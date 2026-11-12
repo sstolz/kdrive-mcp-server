@@ -1,7 +1,7 @@
 {
   "name": "kdrive-mcp-server",
   "version": "0.1.0",
-  "description": "Unofficial MCP server for kDrive, not affiliated with Infomaniak",
+  "description": "Beta, interface may change: unofficial MCP server for kDrive, not affiliated with Infomaniak",
   "license": "MIT",
   "type": "module",
   "packageManager": "npm@11.20.0",
