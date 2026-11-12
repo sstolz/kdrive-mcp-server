@@ -1092,7 +1092,13 @@ GitHub App holds no write permission on deployments.
   Mitigation: two-factor authentication on the account, and the P-5 rule
   that agents never dispatch a non-dry run or approve a deployment. Owner
   acceptance: accepted 2026-11-12, on the condition that the Claude GitHub
-  App holds no deployment write permission.
+  App holds no deployment write permission. Condition checked by the owner
+  on 2026-11-12: the App has read access to administration, commit
+  statuses, merge queues and metadata, and read and write access to
+  actions, checks, code, discussions, issues, pull requests, repository
+  hooks and workflows; it has no deployments permission. With actions and
+  workflows write it can dispatch workflows and change workflow files on a
+  branch, which P-5 and risk (a) cover.
 - **(d)** OIDC trusted publishing, provenance and the first GHCR push are
   exercised for real only by `0.6.0-beta.1`. Mitigation: the mandatory green
   real `dry_run=true` dispatch of the same version and commit (BR-354,
