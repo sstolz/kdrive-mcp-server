@@ -2,7 +2,7 @@
 // The deny patterns come only from PRIVACY_DENY_PATTERNS. No output ever holds
 // a pattern, matched text or text around a hit: only locations and numbers.
 import { spawnSync } from "node:child_process";
-import { resolve } from "node:path";
+import { realpathSync } from "node:fs";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
@@ -448,8 +448,10 @@ export function main(): void {
   }
 }
 
+// Resolve symlinks on both sides so a symlinked invocation still runs the
+// scan instead of exiting 0 silently.
 if (
   process.argv[1] !== undefined &&
-  resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+  realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))
 )
   main();

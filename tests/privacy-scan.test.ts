@@ -459,6 +459,21 @@ describe("BR-349 internal error", () => {
   });
 });
 
+describe("BR-349 entry point", () => {
+  it("BR-349 a symlinked script path still runs the scan", () => {
+    const dir = temporary("privacy-scan-link-");
+    const link = join(dir, "privacy-scan.ts");
+    symlinkSync(SCRIPT, link);
+    const result = spawnSync(process.execPath, [link], {
+      cwd: dir,
+      env: baseEnv(),
+      encoding: "utf8",
+    });
+    expect(result.status).toBe(2);
+    expect(result.stderr).toBe("privacy-scan: no pattern is configured\n");
+  });
+});
+
 describe("BR-342 secret confinement", () => {
   it("BR-342 no git child receives PRIVACY_* variables or a pattern", () => {
     const fixture = repository();
