@@ -463,9 +463,10 @@ describe("F-024 AC-02 release documentation", () => {
     const readme = readFileSync("README.md", "utf8");
     const tarball = `./artifacts/sstolz-kdrive-mcp-server-${version}.tgz`;
     expect(readme).toContain(tarball);
-    const named = [
-      ...readme.matchAll(/\S*sstolz-kdrive-mcp-server-[^\s`]*/gu),
-    ].map((match) => match[0].replaceAll("`", ""));
+    const named = readme
+      .split(/\s/u)
+      .filter((word) => word.includes("sstolz-kdrive-mcp-server-"))
+      .map((word) => word.replaceAll("`", ""));
     expect(named.length).toBeGreaterThan(0);
     for (const name of named) expect(name).toBe(tarball);
     expect(readme).toContain("npm install -g @sstolz/kdrive-mcp-server@beta");
@@ -528,7 +529,7 @@ describe("F-024 AC-02 release documentation", () => {
       "dispatched from `main` while the release commit is `main`'s HEAD",
       "otherwise BR-361 refuses it because `GITHUB_SHA` differs",
       // green real dry run first
-      "a green real `dry_run=true` dispatch of the same version and commit is required, and its run link recorded, before any `dry_run=false` dispatch",
+      "green real `dry_run=true` dispatch of the same version and commit is required, and its run link recorded, before any `dry_run=false` dispatch",
       // read-back recovery
       "re-run only the failed `read-back` job",
       "`npm view @sstolz/kdrive-mcp-server@<version>`",

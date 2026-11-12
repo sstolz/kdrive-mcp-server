@@ -392,6 +392,7 @@ export const PUBLISH_MARKERS = [
   "type=registry",
   "push=true",
   "ghcr.io",
+  "npm publish",
 ];
 
 // BR-178 v2: the only admitted ghcr.io references.
@@ -399,6 +400,15 @@ export const RUNNER_BASE =
   /^FROM ghcr\.io\/actions\/actions-runner:\d[\d.]*@sha256:[0-9a-f]{64}$/u;
 // The exact probe URL, not followed by any further path character.
 const GHCR_PROBE = /https:\/\/ghcr\.io\/v2\/(?![\w./-])/u;
+
+// BR-178 v3: markers admitted only in the two release scripts.
+const RELEASE_MARKERS: Record<string, { once: string[]; any: string[] }> = {
+  "scripts/release-image.sh": {
+    once: ["docker login", "--push"],
+    any: ["ghcr.io"],
+  },
+  "scripts/release.ts": { once: ["npm publish"], any: ["ghcr.io"] },
+};
 
 function admittedRegistryText(path: string, text: string): string {
   if (path === "ops/runner/Dockerfile") {
@@ -408,10 +418,23 @@ function admittedRegistryText(path: string, text: string): string {
   }
   // A second or different ghcr.io string stays in the text and is rejected.
   if (path === "ops/runner/probe.sh") return text.replace(GHCR_PROBE, "");
+  const admitted = RELEASE_MARKERS[path];
+  if (admitted) {
+    let scanned = text;
+    for (const marker of admitted.once) {
+      check(
+        scanned.split(marker).length - 1 <= 1,
+        `${path} contains ${marker} more than once`,
+      );
+      scanned = scanned.replace(marker, "");
+    }
+    for (const marker of admitted.any) scanned = scanned.replaceAll(marker, "");
+    return scanned;
+  }
   return text;
 }
 
-/** BR-178 v2: no push, publish or registry login marker. */
+/** BR-178 v3: no push, publish or registry login marker outside the release scripts. */
 export function validateNoPublish(files: Record<string, string>): void {
   for (const [path, text] of Object.entries(files)) {
     const scanned = admittedRegistryText(path, text);

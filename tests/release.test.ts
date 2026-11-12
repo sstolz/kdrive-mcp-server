@@ -18,7 +18,6 @@ import {
   executable,
   gitEnv,
   goodEnvironment,
-  goodPolicies,
   indexBody,
   npmDocument,
   packTarball,
@@ -37,7 +36,7 @@ import {
 afterAll(() => {
   cleanupTemporaries();
 });
-let doubles: Double[] = [];
+const doubles: Double[] = [];
 afterEach(async () => {
   for (const entry of doubles.splice(0)) await entry.close();
 });
@@ -1463,7 +1462,7 @@ describe("F-024 AC-13 Make targets and rehearsal", () => {
   function containerNames(target: string, mode: string): string[] {
     const command = recipeOf(target).recipe[0] ?? "";
     const match =
-      /^\$\(COMPOSE\) run --rm -T((?: -e [A-Z_]+)+) dev node scripts\/release\.ts (\w+)$/u.exec(
+      /^\$\(COMPOSE\) run --rm -T((?: -e [A-Z0-9_]+)+) dev node scripts\/release\.ts (\w+)$/u.exec(
         command,
       );
     expect(match, command).not.toBeNull();
@@ -1527,9 +1526,10 @@ describe("F-024 AC-13 Make targets and rehearsal", () => {
     }
     for (const script of ["scripts/release.ts", "scripts/shrinkwrap.ts"]) {
       const source = readFileSync(script, "utf8");
-      const specifiers = [
-        ...source.matchAll(/^\s*import\b[^"']*["']([^"']+)["']/gmu),
-      ].map((match) => match[1]);
+      const specifiers = source
+        .split("\n")
+        .map((text) => / from "([^"]+)";$/u.exec(text)?.[1])
+        .filter((specifier) => specifier !== undefined);
       expect(specifiers.length).toBeGreaterThan(0);
       for (const specifier of specifiers) expect(specifier).toMatch(/^node:/u);
       expect(source).not.toMatch(/\brequire\(|\bimport\(/u);
@@ -1755,7 +1755,7 @@ describe("F-024 AC-13 Make targets and rehearsal", () => {
       ),
     ).toHaveLength(4);
     // The -e names reaching the container equal the BR-375 lists.
-    const composeRuns = docker.filter((call) =>
+    const composeRuns = lines(fake.dockerLog).filter((call) =>
       call.startsWith("compose run "),
     );
     for (const [mode, names] of [

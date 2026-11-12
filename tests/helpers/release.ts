@@ -274,42 +274,47 @@ export function releaseState(sha: string): ReleaseState {
   };
 }
 
+function githubRoute(state: ReleaseState, url: string): Reply | undefined {
+  if (url.startsWith(`${REPO}/actions/workflows/ci.yml/runs?`))
+    return state.ciRuns;
+  if (
+    /^\/repos\/sstolz\/kdrive-mcp-server\/actions\/runs\/\d+\/jobs/u.test(url)
+  )
+    return state.ciJobs;
+  if (
+    url ===
+    `${REPO}/environments/release/deployment-branch-policies?per_page=100`
+  )
+    return state.policies;
+  if (url === `${REPO}/environments/release`) return state.environment;
+  return undefined;
+}
+function ghcrRoute(state: ReleaseState, request: Seen): Reply | undefined {
+  if (request.url.startsWith("/token?"))
+    return request.authorization === undefined
+      ? state.anonToken
+      : state.ghcrToken;
+  const manifest = /^\/v2\/sstolz\/kdrive-mcp-server\/manifests\/(.+)$/u.exec(
+    request.url,
+  );
+  if (!manifest) return undefined;
+  if (request.authorization === "Bearer anon-token") return state.anonManifest;
+  if (manifest[1] === "latest") return state.latest;
+  return request.method === "HEAD" ? state.manifest : state.index;
+}
 export function releaseRoute(state: ReleaseState): (request: Seen) => Reply {
   return (request) => {
     const url = request.url;
-    if (url.startsWith(`${REPO}/actions/workflows/ci.yml/runs?`))
-      return state.ciRuns;
-    if (
-      /^\/repos\/sstolz\/kdrive-mcp-server\/actions\/runs\/\d+\/jobs/u.test(url)
-    )
-      return state.ciJobs;
-    if (
-      url ===
-      `${REPO}/environments/release/deployment-branch-policies?per_page=100`
-    )
-      return state.policies;
-    if (url === `${REPO}/environments/release`) return state.environment;
     if (url === "/@sstolz%2fkdrive-mcp-server") {
       state.npmAttempts += 1;
       return typeof state.npm === "function"
         ? state.npm(state.npmAttempts)
         : state.npm;
     }
-    if (url.startsWith("/token?"))
-      return request.authorization === undefined
-        ? state.anonToken
-        : state.ghcrToken;
-    const manifest = /^\/v2\/sstolz\/kdrive-mcp-server\/manifests\/(.+)$/u.exec(
-      url,
-    );
-    if (manifest) {
-      if (request.authorization === "Bearer anon-token")
-        return state.anonManifest;
-      if (manifest[1] === "latest") return state.latest;
-      return request.method === "HEAD" ? state.manifest : state.index;
-    }
     if (url === "/tarballs/pkg.tgz") return state.tarball;
-    return { status: 404 };
+    return (
+      githubRoute(state, url) ?? ghcrRoute(state, request) ?? { status: 404 }
+    );
   };
 }
 

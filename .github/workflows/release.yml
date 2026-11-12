@@ -1,0 +1,232 @@
+{
+  "name": "Release",
+  "run-name": "Release ${{ inputs.version }} @ ${{ inputs.sha }} dry_run=${{ inputs.dry_run }}",
+  "on": {
+    "workflow_dispatch": {
+      "inputs": {
+        "version": {
+          "type": "string",
+          "required": true
+        },
+        "sha": {
+          "type": "string",
+          "required": true
+        },
+        "dry_run": {
+          "type": "boolean",
+          "required": false,
+          "default": true
+        }
+      }
+    }
+  },
+  "permissions": {},
+  "concurrency": {
+    "group": "release",
+    "cancel-in-progress": false
+  },
+  "env": {
+    "DEV_UID": "1001",
+    "DEV_GID": "1001"
+  },
+  "jobs": {
+    "verify": {
+      "runs-on": "ubuntu-24.04",
+      "timeout-minutes": 60,
+      "if": "github.repository == 'sstolz/kdrive-mcp-server' && github.ref == 'refs/heads/main'",
+      "permissions": {
+        "contents": "read",
+        "actions": "read",
+        "packages": "read"
+      },
+      "outputs": {
+        "tarball-sha256": "${{ steps.release-npm.outputs.tarball-sha256 }}"
+      },
+      "steps": [
+        {
+          "uses": "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683",
+          "with": {
+            "ref": "${{ github.sha }}",
+            "fetch-depth": 0,
+            "persist-credentials": false
+          }
+        },
+        {
+          "run": "make release-check",
+          "env": {
+            "RELEASE_VERSION": "${{ inputs.version }}",
+            "RELEASE_SHA": "${{ inputs.sha }}",
+            "RELEASE_DRY_RUN": "${{ inputs.dry_run }}",
+            "RELEASE_PHASE": "verify",
+            "GITHUB_TOKEN": "${{ github.token }}"
+          }
+        },
+        {
+          "run": "make release-setup"
+        },
+        {
+          "run": "make pack"
+        },
+        {
+          "id": "release-npm",
+          "run": "make release-npm",
+          "env": {
+            "RELEASE_VERSION": "${{ inputs.version }}",
+            "RELEASE_SHA": "${{ inputs.sha }}",
+            "RELEASE_DRY_RUN": "true"
+          }
+        },
+        {
+          "run": "make image-binfmt",
+          "env": {
+            "IMAGE_PLATFORMS": "linux/amd64 linux/arm64"
+          }
+        },
+        {
+          "run": "make release-image",
+          "env": {
+            "RELEASE_VERSION": "${{ inputs.version }}",
+            "RELEASE_SHA": "${{ inputs.sha }}",
+            "RELEASE_DRY_RUN": "true",
+            "IMAGE_PLATFORMS": "linux/amd64 linux/arm64"
+          }
+        },
+        {
+          "uses": "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02",
+          "with": {
+            "name": "npm-tarball",
+            "path": "artifacts/sstolz-kdrive-mcp-server-*.tgz",
+            "if-no-files-found": "error"
+          }
+        }
+      ]
+    },
+    "publish-image": {
+      "runs-on": "ubuntu-24.04",
+      "timeout-minutes": 60,
+      "if": "github.repository == 'sstolz/kdrive-mcp-server' && github.ref == 'refs/heads/main' && inputs.dry_run == false",
+      "needs": ["verify"],
+      "environment": "release",
+      "permissions": {
+        "contents": "read",
+        "actions": "read",
+        "packages": "write"
+      },
+      "steps": [
+        {
+          "uses": "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683",
+          "with": {
+            "ref": "${{ github.sha }}",
+            "fetch-depth": 0,
+            "persist-credentials": false
+          }
+        },
+        {
+          "run": "make release-check",
+          "env": {
+            "RELEASE_VERSION": "${{ inputs.version }}",
+            "RELEASE_SHA": "${{ inputs.sha }}",
+            "RELEASE_DRY_RUN": "${{ inputs.dry_run }}",
+            "RELEASE_PHASE": "image",
+            "GITHUB_TOKEN": "${{ github.token }}"
+          }
+        },
+        {
+          "run": "make image-binfmt",
+          "env": {
+            "IMAGE_PLATFORMS": "linux/amd64 linux/arm64"
+          }
+        },
+        {
+          "run": "make release-image",
+          "env": {
+            "RELEASE_VERSION": "${{ inputs.version }}",
+            "RELEASE_SHA": "${{ inputs.sha }}",
+            "RELEASE_DRY_RUN": "${{ inputs.dry_run }}",
+            "IMAGE_PLATFORMS": "linux/amd64 linux/arm64",
+            "GITHUB_TOKEN": "${{ github.token }}"
+          }
+        }
+      ]
+    },
+    "publish-npm": {
+      "runs-on": "ubuntu-24.04",
+      "timeout-minutes": 60,
+      "if": "github.repository == 'sstolz/kdrive-mcp-server' && github.ref == 'refs/heads/main' && inputs.dry_run == false",
+      "needs": ["verify", "publish-image"],
+      "environment": "release",
+      "permissions": {
+        "contents": "read",
+        "actions": "read",
+        "packages": "read",
+        "id-token": "write"
+      },
+      "steps": [
+        {
+          "uses": "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683",
+          "with": {
+            "ref": "${{ github.sha }}",
+            "fetch-depth": 0,
+            "persist-credentials": false
+          }
+        },
+        {
+          "run": "make release-check",
+          "env": {
+            "RELEASE_VERSION": "${{ inputs.version }}",
+            "RELEASE_SHA": "${{ inputs.sha }}",
+            "RELEASE_DRY_RUN": "${{ inputs.dry_run }}",
+            "RELEASE_PHASE": "npm",
+            "GITHUB_TOKEN": "${{ github.token }}"
+          }
+        },
+        {
+          "uses": "actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093",
+          "with": {
+            "name": "npm-tarball",
+            "path": "artifacts"
+          }
+        },
+        {
+          "run": "make release-npm",
+          "env": {
+            "RELEASE_VERSION": "${{ inputs.version }}",
+            "RELEASE_SHA": "${{ inputs.sha }}",
+            "RELEASE_DRY_RUN": "${{ inputs.dry_run }}",
+            "RELEASE_TARBALL_SHA256": "${{ needs.verify.outputs.tarball-sha256 }}"
+          }
+        }
+      ]
+    },
+    "read-back": {
+      "runs-on": "ubuntu-24.04",
+      "timeout-minutes": 60,
+      "if": "github.repository == 'sstolz/kdrive-mcp-server' && github.ref == 'refs/heads/main' && inputs.dry_run == false",
+      "needs": ["verify", "publish-npm"],
+      "permissions": {
+        "contents": "read",
+        "packages": "read"
+      },
+      "steps": [
+        {
+          "uses": "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683",
+          "with": {
+            "ref": "${{ github.sha }}",
+            "fetch-depth": 0,
+            "persist-credentials": false
+          }
+        },
+        {
+          "run": "make release-verify",
+          "env": {
+            "RELEASE_VERSION": "${{ inputs.version }}",
+            "RELEASE_SHA": "${{ inputs.sha }}",
+            "RELEASE_DRY_RUN": "${{ inputs.dry_run }}",
+            "GITHUB_TOKEN": "${{ github.token }}",
+            "RELEASE_TARBALL_SHA256": "${{ needs.verify.outputs.tarball-sha256 }}"
+          }
+        }
+      ]
+    }
+  }
+}
