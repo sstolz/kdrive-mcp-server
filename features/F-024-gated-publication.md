@@ -2,16 +2,43 @@
 id: F-024
 title: Scoped package name and gated beta publication
 ticket: "#2"
-status: frozen
-version: 1
+status: draft
+version: 2
 ---
 
 Author: Claude Opus 5.5 (effort unknown), spec phase, 2026-11-12.
 Base: branch `claude/beautiful-maxwell-8mdk2w`, tree identical to `main`
-`5e5a7db`. IDs: F-024, BR-353–BR-379, BR-016 v3, BR-178 v3, BR-321 v2; no
-ADR. BR-291 and BR-305–BR-311 are reserved and not used. `#2` is this
-repository's ticket. The owner answered OQ-1 and OQ-2 on 2026-11-12; the
-answers are integrated as P-0, D-13, D-14, BR-376, BR-377 and BR-321 v2.
+`5e5a7db`. IDs: F-024, BR-353–BR-375, BR-378, BR-379, BR-016 v3, BR-178
+v3; no ADR. BR-376 and BR-377 are withdrawn in v2 (never accepted, IDs never
+reused); BR-321 stays at v1. BR-291 and BR-305–BR-311 are reserved and not
+used. `#2` is this repository's ticket. The owner answered OQ-1 and OQ-2 on
+2026-11-12; the answers are integrated as P-0, D-13 and residual risk (f)
+(v2, see `## Version history`).
+
+Version 2 author: Claude Opus 5.5 (effort unknown), spec phase, 2026-11-12,
+base branch `claude/beautiful-maxwell-8mdk2w` at `ad50865`. It allocates no
+new F or BR ID. Frozen v1 (`0624a1b`) is kept in
+[history](history/F-024-v1.md).
+
+## Version history
+
+- **v2 (2026-11-12, draft).** Reason: implementing v1 hit the D-14 stop
+  condition. A packed tarball shipping `npm-shrinkwrap.json`, installed with
+  `npm install --global --prefix <tmp> ./…tgz` under npm 11.20.0, still
+  resolved `zod@3.25.76` under `@jimp/types@1.6.1` and
+  `@jimp/plugin-resize@1.6.1`, exactly as without a shrinkwrap; with the
+  current `package.json` `files` list npm did not pack the shrinkwrap at
+  all; `@jimp/*` 1.6.1 is the latest release and still depends on
+  `zod ^3.23.8`. The owner chose option A on 2026-11-12 (V2-1). Changes: the
+  production shrinkwrap is dropped (Context T8, Scope item 6, D-14); BR-376
+  and BR-377 are withdrawn (never accepted, IDs never reused); BR-321 v2 is
+  dropped and BR-321 stays at v1; AC-17–AC-20, which verified only the
+  shrinkwrap and BR-321 v2, are withdrawn; residual risk (e), which applied
+  only to the shipped shrinkwrap, is withdrawn; new residual risk (f)
+  accepts the nested Zod 3 advisory for npm installs during the beta, fixed
+  before 1.0 in #12. Everything else is unchanged from v1.
+- **v1 (2026-11-12, frozen at `0624a1b`).** Kept in
+  [history](history/F-024-v1.md).
 
 ## Context
 
@@ -86,8 +113,9 @@ or pull the image). The MCP server's runtime behaviour is unchanged.
   real run. Refused in CI (BR-367).
 - T8 unaudited registry install: `overrides` apply only in the root project,
   so `npm install -g` of the published package resolves Jimp's nested Zod 3
-  and its high advisory again. Covered by a production-only
-  `npm-shrinkwrap.json` in the package (BR-376, BR-377, D-14).
+  and its high advisory again. Not covered by F-024 v2: accepted for the
+  beta as residual risk (f) and fixed before 1.0 (#12). The container image
+  is built from the lockfile with the root overrides and is not affected.
 
 ## Scope
 
@@ -107,14 +135,11 @@ or pull the image). The MCP server's runtime behaviour is unchanged.
    `tests/helpers/image-policy.ts` and `tests/image-policy.test.ts`.
 5. docs/publishing.md: a "Release workflow" section with the procedure, the
    owner preconditions and partial-failure recovery.
-6. Audited install resolution (OQ-2, D-14): `scripts/shrinkwrap.ts` (Node
-   built-ins only) generates the production `npm-shrinkwrap.json` from
-   `package-lock.json` inside the `make pack` recipe; `.gitignore` lists it;
-   the pack checks of BR-376 and BR-377 in `tests/package.test.ts`;
-   SECURITY.md's `## Dependency audit` section rewritten for BR-321 v2. This
-   resolves the BACKLOG.md entry of 2026-11-11 (nested `zod` 3 on tarball
-   installs); the BACKLOG.md line itself is updated in the implementation
-   change, not in this spec.
+6. Audited install resolution (OQ-2): not in F-024 v2. The BACKLOG.md entry
+   of 2026-11-11 (nested `zod` 3 on npm and tarball installs) stays open,
+   accepted for the beta as residual risk (f); the fix (replace Jimp, or
+   bundle dependencies) is the 1.0 follow-up ticket #12. SECURITY.md's
+   `## Dependency audit` section stays as BR-321 v1 requires.
 7. The BR files (new and versioned), `business-rules/README.md`,
    `docs/spec-index.md`, `capability-map.md` and a CHANGELOG Unreleased line,
    all pending acceptance.
@@ -582,33 +607,10 @@ GHCR package).
   its status code only (BR-365). The check is part of BR-372's retry loop.
   Verified by: AC-12, AC-13.
 
-### Audited install resolution (`make pack`)
+### Withdrawn in v2
 
-- **BR-376** — `make pack` runs `node scripts/shrinkwrap.ts` before
-  `npm pack`. The script reads only `package-lock.json` and writes
-  `npm-shrinkwrap.json` at the repository root: `name`, `version` and
-  `lockfileVersion` copied from the lockfile; `packages[""]` copied without
-  `devDependencies`; every other `packages` entry copied unchanged when it
-  has no `dev: true`, and left out when it has; keys in lockfile order,
-  two-space JSON with a final newline. The recipe removes the root file
-  after `npm pack` whatever the outcome (a root shrinkwrap would take the
-  lockfile's place for `npm ci`), and `.gitignore` lists it. The packed
-  tarball contains exactly one `package/npm-shrinkwrap.json`, and it is
-  byte-identical to what the script produces from the current
-  `package-lock.json`; a missing file, a `dev: true` entry, a
-  `devDependencies` key or any difference (a stale shrinkwrap) fails the
-  pack check. `package.json` `files` and `overrides` stay unchanged (npm
-  always packs a root `npm-shrinkwrap.json`). Verified by: AC-17.
-- **BR-377** — In the packed tarball's `npm-shrinkwrap.json`, the only
-  `packages` key whose last `node_modules/` segment is `zod` is
-  `node_modules/zod` with a version `>=4.6.6`, and every entry whose last
-  segment is `minimatch` has a version `>=11.0.1` (the BR-316 predicate,
-  applied to the shipped file). The pack check rejects any nested `zod`,
-  whatever its version, so a copy in the advisory's Zod 3 range can never
-  ship. This offline check runs in `make check`; an install of the packed
-  tarball into an isolated prefix, whose `npm ls zod --all` lists only
-  `zod@4.6.7` (the lockfile version), is recorded once as implementation
-  evidence. Verified by: AC-18, AC-19.
+- **BR-376** — withdrawn in v2; never accepted; the ID is never reused.
+- **BR-377** — withdrawn in v2; never accepted; the ID is never reused.
 
 ### Make targets and script
 
@@ -686,14 +688,8 @@ GHCR package).
   `.github/workflows/release.yml`, `ci.yml`, the Makefile and every other
   scanned file admit no marker. (v2: no marker admitted outside
   `ops/runner/`.) Verified by: AC-14.
-- **BR-321 v2** — v1 holds with this change: `SECURITY.md`'s
-  `## Dependency audit` section states that the published package ships an
-  `npm-shrinkwrap.json` holding the audited production tree (BR-376,
-  BR-377), so an install of the package or the packed tarball
-  (`npm install -g`) gets the root Zod 4, and it no longer says that such an
-  install can resolve Jimp's nested Zod 3 or that the limit is accepted
-  until the publication ticket. (v1: the section stated that limit.)
-  Verified by: AC-20.
+
+BR-321 stays at v1 (the BR-321 v2 of F-024 v1 is withdrawn in v2).
 
 ## Acceptance criteria
 
@@ -947,36 +943,10 @@ GHCR package).
   past `verify`, and the decision goes back to the owner (a new spec
   version). Verified by: run links recorded in the #2 acceptance comment.
 
-- **AC-17** (BR-376) — Given the real lockfile, When `make pack` runs,
-  Then the tarball holds `package/npm-shrinkwrap.json`, byte-identical to the
-  script output for the current `package-lock.json`, with no `dev: true`
-  entry and no `devDependencies`, every production key of the lockfile
-  present, and no `npm-shrinkwrap.json` left at the repository root; given
-  the generator run on fixture lockfiles where a dev entry, a changed
-  version and a removed entry differ from a packed shrinkwrap, Then the
-  staleness comparison throws. Verified by: `tests/package.test.ts`
-  `BR-376 packs the production shrinkwrap generated from the lockfile` and
-  `BR-376 rejects stale shrinkwrap: %s`.
-- **AC-18** (BR-377) — Given the packed tarball, When its
-  `npm-shrinkwrap.json` is checked, Then only `node_modules/zod` (`>=4.6.6`)
-  exists and every `minimatch` is `>=11.0.1`; given fixtures with
-  `node_modules/@jimp/types/node_modules/zod` at 3.25.76, a nested `zod` at
-  4.6.7, a root `zod` at 3.25.76 and a `minimatch` at 10.2.6, Then each
-  throws. Offline, in `make check`. Verified by: `tests/package.test.ts`
-  `BR-377 the packed shrinkwrap holds the audited resolution` and
-  `BR-377 rejects shrinkwrap resolution: %s`.
-- **AC-19** (BR-377) — Given the packed tarball, with network access to the
-  public npm registry, When it is installed with
-  `npm install --global --prefix <empty temporary directory> ./artifacts/sstolz-kdrive-mcp-server-<version>.tgz` and
-  `npm ls --global --prefix <that directory> --all zod` runs, Then every
-  listed `zod` is `4.6.7` and none is nested under `@jimp/`. Verified by: the
-  command and its output recorded in the #2 implementation PR body.
-- **AC-20** (BR-321 v2) — Given SECURITY.md, When the content test runs,
-  Then `## Dependency audit` states the shrinkwrap coverage of
-  `npm install -g` and no longer states the nested Zod 3 limit. Verified by:
-  `tests/dependency-audit.test.ts`
-  `TestBR321_audit_docs development, security and changelog state the audit contract`
-  (updated).
+- **AC-17** — withdrawn in v2 (verified BR-376); never reused.
+- **AC-18** — withdrawn in v2 (verified BR-377); never reused.
+- **AC-19** — withdrawn in v2 (verified BR-377); never reused.
+- **AC-20** — withdrawn in v2 (verified BR-321 v2); never reused.
 - **AC-21** (BR-378) — Given a GitHub API double where: the environment has
   a `required_reviewers` rule with one reviewer and the policy list is
   exactly branch `main` (pass); no `required_reviewers` rule; the rule with
@@ -1008,7 +978,7 @@ GHCR package).
   another package, or reaches provenance generation (the `verify` job's dry
   run has no `id-token: write`), implementation stops and the spec returns
   to the orchestrator. Verified by: the command, its exit status and its output
-  recorded in the #2 implementation PR body, like AC-19.
+  recorded in the #2 implementation PR body.
 
 ## Decisions
 
@@ -1172,30 +1142,16 @@ GHCR package).
   it would still leave the first publish without a tested path); the owner
   publishing `0.6.0-beta.1` by hand from a `verify` tarball (the first real
   version would have no workflow provenance, against D-10).
-- **D-14 Production `npm-shrinkwrap.json` in the package (owner, OQ-2,
-  2026-11-12).** It carries the audited lockfile resolution, overrides
-  included, into registry and tarball installs, which `overrides` alone
-  cannot (F-020 D-1), and replaces the BACKLOG.md entry. It is generated at
-  pack time and never committed, because a root shrinkwrap would replace
-  the lockfile for `npm ci` and drop the development tree. The `make check`
-  rule is a static check of the shipped file (BR-377), not an audit: npm
-  installs a dependency's shrinkwrapped tree as written, so the shipped
-  file decides what an install resolves, and the check is offline and
-  deterministic, whereas `npm audit` and a real install need the registry
-  (BR-319 keeps audit out of `make check`). The real isolated-prefix install
-  (AC-19) is recorded once to confirm npm honours the shrinkwrap for this
-  package; if it lists a nested Zod 3, implementation stops and the spec
-  returns to the owner. Rejected: accepting the advisory for the beta with a
-  README note (ships a known high finding); `bundleDependencies` (a larger
-  tarball that freezes every dependency's files and bypasses npm's
-  integrity checks per package); a committed root `npm-shrinkwrap.json`
-  (breaks `npm ci` for development).
+- **D-14** — withdrawn in v2: the owner's decision of 2026-11-12 (V2-1)
+  accepts the nested Zod 3 advisory for npm installs during the beta as
+  residual risk (f) and fixes it before 1.0 (#12).
 
 ## Residual risks
 
-Each entry gives the risk and its mitigation. The owner accepted all five on
+Each entry gives the risk and its mitigation. The owner accepted (a)–(e) on
 2026-11-12 (#2), (c) on the condition that the owner confirms the Claude
-GitHub App holds no write permission on deployments.
+GitHub App holds no write permission on deployments, and (f) on 2026-11-12
+with v2; (e) is withdrawn in v2.
 
 - **(a)** GHCR tags are mutable and the image is unsigned: any writer, or
   any workflow on a pushed branch granted `packages: write`, can overwrite
@@ -1222,11 +1178,15 @@ GitHub App holds no write permission on deployments.
   exercised for real only by `0.6.0-beta.1`. Mitigation: the mandatory green
   real `dry_run=true` dispatch of the same version and commit (BR-354,
   AC-22) and the recovery of D-8. Owner acceptance: accepted 2026-11-12.
-- **(e)** The shipped shrinkwrap pins every transitive production
-  dependency (BR-376), so each transitive security fix reaches users only
-  through a new release. Mitigation: the audit job flags the advisory, and
-  a beta is cheap to release through this workflow. Owner acceptance:
-  accepted 2026-11-12.
+- **(e)** Withdrawn in v2: it applied only to package content withdrawn
+  with D-14.
+- **(f)** npm installs of the package (registry or packed tarball) resolve
+  Jimp's nested `zod@3.25.76` and its high advisory, because `overrides`
+  apply only in the root project. The container image is not affected: it
+  is built from the lockfile with the root overrides applied. Mitigation:
+  SECURITY.md already documents the limit (BR-321 v1); fixed before 1.0 in
+  #12 (replace Jimp, or bundle dependencies). Owner acceptance: accepted
+  2026-11-12.
 
 ## Open questions
 
@@ -1407,3 +1367,17 @@ Decision pass `2-spec-decision-2-reviewer` (strongest tier, verdict
   `publish-npm` stays for a rejection or a failed check or publish.
 - **R6-2** (minor, retained) — AC-23 runs with `-e GITHUB_ACTIONS=true` and no
   OIDC variable, matching the `verify` environment.
+
+Implementation finding and owner decision for v2.
+
+- **V2-1** (blocking, retained; implementation of frozen v1 at `0624a1b`) —
+  The D-14 stop condition was hit: an isolated-prefix install of the packed
+  tarball under npm 11.20.0 still listed `zod@3.25.76` under
+  `@jimp/types@1.6.1` and `@jimp/plugin-resize@1.6.1`, and with the current
+  `files` list npm did not pack the shrinkwrap; `@jimp/*` 1.6.1 is the latest
+  release and still depends on `zod ^3.23.8`. The owner decided on
+  2026-11-12 (option A): drop the shrinkwrap from F-024, accept the nested
+  Zod 3 advisory for npm installs during the beta as residual risk (f), and
+  fix it before 1.0 in a separate ticket (#12). BR-376, BR-377, BR-321 v2,
+  D-14, AC-17–AC-20 and residual risk (e) are withdrawn; Scope item 6 and T8
+  updated.
