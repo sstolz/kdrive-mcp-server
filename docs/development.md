@@ -247,6 +247,13 @@ text or a pattern. It exits 2 when the secret is missing or a pattern is
 invalid, so the owner provisions the secret before the first green CI. Fork
 pull requests get a notice instead of a scan and still fail on `fork-refusal`.
 
+Writing patterns: a multi-word name may wrap onto an indented continuation
+line, so separate words with `\s+` rather than a literal space. On a
+`pr-title` or `pr-body` hit, remember that the runner prints the step's
+environment, PR title and body included, in the job log: edit the PR, delete
+the edit's revision in the PR history, and delete the logs of every attempt of
+that run before the repository is public.
+
 For initial lockfile bootstrapping or deliberate dependency changes, run
 `make lockfile` and review the resulting manifest/lockfile diff, then run
 `make setup` again. Do not install tools on the host. Ordinary stopped-container
