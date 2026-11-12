@@ -8,9 +8,10 @@ version: 1
 
 Author: Claude Opus 5.5 (effort unknown), spec phase, 2026-11-12.
 Base: branch `claude/beautiful-maxwell-8mdk2w`, tree identical to `main`
-`5e5a7db`. IDs: F-024, BR-353–BR-375, BR-016 v3, BR-178 v3; no ADR.
-BR-291 and BR-305–BR-311 are reserved and not used. `#2` is this
-repository's ticket.
+`5e5a7db`. IDs: F-024, BR-353–BR-377, BR-016 v3, BR-178 v3, BR-321 v2; no
+ADR. BR-291 and BR-305–BR-311 are reserved and not used. `#2` is this
+repository's ticket. The owner answered OQ-1 and OQ-2 on 2026-11-12; the
+answers are integrated as P-0, D-13, D-14, BR-376, BR-377 and BR-321 v2.
 
 ## Context
 
@@ -63,6 +64,10 @@ or pull the image). The MCP server's runtime behaviour is unchanged.
   goes last (BR-371, D-8).
 - T7 endpoint substitution: the test-double endpoint overrides redirect a
   real run. Refused in CI (BR-367).
+- T8 unaudited registry install: `overrides` apply only in the root project,
+  so `npm install -g` of the published package resolves Jimp's nested Zod 3
+  and its high advisory again. Covered by a production-only
+  `npm-shrinkwrap.json` in the package (BR-376, BR-377, D-14).
 
 ## Scope
 
@@ -81,7 +86,15 @@ or pull the image). The MCP server's runtime behaviour is unchanged.
    `tests/helpers/image-policy.ts` and `tests/image-policy.test.ts`.
 5. docs/publishing.md: a "Release workflow" section with the procedure, the
    owner preconditions and partial-failure recovery.
-6. The BR files (new and versioned), `business-rules/README.md`,
+6. Audited install resolution (OQ-2, D-14): `scripts/shrinkwrap.ts` (Node
+   built-ins only) generates the production `npm-shrinkwrap.json` from
+   `package-lock.json` inside the `make pack` recipe; `.gitignore` lists it;
+   the pack checks of BR-376 and BR-377 in `tests/package.test.ts`;
+   SECURITY.md's `## Dependency audit` section rewritten for BR-321 v2. This
+   resolves the BACKLOG.md entry of 2026-11-11 (nested `zod` 3 on tarball
+   installs); the BACKLOG.md line itself is updated in the implementation
+   change, not in this spec.
+7. The BR files (new and versioned), `business-rules/README.md`,
    `docs/spec-index.md`, `capability-map.md` and a CHANGELOG Unreleased line,
    all pending acceptance.
 
@@ -96,14 +109,28 @@ or pull the image). The MCP server's runtime behaviour is unchanged.
 - A GitHub Release object, release notes or a tag-triggered workflow.
 - The Sonar CI speed-up.
 - Any change to `ci.yml` or `runner-acceptance.yml` (BR-374).
-- Automating the owner preconditions P-1–P-4.
+- Automating the owner preconditions P-0–P-4, including the hand publication
+  and deprecation of the placeholder version (P-0).
+- Bundling dependencies into the tarball (`bundleDependencies`) or vendoring
+  Jimp; `package.json` `files` and `overrides` stay unchanged.
 
 ### Owner preconditions (not automated)
 
-- **P-1** The npm account that publishes owns the `@sstolz` scope and has a
-  trusted publisher for `@sstolz/kdrive-mcp-server`: provider GitHub Actions,
-  repository `sstolz/kdrive-mcp-server`, workflow file `release.yml`,
-  environment `release` (see OQ-1 for the first publish).
+Order: P-0, then P-1; P-2–P-4 before the first non-dry-run dispatch.
+
+- **P-0** Before the first real release, the owner publishes once, by hand
+  from their own machine, the placeholder
+  `@sstolz/kdrive-mcp-server@0.0.0-placeholder.0`: no code, only
+  `package.json` and a README that says it is a placeholder and points to the
+  repository. The owner then runs `npm deprecate` on that version. The npm
+  credential used stays on the owner's machine; no npm token is ever stored
+  in GitHub. npm sets `latest` on this first publish, so `latest` points at
+  the deprecated placeholder until a stable release moves it (D-9, D-13).
+- **P-1** After P-0, the npm account that publishes owns the `@sstolz` scope
+  and has a trusted publisher for `@sstolz/kdrive-mcp-server`: provider
+  GitHub Actions, repository `sstolz/kdrive-mcp-server`, workflow file
+  `release.yml`, environment `release`. `0.6.0-beta.1` and every later
+  version are published only by the workflow through OIDC (D-3).
 - **P-2** The repository environment `release` exists with the owner as
   required reviewer, deployment branches limited to `main`, and no
   environment secret or variable.
@@ -127,7 +154,11 @@ or pull the image). The MCP server's runtime behaviour is unchanged.
   outside `features/`, `business-rules/` and CHANGELOG.md contains
   `artifacts/kdrive-mcp-server-`; SPEC.md's `npx` lines read
   `npx @sstolz/kdrive-mcp-server`; docs/publishing.md no longer has the
-  "Pending change" paragraph and its Names table marks the npm name as in use.
+  "Pending change" paragraph, its Names table marks the npm name as in use,
+  its Versions section states that `latest` points at the deprecated
+  placeholder `0.0.0-placeholder.0` until 1.0.0 and that users install
+  `@beta` or an exact version, and it no longer says that `latest` points to
+  the first beta; its "Release workflow" section lists P-0–P-4 in order.
   Verified by: AC-02.
 
 ### Release workflow
@@ -209,7 +240,9 @@ or pull the image). The MCP server's runtime behaviour is unchanged.
 - **BR-363** — The version is not already published:
   - npm: `GET <registry>/@sstolz%2fkdrive-mcp-server` returning 404 passes;
     200 passes only if neither `versions` nor `time` has the key `<version>`
-    (npm never reuses an unpublished version); any other status fails;
+    (npm never reuses an unpublished version); only that exact key counts,
+    so other versions (the P-0 placeholder, earlier betas), deprecations and
+    `dist-tags` never fail the check; any other status fails;
   - GHCR: a pull token for `repository:sstolz/kdrive-mcp-server:pull`
     obtained with `GITHUB_TOKEN`, then
     `HEAD /v2/sstolz/kdrive-mcp-server/manifests/<version>`: 404 passes;
@@ -247,7 +280,9 @@ or pull the image). The MCP server's runtime behaviour is unchanged.
 - **BR-368** — For a version `<x.y.z>-beta.<n>`, the npm dist-tag is exactly
   `beta` and the only image reference pushed is exactly
   `ghcr.io/sstolz/kdrive-mcp-server:<version>`. No mode passes `--tag latest`
-  to npm or pushes an image tag `latest`. Verified by: AC-10, AC-11.
+  to npm, runs `npm dist-tag` or pushes an image tag `latest`, so npm
+  `latest` stays on the P-0 placeholder in F-024 v1. Verified by: AC-10,
+  AC-11.
 - **BR-369** — `release-npm` requires exactly one file
   `artifacts/sstolz-kdrive-mcp-server-<version>.tgz` whose
   `package/package.json` has `name` `@sstolz/kdrive-mcp-server` and `version`
@@ -280,9 +315,9 @@ or pull the image). The MCP server's runtime behaviour is unchanged.
 - **BR-372** — `release-verify` reads the npm package document, retrying up
   to 10 times 15 seconds apart until every condition holds or the attempts
   run out: `versions` has `<version>`; `dist-tags.beta` equals `<version>`;
-  `dist-tags.latest` equals `<version>` only when `<version>` is the only
-  key of `versions` (the registry's first-publish behaviour), and differs
-  from it otherwise; `versions[<version>].dist.attestations` exists
+  `dist-tags.latest` is present and differs from `<version>` (with P-0 it
+  names the placeholder, since npm set it on the first publish and BR-368
+  never moves it); `versions[<version>].dist.attestations` exists
   (provenance). Verified by: AC-12.
 - **BR-373** — `release-verify` reads the GHCR manifest of tag `<version>`
   with a pull token: it is an OCI image index or Docker manifest list whose
@@ -291,6 +326,34 @@ or pull the image). The MCP server's runtime behaviour is unchanged.
   returns 404 or a digest different from the digest of tag `<version>`. It
   prints one line per condition like BR-365 and exits 0 only when all hold.
   Verified by: AC-12.
+
+### Audited install resolution (`make pack`)
+
+- **BR-376** — `make pack` runs `node scripts/shrinkwrap.ts` before
+  `npm pack`. The script reads only `package-lock.json` and writes
+  `npm-shrinkwrap.json` at the repository root: `name`, `version` and
+  `lockfileVersion` copied from the lockfile; `packages[""]` copied without
+  `devDependencies`; every other `packages` entry copied unchanged when it
+  has no `dev: true`, and left out when it has; keys in lockfile order,
+  two-space JSON with a final newline. The recipe removes the root file
+  after `npm pack` whatever the outcome (a root shrinkwrap would take the
+  lockfile's place for `npm ci`), and `.gitignore` lists it. The packed
+  tarball contains exactly one `package/npm-shrinkwrap.json`, and it is
+  byte-identical to what the script produces from the current
+  `package-lock.json`; a missing file, a `dev: true` entry, a
+  `devDependencies` key or any difference (a stale shrinkwrap) fails the
+  pack check. `package.json` `files` and `overrides` stay unchanged (npm
+  always packs a root `npm-shrinkwrap.json`). Verified by: AC-17.
+- **BR-377** — In the packed tarball's `npm-shrinkwrap.json`, the only
+  `packages` key whose last `node_modules/` segment is `zod` is
+  `node_modules/zod` with a version `>=4.6.6`, and every entry whose last
+  segment is `minimatch` has a version `>=11.0.1` (the BR-316 predicate,
+  applied to the shipped file). The pack check rejects any nested `zod`,
+  whatever its version, so a copy in the advisory's Zod 3 range can never
+  ship. This offline check runs in `make check`; an install of the packed
+  tarball into an isolated prefix, whose `npm ls zod --all` lists only
+  `zod@4.6.7` (the lockfile version), is recorded once as implementation
+  evidence. Verified by: AC-18, AC-19.
 
 ### Make targets and script
 
@@ -335,6 +398,14 @@ or pull the image). The MCP server's runtime behaviour is unchanged.
   `.github/workflows/release.yml`, `ci.yml`, the Makefile and every other
   scanned file admit no marker. (v2: no marker admitted outside
   `ops/runner/`.) Verified by: AC-14.
+- **BR-321 v2** — v1 holds with this change: `SECURITY.md`'s
+  `## Dependency audit` section states that the published package ships an
+  `npm-shrinkwrap.json` holding the audited production tree (BR-376,
+  BR-377), so an install of the package or the packed tarball
+  (`npm install -g`) gets the root Zod 4, and it no longer says that such an
+  install can resolve Jimp's nested Zod 3 or that the limit is accepted
+  until the publication ticket. (v1: the section stated that limit.)
+  Verified by: AC-20.
 
 ## Acceptance criteria
 
@@ -347,9 +418,11 @@ or pull the image). The MCP server's runtime behaviour is unchanged.
   `BR-016 v3 packs the scoped package with the unchanged command`,
   `tests/package-version-wiring.test.ts` (unchanged), `BR-353 lockfile names`.
 - **AC-02** (BR-354) — Given README.md, SPEC.md and docs/publishing.md, When
-  the documentation test runs, Then the BR-354 strings are present and
+  the documentation test runs, Then the BR-354 strings are present
+  (including the placeholder `latest` statement and P-0–P-4),
   `artifacts/kdrive-mcp-server-` appears in no tracked file outside the
-  excluded records. Verified by: `tests/release-policy.test.ts`
+  excluded records, and docs/publishing.md does not say that `latest`
+  points to the first beta. Verified by: `tests/release-policy.test.ts`
   `BR-354 documentation uses the scoped name`.
 - **AC-03** (BR-355–BR-358, BR-371) — Given the real `release.yml`, When the
   release policy validator runs, Then it passes. Verified by:
@@ -386,9 +459,10 @@ or pull the image). The MCP server's runtime behaviour is unchanged.
   `tests/release.test.ts` `BR-362 CI evidence: %s`.
 - **AC-08** (BR-363, BR-364) — Given registry doubles returning: npm 404;
   npm 200 without the version; npm 200 with the version in `versions`; npm
-  200 with the version only in `time`; npm 503; GHCR manifest 404; 200;
-  token 401; When checked, Then the 404 and "without" cases pass and the
-  others fail, and the doubles saw only `GET`/`HEAD` and the token request.
+  200 with the version only in `time`; npm 200 with only the deprecated
+  `0.0.0-placeholder.0` and `latest` on it; npm 503; GHCR manifest 404;
+  200; token 401; When checked, Then the 404, "without" and placeholder
+  cases pass and the others fail, and the doubles saw only `GET`/`HEAD` and the token request.
   Verified by: `tests/release.test.ts` `BR-363 already published: %s`.
 - **AC-09** (BR-365–BR-367) — Given a synthetic token `SYNTHETIC-RELEASE-TOKEN`
   and doubles that echo the `Authorization` header in their bodies and fail
@@ -417,13 +491,14 @@ or pull the image). The MCP server's runtime behaviour is unchanged.
   failing, Then `logout` still runs and the exit is non-zero. Verified by:
   `tests/release.test.ts` `BR-370 image build: %s`.
 - **AC-12** (BR-372, BR-373) — Given read-back doubles where: everything
-  holds with an earlier version and `latest` on it; the version is the sole
-  version and `latest` equals it; `beta` points elsewhere; `latest` moved to
-  the new version with earlier versions present; attestations are missing;
-  the index lacks `linux/arm64`; the index has an extra `linux/386`;
-  `latest` resolves to the new digest; the version appears only on the third
-  attempt; When `release-verify` runs (retry delay shortened by the test
-  double clock), Then only the first, second and last pass. Verified by:
+  holds with the placeholder `0.0.0-placeholder.0` as the earlier version
+  and `latest` on it; the version is the sole version and `latest` equals it
+  (P-0 skipped); `beta` points elsewhere; `latest` moved to the new version
+  with the placeholder present; `latest` is missing; attestations are
+  missing; the index lacks `linux/arm64`; the index has an extra
+  `linux/386`; image tag `latest` resolves to the new digest; the version
+  appears only on the third attempt; When `release-verify` runs (retry delay
+  shortened by the test double clock), Then only the first and last pass. Verified by:
   `tests/release.test.ts` `BR-372 BR-373 read-back: %s`.
 - **AC-13** (BR-357, BR-364, BR-369, BR-370, BR-375) —
   Rehearsal (AGENTS.md §6). Given a temporary repository prepared as a
@@ -457,9 +532,40 @@ or pull the image). The MCP server's runtime behaviour is unchanged.
   `main` SHA; When they run, Then (a) fails input validation with the stable
   refusal; (b) fails `VERSION`, `package.json`, lockfile and tag checks while
   the `main`, CI-evidence, npm and GHCR checks pass; in both, `publish` never
-  starts and no deployment approval is requested; and npm still returns 404
-  for the package. Verified by: run links recorded in the #2 acceptance
+  starts and no deployment approval is requested; and npm has no
+  `0.6.0-beta.1` (404, or only the P-0 placeholder). Verified by: run links recorded in the #2 acceptance
   comment.
+
+- **AC-17** (BR-376) — Given the real lockfile, When `make pack` runs,
+  Then the tarball holds `package/npm-shrinkwrap.json`, byte-identical to the
+  script output for the current `package-lock.json`, with no `dev: true`
+  entry and no `devDependencies`, every production key of the lockfile
+  present, and no `npm-shrinkwrap.json` left at the repository root; given
+  the generator run on fixture lockfiles where a dev entry, a changed
+  version and a removed entry differ from a packed shrinkwrap, Then the
+  staleness comparison throws. Verified by: `tests/package.test.ts`
+  `BR-376 packs the production shrinkwrap generated from the lockfile` and
+  `BR-376 rejects stale shrinkwrap: %s`.
+- **AC-18** (BR-377) — Given the packed tarball, When its
+  `npm-shrinkwrap.json` is checked, Then only `node_modules/zod` (`>=4.6.6`)
+  exists and every `minimatch` is `>=11.0.1`; given fixtures with
+  `node_modules/@jimp/types/node_modules/zod` at 3.25.76, a nested `zod` at
+  4.6.7, a root `zod` at 3.25.76 and a `minimatch` at 10.2.6, Then each
+  throws. Offline, in `make check`. Verified by: `tests/package.test.ts`
+  `BR-377 the packed shrinkwrap holds the audited resolution` and
+  `BR-377 rejects shrinkwrap resolution: %s`.
+- **AC-19** (BR-377) — Given the packed tarball, with network access to the
+  public npm registry, When it is installed with
+  `npm install --global --prefix <empty temporary directory> <tarball>` and
+  `npm ls --global --prefix <that directory> --all zod` runs, Then every
+  listed `zod` is `4.6.7` and none is nested under `@jimp/`. Verified by: the
+  command and its output recorded in the #2 implementation PR body.
+- **AC-20** (BR-321 v2) — Given SECURITY.md, When the content test runs,
+  Then `## Dependency audit` states the shrinkwrap coverage of
+  `npm install -g` and no longer states the nested Zod 3 limit. Verified by:
+  `tests/dependency-audit.test.ts`
+  `TestBR321_audit_docs development, security and changelog state the audit contract`
+  (updated).
 
 ## Decisions
 
@@ -485,7 +591,7 @@ or pull the image). The MCP server's runtime behaviour is unchanged.
   a token in the environment so the path cannot silently fall back.
   Rejected: an automation or granular token as a secret (long-lived,
   exfiltrable; the owner asked to prefer OIDC). The first publish of a new
-  package is OQ-1.
+  package is D-13.
 - **D-4 GHCR through `GITHUB_TOKEN`, `packages: write` only on `publish`.**
   Rejected: a personal access token (long-lived, broader); `packages: write`
   on `verify` (no need). The token reaches only the three steps that call
@@ -518,7 +624,8 @@ or pull the image). The MCP server's runtime behaviour is unchanged.
   and the version image tag. The later stable mapping is planned as the
   `latest` dist-tag and the image tags `<version>` and `latest`; adding it is
   a new spec version that extends BR-359 and BR-368 without touching the
-  beta path. Rejected: implementing stable now (no owner go for 1.0.0;
+  beta path; that stable publish is what moves `latest` off the P-0
+  placeholder. Rejected: implementing stable now (no owner go for 1.0.0;
   untested path that could move `latest`).
 - **D-10 Provenance required in the read-back.** It is the user-visible
   proof that the package came from this workflow. It needs a public
@@ -533,28 +640,39 @@ or pull the image). The MCP server's runtime behaviour is unchanged.
 - **D-12 BR-178 versioned, not superseded.** Its purpose (no publication
   outside the release decision) is kept; v3 confines the markers to the two
   release scripts, which only the approved job runs for real.
+- **D-13 First publish through a hand-published placeholder (owner, OQ-1,
+  2026-11-12).** npm configures a trusted publisher only on an existing
+  package, so the owner publishes `0.0.0-placeholder.0` once by hand (P-0),
+  deprecates it, then configures P-1; every real version goes through the
+  workflow and OIDC, and no npm token ever lives in GitHub. Consequences:
+  `latest` points at the deprecated placeholder until a stable release
+  (BR-354, BR-368, BR-372), and BR-363 looks only at the exact version, so
+  the placeholder never blocks a release. Rejected: a one-time granular
+  token stored as a `release` environment secret (a token in GitHub, even
+  briefly, and a v2 of BR-358 and BR-369 for a single run); `npm trust`
+  before the package exists (not confirmed to work on a missing package, and
+  it would still leave the first publish without a tested path); the owner
+  publishing `0.6.0-beta.1` by hand from a `verify` tarball (the first real
+  version would have no workflow provenance, against D-10).
+- **D-14 Production `npm-shrinkwrap.json` in the package (owner, OQ-2,
+  2026-11-12).** It carries the audited lockfile resolution, overrides
+  included, into registry and tarball installs, which `overrides` alone
+  cannot (F-020 D-1), and replaces the BACKLOG.md entry. It is generated at
+  pack time and never committed, because a root shrinkwrap would replace
+  the lockfile for `npm ci` and drop the development tree. The `make check`
+  rule is a static check of the shipped file (BR-377), not an audit: npm
+  installs a dependency's shrinkwrapped tree as written, so the shipped
+  file decides what an install resolves, and the check is offline and
+  deterministic, whereas `npm audit` and a real install need the registry
+  (BR-319 keeps audit out of `make check`). The real isolated-prefix install
+  (AC-19) is recorded once to confirm npm honours the shrinkwrap for this
+  package; if it lists a nested Zod 3, implementation stops and the spec
+  returns to the owner. Rejected: accepting the advisory for the beta with a
+  README note (ships a known high finding); `bundleDependencies` (a larger
+  tarball that freezes every dependency's files and bypasses npm's
+  integrity checks per package); a committed root `npm-shrinkwrap.json`
+  (breaks `npm ci` for development).
 
 ## Open questions
-
-- **OQ-1 First npm publish of a package that does not exist yet.** npm
-  configures a trusted publisher on an existing package; it has no pending
-  publisher. Community sources mention an `npm trust` command (npm 11.10 or
-  later) that may configure it beforehand; this is not confirmed. If the
-  owner cannot configure P-1 before `0.6.0-beta.1` exists, which path does
-  the owner choose? (a) a one-time granular publish token, scoped to
-  `@sstolz`, with a short expiry, stored only as a `release` environment
-  secret and used only when the package does not exist, then deleted (a
-  v2 change of BR-358 and BR-369); (b) a placeholder version published by
-  the owner by hand, which makes `latest` point at the placeholder and
-  contradicts docs/publishing.md; (c) the owner publishes `0.6.0-beta.1`
-  by hand from the tarball that a `verify` run built, outside the workflow.
-  Recommendation: first try `npm trust`; otherwise (a).
-- **OQ-2 Audited dependency resolution for registry installs.** BACKLOG.md
-  (2026-11-11) notes that `npm install -g` of the package resolves Jimp's
-  nested `zod` 3 and its high advisory again, because `overrides` apply only
-  in the root project, and asks the publication ticket to decide. Must this
-  be fixed (for example with `npm-shrinkwrap.json`) before the first beta, in
-  this spec or another ticket, or is it accepted for the beta and stated in
-  the README?
 
 ## Stress-test
