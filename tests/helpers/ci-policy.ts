@@ -94,6 +94,10 @@ export const FORK_REFUSAL = [
 export const DISABLED_NOTICE =
   "printf '%s\\n' 'PR Quality Gate disabled: SONAR_ENABLED is not true; no analysis ran.'";
 
+// BR-350 / BR-015 v7: the fork notice, step 1 of `privacy-scan`.
+export const PRIVACY_FORK_NOTICE =
+  "printf '%s\\n' 'privacy-scan: fork pull request; deny patterns are unavailable, no scan was run.'";
+
 // BR-015 v5 / BR-227: the only non-Make text of the `ci-result` job.
 export const CI_RESULT_FAILURE = [
   "printf '%s\\n' 'CI failed: the changes job did not succeed, or a job failed or was cancelled.' >&2",
@@ -110,7 +114,9 @@ export const PR_CONDITIONS = {
   disabled: `${SAME} && vars.SONAR_ENABLED != 'true'`,
   enabled: ENABLED,
 };
-// BR-225: the self-hosted label array and the per-job timeouts.
+// BR-225 v3: every ci.yml job on one hosted image. The self-hosted label array
+// survives only in runner-acceptance.yml (BR-229 v2).
+export const HOSTED = "ubuntu-24.04";
 export const LABELS = ["self-hosted", "linux", "x64", "kdrive-ci"];
 export const TIMEOUTS: Record<string, number> = {
   changes: 5,
@@ -125,8 +131,9 @@ export const TIMEOUTS: Record<string, number> = {
   "sonar-pr": 15,
   "ci-result": 5,
   "fork-refusal": 5,
+  "privacy-scan": 20,
 };
-// BR-227, BR-149 v2, BR-183 v2: the exact job conditions.
+// BR-227 v3, BR-149 v3, BR-183 v3: the exact job conditions.
 export const JOB_CONDITIONS = {
   changes: `github.event_name != 'pull_request' || ${SAME}`,
   heavy: "needs.changes.outputs.heavy != 'false'",
@@ -135,7 +142,23 @@ export const JOB_CONDITIONS = {
   forkRefusal: `github.event_name == 'pull_request' && ${FORK}`,
   ciResult: `always() && (github.event_name != 'pull_request' || ${SAME})`,
   ciResultStep:
-    "needs.changes.result != 'success' || contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')",
+    "needs.changes.result != 'success' || needs.privacy-scan.result != 'success' || contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')",
+};
+// BR-341 / BR-350: the step conditions of `privacy-scan`.
+export const PRIVACY_CONDITIONS = {
+  fork: `github.event_name == 'pull_request' && ${FORK}`,
+  scan: `github.event_name != 'pull_request' || ${SAME}`,
+};
+// BR-341: the exact env of `make privacy-scan`.
+export const PRIVACY_ENV = {
+  PRIVACY_DENY_PATTERNS: "${{ secrets.PRIVACY_DENY_PATTERNS }}",
+  PRIVACY_EVENT: "${{ github.event_name }}",
+  PRIVACY_RANGE_BASE:
+    "${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}",
+  PRIVACY_RANGE_HEAD:
+    "${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}",
+  PRIVACY_PR_TITLE: "${{ github.event.pull_request.title }}",
+  PRIVACY_PR_BODY: "${{ github.event.pull_request.body }}",
 };
 // BR-228: the exact top-level concurrency.
 export const CONCURRENCY = {
@@ -147,7 +170,7 @@ const GATES = ["lint", "format", "typecheck", "test", "build"];
 // BR-015 v5 / BR-183 v2: the per-architecture image job, compared exactly.
 const IMAGE_TARGETS = ["make image-binfmt", "make image", "make image-smoke"];
 const expectedImageJob: Job = {
-  "runs-on": LABELS,
+  "runs-on": HOSTED,
   needs: ["changes"],
   if: JOB_CONDITIONS.image,
   permissions: { contents: "read" },
@@ -167,7 +190,7 @@ const expectedImageJob: Job = {
 // BR-320 / BR-015 v6: the dependency audit job, compared exactly. It is not
 // one of the five build gates, so Sonar never waits for it (BR-149 v2).
 export const expectedAuditJob: Job = {
-  "runs-on": LABELS,
+  "runs-on": HOSTED,
   needs: ["changes"],
   if: JOB_CONDITIONS.heavy,
   "timeout-minutes": 20,
@@ -179,7 +202,7 @@ export const expectedAuditJob: Job = {
 };
 // BR-227: the classification job.
 const expectedChangesJob: Job = {
-  "runs-on": LABELS,
+  "runs-on": HOSTED,
   if: JOB_CONDITIONS.changes,
   "timeout-minutes": 5,
   outputs: {
@@ -196,16 +219,39 @@ const expectedChangesJob: Job = {
 };
 // BR-149 v2: the hosted fork refusal.
 const expectedForkRefusalJob: Job = {
-  "runs-on": "ubuntu-24.04",
+  "runs-on": HOSTED,
   if: JOB_CONDITIONS.forkRefusal,
   permissions: { contents: "read" },
   "timeout-minutes": 5,
   steps: [{ run: FORK_REFUSAL }],
 };
-// BR-227: the aggregate result job.
+// BR-341: the privacy scan, compared exactly.
+export const expectedPrivacyScanJob: Job = {
+  "runs-on": HOSTED,
+  permissions: { contents: "read" },
+  "timeout-minutes": 20,
+  steps: [
+    { if: PRIVACY_CONDITIONS.fork, run: PRIVACY_FORK_NOTICE },
+    {
+      if: PRIVACY_CONDITIONS.scan,
+      uses: CHECKOUT,
+      with: { "fetch-depth": 0, "persist-credentials": false },
+    },
+    { if: PRIVACY_CONDITIONS.scan, run: "make privacy-scan", env: PRIVACY_ENV },
+  ],
+};
+// BR-227 v3: the aggregate result job.
 const expectedCiResultJob: Job = {
-  "runs-on": LABELS,
-  needs: ["changes", ...GATES, "image", "audit", "sonar", "sonar-pr"],
+  "runs-on": HOSTED,
+  needs: [
+    "changes",
+    ...GATES,
+    "image",
+    "audit",
+    "sonar",
+    "sonar-pr",
+    "privacy-scan",
+  ],
   if: JOB_CONDITIONS.ciResult,
   "timeout-minutes": 5,
   steps: [{ if: JOB_CONDITIONS.ciResultStep, run: CI_RESULT_FAILURE }],
@@ -314,8 +360,9 @@ const ADMITTED_JOBS = new Map<string, string[]>([
   [FORK_REFUSAL, ["sonar-pr", "fork-refusal"]],
   [DISABLED_NOTICE, ["sonar-pr"]],
   [CI_RESULT_FAILURE, ["ci-result"]],
+  [PRIVACY_FORK_NOTICE, ["privacy-scan"]],
 ]);
-const ADMITTED_OCCURRENCES = 10;
+const ADMITTED_OCCURRENCES = 11;
 
 // Checks one run text; returns 1 for an admitted non-Make constant.
 function validateRun(job: string, run: string): number {
@@ -326,10 +373,14 @@ function validateRun(job: string, run: string): number {
     check(job === "audit", "make audit only in the audit job");
   else if (run === "make ci-changes")
     check(job === "changes", "make ci-changes only in the changes job");
+  else if (run === "make privacy-scan")
+    check(job === "privacy-scan", "make privacy-scan only in privacy-scan");
   else if (admittedIn) {
     check(admittedIn.includes(job), "admitted constant in its job only");
     return 1;
-  } else
+  } else if (job === "privacy-scan")
+    check(false, "no other command in privacy-scan, make setup included");
+  else
     check(
       /^make (setup|lint|format-check|typecheck|build|coverage|pack|sonar|sonar-pr)(\nmake (coverage|pack))?$/u.test(
         run,
@@ -369,9 +420,20 @@ function validateSteps(workflow: Workflow): void {
       if (env.includes("secrets."))
         check(
           (name === "sonar" && step.run === "make sonar") ||
-            (name === "sonar-pr" && step.run === "make sonar-pr"),
-          "secrets only on the analysis step",
+            (name === "sonar-pr" && step.run === "make sonar-pr") ||
+            (name === "privacy-scan" && step.run === "make privacy-scan"),
+          "secrets only on the analysis and privacy-scan steps",
         );
+      // BR-342: the deny secret only in the scan step, no Sonar secret there.
+      check(
+        !env.includes("secrets.PRIVACY_DENY_PATTERNS") ||
+          (name === "privacy-scan" && step.run === "make privacy-scan"),
+        "PRIVACY_DENY_PATTERNS only in the privacy-scan step",
+      );
+      check(
+        name !== "privacy-scan" || !env.includes("secrets.SONAR_"),
+        "no Sonar secret in privacy-scan",
+      );
       check(
         name === "sonar" || !env.includes("secrets.SONAR_TOKEN }}"),
         "SONAR_TOKEN only in the main analysis",
@@ -384,12 +446,13 @@ function validateSteps(workflow: Workflow): void {
   }
   check(
     admittedCount === ADMITTED_OCCURRENCES,
-    "exactly ten admitted non-Make run texts",
+    "exactly eleven admitted non-Make run texts",
   );
 }
 
-// BR-015 v3: the word `secrets`, case-insensitive, in any parsed key or string
-// value, is admitted only inside the env values of the two analysis steps.
+// BR-015 v7: the word `secrets`, case-insensitive, in any parsed key or string
+// value, is admitted only inside the env values of the two analysis steps and
+// of the privacy-scan step.
 function secretReferences(value: unknown, path: string[], found: string[][]) {
   if (typeof value === "string") {
     if (/\bsecrets\b/iu.test(value)) found.push(path);
@@ -407,6 +470,7 @@ function validateSecretPlacement(workflow: Workflow): void {
   const analysis: Record<string, string> = {
     sonar: "make sonar",
     "sonar-pr": "make sonar-pr",
+    "privacy-scan": "make privacy-scan",
   };
   for (const path of found) {
     const [jobs, job = "", steps, index = "", env, name] = path;
@@ -473,20 +537,21 @@ function validateHeadRepositoryPlacement(workflow: Workflow): void {
   }
 }
 
-// BR-225: label array and timeouts.
+// BR-225 v3: hosted runners and timeouts.
 function validateRunners(workflow: Workflow): void {
   for (const [name, job] of Object.entries(workflow.jobs)) {
-    const expected = name === "fork-refusal" ? "ubuntu-24.04" : LABELS;
+    check(job["runs-on"] === HOSTED, "every job on ubuntu-24.04");
     check(
-      canonical(job["runs-on"]) === canonical(expected),
-      "self-hosted label array, fork-refusal hosted",
+      !JSON.stringify(job["runs-on"]).includes("self-hosted"),
+      "no self-hosted runner",
     );
     check(job["timeout-minutes"] === TIMEOUTS[name], "BR-225 timeout-minutes");
   }
 }
 
-// BR-227: only ci-result uses always() at job level; every self-hosted job
-// except changes and ci-result depends on changes directly or transitively.
+// BR-227 v3: only ci-result uses always() at job level; every job except
+// changes, privacy-scan, fork-refusal and ci-result depends on changes
+// directly or transitively.
 function dependsOnChanges(
   workflow: Workflow,
   name: string,
@@ -503,13 +568,20 @@ function validateDependencies(workflow: Workflow): void {
   for (const [name, job] of Object.entries(workflow.jobs)) {
     if (name !== "ci-result")
       check(!job.if?.includes("always()"), "always() only on ci-result");
-    if (!["changes", "ci-result", "fork-refusal"].includes(name))
+    if (
+      !["changes", "ci-result", "fork-refusal", "privacy-scan"].includes(name)
+    )
       check(
         dependsOnChanges(workflow, name, new Set()),
-        "self-hosted job depends on changes",
+        "job depends on changes",
       );
   }
   check(!workflow.jobs.changes?.needs, "changes has no needs");
+  const scan = workflow.jobs["privacy-scan"];
+  check(
+    scan && !scan.needs && scan.if === undefined && !scan.env,
+    "privacy-scan has no needs, no job if and no job env",
+  );
   check(!workflow.jobs["fork-refusal"]?.needs, "fork-refusal has no needs");
 }
 
@@ -552,7 +624,7 @@ export function validateWorkflow(workflow: Workflow): void {
     Object.keys(workflow.jobs)
       .sort((a, b) => a.localeCompare(b))
       .join(",") ===
-      "audit,build,changes,ci-result,fork-refusal,format,image,lint,sonar,sonar-pr,test,typecheck",
+      "audit,build,changes,ci-result,fork-refusal,format,image,lint,privacy-scan,sonar,sonar-pr,test,typecheck",
     "exact job set",
   );
   validateRunners(workflow);
@@ -568,6 +640,11 @@ export function validateWorkflow(workflow: Workflow): void {
     canonical(workflow.jobs["fork-refusal"]) ===
       canonical(expectedForkRefusalJob),
     "fork-refusal job: hosted, read-only, refusal step only",
+  );
+  check(
+    canonical(workflow.jobs["privacy-scan"]) ===
+      canonical(expectedPrivacyScanJob),
+    "privacy-scan job: hosted, read-only, fork notice, full checkout, make privacy-scan with its env",
   );
   check(
     canonical(workflow.jobs["ci-result"]) === canonical(expectedCiResultJob),
@@ -624,6 +701,31 @@ export function validateWorkflow(workflow: Workflow): void {
     canonical(pr?.steps) === canonical(expectedPullRequestSteps),
     "PR gate steps: checkout, fork refusal, disabled notice, pristine export, setup, comparison, analysis, final Git-metadata step",
   );
+}
+
+// BR-229 v2: the owner's runner acceptance never runs in this repository.
+export const RUNNER_ACCEPTANCE_GUARD = `github.repository != '${REPOSITORY}'`;
+export interface AcceptanceWorkflow {
+  on: Record<string, unknown>;
+  jobs: Record<string, { "runs-on"?: unknown; if?: string }>;
+}
+export function validateRunnerAcceptance(workflow: AcceptanceWorkflow): void {
+  check(
+    canonical(Object.keys(workflow.on)) === canonical(["workflow_dispatch"]),
+    "workflow_dispatch is the only trigger",
+  );
+  check(
+    canonical(Object.keys(workflow.jobs).sort((a, b) => a.localeCompare(b))) ===
+      canonical(["probe", "reset-check", "reset-mark"]),
+    "the three acceptance jobs",
+  );
+  for (const job of Object.values(workflow.jobs)) {
+    check(job.if === RUNNER_ACCEPTANCE_GUARD, "repository guard on each job");
+    check(
+      canonical(job["runs-on"]) === canonical(LABELS),
+      "the label array survives here",
+    );
+  }
 }
 
 // AC-14: a minimal evaluator for the exact step conditions used above.
