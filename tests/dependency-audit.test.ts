@@ -269,7 +269,12 @@ it("TestBR321_audit_docs development, security and changelog state the audit con
   expect(text).toMatch(/high or critical/u);
   expect(text).toMatch(/not allowlisted/u);
   expect(text).toContain("npm install -g");
-  expect(text).toMatch(/Zod 3/u);
+  // BR-321 v2 (F-024): the shipped npm-shrinkwrap.json covers tarball and
+  // registry installs; the nested Zod 3 limit is no longer stated.
+  expect(text).toContain("`npm-shrinkwrap.json`");
+  expect(text).toMatch(/root Zod 4/u);
+  expect(text).not.toMatch(/can resolve Jimp's nested Zod 3/u);
+  expect(text).not.toMatch(/accepted until the public-publication/u);
   const changelog = readFileSync("CHANGELOG.md", "utf8");
   const unreleased =
     /^## \[Unreleased\]\n([\s\S]*?)(?=^## |(?![\s\S]))/mu.exec(

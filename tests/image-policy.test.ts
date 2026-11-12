@@ -316,6 +316,107 @@ describe("F-013 AC-05 build, binfmt, ignore and publish policy", () => {
     },
   );
 
+  it("BR-178 v3 admits markers only in the release scripts", () => {
+    const scope = publishScope();
+    for (const path of [
+      "scripts/release.ts",
+      "scripts/release-image.sh",
+      "scripts/shrinkwrap.ts",
+      ".github/workflows/release.yml",
+      ".github/workflows/ci.yml",
+      "Makefile",
+    ])
+      expect(Object.keys(scope)).toContain(path);
+    const count = (text: string, marker: string) =>
+      text.split(marker).length - 1;
+    const image = scope["scripts/release-image.sh"] ?? "";
+    expect(count(image, "docker login")).toBe(1);
+    expect(count(image, "--push")).toBe(1);
+    expect(image).toContain("ghcr.io");
+    const release = scope["scripts/release.ts"] ?? "";
+    expect(count(release, "npm publish")).toBeLessThanOrEqual(1);
+    expect(release).toContain("ghcr.io");
+    expect(() => {
+      validateNoPublish(scope);
+    }).not.toThrow();
+  });
+
+  const v3Mutations: Record<string, (scope: Record<string, string>) => void> = {
+    "ghcr.io in release.yml": (scope) => {
+      scope[".github/workflows/release.yml"] =
+        (scope[".github/workflows/release.yml"] ?? "") + "\n# ghcr.io\n";
+    },
+    "npm publish in release.yml": (scope) => {
+      scope[".github/workflows/release.yml"] =
+        (scope[".github/workflows/release.yml"] ?? "") + "\n# npm publish\n";
+    },
+    "--push in ci.yml": (scope) => {
+      scope[".github/workflows/ci.yml"] =
+        (scope[".github/workflows/ci.yml"] ?? "") + "\n# --push\n";
+    },
+    "npm publish in the Makefile": (scope) => {
+      scope.Makefile = (scope.Makefile ?? "") + "\n\tnpm publish\n";
+    },
+    "ghcr.io in another script": (scope) => {
+      scope["scripts/image-smoke.sh"] =
+        (scope["scripts/image-smoke.sh"] ?? "") + "\n# ghcr.io/x\n";
+    },
+    "docker login in another script": (scope) => {
+      scope["scripts/sonar-entry.sh"] =
+        (scope["scripts/sonar-entry.sh"] ?? "") + "\ndocker login\n";
+    },
+    "a second --push in release-image.sh": (scope) => {
+      scope["scripts/release-image.sh"] =
+        (scope["scripts/release-image.sh"] ?? "") + "\n# --push\n";
+    },
+    "a second docker login in release-image.sh": (scope) => {
+      scope["scripts/release-image.sh"] =
+        (scope["scripts/release-image.sh"] ?? "") + "\n# docker login\n";
+    },
+    "docker push in release-image.sh": (scope) => {
+      scope["scripts/release-image.sh"] =
+        (scope["scripts/release-image.sh"] ?? "") + "\ndocker push x\n";
+    },
+    "push=true in release-image.sh": (scope) => {
+      scope["scripts/release-image.sh"] =
+        (scope["scripts/release-image.sh"] ?? "") + "\n# push=true\n";
+    },
+    "type=registry in release-image.sh": (scope) => {
+      scope["scripts/release-image.sh"] =
+        (scope["scripts/release-image.sh"] ?? "") + "\n# type=registry\n";
+    },
+    "npm publish in release-image.sh": (scope) => {
+      scope["scripts/release-image.sh"] =
+        (scope["scripts/release-image.sh"] ?? "") + "\n# npm publish\n";
+    },
+    "npm publish outside scripts/release.ts": (scope) => {
+      scope["scripts/shrinkwrap.ts"] =
+        (scope["scripts/shrinkwrap.ts"] ?? "") + "\n// npm publish\n";
+    },
+    "a second npm publish in scripts/release.ts": (scope) => {
+      scope["scripts/release.ts"] =
+        (scope["scripts/release.ts"] ?? "") +
+        "\n// npm publish\n// npm publish\n";
+    },
+    "docker login in scripts/release.ts": (scope) => {
+      scope["scripts/release.ts"] =
+        (scope["scripts/release.ts"] ?? "") + "\n// docker login\n";
+    },
+    "--push in scripts/release.ts": (scope) => {
+      scope["scripts/release.ts"] =
+        (scope["scripts/release.ts"] ?? "") + "\n// --push\n";
+    },
+  };
+  it.each(Object.keys(v3Mutations))("BR-178 v3 rejects %s", (name) => {
+    const scope = publishScope();
+    const before = JSON.stringify(scope);
+    v3Mutations[name]?.(scope);
+    expect(JSON.stringify(scope)).not.toBe(before);
+    rejects(() => {
+      validateNoPublish(scope);
+    });
+  });
+
   it("BR-178 rejects a ghcr.io reference in the Dockerfile", () => {
     rejects(() => {
       validateNoPublish({
