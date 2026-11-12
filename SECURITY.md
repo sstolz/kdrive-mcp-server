@@ -246,9 +246,13 @@ fail the job and are triaged as tickets.
 The F-020 `overrides` in `package.json` move Jimp's nested Zod 3 to the root
 Zod 4 and pin `minimatch` (see
 [ADR-009](architecture-decisions/ADR-009-dependency-overrides-skiplibcheck.md)).
-npm applies `overrides` only in the root project: the container image, built
-with `npm ci` on this repository's lockfile, is covered, but an install of the
-packed tarball (`npm install -g`) resolves its dependencies afresh and can
-resolve Jimp's nested Zod 3 again, with its high advisory
+npm applies `overrides` only in the root project, so the published package
+ships an `npm-shrinkwrap.json` holding the audited production tree of the
+lockfile, overrides included (F-024 BR-376, BR-377): `make pack` generates it,
+and an install of the package or of the packed tarball (`npm install -g`)
+resolves exactly that tree and gets the root Zod 4, as the container image
+built with `npm ci` does. `make check` verifies that the packed shrinkwrap
+matches the lockfile and holds no nested `zod`
 ([GHSA-mrhx-c7xc-m3w5](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5)).
-That limit is accepted until the public-publication preparation ticket.
+Because the shrinkwrap pins every transitive production dependency, a
+transitive security fix reaches users through a new release.

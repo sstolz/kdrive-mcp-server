@@ -42,14 +42,19 @@ Build from a checkout of this repository:
 ```sh
 make setup        # build the development container and install dependencies
 make image        # container image: kdrive-mcp-server:runtime-<arch>
-make pack         # npm package: artifacts/kdrive-mcp-server-0.1.0.tgz
+make pack         # npm package: ./artifacts/sstolz-kdrive-mcp-server-0.1.0.tgz
 ```
 
 `make image IMAGE_PLATFORMS=linux/amd64` builds one architecture only. Nothing
 is pushed to a registry. To use the CLI on your machine, install the package
-with `npm install -g artifacts/kdrive-mcp-server-0.1.0.tgz`; it provides the
-`kdrive-mcp-server` command. `kdrive-mcp-server --help` and `--version` need no
-configuration.
+with `npm install -g ./artifacts/sstolz-kdrive-mcp-server-0.1.0.tgz` (keep the
+leading `./`, without which npm reads the argument as a GitHub shorthand); it
+provides the `kdrive-mcp-server` command. `kdrive-mcp-server --help` and
+`--version` need no configuration.
+
+Once the public beta is published, install it from the npm registry with
+`npm install -g @sstolz/kdrive-mcp-server@beta`
+([publishing](docs/publishing.md)).
 
 ## Configure
 
