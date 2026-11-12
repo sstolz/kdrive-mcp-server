@@ -236,11 +236,14 @@ GHCR package).
     version by hand with the read-back commands, and `read-back`, skipped
     because its `needs` failed, is not re-run;
   - when the image is pushed but npm is not published (the second approval
-    is rejected or expires, `release-check` fails in `publish-npm`, or
-    `npm publish` reports a failure and `npm view` does not find the
-    version), re-run the `publish-npm` job (its `release-check` in phase
-    `npm` expects the pushed image), or delete the GHCR version and dispatch
-    again;
+    is rejected, `release-check` fails in `publish-npm`, or `npm publish`
+    reports a failure and `npm view` does not find the version), re-run the
+    `publish-npm` job (its `release-check` in phase `npm` expects the pushed
+    image), or delete the GHCR version and dispatch again;
+  - when the second approval expires (GitHub cancels a run waiting 30 days
+    and allows no re-run after 30 days), delete the GHCR version and
+    dispatch again while the release commit is `main`'s HEAD, otherwise
+    release the next beta;
   - when the image push reports a failure and GHCR does not have the
     version, re-run the failed `publish-image` job or dispatch again;
   - when the image push reports a failure but GHCR has the version,
@@ -710,9 +713,10 @@ GHCR package).
   "release commit is `main`'s HEAD" statement, the required green real
   `dry_run=true` dispatch before any `dry_run=false` dispatch, the read-back
   recovery, the "check the registry first" recovery for npm, the "image
-  pushed, npm not published" recovery naming a rejected or expired second
-  approval, a failed `release-check` in `publish-npm` and an unpublished
-  failed `npm publish` (R5-1, widened by D2-6), the "image push failed, GHCR
+  pushed, npm not published" recovery naming a rejected second approval, a
+  failed `release-check` in `publish-npm` and an unpublished
+  failed `npm publish` (R5-1, widened by D2-6), the expired-approval
+  recovery (R6-1), the "image push failed, GHCR
   lacks the version" recovery (R4-3), the "image in GHCR but npm never ran"
   recovery and the `main`-HEAD limit of a GHCR delete and re-dispatch, and
   the README tarball path with its leading `./`),
@@ -996,7 +1000,7 @@ GHCR package).
 - **AC-23** (BR-369) — Real npm argv check, once, during implementation.
   Given the tarball `./artifacts/sstolz-kdrive-mcp-server-<version>.tgz`
   written by `make pack` at the current `package.json` version, When the pinned npm 11.20.0 of the `dev` container
-  runs `docker compose run --rm -T dev npm publish ./artifacts/sstolz-kdrive-mcp-server-<version>.tgz --tag beta --access public --ignore-scripts --provenance --dry-run`
+  runs `docker compose run --rm -T -e GITHUB_ACTIONS=true dev npm publish ./artifacts/sstolz-kdrive-mcp-server-<version>.tgz --tag beta --access public --ignore-scripts --provenance --dry-run`
   (the exact BR-369 argv with `--dry-run`), Then it exits 0 and its output
   names `@sstolz/kdrive-mcp-server@<version>`; the record also states
   whether the dry run reached provenance generation (for example a
@@ -1015,8 +1019,10 @@ GHCR package).
   run, once for `publish-image` and once for `publish-npm` (both target the
   `release` environment, D-5); the second approval comes after the image
   push, and rejecting it or letting it expire leaves only the GHCR version,
-  recovered as in D-8 (re-run `publish-npm`, or delete the GHCR version and
-  dispatch again while the release commit is `main`'s HEAD).
+  recovered as in D-8 (after a rejection, re-run `publish-npm`; after an
+  expiry, which cancels the run, delete the GHCR version and dispatch again
+  while the release commit is `main`'s HEAD, otherwise release the next
+  beta).
   Rejected: a tag-push trigger
   (a tag alone would publish, against §7); a job in `ci.yml` (mixes
   publication into the gate workflow, versions BR-015 and BR-225, and runs on
@@ -1090,12 +1096,15 @@ GHCR package).
   If the image push failed and GHCR does not have the version, the owner
   re-runs the failed `publish-image` job (its `release-check` in phase
   `image` expects a 404) or dispatches again. If the image was pushed but
-  npm was not published (the second approval was rejected or expired,
+  npm was not published (the second approval was rejected,
   `release-check` failed in `publish-npm`, or the npm step failed without
   publishing),
   the owner re-runs the `publish-npm` job (its `release-check` in
   phase `npm` expects the pushed image), or deletes the GHCR version and
-  dispatches again. If the image push reported a failure but GHCR has the
+  dispatches again. If the second approval expired, GitHub cancelled the
+  run after 30 days and allows no re-run, so the owner deletes the GHCR
+  version and dispatches again while the release commit is `main`'s HEAD,
+  or releases the next beta. If the image push reported a failure but GHCR has the
   version, `publish-npm` never ran: re-running `publish-image` fails its
   `release-check` (200 in phase `image`), so the owner deletes the GHCR
   version and dispatches again, which BR-361 admits only while the release
@@ -1391,3 +1400,10 @@ Decision pass `2-spec-decision-2-reviewer` (strongest tier, verdict
 - **D2-7** (minor, retained) — BR-378 now says that BR-356 grants
   `actions: read` for these reads and any status other than 200 fails
   closed, replacing the claim about removing the permission.
+- **R6-1** (minor, retained; `2-spec-review-6-reviewer`) — An expired second
+  approval cancels the run after 30 days and allows no re-run: BR-354, D-1,
+  D-8 and AC-02 give only "delete the GHCR version and dispatch again while
+  the commit is HEAD, otherwise the next beta" for it; re-running
+  `publish-npm` stays for a rejection or a failed check or publish.
+- **R6-2** (minor, retained) — AC-23 runs with `-e GITHUB_ACTIONS=true` and no
+  OIDC variable, matching the `verify` environment.
