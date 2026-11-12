@@ -149,13 +149,20 @@ keep their rules and change only `runs-on`.
   `PRIVACY_RANGE_HEAD`: on `pull_request` the PR base and head, on `push`
   `before..after`. The full history of the head is scanned instead when
   `PRIVACY_EVENT` is `workflow_dispatch`, or the base is empty, forty zeros
-  (new branch), not a commit in the clone, or not an ancestor of the head
-  (force push). For each commit of `git rev-list <range>`: its full message
+  (new branch) or not a commit in the clone. A base that is not an ancestor
+  of the head (a PR whose base moved on, or a force push) keeps the range
+  scan: `git rev-list <base>..<head>` already lists exactly the commits that
+  the base lacks. For each commit of `git rev-list <range>`: its full message
   (`git log -1 --format=%B`) is scanned by the BR-345 views; and the added
   lines of its patch (`git log -p --no-ext-diff --no-textconv
-  --format=commit%x20%H <range>`, lines starting with `+` except `+++`
-  headers; merge commits show no patch) are scanned by the BR-345 per-line
-  views and the collapsed view over each file's added lines. An empty head, or
+  --text --format=commit%x20%H <range>`; a `+++`/`---` line is a header only
+  inside the per-file header block that follows a `diff --git` line, every
+  other line starting with `+` is an added line; merge commits show no patch)
+  are scanned by the BR-345 per-line views and the collapsed view over each
+  file's added lines. Patch lines are decoded as strict UTF-8; a line that is
+  not valid UTF-8 is counted as binary and skipped. The old and new paths of
+  every file in each patch header (`diff --git`, rename and delete headers)
+  are scanned too and reported as `commit <sha> added` with no text. An empty head, or
   a head that is not a commit in the clone, prints only
   `privacy-scan: head is not a commit` and exits 2. Verified by: AC-09.
 - **BR-347** — Only when `PRIVACY_EVENT` is `pull_request`, `PRIVACY_PR_TITLE`
@@ -176,7 +183,8 @@ keep their rules and change only `runs-on`.
   the exit status is 0 when `h` is 0, else 1. Any unexpected error (Git
   failure, read error, exception) is caught by one top-level handler that
   prints only `privacy-scan: internal error` to stderr and exits 2; no stack,
-  message or partial summary is printed. Verified by: AC-07, AC-16.
+  message or partial summary is printed. Every git child process runs with
+  its stderr piped and discarded, never inherited. Verified by: AC-07, AC-16.
 - **BR-350** — Step 1 of `privacy-scan` has the `if` exactly
   `github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository`
   and the `run` exactly the `PRIVACY_FORK_NOTICE` constant of
@@ -268,10 +276,14 @@ keep their rules and change only `runs-on`.
   `tests/privacy-scan.test.ts` `BR-348 …`.
 - **AC-09** (BR-346) — Given commits A–C with the token only in B's message,
   and the token only in an added line of C, When scanned with base A and head
-  C, with base forty zeros, with an unknown base, with a base not an ancestor
-  of C, with `PRIVACY_EVENT=workflow_dispatch` and base C, and with base C,
-  Then `commit <B> line <n>` and `commit <C> added` are reported in the first
-  five and nothing in the last; an empty head and an unknown non-empty head
+  C, with base forty zeros, with an unknown base, with
+  `PRIVACY_EVENT=workflow_dispatch` and base C, and with base C, Then
+  `commit <B> line <n>` and `commit <C> added` are reported in the first four
+  and nothing in the last; given a PR whose base D (on another branch, not an
+  ancestor of C) shares only A with C, Then the range `D..C` is scanned (B and
+  C reported, no full-history scan of A); given an added line starting with
+  `+++` and a deleted file whose path holds the token, Then both are reported
+  as `commit <sha> added`; an empty head and an unknown non-empty head
   each print `privacy-scan: head is not a commit` and exit 2. Verified by: `tests/privacy-scan.test.ts`
   `BR-346 …`.
 - **AC-10** (BR-347) — Given the token in `PRIVACY_PR_TITLE` and in
@@ -311,7 +323,7 @@ keep their rules and change only `runs-on`.
   reported at line 1 and the gitlink is counted in `gitlinks skipped`; and
   given a Git failure forced by the test (scan run outside a repository with a
   valid secret and head), Then stdout is empty, stderr is exactly
-  `privacy-scan: internal error` and the exit is 2. Verified by:
+  `privacy-scan: internal error` (no git `fatal:` line) and the exit is 2. Verified by:
   `tests/privacy-scan.test.ts` `BR-345 object database …`, `BR-349 internal
   error …`.
 
@@ -377,3 +389,15 @@ keep their rules and change only `runs-on`.
 - [minor] Decoders unspecified — retained: UTF-8, UTF-16 LE/BE with BOM, `%XX` and HTML numeric entity views, else binary (BR-345, AC-11, AC-15).
 - [minor] Missing test rows and ReDoS — retained: unknown non-empty head (AC-09), PR sources ignored on non-PR events via `PRIVACY_EVENT` (BR-347, AC-10); ReDoS bounded by the 20-minute timeout failing closed (T7).
 - [minor] Squash message assumption — retained: AC-13 owner precondition, squash only with "Pull request title and description".
+
+### Round 2 — reviewed SHA `4e77729` (Opus 5.5, `1-spec-review-2-reviewer`, diff-focused)
+
+1. [major] Non-ancestor fallback would make most PRs scan full history —
+   retained: dropped; `rev-list base..head` already lists the missing
+   commits; AC-09 adds a moved-base PR row.
+2. [minor] `+++` content lines and history paths — retained: headers only in
+   the per-file header block; patch paths scanned; AC-09 row.
+3. [minor] Patch decoding — retained: `--text`, strict UTF-8, invalid lines
+   counted as binary.
+4. [minor] Git child stderr — retained: piped and discarded; AC-16 asserts no
+   `fatal:` line.
