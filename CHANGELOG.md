@@ -7,7 +7,7 @@ No product release is recorded.
 
 ### Added
 
-- #1 / F-023 v1 (pending acceptance): every CI job runs on GitHub-hosted
+- #1 / F-023 v1 (accepted 2026-11-12): every CI job runs on GitHub-hosted
   `ubuntu-24.04`, and a `privacy-scan` job (`make privacy-scan`, needed by
   `ci-result`) scans the tracked tree, the pushed or PR commits and the PR
   title and body against deny patterns from the `PRIVACY_DENY_PATTERNS`

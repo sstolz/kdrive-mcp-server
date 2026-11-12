@@ -1,6 +1,6 @@
 # Capability map
 
-## Provisional (pending acceptance) — hosted CI and privacy scan
+## Accepted — hosted CI and privacy scan
 
 [F-023 v1](features/F-023-hosted-ci-privacy-scan.md) (#1), BR-341–BR-352 v1
 with BR-015 v7, BR-149, BR-183, BR-225 and BR-227 v3, BR-229 and BR-320 v2.
@@ -9,8 +9,10 @@ by `ci-result`, scans the tracked tree, the commit range (messages, identities,
 changed blobs and paths) and the PR title and body against deny patterns read
 only from the `PRIVACY_DENY_PATTERNS` secret, and prints locations and pattern
 numbers only. The self-hosted runner setup stays optional documentation, never
-attached to this repository. Provisional: not accepted on actual main; it needs
-the owner-provisioned secret and the AC-13 CI runs.
+attached to this repository. Accepted on actual main `ad25fa2` on 2026-11-12
+(`make check` rc=0, 142 files / 3742 tests; push run 43269623841 and full-history
+`workflow_dispatch` run 43269650799 green on hosted runners, `privacy-scan` 0 hits;
+[evidence](https://github.com/sstolz/kdrive-mcp-server/issues/1#issuecomment-6831523066)).
 
 ## Accepted — Quality Gate failure summary
 
