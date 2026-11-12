@@ -2,7 +2,7 @@
 id: F-024
 title: Scoped package name and gated beta publication
 ticket: "#2"
-status: draft
+status: frozen
 version: 2
 ---
 
@@ -23,12 +23,13 @@ new F or BR ID. Frozen v1 (`0624a1b`) is kept in
 ## Version history
 
 - **v2 (2026-11-12, draft).** Reason: implementing v1 hit the D-14 stop
-  condition. A packed tarball shipping `npm-shrinkwrap.json`, installed with
+  condition. With the current `package.json` `files` list npm did not pack
+  the shrinkwrap at all. A temporary tarball variant with
+  `npm-shrinkwrap.json` added to `files`, installed with
   `npm install --global --prefix <tmp> ./…tgz` under npm 11.20.0, still
   resolved `zod@3.25.76` under `@jimp/types@1.6.1` and
-  `@jimp/plugin-resize@1.6.1`, exactly as without a shrinkwrap; with the
-  current `package.json` `files` list npm did not pack the shrinkwrap at
-  all; `@jimp/*` 1.6.1 is the latest release and still depends on
+  `@jimp/plugin-resize@1.6.1`, exactly as without a shrinkwrap (commands and
+  output in the #2 implementation PR body); `@jimp/*` 1.6.1 is the latest release and still depends on
   `zod ^3.23.8`. The owner chose option A on 2026-11-12 (V2-1). Changes: the
   production shrinkwrap is dropped (Context T8, Scope item 6, D-14); BR-376
   and BR-377 are withdrawn (never accepted, IDs never reused); BR-321 v2 is
@@ -139,7 +140,10 @@ or pull the image). The MCP server's runtime behaviour is unchanged.
    of 2026-11-11 (nested `zod` 3 on npm and tarball installs) stays open,
    accepted for the beta as residual risk (f); the fix (replace Jimp, or
    bundle dependencies) is the 1.0 follow-up ticket #12. SECURITY.md's
-   `## Dependency audit` section stays as BR-321 v1 requires.
+   `## Dependency audit` section keeps the BR-321 v1 statement, and its
+   sentence that the limit is accepted "until the public-publication
+   preparation ticket" becomes "accepted for the beta, fixed before 1.0 in
+   #12".
 7. The BR files (new and versioned), `business-rules/README.md`,
    `docs/spec-index.md`, `capability-map.md` and a CHANGELOG Unreleased line,
    all pending acceptance.
@@ -1184,7 +1188,8 @@ with v2; (e) is withdrawn in v2.
   Jimp's nested `zod@3.25.76` and its high advisory, because `overrides`
   apply only in the root project. The container image is not affected: it
   is built from the lockfile with the root overrides applied. Mitigation:
-  SECURITY.md already documents the limit (BR-321 v1); fixed before 1.0 in
+  SECURITY.md documents the limit (BR-321 v1), as accepted for the beta and
+  fixed before 1.0 in #12 (Scope item 6); fixed before 1.0 in
   #12 (replace Jimp, or bundle dependencies). Owner acceptance: accepted
   2026-11-12.
 
@@ -1372,12 +1377,19 @@ Implementation finding and owner decision for v2.
 
 - **V2-1** (blocking, retained; implementation of frozen v1 at `0624a1b`) —
   The D-14 stop condition was hit: an isolated-prefix install of the packed
-  tarball under npm 11.20.0 still listed `zod@3.25.76` under
-  `@jimp/types@1.6.1` and `@jimp/plugin-resize@1.6.1`, and with the current
-  `files` list npm did not pack the shrinkwrap; `@jimp/*` 1.6.1 is the latest
+  tarball variant with `npm-shrinkwrap.json` added to `files` still listed
+  `zod@3.25.76` under `@jimp/types@1.6.1` and `@jimp/plugin-resize@1.6.1`
+  under npm 11.20.0, and with the current `files` list npm did not pack the
+  shrinkwrap at all; `@jimp/*` 1.6.1 is the latest
   release and still depends on `zod ^3.23.8`. The owner decided on
   2026-11-12 (option A): drop the shrinkwrap from F-024, accept the nested
   Zod 3 advisory for npm installs during the beta as residual risk (f), and
   fix it before 1.0 in a separate ticket (#12). BR-376, BR-377, BR-321 v2,
   D-14, AC-17–AC-20 and residual risk (e) are withdrawn; Scope item 6 and T8
   updated.
+- **R7-1** (minor, retained; `2-spec-review-7-reviewer`) — Scope item 6 and
+  risk (f) now require SECURITY.md to keep the BR-321 v1 statement and to
+  say the limit is accepted for the beta and fixed before 1.0 in #12.
+- **R7-2** (minor, retained) — The version history and V2-1 say that the
+  shrinkwrap was put into a temporary tarball variant through `files`, and
+  that the commands and output are in the #2 implementation PR body.
