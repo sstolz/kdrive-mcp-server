@@ -8,7 +8,7 @@ version: 1
 
 Author: Claude Opus 5.5 (effort unknown), spec phase, 2026-11-12.
 Base: branch `claude/beautiful-maxwell-8mdk2w`, tree identical to `main`
-`5e5a7db`. IDs: F-024, BR-353–BR-377, BR-016 v3, BR-178 v3, BR-321 v2; no
+`5e5a7db`. IDs: F-024, BR-353–BR-378, BR-016 v3, BR-178 v3, BR-321 v2; no
 ADR. BR-291 and BR-305–BR-311 are reserved and not used. `#2` is this
 repository's ticket. The owner answered OQ-1 and OQ-2 on 2026-11-12; the
 answers are integrated as P-0, D-13, D-14, BR-376, BR-377 and BR-321 v2.
@@ -43,12 +43,20 @@ or pull the image). The MCP server's runtime behaviour is unchanged.
 - T1 publication without a go: a tag push, a merge, a CI run or a dispatch
   publishes by itself. Covered by a dispatch-only workflow whose two
   publishing jobs each need the `release` environment's required reviewer
-  (BR-355, BR-356).
+  (BR-355, BR-356). Because a missing or weakened protection rule would let
+  those jobs run unapproved, `release-check` reads the environment's
+  protection rules and branch policies through the GitHub API in every phase
+  and fails closed unless a required reviewer and exactly the `main` branch
+  policy are configured (BR-378).
 - T2 wrong artifact: the published bytes do not come from the commit, version
   and tag the owner approved, or from a commit that never passed CI on `main`
   (BR-359–BR-363, re-checked inside each approved job, D-7), or the
-  workflow and scripts that run do not come from the released commit
-  (`RELEASE_SHA` must equal `GITHUB_SHA`, BR-361, D-10).
+  workflow and scripts that run do not come from the released commit. Every
+  job checks out `${{ github.sha }}`, the `main` HEAD the run was dispatched
+  on and the commit the workflow file comes from, never `inputs.sha`
+  (BR-357); that trusted, checked-out code then asserts `RELEASE_SHA` equals
+  `GITHUB_SHA` (BR-361, D-10). The input commit is therefore only compared,
+  never executed, so the check is not decided by the code it checks.
 - T3 untrusted code reaching publish credentials: fork and PR events, a
   dependency's install script, or a step that receives a token it does not
   need (BR-356, BR-358, D-4). Dependencies are installed with
@@ -59,13 +67,17 @@ or pull the image). The MCP server's runtime behaviour is unchanged.
 - T4 long-lived credential theft: an npm token stored in GitHub. Avoided by
   npm trusted publishing (OIDC) and the short-lived `GITHUB_TOKEN` (D-3).
 - T5 same-repository writer: an account with write access can dispatch a
-  modified `release.yml` from another branch. The `release` environment only
-  admits `main` (precondition P-2), and the npm trusted publisher names the
-  workflow file and the environment (P-1), so such a run reaches neither the
-  approval nor npm. It can still get `packages: write` through
-  `GITHUB_TOKEN`. Residual risk accepted, the same trust level as F-023 T5:
-  same-repository writers are trusted, and every workflow change gets the
-  mandatory independent review.
+  modified `release.yml` from another branch. That run's `GITHUB_SHA` is the
+  other branch's HEAD, so the unmodified workflow's `main` guard (BR-356)
+  skips it, and a modified copy without the guard still meets the `release`
+  environment, which only admits `main` (precondition P-2, checked on `main`
+  runs by BR-378), and the npm trusted publisher, which names the workflow
+  file and the environment (P-1); such a run reaches neither the approval
+  nor npm. It can still get `packages: write` through `GITHUB_TOKEN`, and a
+  writer can push a `v*` tag unless the P-5 tag ruleset blocks it. Residual
+  risk accepted, the same trust level as F-023 T5: same-repository writers
+  are trusted, and every workflow change gets the mandatory independent
+  review (see also `## Residual risks` (a)).
 - T6 partial publication: one registry accepts and the other fails. npm
   versions cannot be reused, so the reversible push (GHCR) goes first and npm
   goes last (BR-371, D-8); a read-back failure after the npm publish is
@@ -118,14 +130,17 @@ or pull the image). The MCP server's runtime behaviour is unchanged.
 - A GitHub Release object, release notes or a tag-triggered workflow.
 - The Sonar CI speed-up.
 - Any change to `ci.yml` or `runner-acceptance.yml` (BR-374).
-- Automating the owner preconditions P-0–P-4, including the hand publication
+- Automating the owner preconditions P-0–P-5, including the hand publication
   and deprecation of the placeholder version (P-0).
 - Bundling dependencies into the tarball (`bundleDependencies`) or vendoring
   Jimp; `package.json` `files` and `overrides` stay unchanged.
 
 ### Owner preconditions (not automated)
 
-Order: P-0, then P-1; P-2–P-4 before the first non-dry-run dispatch.
+Order, as listed below: P-0, P-1, P-4, P-2 and P-5 before the first
+non-dry-run dispatch; P-3 during or after the first non-dry-run run, once
+its image is pushed (it cannot precede the first push, which creates the
+GHCR package).
 
 - **P-0** Before the first real release, the owner publishes once, by hand
   from their own machine with npm 11.5.1 or later, the placeholder
@@ -140,27 +155,48 @@ Order: P-0, then P-1; P-2–P-4 before the first non-dry-run dispatch.
   npm publish --access public --tag latest
   npm deprecate @sstolz/kdrive-mcp-server@0.0.0-placeholder.0 "Placeholder, not a release. Install @sstolz/kdrive-mcp-server@beta."
   npm view @sstolz/kdrive-mcp-server dist-tags.latest
+  npm logout
   ```
 
   `--tag latest` is explicit because npm 11 refuses to publish a pre-release
   version without `--tag`, and `latest` must exist for BR-363 and BR-372; the
-  last command must print `0.0.0-placeholder.0`. The npm credential used
-  stays on the owner's machine; no npm token is ever stored in GitHub.
-  `latest` points at the deprecated placeholder until a stable release moves
-  it (D-9, D-13).
+  `npm view` command must print `0.0.0-placeholder.0`. `npm logout` revokes
+  the session token on the owner's machine; no npm token is ever stored in
+  GitHub. `latest` points at the deprecated placeholder until a stable
+  release moves it (D-9, D-13).
 - **P-1** After P-0, the npm account that publishes owns the `@sstolz` scope
   and has a trusted publisher for `@sstolz/kdrive-mcp-server`: provider
   GitHub Actions, repository `sstolz/kdrive-mcp-server`, workflow file
-  `release.yml`, environment `release`. `0.6.0-beta.1` and every later
-  version are published only by the workflow through OIDC (D-3).
-- **P-2** The repository environment `release` exists with the owner as
-  required reviewer, deployment branches limited to `main`, and no
-  environment secret or variable.
-- **P-3** After the first push, the owner sets the GHCR package
-  `kdrive-mcp-server` to public and keeps this repository's Actions write
-  access to it.
-- **P-4** The repository is public before the first non-dry-run dispatch:
-  npm provenance needs a public source repository (BR-372, D-10).
+  `release.yml`, environment `release`. Once the trusted publisher is
+  configured, the owner sets the package's publishing access to "Require
+  two-factor authentication and disallow tokens", which trusted publishing
+  still satisfies. `0.6.0-beta.1` and every later version are published only
+  by the workflow through OIDC (D-3).
+- **P-4** The repository is public before P-2 and before the first
+  non-dry-run dispatch: environment protection rules (required reviewers,
+  deployment branch policies) are only available on public repositories for
+  this account's plan, and npm provenance needs a public source repository
+  (BR-372, D-10).
+- **P-2** The repository environment `release` exists with a
+  `required_reviewers` protection rule naming the owner, a custom deployment
+  branch policy that is exactly the branch `main` (not "protected branches",
+  no other branch or tag pattern), and no environment secret or variable.
+  "Prevent self-review" stays off: the single maintainer both dispatches and
+  approves. `release-check` verifies the reviewer rule and the branch policy
+  in every phase (BR-378).
+- **P-5** A repository ruleset on `main` already exists. The owner adds a tag
+  ruleset on `refs/tags/v*` that restricts creation, update and deletion to
+  the owner (bypass list: the owner only), or at least blocks update and
+  deletion, so that the release tag BR-361 checks cannot be moved. Agents
+  never dispatch `release.yml` with `dry_run=false` and never approve a
+  `release` deployment; the owner does both (AGENTS.md §7).
+- **P-3** The first non-dry-run run creates the GHCR package
+  `kdrive-mcp-server`, private by default. The owner then sets it to public,
+  either between the `publish-image` push and the `publish-npm` approval or
+  after the run, and keeps this repository's Actions write access to it.
+  Until then anonymous pulls fail and `read-back` fails its `image is
+  public (P-3)` check (BR-373); after setting it public, the owner re-runs
+  only the failed `read-back` job, which verifies the visibility.
 
 ## Business rules
 
@@ -180,27 +216,48 @@ Order: P-0, then P-1; P-2–P-4 before the first non-dry-run dispatch.
   its Versions section states that `latest` points at the deprecated
   placeholder `0.0.0-placeholder.0` until 1.0.0 and that users install
   `@beta` or an exact version, and it no longer says that `latest` points to
-  the first beta; its "Release workflow" section lists P-0–P-4 in order,
-  gives the P-0 commands of this spec verbatim, states that the release is
-  dispatched from `main` while the release commit is `main`'s HEAD (else
-  BR-361 refuses it because `GITHUB_SHA` differs), and states the read-back
-  recovery: when npm published but `read-back` failed, re-run only the
-  failed `read-back` job or verify by hand with
-  `npm view @sstolz/kdrive-mcp-server@<version>` and
-  `docker buildx imagetools inspect ghcr.io/sstolz/kdrive-mcp-server:<version>`,
-  and a new dispatch of that version is refused by BR-363, as intended.
-  Verified by: AC-02.
+  the first beta; its "Release workflow" section lists the preconditions in
+  the order P-0, P-1, P-4, P-2, P-5, P-3, gives the P-0 commands of this
+  spec verbatim (ending with `npm logout`), states that P-3 is done after
+  the first image push and verified by `read-back`, states that the release
+  is dispatched from `main` while the release commit is `main`'s HEAD (else
+  BR-361 refuses it because `GITHUB_SHA` differs), and states that a green
+  real `dry_run=true` dispatch of the same version and commit is required,
+  and its run link recorded, before any `dry_run=false` dispatch. It states
+  the recovery of D-8:
+  - when npm published but `read-back` failed, re-run only the failed
+    `read-back` job or verify by hand with
+    `npm view @sstolz/kdrive-mcp-server@<version>` and
+    `docker buildx imagetools inspect ghcr.io/sstolz/kdrive-mcp-server:<version>`;
+    a new dispatch of that version is refused by BR-363, as intended;
+  - when `npm publish` or the image push reports a failure, first check
+    whether the registry accepted it anyway (`npm view` for npm, the GHCR
+    manifest for the image); if it did, verify the published version by hand
+    with the same commands, and `read-back`, skipped because its `needs`
+    failed, is not re-run;
+  - deleting the GHCR version and dispatching again works only while the
+    release commit is still `main`'s HEAD (BR-361); otherwise the next beta
+    is released.
+
+  Verified by: AC-02, AC-22.
 
 ### Release workflow
 
-- **BR-355** — `.github/workflows/release.yml` has `name: Release`, `on`
-  exactly `workflow_dispatch` with exactly three inputs: `version` (type
-  `string`, required), `sha` (type `string`, required) and `dry_run` (type
-  `boolean`, required `false`, default `true`). Top-level `permissions` is
-  `{}`, top-level `concurrency` is exactly
-  `{group: release, cancel-in-progress: false}`, there is no top-level `env`,
-  and the job set is exactly `verify`, `publish-image`, `publish-npm` and
-  `read-back`. Verified by: AC-03, AC-04.
+- **BR-355** — `.github/workflows/release.yml` has `name: Release`,
+  `run-name` exactly
+  `Release ${{ inputs.version }} @ ${{ inputs.sha }} dry_run=${{ inputs.dry_run }}`
+  (so the approval page shows what the owner approves; it is display text
+  only, and since every `run` is a bare `make <target>` and step `env` holds
+  only the BR-358 values, it reaches no shell), `on` exactly
+  `workflow_dispatch` with exactly three inputs: `version` (type `string`,
+  required), `sha` (type `string`, required) and `dry_run` (type `boolean`,
+  required `false`, default `true`). Top-level `permissions` is `{}`,
+  top-level `concurrency` is exactly
+  `{group: release, cancel-in-progress: false}`, top-level `env` is exactly
+  `{DEV_UID: "1001", DEV_GID: "1001"}` (the hosted runner's uid and gid, as
+  in `.github/workflows/ci.yml`, so the `dev` container writes files the
+  runner user owns), and the job set is exactly `verify`, `publish-image`,
+  `publish-npm` and `read-back`. Verified by: AC-03, AC-04.
 - **BR-356** — Every job has `runs-on: ubuntu-24.04` and `timeout-minutes:
   60`. `verify` has the `if` exactly
   `github.repository == 'sstolz/kdrive-mcp-server' && github.ref == 'refs/heads/main'`,
@@ -230,12 +287,46 @@ Order: P-0, then P-1; P-2–P-4 before the first non-dry-run dispatch.
     `npm-tarball` into `artifacts/`; `make release-npm`;
   - `read-back`: checkout; `make release-verify`.
 
-  Every checkout uses `ref: ${{ inputs.sha }}`, `fetch-depth: 0` and
-  `persist-credentials: false`. Verified by: AC-03, AC-04.
-- **BR-358** — Step inputs and credentials in `release.yml`:
+  Every checkout uses `ref: ${{ github.sha }}` (the `main` HEAD the run was
+  dispatched on, whose workflow file is the one running), `fetch-depth: 0`
+  and `persist-credentials: false`; no step checks out or executes
+  `inputs.sha`, which only BR-360 and BR-361, run from that checkout,
+  compare. Verified by: AC-03, AC-04.
+- **BR-358** — Step inputs and credentials in `release.yml`. The release
+  policy validator is closed-set: any key not listed here or in BR-355–BR-357
+  is rejected, at every level.
+  - Top-level keys are exactly `name`, `run-name`, `on`, `permissions`,
+    `concurrency`, `env` and `jobs`. Job keys are only `if`, `runs-on`,
+    `timeout-minutes`, `permissions`, `needs`, `environment`, `outputs` and
+    `steps`, each only where BR-356 lists it; so `continue-on-error`, job
+    `env`, `container`, `services`, `strategy` and `defaults` are rejected.
+  - Step keys are only `name` (a literal without `${{`), `id` (only
+    `release-npm` on `verify`'s `make release-npm`), `uses`, `with`, `run`
+    and `env`; no step has `if`, `continue-on-error`, `shell`,
+    `working-directory` or `timeout-minutes`.
+  - `with` has exactly the keys `ref` (`${{ github.sha }}`), `fetch-depth`
+    (`0`) and `persist-credentials` (`false`) on checkout; exactly `name`
+    (`npm-tarball`), `path` (`artifacts/sstolz-kdrive-mcp-server-*.tgz`) and
+    `if-no-files-found` (`error`) on upload; and exactly `name`
+    (`npm-tarball`) and `path` (`artifacts`) on download (no `run-id`,
+    `github-token`, `repository` or `pattern`, which would fetch another
+    run's artifact); no `make` step has `with`.
   - `uses` admits only `actions/checkout`, `actions/upload-artifact` and
     `actions/download-artifact`, each pinned to a 40-hex commit SHA;
   - every `run` is exactly one `make <target>` with no `${{`;
+  - each step's `env` key set is exactly the set given here, with no other
+    variable (for example no `RELEASE_NPM_REGISTRY_URL` or other BR-367
+    override): `make release-check`: `RELEASE_VERSION`, `RELEASE_SHA`,
+    `RELEASE_DRY_RUN`, `RELEASE_PHASE`, `GITHUB_TOKEN`;
+    `make release-npm` in `verify`: `RELEASE_VERSION`, `RELEASE_SHA`,
+    `RELEASE_DRY_RUN`; `make release-npm` in `publish-npm`: those three and
+    `RELEASE_TARBALL_SHA256`; `make image-binfmt`: `IMAGE_PLATFORMS`;
+    `make release-image` in `verify`: `RELEASE_VERSION`, `RELEASE_SHA`,
+    `RELEASE_DRY_RUN`, `IMAGE_PLATFORMS`; `make release-image` in
+    `publish-image`: those four and `GITHUB_TOKEN`; `make release-verify`:
+    `RELEASE_VERSION`, `RELEASE_SHA`, `RELEASE_DRY_RUN`, `GITHUB_TOKEN`;
+    checkout, `make release-setup`, `make pack`, upload and download: no
+    `env`;
   - workflow inputs reach steps only as step `env` values
     `RELEASE_VERSION: ${{ inputs.version }}`, `RELEASE_SHA: ${{ inputs.sha }}`
     and `RELEASE_DRY_RUN`, whose value is `'true'` on the `make release-npm`
@@ -320,13 +411,27 @@ Order: P-0, then P-1; P-2–P-4 before the first non-dry-run dispatch.
     the spec goes back to the owner, who decides the handling of that
     status in a new spec version.
 
-  All these checks run in `release-check`, which every publishing job runs
-  before its publish step, so nothing is published when one fails.
+  All these checks and BR-378 run in `release-check`, which every publishing
+  job runs before its publish step, so nothing is published when one fails.
   Verified by: AC-08, AC-16.
 - **BR-364** — The checks only read: Git commands that do not write refs or
   objects, and HTTP `GET` or `HEAD` requests (plus the GHCR token request).
   All checks after input validation run even when one fails. Verified by:
   AC-08, AC-13.
+- **BR-378** — In every phase, `release-check` reads, with `GITHUB_TOKEN`,
+  `GET /repos/sstolz/kdrive-mcp-server/environments/release` and
+  `GET /repos/sstolz/kdrive-mcp-server/environments/release/deployment-branch-policies?per_page=100`.
+  The check `release environment protected` passes only when both return 200,
+  `protection_rules` holds an entry of type `required_reviewers` whose
+  `reviewers` has at least one entry, `deployment_branch_policy` is exactly
+  `{protected_branches: false, custom_branch_policies: true}`, and the policy
+  list has `total_count` 1 and exactly one entry, with `name` `main` and
+  `type` `branch`. A non-2xx status fails with
+  `release environment unreadable <code>; refer to the owner` (fail closed:
+  the run stops and the decision goes back to the owner); any other
+  departure fails with `release environment not protected (P-2)`.
+  `prevent_self_review` is not checked (P-2 keeps it off). Verified by:
+  AC-21, AC-13, AC-16.
 
 ### Output and safety of `scripts/release.ts`
 
@@ -379,16 +484,22 @@ Order: P-0, then P-1; P-2–P-4 before the first non-dry-run dispatch.
     keys such as `npm_config_//registry.npmjs.org/:_authToken`); the check
     reads the process environment, whatever was passed to the container.
 
-  It then runs exactly `npm publish <tarball> --tag beta --access public`,
-  with `--dry-run` appended when `RELEASE_DRY_RUN` is `true`. The tarball is
+  It also exits 1 with `publishConfig refused`, in both dry-run modes and
+  before calling `npm publish`, when the tarball's `package/package.json` has
+  a `publishConfig` key (it could redirect the registry, tag or access). It
+  then runs exactly
+  `npm publish <tarball> --tag beta --access public --ignore-scripts`, with
+  `--dry-run` appended when `RELEASE_DRY_RUN` is `true`, so no lifecycle
+  script of the package runs at publish. The tarball is
   built in `verify` from a dependency tree installed with
   `npm ci --ignore-scripts` (`make release-setup`, BR-375), as the
   Dockerfile does. Verified by: AC-10, AC-13.
 - **BR-370** — `release-image` (`scripts/release-image.sh`, host Docker)
   builds target `runtime` of `Dockerfile` for
   `--platform linux/amd64,linux/arm64` with a `docker-container` Buildx
-  builder whose BuildKit image is pinned by digest, with no `--build-arg`
-  and no secret mount. With `RELEASE_DRY_RUN=true` the command has no
+  builder whose BuildKit image is pinned by digest, with no `--build-arg`,
+  no secret mount, and no `--cache-from` or `--cache-to` (a shared cache
+  could feed layers from an unapproved build into the release image). With `RELEASE_DRY_RUN=true` the command has no
   `--push`, `--load`, `--output` or `--tag`, and no login runs. With
   `RELEASE_DRY_RUN=false` it logs in to `ghcr.io` with `GITHUB_TOKEN` through
   `--password-stdin`, builds with `--push`, exactly one
@@ -416,8 +527,13 @@ Order: P-0, then P-1; P-2–P-4 before the first non-dry-run dispatch.
   entries, ignoring attestation entries (platform `unknown/unknown`), have
   exactly the platforms `linux/amd64` and `linux/arm64`; and tag `latest`
   returns 404 or a digest different from the digest of tag `<version>`. It
-  prints one line per condition like BR-365 and exits 0 only when all hold.
-  Verified by: AC-12.
+  prints the index digest of tag `<version>` as
+  `release-verify: image digest sha256:<hex>`. The check
+  `image is public (P-3)` requests a pull token for
+  `repository:sstolz/kdrive-mcp-server:pull` without any credential and
+  then `HEAD /v2/sstolz/kdrive-mcp-server/manifests/<version>` with it; it
+  passes only when both return 200. It prints one line per condition like
+  BR-365 and exits 0 only when all hold. Verified by: AC-12.
 
 ### Audited install resolution (`make pack`)
 
@@ -454,8 +570,9 @@ Order: P-0, then P-1; P-2–P-4 before the first non-dry-run dispatch.
   `$(COMPOSE) run --rm -T` with every environment variable passed by name
   (`-e NAME`, never `-e NAME=value`), then
   `dev node scripts/release.ts <check|npm|verify>`; `release-check` passes
-  `GITHUB_SHA` and `RELEASE_PHASE` by name, and `release-npm` passes
-  `RELEASE_TARBALL_SHA256` by name. After that command exits 0, the
+  `GITHUB_SHA` and `RELEASE_PHASE` by name, `release-npm` passes
+  `RELEASE_TARBALL_SHA256` by name, and all three pass `GITHUB_ACTIONS` by
+  name, so that BR-367's refusal fires inside the container. After that command exits 0, the
   `release-npm` recipe, only when `RELEASE_DRY_RUN` is `true` and
   `GITHUB_OUTPUT` is set, appends exactly one line
   `tarball-sha256=<hex>` to the host file `$GITHUB_OUTPUT`, with `<hex>` the
@@ -525,9 +642,12 @@ Order: P-0, then P-1; P-2–P-4 before the first non-dry-run dispatch.
   `tests/package-version-wiring.test.ts` (unchanged), `BR-353 lockfile names`.
 - **AC-02** (BR-354) — Given README.md, SPEC.md and docs/publishing.md, When
   the documentation test runs, Then the BR-354 strings are present
-  (including the placeholder `latest` statement, P-0–P-4 with the P-0
-  commands, the "release commit is `main`'s HEAD" statement and the
-  read-back recovery),
+  (including the placeholder `latest` statement, P-0, P-1, P-4, P-2, P-5 and
+  P-3 in that order with the P-0 commands ending in `npm logout`, the
+  "release commit is `main`'s HEAD" statement, the required green real
+  `dry_run=true` dispatch before any `dry_run=false` dispatch, the read-back
+  recovery, the "check the registry first" recovery and the `main`-HEAD
+  limit of a GHCR delete and re-dispatch),
   `artifacts/kdrive-mcp-server-` appears in no tracked file outside the
   excluded records, and docs/publishing.md does not say that `latest`
   points to the first beta. Verified by: `tests/release-policy.test.ts`
@@ -551,14 +671,22 @@ Order: P-0, then P-1; P-2–P-4 before the first non-dry-run dispatch.
   reference; a `run` with `${{ inputs.version }}`; `GITHUB_TOKEN` on
   `make release-setup`, `make pack`, `make image-binfmt`, `make release-npm`
   or the download step; a checkout with `persist-credentials: true` or a
-  `ref` other than `${{ inputs.sha }}`; `make setup` in place of
+  `ref` other than `${{ github.sha }}`; `make setup` in place of
   `make release-setup`; `verify` without the `tarball-sha256` output, or
   `publish-npm`'s `make release-npm` without `RELEASE_TARBALL_SHA256`;
   `IMAGE_PLATFORMS` other than `linux/amd64 linux/arm64` on
   `make image-binfmt` or `make release-image`; a `make release-check`
   without its literal `RELEASE_PHASE`; an unpinned or other action;
   `RELEASE_DRY_RUN` from the input on `verify`'s `make release-npm` or
-  `make release-image`; When validated, Then each throws. Verified by:
+  `make release-image`; a checkout `ref` of `${{ inputs.sha }}`; top-level
+  `env` missing, with `DEV_UID` or `DEV_GID` other than `"1001"`, or with an
+  extra key; `run-name` missing or other than the BR-355 text; an unlisted
+  top-level key (`defaults`); `continue-on-error` on a job or a step; a
+  step `if`; a job `env`, `container` or `services`; a step `shell`; an
+  extra step env variable (`RELEASE_NPM_REGISTRY_URL` on `make release-check`,
+  `GITHUB_TOKEN` on `make release-setup`); an extra `with` key on
+  download-artifact (`run-id`, `github-token`) or checkout; When validated,
+  Then each throws. Verified by:
   `tests/release-policy.test.ts` `BR-355 rejects release workflow mutation: %s`.
 - **AC-05** (BR-359, BR-365) — Given the inputs `0.6.0`, `v0.6.0-beta.1`,
   `0.6.0-beta.01`, `0.6.0-rc.1`, `0.6.0-beta.1+build`, `0.6`, an empty
@@ -608,7 +736,7 @@ Order: P-0, then P-1; P-2–P-4 before the first non-dry-run dispatch.
 - **AC-10** (BR-368, BR-369) — Given a fake `npm` on `PATH` that records its
   argv and environment and answers `--version` with `11.5.1`, When
   `release-npm` runs with dry run `true`, Then it prints the tarball digest
-  and the publish argv is exactly `publish artifacts/sstolz-kdrive-mcp-server-0.6.0-beta.1.tgz --tag beta --access public --dry-run`;
+  and the publish argv is exactly `publish artifacts/sstolz-kdrive-mcp-server-0.6.0-beta.1.tgz --tag beta --access public --ignore-scripts --dry-run`;
   with dry run `false`, the OIDC variables set and `RELEASE_TARBALL_SHA256`
   equal to the tarball digest, Then the same without `--dry-run`; with
   `RELEASE_TARBALL_SHA256` missing, upper-case, or the digest of another
@@ -616,16 +744,19 @@ Order: P-0, then P-1; P-2–P-4 before the first non-dry-run dispatch.
   `NPM_TOKEN`, `node_auth_token` and
   `npm_config_//registry.npmjs.org/:_authToken`; without the OIDC
   variables; with the fake npm answering `11.5.0` or `10.9.2`; with a
-  missing tarball, two tarballs, or a tarball whose inner version differs,
-  Then `npm publish` is not called, the fixed message prints and the exit is
+  missing tarball, two tarballs, a tarball whose inner version differs, or a
+  tarball whose `package.json` has `publishConfig` (dry run `true` and
+  `false`, message `publishConfig refused`), Then `npm publish` is not called, the fixed message prints and the exit is
   1. Verified by: `tests/release.test.ts` `BR-369 npm publish: %s`.
 - **AC-11** (BR-368, BR-370) — Given a fake `docker` that records argv and
   stdin, When `release-image` runs dry, Then one `buildx build` has both
   platforms and target `runtime` and no `--push`, `--load`, `--output`,
-  `--tag`, and no `login` call; when it runs for real, Then `login ghcr.io`
-  reads the token from stdin (never argv), the build has `--push`, exactly
-  one `--tag ghcr.io/sstolz/kdrive-mcp-server:0.6.0-beta.1` and the three
-  labels, no `latest`, and `logout ghcr.io` follows; given the fake build
+  `--tag`, `--cache-from` or `--cache-to`, and no `login` call; when it runs
+  for real, Then `login ghcr.io` reads the token from stdin (never argv), the
+  build has `--push`, exactly one
+  `--tag ghcr.io/sstolz/kdrive-mcp-server:0.6.0-beta.1` and the three labels,
+  no `latest`, no `--cache-from` or `--cache-to`, and `logout ghcr.io`
+  follows; given the fake build
   failing, Then `logout` still runs and the exit is non-zero. Verified by:
   `tests/release.test.ts` `BR-370 image build: %s`.
 - **AC-12** (BR-372, BR-373) — Given read-back doubles where: everything
@@ -634,17 +765,23 @@ Order: P-0, then P-1; P-2–P-4 before the first non-dry-run dispatch.
   (P-0 skipped); `beta` points elsewhere; `latest` moved to the new version
   with the placeholder present; `latest` is missing; `latest` names a
   non-deprecated version; attestations are missing; the index lacks `linux/arm64`; the index has an extra
-  `linux/386`; image tag `latest` resolves to the new digest; the version
-  never appears within 20 attempts; the version appears only on the third
-  attempt; When `release-verify` runs (retry delay
-  shortened by the test double clock), Then only the first and last pass. Verified by:
+  `linux/386`; image tag `latest` resolves to the new digest; the anonymous
+  pull token request returns 401 (package still private, P-3); the
+  anonymous manifest request returns 401 or 404; the version never appears
+  within 20 attempts; the version appears only on the third attempt; When
+  `release-verify` runs (retry delay shortened by the test double clock),
+  Then only the first and last pass, the passing runs print the index digest,
+  and the anonymous requests carry no `Authorization` header. Verified by:
   `tests/release.test.ts` `BR-372 BR-373 read-back: %s`.
 - **AC-13** (BR-357, BR-364, BR-369, BR-370, BR-375) —
   Rehearsal (AGENTS.md §6). Given a temporary repository prepared as a
   `0.6.0-beta.1` release commit on `main` with its tag, `GITHUB_SHA` set to
   that commit and `GITHUB_OUTPUT` to a temporary file, doubles for the
-  GitHub API, npm (deprecated placeholder on `latest`, version absent) and
-  GHCR (version absent), and fake `npm` and `docker`, where the fake
+  GitHub API (CI evidence, and the `release` environment and its
+  deployment-branch-policies answering the P-2 configuration of BR-378), npm
+  (deprecated placeholder on `latest`, version absent) and GHCR (version
+  absent, anonymous pulls allowed after the push), and fake `npm` and
+  `docker`, where the fake
   `docker` executes the inner command of every `compose run … dev <command>`
   on the host with only the `-e` variables passed by name (so
   `node scripts/release.ts` runs the real checks, and `npm` resolves to the
@@ -655,12 +792,15 @@ Order: P-0, then P-1; P-2–P-4 before the first non-dry-run dispatch.
   BR-358 step environment (including `RELEASE_PHASE` and
   `RELEASE_TARBALL_SHA256` read from the `GITHUB_OUTPUT` file), with dry run
   `true` and then `false`, Then the dry run passes every check, calls
-  `npm ci --ignore-scripts` and `npm publish … --dry-run`, writes one
+  `npm ci --ignore-scripts` and
+  `npm publish … --ignore-scripts --dry-run`, writes one
   `tarball-sha256=` line, and calls neither `login` nor `--push`; the real
   run calls the image push before `npm publish`, `publish-npm`'s
-  `release-check` passes with the GHCR double now answering 200, and the
-  read-back passes against doubles updated after the publish; and the
-  Makefile and import rules hold. Verified by:
+  `release-check` passes with the GHCR double now answering 200, every
+  `release-check` read the two environment endpoints, and the read-back
+  passes against doubles updated after the publish; and the Makefile and
+  import rules hold, including `-e GITHUB_ACTIONS` in the three
+  `scripts/release.ts` targets. Verified by:
   `tests/release.test.ts` `F-024 rehearsal dry run then publish against doubles`,
   `BR-375 Makefile targets and imports`.
 - **AC-14** (BR-178 v3) — Given the real publish scope, When
@@ -676,14 +816,16 @@ Order: P-0, then P-1; P-2–P-4 before the first non-dry-run dispatch.
   `runner-acceptance.yml` are unchanged and `tests/ci-policy.test.ts`
   passes unchanged. Verified by: `git diff --exit-code <base> -- .github/workflows/ci.yml .github/workflows/runner-acceptance.yml`
   in the PR body, and `make check`.
-- **AC-16** (BR-355, BR-356, BR-359–BR-363, BR-365) — Real wiring, after the
-  merge, on actual `main`, with P-2 in place and nothing published. Given
+- **AC-16** (BR-355, BR-356, BR-359–BR-363, BR-365, BR-378) — Real wiring,
+  after the merge, on actual `main`, with P-4, P-2 and P-5 in place and
+  nothing published. Given
   three dispatches of `release.yml` from `main` with `dry_run=false`: (a)
   `version=0.1.0` and the `main` SHA; (b) `version=0.6.0-beta.1` and the
   `main` SHA; (c) `version=0.6.0-beta.1` and the parent of the `main` SHA;
   When they run, Then (a) fails input validation with the stable refusal;
   (b) fails `VERSION`, `package.json`, lockfile and tag checks while the
-  `main`, `GITHUB_SHA`, CI-evidence and GHCR checks pass, and the npm
+  `main`, `GITHUB_SHA`, CI-evidence, GHCR and BR-378 environment checks
+  pass, and the npm
   checks pass if P-0 is done or fail only with
   `npm placeholder missing (P-0)` if it is not; (c) additionally fails with
   `sha is not the dispatched commit`; in all three, `publish-image`,
@@ -692,8 +834,12 @@ Order: P-0, then P-1; P-2–P-4 before the first non-dry-run dispatch.
   placeholder). The status of the GHCR manifest request is recorded; if it
   is neither 200 nor 404 (for example 401 or 403 before the first push),
   the run shows `unexpected GHCR status <code>; refer to the owner` and the
-  spec goes back to the owner (BR-363). Verified by: run links recorded in
-  the #2 acceptance comment.
+  spec goes back to the owner (BR-363). The acceptance comment also records
+  whether the job's `GITHUB_TOKEN` could read the two environment endpoints;
+  if it could not, (b) fails closed with
+  `release environment unreadable <code>; refer to the owner`, nothing runs
+  past `verify`, and the decision goes back to the owner (a new spec
+  version). Verified by: run links recorded in the #2 acceptance comment.
 
 - **AC-17** (BR-376) — Given the real lockfile, When `make pack` runs,
   Then the tarball holds `package/npm-shrinkwrap.json`, byte-identical to the
@@ -725,6 +871,26 @@ Order: P-0, then P-1; P-2–P-4 before the first non-dry-run dispatch.
   `tests/dependency-audit.test.ts`
   `TestBR321_audit_docs development, security and changelog state the audit contract`
   (updated).
+- **AC-21** (BR-378) — Given a GitHub API double where: the environment has
+  a `required_reviewers` rule with one reviewer and the policy list is
+  exactly branch `main` (pass); no `required_reviewers` rule; the rule with
+  an empty `reviewers`; `protected_branches: true`; a policy list `main` and
+  `dev`; a single policy `main` of type `tag`; a single policy `main*`; the
+  environment endpoint returning 404, 403 or 500; the policy endpoint
+  returning 403; When `release-check` runs in each phase, Then only the first
+  case passes, the non-2xx cases fail with
+  `release environment unreadable <code>; refer to the owner`, the others
+  with `release environment not protected (P-2)`, and the double saw only
+  `GET`. Verified by: `tests/release.test.ts`
+  `BR-378 release environment protection: %s`.
+- **AC-22** (BR-354) — Release gate, checked at each release step (outside
+  F-024 acceptance, starting with `0.6.0-beta.1`). Given a release commit on
+  `main`'s HEAD with its tag, When the owner is asked for the go, Then the
+  request links a green real dispatch of `release.yml` with `dry_run=true`,
+  the same `version` and the same `sha`, whose `verify` job passed and whose
+  other jobs were skipped, and no `dry_run=false` dispatch of that version
+  precedes it. Verified by: the dry-run run link recorded in the #2 (or
+  release ticket) go request, before the `dry_run=false` run link.
 
 ## Decisions
 
@@ -796,15 +962,24 @@ Order: P-0, then P-1; P-2–P-4 before the first non-dry-run dispatch.
   `publish-image` and `publish-npm` each re-run `release-check` right before
   publishing. The workflow `concurrency` group serializes release runs.
 - **D-8 Image before npm, read-back in its own job.** A GHCR version can be
-  deleted by the owner; an npm version can never be reused. If the npm step
-  fails without publishing, the owner re-runs the failed `publish-npm` job
-  (its `release-check` in phase `npm` expects the pushed image), or deletes
-  the GHCR version and dispatches again, or releases the next beta. If npm
-  published but `read-back` failed, the owner re-runs only the failed
-  `read-back` job, which holds no publish permission, or verifies by hand
-  with `npm view` and `docker buildx imagetools inspect`; a new dispatch of
-  that version is refused by BR-363, which is intended, since that version
-  is published. docs/publishing.md records this (BR-354). The read-back
+  deleted by the owner; an npm version can never be reused. A failed
+  `npm publish` or image push may still have been accepted by the registry
+  (a timeout or a lost response after the upload), so the owner first
+  checks `npm view @sstolz/kdrive-mcp-server@<version>` or the GHCR manifest
+  of `<version>`. If the registry has it, the owner verifies it by hand with
+  the read-back commands; `read-back` was skipped (its `needs` failed), not
+  failed, and is not re-run, and re-running the failed publish job would
+  only fail its `release-check`. If the npm step failed without publishing,
+  the owner re-runs the failed `publish-npm` job (its `release-check` in
+  phase `npm` expects the pushed image), or deletes the GHCR version and
+  dispatches again, which BR-361 admits only while the release commit is
+  still `main`'s HEAD, or releases the next beta. If npm published but
+  `read-back` failed, the owner re-runs only the failed `read-back` job,
+  which holds no publish permission, or verifies by hand with `npm view`
+  and `docker buildx imagetools inspect`; a new dispatch of that version is
+  refused by BR-363, which is intended, since that version is published. A
+  `read-back` that fails only `image is public (P-3)` is re-run after the
+  owner sets the package public. docs/publishing.md records this (BR-354). The read-back
   retries 20 times 15 seconds apart (about 5 minutes): the registry's
   package document and its attestations can lag the publish by minutes
   behind its cache, 10 tries (150 seconds) risks a false failure on a good
@@ -824,12 +999,18 @@ Order: P-0, then P-1; P-2–P-4 before the first non-dry-run dispatch.
   proof that the package came from this workflow. It needs a public
   repository, hence P-4, and a `repository.url` matching it (BR-016 v3).
   Provenance and the OIDC claim name `GITHUB_SHA`, the commit the workflow
-  file and scripts were taken from, not `inputs.sha`; BR-361 therefore
-  requires `RELEASE_SHA` to equal `GITHUB_SHA`, so the release is
-  dispatched while the release commit is `main`'s HEAD. Rejected: optional
-  provenance (a silent loss of provenance would go unnoticed); trusting
-  `inputs.sha` alone (the provenance could name a later `main` commit whose
-  workflow differs from the released one).
+  file comes from. Every job checks out that same commit
+  (`ref: ${{ github.sha }}`, BR-357), so the scripts, Makefile and sources
+  that run and are packed are those of `GITHUB_SHA`, and that trusted code
+  requires `RELEASE_SHA` to equal `GITHUB_SHA` (BR-361); the release is
+  therefore dispatched while the release commit is `main`'s HEAD.
+  `inputs.sha` names what the owner approves (it is in `run-name`) and is
+  only compared, never checked out. Rejected: optional provenance (a silent
+  loss of provenance would go unnoticed); checking out `inputs.sha` (the
+  equality check would then run from the very commit it checks, so a
+  commit without the check would pass itself); trusting `inputs.sha` alone
+  (the provenance could name a later `main` commit whose workflow differs
+  from the released one).
 - **D-11 `ci-result` on a `main` push or dispatch run as CI evidence.** On
   `push` and `workflow_dispatch` the `changes` job never skips a gate
   (BR-226), so a successful `ci-result` there means the full gate passed for
@@ -871,6 +1052,35 @@ Order: P-0, then P-1; P-2–P-4 before the first non-dry-run dispatch.
   tarball that freezes every dependency's files and bypasses npm's
   integrity checks per package); a committed root `npm-shrinkwrap.json`
   (breaks `npm ci` for development).
+
+## Residual risks
+
+Each entry gives the risk and its mitigation; owner acceptance: pending for
+all five.
+
+- **(a)** GHCR tags are mutable and the image is unsigned: any writer, or
+  any workflow on a pushed branch granted `packages: write`, can overwrite
+  `ghcr.io/sstolz/kdrive-mcp-server:<version>` without an approval.
+  Mitigation: `read-back` prints the index digest (BR-373), and
+  docs/publishing.md tells users to pin the image by digest; image signing
+  is deferred to 1.0 (#6). Owner acceptance: pending.
+- **(b)** A compromised devDependency running in `verify` yields a tampered
+  tarball whose digest and provenance are both valid. Mitigation: lockfile
+  integrity, `npm ci --ignore-scripts` (BR-375), the dependency audit job,
+  and review of every dependency update. Owner acceptance: pending.
+- **(c)** The approval is only as strong as the owner's GitHub account.
+  Mitigation: two-factor authentication on the account, and the P-5 rule
+  that agents never dispatch a non-dry run or approve a deployment. Owner
+  acceptance: pending.
+- **(d)** OIDC trusted publishing, provenance and the first GHCR push are
+  exercised for real only by `0.6.0-beta.1`. Mitigation: the mandatory green
+  real `dry_run=true` dispatch of the same version and commit (BR-354,
+  AC-22) and the recovery of D-8. Owner acceptance: pending.
+- **(e)** The shipped shrinkwrap pins every transitive production
+  dependency (BR-376), so each transitive security fix reaches users only
+  through a new release. Mitigation: the audit job flags the advisory, and
+  a beta is cheap to release through this workflow. Owner acceptance:
+  pending.
 
 ## Open questions
 
@@ -936,3 +1146,47 @@ finding retained.
   `needs: [publish-npm]`, `RELEASE_TARBALL_SHA256` on another step, and a
   swapped `RELEASE_PHASE` literal.
 - **R2-3** (minor, retained) — AC-16 says "three dispatches".
+
+Decision pass `2-spec-decision-1-reviewer` (strongest tier, verdict
+`changes`, on `93b2522`); every finding retained.
+
+- **D1-1** (major, retained) — BR-357: every checkout uses
+  `ref: ${{ github.sha }}`; `inputs.sha` is never checked out and only
+  compared by the trusted checkout (BR-360, BR-361). BR-358 and AC-04 flip
+  the checkout mutation (a `ref` of `${{ inputs.sha }}` now throws). T2, T5
+  and D-10 corrected.
+- **D1-2** (major, retained) — New BR-378: `release-check` reads the
+  `release` environment and its deployment-branch-policies, requires a
+  `required_reviewers` rule with a reviewer and exactly the `main` branch
+  policy, and fails closed. New AC-21; AC-13 adds the doubles; AC-16 (b)
+  shows the check passing and records whether `GITHUB_TOKEN` can read the
+  endpoints, else the run fails closed and the decision returns to the
+  owner. P-2 keeps "prevent self-review" off; P-4 is ordered before P-2; T1
+  updated.
+- **D1-3** (major, retained) — BR-355: top-level `env` exactly
+  `{DEV_UID: "1001", DEV_GID: "1001"}`; AC-04 mutations added. BR-354 and
+  new AC-22 require a green real `dry_run=true` dispatch of the same
+  version and commit before any `dry_run=false` dispatch.
+- **D1-4** (minor, retained) — BR-358 makes the validator closed-set
+  (top-level, job, step, `with` and per-step `env` key sets); AC-04 adds
+  `continue-on-error`, step `if`, job `env`, `container`, `services`,
+  `RELEASE_NPM_REGISTRY_URL` and extra download `with` keys. BR-375 passes
+  `GITHUB_ACTIONS` by name in the three `scripts/release.ts` targets; AC-13
+  checks it.
+- **D1-5** (minor, retained) — BR-355 adds the `run-name` and states why it
+  reaches no shell; AC-04 adds its mutation.
+- **D1-6** (minor, retained) — D-8 and BR-354: check the registry first
+  after a reported publish failure, verify by hand, `read-back` skipped not
+  failed; delete-and-redispatch only while the release commit is `main`'s
+  HEAD. P-3 becomes a step after the first image push, verified by the new
+  `image is public (P-3)` read-back check (BR-373, AC-12); the precondition
+  order line no longer contradicts it.
+- **D1-7** (minor, retained) — P-0 ends with `npm logout`; P-1 sets "Require
+  two-factor authentication and disallow tokens" after the trusted
+  publisher; new P-5 (tag ruleset on `refs/tags/v*`, agents never dispatch
+  non-dry runs or approve deployments).
+- **D1-8** (minor, retained) — BR-369 adds `--ignore-scripts` to
+  `npm publish` and refuses a tarball with `publishConfig`; BR-370 forbids
+  `--cache-from` and `--cache-to`; AC-10, AC-11 and AC-13 add the cases.
+- **D1-9** (retained, orchestrator request) — `## Residual risks` added with
+  entries (a)–(e), owner acceptance pending.
