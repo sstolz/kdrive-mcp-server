@@ -154,14 +154,16 @@ keep their rules and change only `runs-on`.
   scan: `git rev-list <base>..<head>` already lists exactly the commits that
   the base lacks. For each commit of `git rev-list <range>`: its full message
   (`git log -1 --format=%B`) is scanned by the BR-345 views; and its changed
-  blobs are scanned: `git diff-tree -r --no-renames --root -z <commit>`
+  blobs are scanned: `git diff-tree -r --no-renames --no-commit-id --root -z <commit>`
   (merge commits list no blobs, as no `-m` is given) gives, NUL-separated and never quoted, every path and its new
-  blob id; each new blob that is not a gitlink is read through
-  `git cat-file --batch` and scanned whole with the BR-345 decoders (a blob
-  id already scanned in this run is not read again); each path of the entry
+  blob id; each new blob that is neither all-zero (deleted entry) nor a
+  gitlink (new mode `160000`) is read through
+  `git cat-file --batch` and scanned whole with the BR-345 decoders (a cache used only by
+  this commit scan, separate from the BR-345 entry scan, avoids reading the
+  same blob id twice; these blobs do not count toward `<f>`); each path of the entry
   (including deleted paths) is scanned as text. Hits in a commit's blobs or
   paths are reported as `commit <sha> added`; binary blobs add to `<b>` once
-  per blob, as in BR-345. An empty head, or
+  per blob of the commit scan. An empty head, or
   a head that is not a commit in the clone, prints only
   `privacy-scan: head is not a commit` and exits 2. Verified by: AC-09.
 - **BR-347** — Only when `PRIVACY_EVENT` is `pull_request`, `PRIVACY_PR_TITLE`
@@ -274,7 +276,7 @@ keep their rules and change only `runs-on`.
   When scanned, Then the path is reported as `file #<k>` only. Verified by:
   `tests/privacy-scan.test.ts` `BR-348 …`.
 - **AC-09** (BR-346) — Given commits A–C with the token only in B's message,
-  and the token only in an added line of C, When scanned with base A and head
+  and the token only in a blob that C adds, When scanned with base A and head
   C, with base forty zeros, with an unknown base, with
   `PRIVACY_EVENT=workflow_dispatch` and base C, and with base C, Then
   `commit <B> line <n>` and `commit <C> added` are reported in the first four
@@ -410,6 +412,16 @@ keep their rules and change only `runs-on`.
    `git diff-tree -z`) are read through `cat-file` and scanned whole with the
    BR-345 decoders, counted per blob, deduplicated by blob id.
 2. [minor] Quoted or ambiguous header paths — retained: paths come from
-   `git diff-tree -r --no-renames -z`, never quoted.
+   `git diff-tree -r --no-renames --no-commit-id --root -z`, never quoted.
 3. [minor] One hit per commit and pattern vs two expected — retained: the
    `+++` line and the deleted path are in separate commits in AC-09.
+
+### Round 4 — reviewed SHA `a3474bf` (Opus 5.5, `1-spec-review-4-reviewer`, diff-only)
+
+1. [major] Dedupe shared with the tree scan hid commit hits — retained: a
+   cache private to the commit scan; its blobs do not count toward `<f>`.
+2. [major] Deleted entries have an all-zero blob id — retained: skipped
+   explicitly with gitlinks.
+3. [minor] `--no-commit-id`, per-blob binary count wording, Round 3 text —
+   retained.
+4. [minor] Leftover "added line" in AC-09 — retained.
