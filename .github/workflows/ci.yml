@@ -22,7 +22,7 @@
   },
   "jobs": {
     "changes": {
-      "runs-on": ["self-hosted", "linux", "x64", "kdrive-ci"],
+      "runs-on": "ubuntu-24.04",
       "if": "github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository",
       "timeout-minutes": 5,
       "outputs": {
@@ -44,7 +44,7 @@
       ]
     },
     "lint": {
-      "runs-on": ["self-hosted", "linux", "x64", "kdrive-ci"],
+      "runs-on": "ubuntu-24.04",
       "needs": ["changes"],
       "if": "needs.changes.outputs.heavy != 'false'",
       "timeout-minutes": 20,
@@ -64,7 +64,7 @@
       ]
     },
     "format": {
-      "runs-on": ["self-hosted", "linux", "x64", "kdrive-ci"],
+      "runs-on": "ubuntu-24.04",
       "needs": ["changes"],
       "if": "needs.changes.outputs.heavy != 'false'",
       "timeout-minutes": 20,
@@ -84,7 +84,7 @@
       ]
     },
     "typecheck": {
-      "runs-on": ["self-hosted", "linux", "x64", "kdrive-ci"],
+      "runs-on": "ubuntu-24.04",
       "needs": ["changes"],
       "if": "needs.changes.outputs.heavy != 'false'",
       "timeout-minutes": 20,
@@ -104,7 +104,7 @@
       ]
     },
     "test": {
-      "runs-on": ["self-hosted", "linux", "x64", "kdrive-ci"],
+      "runs-on": "ubuntu-24.04",
       "needs": ["changes"],
       "if": "needs.changes.outputs.heavy != 'false'",
       "timeout-minutes": 20,
@@ -124,7 +124,7 @@
       ]
     },
     "build": {
-      "runs-on": ["self-hosted", "linux", "x64", "kdrive-ci"],
+      "runs-on": "ubuntu-24.04",
       "needs": ["changes"],
       "if": "needs.changes.outputs.heavy != 'false'",
       "timeout-minutes": 20,
@@ -144,7 +144,7 @@
       ]
     },
     "image": {
-      "runs-on": ["self-hosted", "linux", "x64", "kdrive-ci"],
+      "runs-on": "ubuntu-24.04",
       "needs": ["changes"],
       "if": "needs.changes.outputs.image != 'false'",
       "permissions": {
@@ -185,7 +185,7 @@
       ]
     },
     "audit": {
-      "runs-on": ["self-hosted", "linux", "x64", "kdrive-ci"],
+      "runs-on": "ubuntu-24.04",
       "needs": ["changes"],
       "if": "needs.changes.outputs.heavy != 'false'",
       "timeout-minutes": 20,
@@ -205,7 +205,7 @@
       ]
     },
     "sonar": {
-      "runs-on": ["self-hosted", "linux", "x64", "kdrive-ci"],
+      "runs-on": "ubuntu-24.04",
       "if": "github.repository == 'sstolz/kdrive-mcp-server' && github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && vars.SONAR_ENABLED == 'true'",
       "needs": ["lint", "format", "typecheck", "test", "build"],
       "timeout-minutes": 15,
@@ -247,7 +247,7 @@
       ]
     },
     "sonar-pr": {
-      "runs-on": ["self-hosted", "linux", "x64", "kdrive-ci"],
+      "runs-on": "ubuntu-24.04",
       "if": "github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && needs.changes.outputs.heavy != 'false'",
       "needs": ["changes", "lint", "format", "typecheck", "test", "build"],
       "timeout-minutes": 15,
@@ -302,6 +302,39 @@
         }
       ]
     },
+    "privacy-scan": {
+      "runs-on": "ubuntu-24.04",
+      "permissions": {
+        "contents": "read"
+      },
+      "timeout-minutes": 20,
+      "steps": [
+        {
+          "if": "github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository",
+          "run": "printf '%s\\n' 'privacy-scan: fork pull request; deny patterns are unavailable, no scan was run.'"
+        },
+        {
+          "if": "github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository",
+          "uses": "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683",
+          "with": {
+            "fetch-depth": 0,
+            "persist-credentials": false
+          }
+        },
+        {
+          "if": "github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository",
+          "run": "make privacy-scan",
+          "env": {
+            "PRIVACY_DENY_PATTERNS": "${{ secrets.PRIVACY_DENY_PATTERNS }}",
+            "PRIVACY_EVENT": "${{ github.event_name }}",
+            "PRIVACY_RANGE_BASE": "${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}",
+            "PRIVACY_RANGE_HEAD": "${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}",
+            "PRIVACY_PR_TITLE": "${{ github.event.pull_request.title }}",
+            "PRIVACY_PR_BODY": "${{ github.event.pull_request.body }}"
+          }
+        }
+      ]
+    },
     "fork-refusal": {
       "runs-on": "ubuntu-24.04",
       "if": "github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository",
@@ -316,7 +349,7 @@
       ]
     },
     "ci-result": {
-      "runs-on": ["self-hosted", "linux", "x64", "kdrive-ci"],
+      "runs-on": "ubuntu-24.04",
       "needs": [
         "changes",
         "lint",
@@ -327,13 +360,14 @@
         "image",
         "audit",
         "sonar",
-        "sonar-pr"
+        "sonar-pr",
+        "privacy-scan"
       ],
       "if": "always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)",
       "timeout-minutes": 5,
       "steps": [
         {
-          "if": "needs.changes.result != 'success' || contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')",
+          "if": "needs.changes.result != 'success' || needs.privacy-scan.result != 'success' || contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')",
           "run": "printf '%s\\n' 'CI failed: the changes job did not succeed, or a job failed or was cancelled.' >&2\nexit 1"
         }
       ]

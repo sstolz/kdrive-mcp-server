@@ -261,7 +261,9 @@ describe("BR-345 tracked entries", () => {
       "--cacheinfo",
       `160000,${first},vendor/module`,
     ]);
-    const head = fixture.commit("gitlink");
+    // No `git add -A` here: it would drop the gitlink without a work tree.
+    fixture.git(["commit", "-q", "-m", "gitlink"]);
+    const head = fixture.git(["rev-parse", "HEAD"]);
     rmSync(join(fixture.root, "gone.txt"));
     const result = scanAt(fixture, head, head);
     expect(hits(result)).toEqual([
@@ -469,19 +471,24 @@ describe("BR-352 Makefile and imports", () => {
       "PRIVACY_PR_TITLE",
       "PRIVACY_PR_BODY",
     ];
+    const flags = names.map((name) => "-e " + name).join(" ");
     expect(block?.[2]).toBe(
-      `\t$(COMPOSE) run --rm -T ${names.map((name) => `-e ${name}`).join(" ")} dev node scripts/privacy-scan.ts\n`,
+      `\t$(COMPOSE) run --rm -T ${flags} dev node scripts/privacy-scan.ts\n`,
     );
     expect(block?.[2]).not.toMatch(/-e PRIVACY_\w+=/u);
     expect(block?.[0]).not.toContain("_require-setup");
-    expect(makefile).toMatch(/^\.PHONY:[^\n]*(?:\\\n[^\n]*)*privacy-scan/mu);
+    const phony = makefile.slice(
+      makefile.indexOf(".PHONY:"),
+      makefile.indexOf("\n\n", makefile.indexOf(".PHONY:")),
+    );
+    expect(phony.split(/\s+/u)).toContain("privacy-scan");
   });
   it("BR-352 scripts/privacy-scan.ts imports only node: built-ins", () => {
     const source = readFileSync("scripts/privacy-scan.ts", "utf8");
+    // Prettier keeps double quotes: every module specifier follows `from `,
+    // `import ` or `import(`.
     const specifiers = [
-      ...source.matchAll(/\bfrom\s+["']([^"']+)["']/gu),
-      ...source.matchAll(/\bimport\s*\(\s*["']([^"']+)["']/gu),
-      ...source.matchAll(/^\s*import\s+["']([^"']+)["']/gmu),
+      ...source.matchAll(/(?:from |import |import\()"([^"]*)"/gu),
     ].map((match) => match[1] ?? "");
     expect(specifiers.length).toBeGreaterThan(0);
     for (const specifier of specifiers) expect(specifier).toMatch(/^node:/u);

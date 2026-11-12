@@ -3,10 +3,19 @@
 Owner-run guide for the isolated self-hosted runner of
 [F-015](../features/F-015-self-hosted-runner.md) and
 [ADR-007](../architecture-decisions/ADR-007-isolated-self-hosted-runner.md).
-Every CI job of `.github/workflows/ci.yml`, except the hosted `fork-refusal`
-job, runs in a QEMU/KVM Lima VM on the owner's amd64 Linux server. Each job
-gets a VM restored from a read-only golden disk, an ephemeral just-in-time
-(JIT) runner registration and an egress filter enforced on the host.
+The setup runs CI jobs in a QEMU/KVM Lima VM on the owner's amd64 Linux
+server. Each job gets a VM restored from a read-only golden disk, an ephemeral
+just-in-time (JIT) runner registration and an egress filter enforced on the
+host.
+
+**Safety (F-023 BR-351).** This runner setup is safe only for a private
+repository or when fork pull-request workflows cannot run: a fork pull request
+on a public repository could otherwise run its code on the owner's hardware.
+It is never attached to `sstolz/kdrive-mcp-server`, which is meant to be
+public: every job of its `.github/workflows/ci.yml` runs on GitHub-hosted
+`ubuntu-24.04` runners (BR-225 v3), and `.github/workflows/runner-acceptance.yml`
+carries a repository guard so it never runs there (BR-229 v2). The guide below
+is kept as optional documentation for a private repository.
 
 The files, all under `ops/runner/`:
 
@@ -233,5 +242,6 @@ After a change to `ops/runner/lima.yaml`, `ops/runner/provision.sh`,
    `sudo ops/runner/install.sh --uninstall`), then delete any remaining
    `kdrive-ci-…` runner under Settings → Actions → Runners and revoke the
    token if the runner is retired.
-2. Restoring GitHub-hosted runners is a reviewed PR that reverts the
-   `runs-on` values of `.github/workflows/ci.yml`; it needs hosted minutes.
+2. GitHub-hosted runners are this repository's default (F-023). In a private
+   repository that adopted this runner, restoring them is a reviewed PR that
+   reverts its `runs-on` values; it needs hosted minutes.
