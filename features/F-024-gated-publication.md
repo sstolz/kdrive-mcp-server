@@ -1065,19 +1065,20 @@ GHCR package).
 
 ## Residual risks
 
-Each entry gives the risk and its mitigation; owner acceptance: pending for
-all five.
+Each entry gives the risk and its mitigation. The owner accepted all five on
+2026-11-12 (#2), (c) on the condition that the owner confirms the Claude
+GitHub App holds no write permission on deployments.
 
 - **(a)** GHCR tags are mutable and the image is unsigned: any writer, or
   any workflow on a pushed branch granted `packages: write`, can overwrite
   `ghcr.io/sstolz/kdrive-mcp-server:<version>` without an approval.
   Mitigation: `read-back` prints the index digest (BR-373), and
   docs/publishing.md tells users to pin the image by digest; image signing
-  is deferred to 1.0 (#6). Owner acceptance: pending.
+  is deferred to 1.0 (#6). Owner acceptance: accepted 2026-11-12.
 - **(b)** A compromised devDependency running in `verify` yields a tampered
   tarball whose digest and provenance are both valid. Mitigation: lockfile
   integrity, `npm ci --ignore-scripts` (BR-375), the dependency audit job,
-  and review of every dependency update. Owner acceptance: pending.
+  and review of every dependency update. Owner acceptance: accepted 2026-11-12.
 - **(c)** The approval is only as strong as the owner's GitHub account.
   Mitigation: two-factor authentication on the account, and the P-5 rule
   that agents never dispatch a non-dry run or approve a deployment. Owner
@@ -1085,7 +1086,7 @@ all five.
 - **(d)** OIDC trusted publishing, provenance and the first GHCR push are
   exercised for real only by `0.6.0-beta.1`. Mitigation: the mandatory green
   real `dry_run=true` dispatch of the same version and commit (BR-354,
-  AC-22) and the recovery of D-8. Owner acceptance: pending.
+  AC-22) and the recovery of D-8. Owner acceptance: accepted 2026-11-12.
 - **(e)** The shipped shrinkwrap pins every transitive production
   dependency (BR-376), so each transitive security fix reaches users only
   through a new release. Mitigation: the audit job flags the advisory, and
@@ -1199,7 +1200,8 @@ Decision pass `2-spec-decision-1-reviewer` (strongest tier, verdict
   `npm publish` and refuses a tarball with `publishConfig`; BR-370 forbids
   `--cache-from` and `--cache-to`; AC-10, AC-11 and AC-13 add the cases.
 - **D1-9** (retained, orchestrator request) — `## Residual risks` added with
-  entries (a)–(e), owner acceptance pending.
+  entries (a)–(e); the owner accepted all five on 2026-11-12, (c) on the
+  condition that the Claude GitHub App holds no deployment write permission.
 - **R3-1** (major, retained; `2-spec-review-3-reviewer`) — AC-16 contradicted
   P-5: its three `dry_run=false` dispatches are now made by the owner; the
   implementing agent only records the run links and results.
