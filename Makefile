@@ -96,12 +96,9 @@ build: _require-setup
 test: build
 	$(COMPOSE) run --rm dev npm test
 
-# F-024 BR-376: the production npm-shrinkwrap.json is generated before npm
-# pack and removed after it whatever the outcome (a root shrinkwrap would take
-# the lockfile's place for npm ci).
 pack: build
 	$(COMPOSE) run --rm dev sh -c \
-		'mkdir -p artifacts && node scripts/shrinkwrap.ts && { npm pack --pack-destination artifacts; status=$$?; rm -f npm-shrinkwrap.json; test "$$status" -eq 0; } && npm run pack:check'
+		'mkdir -p artifacts && npm pack --pack-destination artifacts && npm run pack:check'
 
 check:
 	+$(MAKE) -f "$(firstword $(MAKEFILE_LIST))" -S lint format-check typecheck build test pack

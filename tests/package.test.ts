@@ -1,7 +1,6 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import {
   cpSync,
-  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -11,8 +10,6 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { expect, it } from "vitest";
 import { runDiagnostic } from "./helpers/diagnostic.js";
-import { rules } from "./helpers/image-policy.js";
-import { shrinkwrap } from "../scripts/shrinkwrap.js";
 
 interface Packed {
   files: Array<{ path: string }>;
@@ -217,8 +214,7 @@ it("BR-171 AC-23 the packed artifact holds no scripts entry and the SDK client s
   expect(files).toContain("dist/http/index.js");
 });
 
-// F-024: scoped package (BR-016 v3, BR-353) and the production shrinkwrap
-// (BR-376, BR-377).
+// F-024: scoped package (BR-016 v3, BR-353).
 interface Lockfile {
   name: string;
   version: string;
@@ -227,7 +223,7 @@ interface Lockfile {
 }
 let scopedPack:
   { directory: string; filename: string; count: number } | undefined;
-/** The make pack recipe in a temporary copy: shrinkwrap, then npm pack. */
+/** The make pack recipe in a temporary copy: npm pack, then unpack. */
 function packScoped(): { directory: string; filename: string; count: number } {
   if (scopedPack) return scopedPack;
   const directory = mkdtempSync(join(tmpdir(), "kdrive-scoped-package-"));
@@ -237,13 +233,10 @@ function packScoped(): { directory: string; filename: string; count: number } {
     "NOTICE",
     "README.md",
     "package.json",
-    "package-lock.json",
-    "scripts/shrinkwrap.ts",
   ]) {
     mkdirSync(dirname(join(directory, path)), { recursive: true });
     cpSync(path, join(directory, path), { recursive: true });
   }
-  execFileSync(process.execPath, ["scripts/shrinkwrap.ts"], { cwd: directory });
   const results = JSON.parse(
     execFileSync("npm", ["pack", "--json", "--ignore-scripts"], {
       cwd: directory,
@@ -263,12 +256,6 @@ function packScoped(): { directory: string; filename: string; count: number } {
   };
   return scopedPack;
 }
-function tarEntries(tarball: string): string[] {
-  return execFileSync("tar", ["-tzf", tarball], { encoding: "utf8" })
-    .split("\n")
-    .filter(Boolean);
-}
-
 it("BR-016 v3 packs the scoped package with the unchanged command", () => {
   const { directory, filename, count } = packScoped();
   expect(count).toBe(1);
@@ -308,159 +295,3 @@ it("BR-353 lockfile names", () => {
   };
   expect(manifest.name).toBe("@sstolz/kdrive-mcp-server");
 });
-
-/** BR-376 staleness comparison: the packed file must be the script output. */
-function checkShrinkwrap(
-  packed: string,
-  lockText: string,
-  expected: string,
-): void {
-  if (packed !== expected)
-    throw new Error("packed npm-shrinkwrap.json differs from the lockfile");
-  const parsed = JSON.parse(packed) as Lockfile;
-  if ("devDependencies" in (parsed.packages[""] ?? {}))
-    throw new Error("shrinkwrap root keeps devDependencies");
-  for (const [key, entry] of Object.entries(parsed.packages))
-    if (entry.dev === true) throw new Error(`dev entry ${key}`);
-  const lock = JSON.parse(lockText) as Lockfile;
-  for (const [key, entry] of Object.entries(lock.packages))
-    if (entry.dev !== true && !(key in parsed.packages))
-      throw new Error(`missing production entry ${key}`);
-}
-function generated(lockText: string): string {
-  return shrinkwrap(lockText);
-}
-
-it("BR-376 packs the production shrinkwrap generated from the lockfile", () => {
-  const pack = rules(readFileSync("Makefile", "utf8")).find(
-    (rule) => rule.target === "pack",
-  );
-  const recipe = pack?.recipe.join("\n") ?? "";
-  expect(recipe.indexOf("node scripts/shrinkwrap.ts")).toBeGreaterThan(-1);
-  expect(recipe.indexOf("node scripts/shrinkwrap.ts")).toBeLessThan(
-    recipe.indexOf("npm pack"),
-  );
-  expect(recipe.lastIndexOf("rm -f npm-shrinkwrap.json")).toBeGreaterThan(
-    recipe.indexOf("npm pack"),
-  );
-  expect(readFileSync(".gitignore", "utf8").split("\n")).toContain(
-    "/npm-shrinkwrap.json",
-  );
-  expect(existsSync("npm-shrinkwrap.json")).toBe(false);
-  const lockText = readFileSync("package-lock.json", "utf8");
-  const expected = generated(lockText);
-  const tarballs = [join(packScoped().directory, packScoped().filename)];
-  // During make pack (pack:check), the real artifact is checked as well.
-  if (process.env.npm_lifecycle_event === "pack:check")
-    tarballs.push("artifacts/sstolz-kdrive-mcp-server-0.1.0.tgz");
-  for (const tarball of tarballs) {
-    expect(
-      tarEntries(tarball).filter((entry) =>
-        entry.endsWith("npm-shrinkwrap.json"),
-      ),
-    ).toEqual(["package/npm-shrinkwrap.json"]);
-    const packed = execFileSync(
-      "tar",
-      ["-xzOf", tarball, "package/npm-shrinkwrap.json"],
-      { encoding: "utf8" },
-    );
-    expect(() => {
-      checkShrinkwrap(packed, lockText, expected);
-    }).not.toThrow();
-  }
-});
-
-const STALE: Record<string, (lock: Lockfile) => void> = {
-  "a dev entry": (lock) => {
-    const [key] = Object.entries(lock.packages).find(
-      ([name, entry]) => name !== "" && entry.dev !== true,
-    )!;
-    lock.packages[key]!.dev = true;
-  },
-  "a changed version": (lock) => {
-    lock.packages["node_modules/zod"]!.version = "4.6.8";
-  },
-  "a removed entry": (lock) => {
-    delete lock.packages["node_modules/zod"];
-  },
-};
-it.each(Object.keys(STALE))("BR-376 rejects stale shrinkwrap: %s", (name) => {
-  const lockText = readFileSync("package-lock.json", "utf8");
-  const packed = generated(lockText);
-  const lock = JSON.parse(lockText) as Lockfile;
-  STALE[name]!(lock);
-  const changed = `${JSON.stringify(lock, null, 2)}\n`;
-  const regenerated = generated(changed);
-  expect(() => {
-    checkShrinkwrap(packed, changed, regenerated);
-  }).toThrow();
-});
-
-/** BR-377: the BR-316 predicate applied to the shipped shrinkwrap. */
-function atLeast(version: unknown, minimum: [number, number, number]): boolean {
-  const match = /^(\d+)\.(\d+)\.(\d+)$/u.exec(String(version));
-  if (!match) return false;
-  const parts = [match[1], match[2], match[3]].map(Number);
-  for (const [index, part] of parts.entries()) {
-    if (part !== minimum[index]) return part > (minimum[index] ?? 0);
-  }
-  return true;
-}
-function checkResolution(text: string): void {
-  const packages = (JSON.parse(text) as Lockfile).packages;
-  const last = (key: string) => key.split("node_modules/").at(-1);
-  const zod = Object.keys(packages).filter((key) => last(key) === "zod");
-  if (zod.join() !== "node_modules/zod")
-    throw new Error(`zod entries: ${zod.join()}`);
-  if (!atLeast(packages["node_modules/zod"]?.version, [4, 6, 6]))
-    throw new Error("zod below 4.6.6");
-  for (const [key, entry] of Object.entries(packages))
-    if (last(key) === "minimatch" && !atLeast(entry.version, [11, 0, 1]))
-      throw new Error(`${key} below 11.0.1`);
-}
-
-it("BR-377 the packed shrinkwrap holds the audited resolution", () => {
-  const { directory } = packScoped();
-  const text = readFileSync(
-    join(directory, "package/npm-shrinkwrap.json"),
-    "utf8",
-  );
-  expect(() => {
-    checkResolution(text);
-  }).not.toThrow();
-  expect(
-    (JSON.parse(text) as Lockfile).packages["node_modules/zod"]?.version,
-  ).toBe("4.6.7");
-});
-
-const RESOLUTIONS: Record<string, (packages: Lockfile["packages"]) => void> = {
-  "nested @jimp/types zod 3.25.76": (packages) => {
-    packages["node_modules/@jimp/types/node_modules/zod"] = {
-      version: "3.25.76",
-    };
-  },
-  "nested zod 4.6.7": (packages) => {
-    packages["node_modules/@jimp/core/node_modules/zod"] = { version: "4.6.7" };
-  },
-  "root zod 3.25.76": (packages) => {
-    packages["node_modules/zod"] = { version: "3.25.76" };
-  },
-  "minimatch 10.2.6": (packages) => {
-    packages["node_modules/glob/node_modules/minimatch"] = {
-      version: "10.2.6",
-    };
-  },
-};
-it.each(Object.keys(RESOLUTIONS))(
-  "BR-377 rejects shrinkwrap resolution: %s",
-  (name) => {
-    const { directory } = packScoped();
-    const parsed = JSON.parse(
-      readFileSync(join(directory, "package/npm-shrinkwrap.json"), "utf8"),
-    ) as Lockfile;
-    RESOLUTIONS[name]!(parsed.packages);
-    expect(() => {
-      checkResolution(JSON.stringify(parsed));
-    }).toThrow();
-  },
-);

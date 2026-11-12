@@ -321,7 +321,6 @@ describe("F-013 AC-05 build, binfmt, ignore and publish policy", () => {
     for (const path of [
       "scripts/release.ts",
       "scripts/release-image.sh",
-      "scripts/shrinkwrap.ts",
       ".github/workflows/release.yml",
       ".github/workflows/ci.yml",
       "Makefile",
@@ -390,8 +389,8 @@ describe("F-013 AC-05 build, binfmt, ignore and publish policy", () => {
         (scope["scripts/release-image.sh"] ?? "") + "\n# npm publish\n";
     },
     "npm publish outside scripts/release.ts": (scope) => {
-      scope["scripts/shrinkwrap.ts"] =
-        (scope["scripts/shrinkwrap.ts"] ?? "") + "\n// npm publish\n";
+      scope["scripts/privacy-scan.ts"] =
+        (scope["scripts/privacy-scan.ts"] ?? "") + "\n// npm publish\n";
     },
     "a second npm publish in scripts/release.ts": (scope) => {
       scope["scripts/release.ts"] =

@@ -1524,16 +1524,14 @@ describe("F-024 AC-13 Make targets and rehearsal", () => {
       expect(phony).toMatch(new RegExp(`(?:^|\\s)${target}(?:\\s|$)`, "u"));
       expect(help).toContain(`'  make ${target}`);
     }
-    for (const script of ["scripts/release.ts", "scripts/shrinkwrap.ts"]) {
-      const source = readFileSync(script, "utf8");
-      const specifiers = source
-        .split("\n")
-        .map((text) => / from "([^"]+)";$/u.exec(text)?.[1])
-        .filter((specifier) => specifier !== undefined);
-      expect(specifiers.length).toBeGreaterThan(0);
-      for (const specifier of specifiers) expect(specifier).toMatch(/^node:/u);
-      expect(source).not.toMatch(/\brequire\(|\bimport\(/u);
-    }
+    const source = readFileSync("scripts/release.ts", "utf8");
+    const specifiers = source
+      .split("\n")
+      .map((text) => / from "([^"]+)";$/u.exec(text)?.[1])
+      .filter((specifier) => specifier !== undefined);
+    expect(specifiers.length).toBeGreaterThan(0);
+    for (const specifier of specifiers) expect(specifier).toMatch(/^node:/u);
+    expect(source).not.toMatch(/\brequire\(|\bimport\(/u);
   });
 
   it("F-024 rehearsal dry run then publish against doubles", async () => {
@@ -1545,7 +1543,6 @@ describe("F-024 AC-13 Make targets and rehearsal", () => {
       "Dockerfile.dev",
       "scripts/release.ts",
       "scripts/release-image.sh",
-      "scripts/shrinkwrap.ts",
     ])
       files[path] = readFileSync(path, "utf8");
     const lock = JSON.parse(readFileSync("package-lock.json", "utf8")) as {
@@ -1772,6 +1769,5 @@ describe("F-024 AC-13 Make targets and rehearsal", () => {
           call.slice("compose run ".length, call.indexOf(" :: ")).split(","),
         ).toEqual(names);
     }
-    expect(existsSync(join(repo.root, "npm-shrinkwrap.json"))).toBe(false);
   });
 });
