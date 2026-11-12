@@ -7,6 +7,12 @@ No product release is recorded.
 
 ### Added
 
+- #1 / F-023 v1 (pending acceptance): every CI job runs on GitHub-hosted
+  `ubuntu-24.04`, and a `privacy-scan` job (`make privacy-scan`, needed by
+  `ci-result`) scans the tracked tree, the pushed or PR commits and the PR
+  title and body against deny patterns from the `PRIVACY_DENY_PATTERNS`
+  secret, failing closed and printing only locations and pattern numbers.
+  `runner-acceptance.yml` never runs in this repository.
 - #114 / F-022 v2 (accepted 2026-11-12): Quality Gate failure summary. When
   the Sonar scanner exits nonzero, the `sonar` and `sonar-pr` logs show the
   gate status, up to 20 failed conditions and up to 20 current open issues of

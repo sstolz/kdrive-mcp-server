@@ -234,6 +234,19 @@ synthetic negative fixtures for quality failures and package/privacy boundaries.
 The five required job names are `lint`, `format`, `typecheck`, `test`, `build`.
 Local checks establish local evidence; only GitHub runs establish CI results.
 
+Every CI job runs on GitHub-hosted `ubuntu-24.04` (F-023). The `privacy-scan`
+job runs `make privacy-scan` (no `make setup`; `scripts/privacy-scan.ts` uses
+Node built-ins only) on every event, and `ci-result` fails unless it succeeded.
+It reads the deny patterns only from the repository secret
+`PRIVACY_DENY_PATTERNS` (one JavaScript regex per line, flags `giu`; blank lines
+and `#` comments skipped), scans the tracked tree, the pushed or PR commits
+(messages, author and committer identities, changed blobs and paths; full
+history on `workflow_dispatch`) and the PR title and body, and prints only
+`privacy-scan: hit <location> pattern <n>` lines and a summary, never matched
+text or a pattern. It exits 2 when the secret is missing or a pattern is
+invalid, so the owner provisions the secret before the first green CI. Fork
+pull requests get a notice instead of a scan and still fail on `fork-refusal`.
+
 For initial lockfile bootstrapping or deliberate dependency changes, run
 `make lockfile` and review the resulting manifest/lockfile diff, then run
 `make setup` again. Do not install tools on the host. Ordinary stopped-container
