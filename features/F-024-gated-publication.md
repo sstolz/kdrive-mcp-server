@@ -1082,7 +1082,8 @@ GitHub App holds no write permission on deployments.
 - **(c)** The approval is only as strong as the owner's GitHub account.
   Mitigation: two-factor authentication on the account, and the P-5 rule
   that agents never dispatch a non-dry run or approve a deployment. Owner
-  acceptance: pending.
+  acceptance: accepted 2026-11-12, on the condition that the Claude GitHub
+  App holds no deployment write permission.
 - **(d)** OIDC trusted publishing, provenance and the first GHCR push are
   exercised for real only by `0.6.0-beta.1`. Mitigation: the mandatory green
   real `dry_run=true` dispatch of the same version and commit (BR-354,
