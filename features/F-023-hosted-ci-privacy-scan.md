@@ -2,7 +2,7 @@
 id: F-023
 title: Hosted CI runners and a secret-fed privacy scan
 ticket: "#1"
-status: draft
+status: frozen
 version: 1
 ---
 
@@ -219,8 +219,7 @@ keep their rules and change only `runs-on`.
 
 - **BR-225 v3** — v2 holds with these changes: every job of `ci.yml` has
   `runs-on` exactly `ubuntu-24.04`; no job of `ci.yml` has `runs-on` containing
-  `self-hosted`. Timeouts unchanged, plus `privacy-scan` 20. (v1: label array
-  `[self-hosted, linux, x64, kdrive-ci]` except `fork-refusal`.) The label
+  `self-hosted`. Timeouts unchanged, plus `privacy-scan` 20. (v2: label array `[self-hosted, linux, x64, kdrive-ci]` except `fork-refusal`, `audit` included.) The label
   array survives only in `runner-acceptance.yml` (BR-229 v2). Verified by:
   AC-01, AC-02.
 - **BR-149 v3**, **BR-183 v3** — v2 holds with "the BR-225 label array"
@@ -250,11 +249,12 @@ keep their rules and change only `runs-on`.
 
 ## Acceptance criteria
 
-- **AC-01** (BR-015 v7, BR-149 v3, BR-183 v3, BR-225 v3, BR-227 v3, BR-341) —
+- **AC-01** (BR-015 v7, BR-149 v3, BR-183 v3, BR-225 v3, BR-227 v3, BR-320 v2,
+  BR-341) —
   Given the real `ci.yml`, When the policy validator runs, Then it passes with
   every job on `ubuntu-24.04` and the exact `privacy-scan` and `ci-result`
   shapes. Verified by: `tests/ci-policy.test.ts` `BR-015 v7 BR-225 v3 accepts
-  the real workflow on hosted runners`, `BR-341 …`, `BR-227 v3 …`.
+  the real workflow on hosted runners`, `BR-341 …`, `BR-227 v3 …`, `BR-320 v2 audit job on hosted runners`.
 - **AC-02** (BR-015 v7, BR-225 v3, BR-227 v3, BR-341, BR-342) — Given fixtures
   mutated to: one job on the label array; `privacy-scan` with `needs` or a job
   `if`; a `make setup` step in `privacy-scan`; the deny secret in another step,
@@ -462,3 +462,17 @@ No finding.
 4. [minor] D-6 vs BR-346 on force pushes — retained: aligned.
 5. [minor] Secret needed before the first green CI; round 5 unrecorded —
    retained: merge precondition; round 5 recorded above.
+
+### Decision-pass confirmation — reviewed SHA `e4e0b30` (Opus 5.5, `1-spec-review-6-reviewer`, diff-only), verdict changes (2 minor)
+
+Both minors folded in at freeze: BR-320 v2 added to AC-01 with a named test,
+and the BR-225 v3 history note now cites v2.
+
+### Freeze
+
+Frozen 2026-11-12 by the orchestrator (autonomous mode, PROJECT.md D-1) on
+reviewed SHA `e4e0b30` plus the two minor fixes above. Evidence: strong-tier
+approve (`1-spec-review-5-reviewer`), strongest-tier decision pass
+(`1-spec-decision-1-reviewer`, majors fixed and confirmed by
+`1-spec-review-6-reviewer`), no open question. IDs F-023 and BR-341–BR-352
+re-checked free on `main` `87c2ab6`.
