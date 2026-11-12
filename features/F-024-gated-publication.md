@@ -234,6 +234,8 @@ GHCR package).
     whether the registry accepted it anyway; if it did, verify the published
     version by hand with the read-back commands, and `read-back`, skipped
     because its `needs` failed, is not re-run;
+  - when the image push reports a failure and GHCR does not have the
+    version, re-run the failed `publish-image` job or dispatch again;
   - when the image push reports a failure but GHCR has the version,
     `publish-npm` never ran and npm is unpublished: the owner deletes the
     GHCR version and dispatches again, or releases the next beta;
@@ -970,13 +972,15 @@ GHCR package).
   publishing. The workflow `concurrency` group serializes release runs.
 - **D-8 Image before npm, read-back in its own job.** A GHCR version can be
   deleted by the owner; an npm version can never be reused. A failed
-  `npm publish` or image push may still have been accepted by the registry
-  (a timeout or a lost response after the upload), so the owner first
-  checks `npm view @sstolz/kdrive-mcp-server@<version>` or the GHCR manifest
-  of `<version>`. If the registry has it, the owner verifies it by hand with
-  the read-back commands; `read-back` was skipped (its `needs` failed), not
-  failed, and is not re-run, and re-running the failed publish job would
-  only fail its `release-check`. If the npm step failed without publishing,
+  publish may still have been accepted by the registry (a timeout or a lost
+  response after the upload), so the owner first checks the registry. If
+  `npm publish` failed but `npm view @sstolz/kdrive-mcp-server@<version>`
+  finds it, the owner verifies it by hand with the read-back commands;
+  `read-back` was skipped (its `needs` failed), not failed, and is not
+  re-run, and re-running `publish-npm` would only fail its `release-check`.
+  If the image push failed and GHCR does not have the version, the owner
+  re-runs the failed `publish-image` job (its `release-check` in phase
+  `image` expects a 404) or dispatches again. If the npm step failed without publishing,
   the owner re-runs the failed `publish-npm` job (its `release-check` in
   phase `npm` expects the pushed image), or deletes the GHCR version and
   dispatches again. If the image push reported a failure but GHCR has the
@@ -1092,7 +1096,7 @@ GitHub App holds no write permission on deployments.
   dependency (BR-376), so each transitive security fix reaches users only
   through a new release. Mitigation: the audit job flags the advisory, and
   a beta is cheap to release through this workflow. Owner acceptance:
-  pending.
+  accepted 2026-11-12.
 
 ## Open questions
 
@@ -1203,6 +1207,13 @@ Decision pass `2-spec-decision-1-reviewer` (strongest tier, verdict
 - **D1-9** (retained, orchestrator request) — `## Residual risks` added with
   entries (a)–(e); the owner accepted all five on 2026-11-12, (c) on the
   condition that the Claude GitHub App holds no deployment write permission.
+- **R4-1** (major, retained; `2-spec-review-4-reviewer`) — Residual risk (e)
+  still read "pending"; it now reads accepted, like (a)–(d).
+- **R4-2** (minor, retained) — D-8 no longer applies the npm hand-check to
+  the image case; the npm and image failure cases are separate, as in
+  BR-354.
+- **R4-3** (minor, retained) — D-8 and BR-354 cover an image push that
+  failed with no GHCR version: re-run `publish-image` or dispatch again.
 - **R3-1** (major, retained; `2-spec-review-3-reviewer`) — AC-16 contradicted
   P-5: its three `dry_run=false` dispatches are now made by the owner; the
   implementing agent only records the run links and results.
