@@ -2,7 +2,7 @@
 id: F-023
 title: Hosted CI runners and a secret-fed privacy scan
 ticket: "#1"
-status: frozen
+status: done
 version: 1
 ---
 
