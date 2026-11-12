@@ -153,16 +153,15 @@ keep their rules and change only `runs-on`.
   of the head (a PR whose base moved on, or a force push) keeps the range
   scan: `git rev-list <base>..<head>` already lists exactly the commits that
   the base lacks. For each commit of `git rev-list <range>`: its full message
-  (`git log -1 --format=%B`) is scanned by the BR-345 views; and the added
-  lines of its patch (`git log -p --no-ext-diff --no-textconv
-  --text --format=commit%x20%H <range>`; a `+++`/`---` line is a header only
-  inside the per-file header block that follows a `diff --git` line, every
-  other line starting with `+` is an added line; merge commits show no patch)
-  are scanned by the BR-345 per-line views and the collapsed view over each
-  file's added lines. Patch lines are decoded as strict UTF-8; a line that is
-  not valid UTF-8 is counted as binary and skipped. The old and new paths of
-  every file in each patch header (`diff --git`, rename and delete headers)
-  are scanned too and reported as `commit <sha> added` with no text. An empty head, or
+  (`git log -1 --format=%B`) is scanned by the BR-345 views; and its changed
+  blobs are scanned: `git diff-tree -r --no-renames --root -z <commit>`
+  (merge commits list no blobs, as no `-m` is given) gives, NUL-separated and never quoted, every path and its new
+  blob id; each new blob that is not a gitlink is read through
+  `git cat-file --batch` and scanned whole with the BR-345 decoders (a blob
+  id already scanned in this run is not read again); each path of the entry
+  (including deleted paths) is scanned as text. Hits in a commit's blobs or
+  paths are reported as `commit <sha> added`; binary blobs add to `<b>` once
+  per blob, as in BR-345. An empty head, or
   a head that is not a commit in the clone, prints only
   `privacy-scan: head is not a commit` and exits 2. Verified by: AC-09.
 - **BR-347** — Only when `PRIVACY_EVENT` is `pull_request`, `PRIVACY_PR_TITLE`
@@ -172,7 +171,7 @@ keep their rules and change only `runs-on`.
 - **BR-348** — Each hit prints exactly one stdout line
   `privacy-scan: hit <location> pattern <n>`, where `<location>` is
   `<path>:<line>`, `commit <40-hex sha> line <line>` (message),
-  `commit <40-hex sha> added` (added lines; one hit per commit and pattern),
+  `commit <40-hex sha> added` (changed blobs and paths of that commit; one hit per commit and pattern),
   `pr-title:<line>` or `pr-body:<line>`. When the path itself matches any pattern, `<location>` is
   `file #<k>:<line>` with `k` the 1-based index in `git ls-files` order, and
   one extra line `privacy-scan: hit path file #<k> pattern <n>` is printed. No
@@ -281,9 +280,11 @@ keep their rules and change only `runs-on`.
   `commit <B> line <n>` and `commit <C> added` are reported in the first four
   and nothing in the last; given a PR whose base D (on another branch, not an
   ancestor of C) shares only A with C, Then the range `D..C` is scanned (B and
-  C reported, no full-history scan of A); given an added line starting with
-  `+++` and a deleted file whose path holds the token, Then both are reported
-  as `commit <sha> added`; an empty head and an unknown non-empty head
+  C reported, no full-history scan of A); given a commit E whose new blob has a line
+  starting with `+++` that holds the token, and a later commit F that deletes
+  a file whose path holds the token, Then exactly one `commit <E> added` and
+  one `commit <F> added` line are reported; given a commit adding a UTF-16 LE
+  file with BOM that holds the token, Then that commit is reported; an empty head and an unknown non-empty head
   each print `privacy-scan: head is not a commit` and exit 2. Verified by: `tests/privacy-scan.test.ts`
   `BR-346 …`.
 - **AC-10** (BR-347) — Given the token in `PRIVACY_PR_TITLE` and in
@@ -401,3 +402,14 @@ keep their rules and change only `runs-on`.
    counted as binary.
 4. [minor] Git child stderr — retained: piped and discarded; AC-16 asserts no
    `fatal:` line.
+
+### Round 3 — reviewed SHA `7929f6b` (Opus 5.5, `1-spec-review-3-reviewer`, diff-only)
+
+1. [major] Patch lines decoded unlike BR-345, mixed counts — retained, by
+   design change: no patch parsing; each commit's changed blobs (from
+   `git diff-tree -z`) are read through `cat-file` and scanned whole with the
+   BR-345 decoders, counted per blob, deduplicated by blob id.
+2. [minor] Quoted or ambiguous header paths — retained: paths come from
+   `git diff-tree -r --no-renames -z`, never quoted.
+3. [minor] One hit per commit and pattern vs two expected — retained: the
+   `+++` line and the deleted path are in separate commits in AC-09.
