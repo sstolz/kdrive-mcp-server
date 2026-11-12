@@ -1,0 +1,74 @@
+{
+  "name": "Runner acceptance",
+  "on": {
+    "workflow_dispatch": {
+      "inputs": {
+        "lan_target": {
+          "description": "LAN host:port that must stay unreachable (optional)",
+          "required": false,
+          "type": "string"
+        },
+        "host_target": {
+          "description": "Host public address:443 that must stay unreachable (optional)",
+          "required": false,
+          "type": "string"
+        }
+      }
+    }
+  },
+  "permissions": {
+    "contents": "read"
+  },
+  "jobs": {
+    "probe": {
+      "runs-on": ["self-hosted", "linux", "x64", "kdrive-ci"],
+      "timeout-minutes": 10,
+      "steps": [
+        {
+          "uses": "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683",
+          "with": {
+            "persist-credentials": false
+          }
+        },
+        {
+          "run": "make runner-probe",
+          "env": {
+            "LAN_TARGET": "${{ inputs.lan_target }}",
+            "HOST_TARGET": "${{ inputs.host_target }}"
+          }
+        }
+      ]
+    },
+    "reset-mark": {
+      "runs-on": ["self-hosted", "linux", "x64", "kdrive-ci"],
+      "timeout-minutes": 10,
+      "steps": [
+        {
+          "uses": "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683",
+          "with": {
+            "persist-credentials": false
+          }
+        },
+        {
+          "run": "make runner-reset-mark"
+        }
+      ]
+    },
+    "reset-check": {
+      "runs-on": ["self-hosted", "linux", "x64", "kdrive-ci"],
+      "timeout-minutes": 10,
+      "needs": ["reset-mark"],
+      "steps": [
+        {
+          "uses": "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683",
+          "with": {
+            "persist-credentials": false
+          }
+        },
+        {
+          "run": "make runner-reset-check"
+        }
+      ]
+    }
+  }
+}

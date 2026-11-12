@@ -1,0 +1,12 @@
+# BR-145: used only after the POSIX entry guard validates the external path.
+services:
+  analysis:
+    environment:
+      - SONAR_HOST_URL_FILE=/run/secrets/sonar-host-url
+    volumes:
+      - type: bind
+        source: ${SONAR_HOST_URL_FILE:?Select an explicit external host file}
+        target: /run/secrets/sonar-host-url
+        read_only: true
+        bind:
+          create_host_path: false

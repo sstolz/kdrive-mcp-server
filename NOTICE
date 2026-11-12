@@ -1,0 +1,20 @@
+kdrive-mcp-server is an unofficial project, not affiliated with Infomaniak.
+Original project code is licensed under the MIT License in LICENSE.
+
+Upstream comparison baseline:
+https://github.com/Infomaniak/mcp-server-kdrive
+Tag: 1.2.0
+Pinned revision: 857272d7fd42c0940ae389b9092b1c4cd2351337
+Reference file: src/kdrive-client.ts
+
+The pinned upstream package.json and README declare MIT. The examined pinned
+root tree has no standalone LICENSE file, and the reference source has no
+copyright header. No upstream copyright statement is invented here.
+No upstream source code is copied into this foundation. Future adaptation in
+P-05 requires resolving provenance, comparing this pinned source with the then
+current upstream revision, and recording retained and changed behavior.
+
+Dependency notice:
+@modelcontextprotocol/server is licensed under Apache-2.0. This foundation
+installs the official SDK without copying or bundling its source. Dependencies
+retain their own license and notice files in their separately installed packages.

@@ -1,0 +1,87 @@
+services:
+  dev:
+    # F-011 BR-150: a local tag derived from the Compose project name, so the
+    # prep service reuses this image and other checkouts never replace it.
+    image: ${COMPOSE_PROJECT_NAME:?Compose project name}-dev:local
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      args:
+        DEV_UID: ${DEV_UID:-1000}
+        DEV_GID: ${DEV_GID:-1000}
+    init: true
+    stdin_open: true
+    tty: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    volumes:
+      - type: bind
+        source: .
+        target: /workspace
+      # F-011 BR-150 v2: Git metadata is read-only for all container code,
+      # including dependency lifecycle scripts run by make setup.
+      - type: bind
+        source: ./.git
+        target: /workspace/.git
+        read_only: true
+        bind:
+          create_host_path: false
+      - node_modules:/workspace/node_modules
+      - npm_cache:/home/node/.npm
+
+  # BR-150: snapshot preparation runs third-party build and test code with the
+  # checkout mounted read-only; only artifacts/sonar-input is writable.
+  prep:
+    profiles: [prep]
+    image: ${COMPOSE_PROJECT_NAME:?Compose project name}-dev:local
+    pull_policy: never
+    init: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    volumes:
+      - type: bind
+        source: .
+        target: /workspace
+        read_only: true
+      - type: bind
+        source: ./artifacts/sonar-input
+        target: /workspace/artifacts/sonar-input
+        bind:
+          create_host_path: false
+      - node_modules:/workspace/node_modules
+      - npm_cache:/home/node/.npm
+
+  analysis:
+    profiles: [analysis]
+    # Official image verified as amd64, Node 22.23.2, Scanner CLI 8.1.0.6389.
+    image: sonarsource/sonar-scanner-cli@sha256:47956b669bf486bdad919e1cbd0533223515aa0b6d1d31763e5a3754942df6d7
+    platform: linux/amd64
+    init: true
+    user: "1000:1000"
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    environment:
+      - SONAR_TOKEN
+      - SONAR_HOST_URL
+      - SONAR_ENABLED
+      - SONAR_ANALYSIS_MODE
+      - SONAR_USER_HOME=/opt/sonar-scanner/.sonar
+    volumes:
+      - type: bind
+        source: ${SONAR_SNAPSHOT:-./artifacts/sonar-input/current}
+        target: /usr/src
+        read_only: true
+        bind:
+          create_host_path: false
+      - sonar_work:/tmp/.scannerwork
+      - sonar_cache:/opt/sonar-scanner/.sonar
+    entrypoint: [node, --experimental-strip-types, scripts/sonar.ts]
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=512m,uid=1000,gid=1000,mode=1777
+
+volumes:
+  node_modules:
+  npm_cache:
+  sonar_work:
+  sonar_cache:

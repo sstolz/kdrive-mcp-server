@@ -1,0 +1,15 @@
+{
+  "services": {
+    "runner": {
+      "image": "kdrive-ci-runner:local",
+      "pull_policy": "never",
+      "restart": "no",
+      "group_add": ["${DOCKER_GID:?}"],
+      "volumes": [
+        "/var/run/docker.sock:/var/run/docker.sock",
+        "/home/runner/_work:/home/runner/_work",
+        "/run/kdrive-runner:/run/kdrive-runner"
+      ]
+    }
+  }
+}

@@ -1,0 +1,23 @@
+# Development only. Official manifest-list digest verified on 2026-11-01.
+FROM node:26.13.0-bookworm@sha256:fa52d1669505e29b58c042875b1d65c229e0787a3610fd52869b22b68e480853
+
+ARG DEV_UID=1000
+ARG DEV_GID=1000
+
+RUN case "${DEV_UID}:${DEV_GID}" in *[!0-9:]*|0:*|*:0|:*) exit 1 ;; esac \
+    && groupmod -o -g "${DEV_GID}" node \
+    && usermod -o -u "${DEV_UID}" -g "${DEV_GID}" node \
+    && mkdir -p /workspace/node_modules /home/node/.npm \
+    && chown -R node:node /home/node /workspace/node_modules \
+    && test "$(node --version)" = v26.13.0 \
+    && test "$(npm --version)" = 11.20.0 \
+    && test "$(git --version)" = 'git version 2.39.5' \
+    && make --version
+
+ENV HOME=/home/node \
+    NPM_CONFIG_CACHE=/home/node/.npm \
+    NPM_CONFIG_UPDATE_NOTIFIER=false
+
+WORKDIR /workspace
+USER node
+CMD ["sh"]

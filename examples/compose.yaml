@@ -1,0 +1,71 @@
+# Runs the HTTP runtime image (F-013, F-014) behind Traefik, in OAuth proxy
+# mode. Step-by-step personal server guide: docs/deployment.md.
+#
+# Every installation-specific value is a required variable: Compose refuses to
+# start while one is unset. Credentials are file secrets only.
+
+services:
+  kdrive-mcp:
+    image: ${KDRIVE_MCP_IMAGE:?set the locally built runtime image tag}
+    user: "1000:1000"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    init: true
+    restart: on-failure:3
+    stop_signal: SIGTERM
+    # At least 75 s in write and share modes (audit outcomes); 10 s in read mode.
+    stop_grace_period: 75s
+    # No healthcheck key: the image's HEALTHCHECK applies (overrides: docs/deployment.md).
+    environment:
+      KDRIVE_MCP_TRANSPORT: http
+      # read, then write (see docs/deployment.md).
+      KDRIVE_MCP_MODE: read
+      # write mode: a durable audit log on the writable mount below.
+      # KDRIVE_MCP_AUDIT_LOG: /audit/audit.jsonl
+      # Optional, same writable mount: keep clients and logins across restarts.
+      # OAUTH_STATE_FILE: /audit/oauth-state.sqlite
+      OAUTH_MODE: proxy
+      # Container-internal bind address; no host port is published.
+      MCP_HTTP_HOST: 0.0.0.0
+      MCP_HTTP_PORT: "3000"
+      MCP_PUBLIC_URL: ${MCP_PUBLIC_URL:?set the public MCP URL}
+      KDRIVE_ID: ${KDRIVE_ID:?set the kDrive ID}
+      OAUTH_ISSUER: ${OAUTH_ISSUER:?set the upstream OIDC issuer URL}
+      OAUTH_ALLOWED_EMAILS: ${OAUTH_ALLOWED_EMAILS:?set the allowed email addresses}
+      OAUTH_UPSTREAM_CLIENT_ID: ${OAUTH_UPSTREAM_CLIENT_ID:?set the upstream client ID}
+      OAUTH_ALLOWED_REDIRECT_URIS: ${OAUTH_ALLOWED_REDIRECT_URIS:?set the allowed redirect URIs}
+      KDRIVE_TOKEN_FILE: /run/secrets/kdrive-token
+      OAUTH_UPSTREAM_CLIENT_SECRET_FILE: /run/secrets/upstream-client-secret
+      OAUTH_SIGNING_KEY_FILE: /run/secrets/signing-key.pem
+    secrets:
+      - source: kdrive_token
+        target: kdrive-token
+      - source: upstream_client_secret
+        target: upstream-client-secret
+      - source: signing_key
+        target: signing-key.pem
+    # write mode: a host directory owned by 1000:1000 with mode 0700.
+    # volumes:
+    #   - ${AUDIT_DIR:?set the audit log directory}:/audit
+    networks: [proxy]
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: ${TRAEFIK_NETWORK:?set the Traefik network name}
+      traefik.http.routers.kdrive-mcp.rule: Host(`${MCP_HOSTNAME:?set the public host name}`)
+      traefik.http.routers.kdrive-mcp.entrypoints: ${TRAEFIK_ENTRYPOINT:?set the Traefik HTTPS entrypoint}
+      traefik.http.routers.kdrive-mcp.tls: "true"
+      traefik.http.services.kdrive-mcp.loadbalancer.server.port: "3000"
+
+secrets:
+  kdrive_token:
+    file: ${KDRIVE_TOKEN_SECRET_FILE:?set the kDrive token file}
+  upstream_client_secret:
+    file: ${UPSTREAM_CLIENT_SECRET_FILE:?set the upstream client secret file}
+  signing_key:
+    file: ${SIGNING_KEY_FILE:?set the signing key file}
+
+networks:
+  proxy:
+    external: true
+    name: ${TRAEFIK_NETWORK:?set the Traefik network name}

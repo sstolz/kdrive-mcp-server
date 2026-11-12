@@ -1,0 +1,16 @@
+# F-015 BR-220: loads the runner egress table (BR-219) before any VM exists.
+# Installed by ops/runner/host-setup.sh. It recreates only the table
+# inet kdrive_runner; host and Docker rules are never touched.
+[Unit]
+Description=kdrive CI runner egress filter (table inet kdrive_runner)
+Before=kdrive-ci-runner.service
+After=nftables.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/sbin/nft -f /etc/kdrive-runner/nftables.conf
+ExecStop=-/usr/sbin/nft delete table inet kdrive_runner
+
+[Install]
+WantedBy=multi-user.target

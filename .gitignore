@@ -1,0 +1,26 @@
+# Environment and private key material
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.p12
+*.pfx
+secrets/
+/.config/qube-token
+/.config/sonar-host-url
+/.config/kdrive-token
+
+# Node dependencies and generated output
+node_modules/
+dist/
+build/
+coverage/
+artifacts/
+.scannerwork/
+.sonar/
+*.tgz
+*.tsbuildinfo
+*.log
+.DS_Store
+.codex/

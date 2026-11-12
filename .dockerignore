@@ -1,0 +1,26 @@
+.git
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+secrets/
+/.config/qube-token
+/.config/sonar-host-url
+node_modules/
+dist/
+artifacts/
+coverage/
+.sonar/
+.scannerwork/
+*.tgz
+runs/
+# F-013: nested secret-shaped files never enter a build context.
+**/.env
+**/.env.*
+!**/.env.example
+**/*.pem
+**/*.key
+**/secrets/

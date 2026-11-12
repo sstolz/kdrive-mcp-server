@@ -1,0 +1,680 @@
+# F-002 — Validate configuration and select execution mode
+
+Status: done (v4 accepted on main `00e6fe3` with [F-012 v1](F-012-authenticated-http.md) under #12 (archive issue 12); v3 snapshot in [history](history/F-002-v3.md)). Version: 4. Ticket: #4 / P-04 (archive issue 4).
+Date: 2026-11-01. Author: GPT-6.1 Sol / high reasoning.
+Depends on: #3, accepted on `main` at
+`f2d38b32dbbd78059da6754bb11d9b8e561fd645` after PR #29.
+BR-016–BR-028 are active following successful actual-main acceptance.
+BR-016 supersedes BR-001; it preserves its package and diagnostic information
+contract while extending ordinary invocation to configuration validation.
+The frozen F-001 contract and immutable history remain unchanged.
+Accepted on main `88bf8caa7412988e11099a4a01f9e600aa38eeee`, 2026-11-01;
+see the acceptance appendix below and the synchronized allocation ledger.
+
+Version 3 (2026-11-03, prepared with [F-010](F-010-oauth-proxy.md) under #21,
+reviewed and frozen with F-010 v1 at `d1d0abb`, pending acceptance) changes only the redirect-URI
+grammar: by owner decision of 2026-11-03, HTTP redirect URIs may also use the
+host `localhost` so that Claude Code can register its documented
+`http://localhost:<port>/callback`; variable-port matching on the three loopback
+hosts belongs to F-010 BR-126. BR-024 moves to v2; every other statement, limit
+and setting is unchanged. Preserve [accepted v2](history/F-002-v2.md)
+byte-for-byte. v2 stayed the accepted contract until v3 acceptance; v3 was
+accepted on main `3fc14c3` with F-010 (#21).
+
+Version 2 clarifies only CLI budget diagnostics and their ordering relative to
+CLI structure checks. Preserve [frozen v1](history/F-002-v1.md) byte-for-byte;
+all BR statements, configured limits, inventory and feature scope are unchanged.
+Global argv count/total budgets belong to `cli`; recognized raw option-value
+budgets belong to their canonical setting. There is no per-argv-element byte
+ceiling. Fresh independent approval and the new freeze are recorded below.
+
+## Context
+
+Local owners and operators of a future HTTP instance need one deterministic,
+bounded configuration contract before policy, transports or OAuth are implemented.
+The historical umbrella's §§4, 8–10 specify the settings and security defaults.
+The [API observations](../docs/api-notes.md) establish that a token can see more
+drives than its owner intended to expose, and that an external drive's root can
+be queried. Token visibility is therefore never an exposure allowlist.
+
+The foundation supplies only an injected metadata port, not drive discovery or
+path resolution. #5 owns production client adaptation and remaining probes.
+This feature supplies an injected startup-preflight boundary and exercises it
+with synthetic data. It cannot claim that a real account, root, OAuth provider,
+listener or MCP session has been validated.
+
+## Scope and exclusions
+
+Deliver `src/config.ts` and associated types/helpers for CLI/environment/explicit
+YAML selection, strict parsing, normalized configuration, explicit credential
+file loading, and an injected asynchronous drive/root preflight. Extend the
+single existing executable to validate locally available configuration and select
+stdio or HTTP without starting either transport. Update CLI help, user-facing
+configuration documentation and placeholder-only `.env.example`.
+
+The next feature PR also synchronizes previously accepted F-001/BR/capability/
+changelog markers and committed local acceptance reports, using #3/#28 acceptance
+evidence; it does not rewrite immutable ADR-001/ADR-002 or frozen history. New
+F-002 records remain pending acceptance until actual-main verification succeeds.
+
+Exclude real kDrive adapters/calls, upstream source reuse, account probing,
+policy enforcement/glob matching, tool registration, content extraction, audit
+file opening, stdio/HTTP servers, OAuth discovery/token verification/signing,
+provider qualification, a production image, secret provisioning and releases.
+Root preflight is a reusable composition step, not a production adapter.
+
+## Business rules
+
+- **BR-016 (supersedes BR-001):** Preserve package name `kdrive-mcp-server`, ESM,
+  Node `>=26.13.0 <27`, executable `dist/cli.js`, and its single binary name.
+  Standalone `--version` prints the package version plus LF and exits 0;
+  standalone `--help` prints current usage plus LF and exits 0. Both ignore
+  deployment environment and perform no configuration, credential or network
+  I/O. Mixed help/version arguments are invalid. Ordinary invocation follows
+  BR-017–BR-028; configuration failure prints one sanitized diagnostic to stderr
+  and exits 1. Successful local preparation selects the transport, prints
+  `Configuration validated locally; <stdio|http> runtime is not implemented yet.`
+  plus LF to stderr, and exits 1. It opens no listener, sends no protocol output,
+  invokes no production preflight, and never implies remote validation. Stdout
+  remains empty on every ordinary invocation.
+- **BR-017:** Parse only the exact source/option inventory below. Select each
+  effective setting in order CLI > environment > explicitly selected YAML >
+  default; replace complete list values rather than merging them. Select the
+  inline/file credential pair atomically at the highest source supplying either
+  member; both members at that same source are an error. Apply all value and
+  cross-field checks to the resulting effective configuration before reading
+  any selected credential file. Lower-priority values do not reappear when a
+  higher-priority value is empty or invalid. Invalid CLI structure, unknown
+  reserved environment names, malformed YAML and unknown YAML keys always fail,
+  even if a higher source would otherwise replace their values.
+- **BR-018:** Read YAML only when `--config` explicitly selects it. Enforce the
+  source-format, syntax and size limits below; perform no `.env` loading, file
+  search, interpolation, execution, YAML tags, merge keys or alias expansion.
+  Imports of the configuration module perform no I/O. Source readers and the
+  process environment/argv are injectable so tests never depend on deployment
+  state. Read only the explicitly selected YAML and credential files.
+- **BR-019:** Require at least one explicit drive identifier: `driveId` or
+  `driveIds`. When only `driveId` is supplied, the allowlist is that singleton;
+  when only `driveIds` is supplied, the first listed ID is the default. When
+  both are supplied, the default must belong to the allowlist. Reject invalid,
+  duplicate or out-of-bound IDs. Never infer configured drives from a token or
+  from a preflight response; retain the supplied drive order.
+- **BR-020:** Parse roots by the grammar below. Absent roots mean ID `1` on
+  each configured drive. Present roots must be nonempty, cover every configured
+  drive and mention no other drive. Preserve configured order, reject duplicate
+  selectors and never fill a missing drive in a present list with its whole root.
+  Resolving a path never changes the configured-drive allowlist.
+- **BR-021:** Asynchronous preflight accepts only a locally prepared
+  configuration and an explicitly injected resolver. It checks every configured
+  drive before resolving any root, permits only exact role `admin`, and rejects
+  missing, mismatched, `external` or unknown-role results. It then validates every
+  selected folder ID and resolves every selected path to exactly one existing
+  directory in the same drive. For a numeric selector, the returned normalized
+  folder ID must equal the selected folder ID exactly; another existing
+  directory, including ID `1`, cannot substitute. Absent, ambiguous, wrong-ID,
+  wrong-drive, non-directory,
+  malformed or rejected results fail the entire preflight. No partially resolved
+  configuration escapes. Return only configured drives and their resolved IDs;
+  duplicate resolved `(driveId, folderId)` pairs collapse in first-selector order.
+  Bind each successful root to its ID, with no subsequent path rebinding in this
+  feature. An absent resolver fails with `PREFLIGHT_UNAVAILABLE`; it never returns
+  a remotely ready configuration. No root is authorized by syntax alone.
+- **BR-022:** Normalize the exact cumulative level `read`, `write` or `share`;
+  default to `read`. Preserve configured feature switches while computing
+  `effectiveSharedWrite = sharedWithMe && sharedWrite && mode != read` and
+  `effectivePublicLinks = allowPublicLinks && mode == share`. Shared reads default
+  off; shared writes and public links default off; an empty invite-domain list
+  permits no invitations. These configuration values confer no tool access or
+  policy decision in this feature.
+- **BR-023:** Accept resource bounds, paths, deny patterns and allowlists only
+  under the tables and grammars below. Reject invalid values rather than clamp,
+  coerce, silently discard entries or use a permissive fallback. Preserve exact
+  subject IDs and root paths; lowercase DNS domains only. Compare invitation
+  domains by exact normalized domain, never suffix/wildcard/subdomain matching.
+- **BR-024:** Default to `stdio`. Reject explicitly supplied HTTP/OAuth-only
+  settings in effective stdio configuration, including `insecureNoAuth=true`.
+  In HTTP mode default host/port to `127.0.0.1:3000`. Authenticated HTTP requires
+  an HTTPS public URL, OAuth mode/issuer and a nonempty identity allowlist under
+  the auth matrix below. Reject unsafe/incomplete combinations without discovery
+  or network I/O. This validates configuration, not OAuth-provider capability.
+- **BR-025:** `insecureNoAuth=true` is permitted only with HTTP and forces the
+  effective bind host to literal `127.0.0.1`, even if another valid host was
+  explicitly supplied. Its optional public URL must use `http`, literal
+  `127.0.0.1` and the configured port; default it to that loopback origin. Reject
+  all explicit OAuth settings in this mode. It never produces a non-loopback
+  listener configuration; the listener it enables binds `127.0.0.1` only
+  (F-012 BR-153).
+- **BR-026:** Load a required nonempty Infomaniak credential from the selected
+  environment value or explicit file reference. Permit the proxy upstream secret
+  from the selected environment value or explicit file reference, and its signing
+  material only by explicit file reference. Reject raw secrets in CLI/YAML,
+  conflicting selectors and invalid credential data under the file contract below.
+  Read nothing from unselected credential sources. No secret is generated,
+  copied to the repository, written to disk or passed as an argument.
+- **BR-027:** Report only stable error codes and canonical setting names from
+  the error contract below. Never include input values, credentials, file paths,
+  YAML excerpts, parser/file/adapter exception text or configuration dumps in
+  diagnostics. Sanitize injected dependency failures before they cross the
+  configuration boundary, including split/multiple validation failures. The CLI
+  emits only the first deterministic error and no stack trace.
+- **BR-028:** Separate `LocalConfiguration` from `ResolvedConfiguration` in
+  exported TypeScript types: the former retains root selectors and the latter
+  exists only after BR-021 succeeds. No production adapter, listener or OAuth
+  verification is added. Tests use injected readers/resolvers and synthetic
+  credentials only; executable tests use isolated synthetic fixture files and
+  an explicit environment. Retain all applicable foundation gates and run the
+  complete Docker/Make local gate and mandatory PR CI before independent review.
+
+### Source syntax and exact inventory (BR-017, BR-018)
+
+Use long CLI options only, accepting `--name value` and `--name=value`; a value
+is required unless a shorthand below says otherwise. No short flags, positional
+arguments, combined flags or `--` operands are supported. Repeated options,
+including repeated list options, fail rather than take the last value.
+`--http` and `--stdio` are mutually exclusive bare transport shorthands; either
+replaces the environment/YAML transport selection. `--insecure-no-auth` alone
+means `1`; `--insecure-no-auth=0|1` supplies an explicit override.
+
+`--config PATH` occurs at most once and has no environment/YAML equivalent.
+Resolve a relative config path against the supplied working directory. Do not
+read a conventional default file. YAML is one UTF-8 mapping document, at most
+65,536 bytes, with the flat exact keys in this table. Reject duplicate keys,
+unknown keys, non-string keys, nested mappings, null, extra documents, malformed
+UTF-8, custom tags, anchors, aliases and merge keys. Lists are YAML sequences
+of scalar strings (drive IDs may also be YAML integer sequence items); scalars
+have only the declared primitive types. Validate this structural primitive-kind
+schema before precedence; validate scalar contents/ranges only for winning
+values. A `token` or
+`oauthUpstreamClientSecret` YAML key is unknown and rejected.
+
+| CLI | Environment | YAML key | Kind / default |
+| --- | --- | --- | --- |
+| `--http` / `--stdio` | `KDRIVE_MCP_TRANSPORT` | `transport` | enum `stdio,http`; `stdio` |
+| none; raw `--token` rejected | `KDRIVE_TOKEN` | none | secret; required as pair with next row |
+| `--token-file` | `KDRIVE_TOKEN_FILE` | `tokenFile` | absolute credential file reference |
+| `--drive-id` | `KDRIVE_ID` | `driveId` | positive safe integer; derived per BR-019 |
+| `--drive-ids` | `KDRIVE_IDS` | `driveIds` | ID list; derived per BR-019 |
+| `--mode` | `KDRIVE_MCP_MODE` | `mode` | enum `read,write,share`; `read` |
+| `--roots` | `KDRIVE_MCP_ROOTS` | `roots` | root-selector list; absent semantics BR-020 |
+| `--deny` | `KDRIVE_MCP_DENY` | `deny` | deny-pattern list; empty |
+| `--max-tree-items` | `KDRIVE_MCP_MAX_TREE_ITEMS` | `maxTreeItems` | integer `1..1000000`; `10000` |
+| `--shared-with-me` | `KDRIVE_MCP_SHARED_WITH_ME` | `sharedWithMe` | boolean; false |
+| `--shared-write` | `KDRIVE_MCP_SHARED_WRITE` | `sharedWrite` | boolean; false |
+| `--max-read-bytes` | `KDRIVE_MCP_MAX_READ_BYTES` | `maxReadBytes` | integer `1..1073741824`; `5000000` |
+| `--max-extract-bytes` | `KDRIVE_MCP_MAX_EXTRACT_BYTES` | `maxExtractBytes` | integer `1..1073741824`; `50000000` |
+| `--extract-timeout-ms` | `KDRIVE_MCP_EXTRACT_TIMEOUT_MS` | `extractTimeoutMs` | integer `1..300000`; `20000` |
+| `--max-output-chars` | `KDRIVE_MCP_MAX_OUTPUT_CHARS` | `maxOutputChars` | integer `1..10000000`; `200000` |
+| `--audit-log` | `KDRIVE_MCP_AUDIT_LOG` | `auditLog` | `stderr` or file path; `stderr` |
+| `--allow-public-links` | `KDRIVE_MCP_ALLOW_PUBLIC_LINKS` | `allowPublicLinks` | boolean; false |
+| `--invite-domains` | `KDRIVE_MCP_INVITE_DOMAINS` | `inviteDomains` | domain list; empty |
+| `--host` | `MCP_HTTP_HOST` | `httpHost` | HTTP-only host; `127.0.0.1` |
+| `--port` | `MCP_HTTP_PORT` | `httpPort` | HTTP-only integer `1..65535`; `3000` |
+| `--public-url` | `MCP_PUBLIC_URL` | `publicUrl` | HTTP-only URL; required for authenticated HTTP |
+| `--insecure-no-auth` | `KDRIVE_MCP_INSECURE_NO_AUTH` | `insecureNoAuth` | HTTP-only boolean; false |
+| `--oauth-mode` | `OAUTH_MODE` | `oauthMode` | HTTP-only enum `delegate,delegate-static,proxy`; absent |
+| `--oauth-issuer` | `OAUTH_ISSUER` | `oauthIssuer` | HTTP-only HTTPS URL; absent |
+| `--oauth-audience` | `OAUTH_AUDIENCE` | `oauthAudience` | HTTP-only HTTPS URL; public URL when authenticated |
+| `--oauth-allowed-subjects` | `OAUTH_ALLOWED_SUBJECTS` | `oauthAllowedSubjects` | HTTP-only subject list; empty |
+| `--oauth-allowed-emails` | `OAUTH_ALLOWED_EMAILS` | `oauthAllowedEmails` | HTTP-only exact email list; empty |
+| `--oauth-upstream-client-id` | `OAUTH_UPSTREAM_CLIENT_ID` | `oauthUpstreamClientId` | proxy-only bounded nonempty string; absent |
+| none; raw `--oauth-upstream-client-secret` rejected | `OAUTH_UPSTREAM_CLIENT_SECRET` | none | proxy-only secret; required as pair with next row |
+| `--oauth-upstream-client-secret-file` | `OAUTH_UPSTREAM_CLIENT_SECRET_FILE` | `oauthUpstreamClientSecretFile` | proxy-only absolute credential file reference |
+| `--oauth-signing-key-file` | `OAUTH_SIGNING_KEY_FILE` | `oauthSigningKeyFile` | proxy-only absolute credential file reference |
+| `--oauth-allowed-redirect-uris` | `OAUTH_ALLOWED_REDIRECT_URIS` | `oauthAllowedRedirectUris` | proxy-only exact URL list; required/nonempty |
+
+Reserved environment namespaces are `KDRIVE_`, `OAUTH_`, `MCP_HTTP_` and the
+exact name `MCP_PUBLIC_URL`; reject unknown names in those namespaces and ignore
+unrelated process variables. An own property with an empty string is present,
+not absent. Each recognized raw environment or CLI option value is at most
+65,536 UTF-8 bytes. Argv has at most 128 elements and 131,072 total UTF-8 bytes,
+counting every complete supplied argument; there is no individual argument
+byte ceiling independent of its recognized option value. Check global argv
+budgets first, complete all CLI structural validation second, then check each
+recognized raw CLI value in argv order. These checks precede environment/YAML
+processing, file reads and semantic value parsing. An oversized unknown option
+is still an unknown option unless a global argv budget is exceeded.
+Defaulted HTTP-only fields are not considered explicitly
+supplied for stdio rejection.
+
+### Value bounds and normalization (BR-019, BR-020, BR-023)
+
+CLI/environment integers use only decimal digits, no whitespace, sign, decimal,
+exponent or units; leading zeros are accepted and normalize to the integer.
+IDs are `1..Number.MAX_SAFE_INTEGER`. YAML integers must be safe integer numbers;
+strings obey the same decimal grammar. CLI/environment booleans are exactly
+`0` or `1`; YAML uses boolean `false`/`true`, not numbers or strings. Enums are
+case-sensitive. No generic truthiness or numeric coercion is permitted.
+
+CLI/environment lists are comma-separated without quoting or escapes; trim
+ASCII spaces/tabs surrounding each element. YAML list entries preserve content
+and must already satisfy the corresponding grammar. Empty entire values are
+allowed only for deny, invitation domains and OAuth subject/email lists; they
+mean an explicit empty replacement. Reject empty elements within a nonempty
+list. No list has more than 256 entries, except drive lists at most 64 and
+roots at most 256 total. Reject duplicates after the documented normalization.
+For IDs, canonical numeric equality detects duplicates.
+
+Roots are `driveId:folderId` or `driveId:/absolute/kDrive/path`, split at the
+first colon. IDs obey the ID bound; root paths are at most 4,096 UTF-8 bytes,
+start with `/`, and contain no control characters, backslash, repeated slash,
+`.`/`..` component or trailing slash except `/` itself. Preserve case, Unicode,
+spaces and literal percent characters: these are kDrive paths, not filesystem
+paths or URLs. `/` identifies the drive root but still requires directory
+verification. A comma in a path is representable only by a YAML entry.
+
+Deny patterns are at most 1,024 UTF-8 bytes, start with `/` or `**/`, and use
+literal path components with `*` and `?`; `**` is permitted only as an entire
+component. Reject controls, backslash, empty components, `.`/`..` components,
+braces, brackets and parentheses. `/` alone is valid. This is a deliberately
+bounded glob syntax; matching and traversal policy belong to #6, not this ticket.
+
+Domains are ASCII DNS names of at most 253 bytes with dot-separated labels of
+1..63 letters/digits/hyphens, with no leading/trailing hyphen, empty label,
+terminal dot, wildcard, URL, port or `@`. Require at least two labels; IDNs use
+explicit ASCII A-label form. Lowercase before duplicate/equality checks.
+An invite to a subdomain needs its own listed entry. Subject IDs are exact,
+nonempty strings of at most 1,024 UTF-8 bytes without controls. Email entries
+have one `@`, an ASCII dot-atom local part of 1..64 bytes (no empty/consecutive
+dots), a domain under this grammar and at most 254 total bytes; lowercase only
+the domain and preserve local-part case. Compare normalized email entries
+exactly. No wildcard, quoted local part or domain suffix authorization exists.
+
+Audit paths are nonempty strings of at most 4,096 UTF-8 bytes without controls,
+resolved against the supplied working directory when relative. Do not open or
+create an audit file. Credential paths are absolute paths under the file
+contract; no tilde or environment interpolation. Host is a valid literal IPv4,
+IPv6 or ASCII DNS name under the domain-label grammar (single-label hosts such
+as `localhost` are allowed); reject schemes, paths, ports, whitespace and controls.
+An IPv6 host is the bare literal, without brackets. Resource limits are
+independent; no implicit requirement makes extraction bytes exceed read bytes.
+
+### HTTP/auth matrix and URLs (BR-024, BR-025)
+
+| Setting | stdio | authenticated delegate / delegate-static | authenticated proxy | insecure HTTP |
+| --- | --- | --- | --- | --- |
+| HTTP-only settings explicitly supplied | rejected | accepted | accepted | accepted under loopback constraints |
+| Public URL | absent | required HTTPS | required HTTPS | loopback HTTP or derived |
+| OAuth mode / issuer | absent | required; mode matches column | required `proxy`; issuer differs from public URL | absent |
+| Audience | absent | defaults public URL; explicit value must equal its canonical URL | same | absent |
+| Subjects / emails | absent | at least one combined entry | at least one combined entry | absent |
+| Upstream ID / secret / signing file / redirect list | absent | rejected, including explicit empty values | all required | absent |
+
+URLs are at most 4,096 UTF-8 bytes and must be absolute, with a hostname, no
+credentials, controls or fragment. Public/issuer/audience URLs also forbid query
+strings. Parse using the Node WHATWG URL implementation; canonicalize scheme,
+hostname and default port through that parser and remove terminal path slashes
+(an origin serializes without terminal `/`). Use this canonical representation
+for public/audience equality and proxy issuer distinction. Do not fetch any URL.
+Reject a proxy issuer whose canonical URL equals the public URL.
+
+Redirect URIs are HTTPS, or HTTP whose host is written in the original string
+exactly as `127.0.0.1`, `[::1]` or lowercase `localhost` (v3: `localhost`
+added); other HTTP hostnames and other loopback spellings (for example `127.1`,
+`LOCALHOST`, `localhost.`) are rejected. Queries are allowed;
+fragments and credentials are not. Wildcards are forbidden. Validate but retain
+the exact original string for later byte-for-byte redirect matching; no prefix
+or origin-only authorization is implied. The only variance, the port of an HTTP
+URI on these three loopback hosts (RFC 8252 §7.3), is defined by F-010 BR-126. Upstream client IDs
+are nonempty, at most 1,024 UTF-8 bytes, without controls.
+
+### Credential-file and error contracts (BR-026, BR-027)
+
+Credential pairs are `(KDRIVE_TOKEN, KDRIVE_TOKEN_FILE)` and
+`(OAUTH_UPSTREAM_CLIENT_SECRET, OAUTH_UPSTREAM_CLIENT_SECRET_FILE)`. A CLI file
+selector replaces both environment members; one environment member replaces a
+YAML file selector. Two members in the selected source fail, including empty
+members. Empty values never fall back. File-only signing material is required
+only in proxy mode. The environment example lists all supported environment
+names with empty placeholders and is not automatically loaded.
+
+Read only an explicitly selected absolute regular file; reject final symlinks,
+directories, missing/unreadable files and files exceeding 16,384 bytes for
+token/secret or 65,536 bytes for signing material. Enforce the bound while
+reading, not only from initial metadata, and use a no-follow open/identity check
+so replacing a checked file with a symlink cannot redirect the read. Do not
+search parent directories, expand selectors or follow a fallback path. Parent
+directory symlinks are allowed; only the explicitly selected final entry is
+protected against replacement/redirection.
+
+For token/secret files strip at most one terminal LF or CRLF. Reject empty
+results, malformed UTF-8, NUL, CR, LF or other ASCII controls. Environment values
+receive the same checks without terminal-newline stripping, and the same
+16,384-byte bound. Treat credential text as opaque, not a provider-specific
+format. Signing material is bounded, nonempty opaque bytes; key parsing,
+algorithm/strength qualification and signing belong to #21, and the local
+result never certifies cryptographic readiness. No real secret file is read
+during development or acceptance; synthetic fixtures are sufficient.
+
+Errors use `{code, setting}`; `setting` is a known YAML key or one of `token`,
+`oauthUpstreamClientSecret`, `cli`, `configFile`, `environment`, `preflight`.
+The two secret names are diagnostic setting names, not accepted YAML keys.
+Codes are `UNKNOWN_OPTION`,
+`DUPLICATE_OPTION`, `INVALID_VALUE`, `LIMIT_EXCEEDED`, `UNKNOWN_SETTING`,
+`CONFIG_READ_FAILED`, `CONFIG_SYNTAX`, `MISSING_REQUIRED`, `CONFLICTING_SETTINGS`,
+`CREDENTIAL_READ_FAILED`, `CREDENTIAL_INVALID`, `DRIVE_NOT_ALLOWED`,
+`ROOT_NOT_RESOLVED`, `PREFLIGHT_UNAVAILABLE`, `PREFLIGHT_FAILED`. The CLI format
+is `Configuration error [<code>] (<setting>).` plus LF. Use the first failure
+in this order: global argv count/total-byte budgets, complete CLI structure,
+recognized raw CLI value byte budgets, reserved environment names (lexicographic), YAML
+read/syntax/schema, inventory-order effective values, cross-field checks,
+inventory-order credential loading. Cross-field checks run in order: drive
+selection, root coverage, level/switch derivation, transport/auth matrix,
+credential requiredness. Selected-source credential pair conflicts are checked
+at the beginning of effective-value validation, before either member is
+value-validated; a conflict prevents selecting a member even when one is empty.
+Within an array use its original order.
+Preflight checks drives then roots in configured order; unexpected injected
+errors become `PREFLIGHT_FAILED (preflight)` without their original message.
+
+The following condition-to-diagnostic mapping is normative. `key` means the
+canonical YAML setting name corresponding to a recognized setting, except that
+inline secret contents use diagnostic-only `token` or
+`oauthUpstreamClientSecret`. Never substitute an unknown raw spelling for `key`.
+
+| Condition | `code` | `setting` |
+| --- | --- | --- |
+| Global argv count or total-byte budget exceeded | `LIMIT_EXCEEDED` | `cli` |
+| Unknown CLI option, positional argument or unsupported `--` operand | `UNKNOWN_OPTION` | `cli` |
+| Repeated CLI option, including repeated same transport shorthand | `DUPLICATE_OPTION` | `cli` |
+| Mixed information command arguments | `INVALID_VALUE` | `cli` |
+| Recognized value option lacks its value; bare transport flag given a value | `INVALID_VALUE` | `key` (`configFile` for `--config`, `transport` for transport flags) |
+| Both distinct transport shorthands supplied | `CONFLICTING_SETTINGS` | `transport` |
+| Unknown reserved environment name | `UNKNOWN_SETTING` | `environment` |
+| Recognized raw CLI option value exceeds 65,536 bytes after complete CLI structural validation; recognized environment value exceeds its raw byte budget | `LIMIT_EXCEEDED` | `key` |
+| Selected YAML is missing, unreadable or not a regular file, or its reader rejects | `CONFIG_READ_FAILED` | `configFile` |
+| YAML file exceeds 65,536 bytes | `LIMIT_EXCEEDED` | `configFile` |
+| Malformed UTF-8/YAML, duplicate keys, forbidden tags/anchors/aliases/merge keys, multiple documents, or invalid mapping structure (including null/non-string keys/nested mappings) | `CONFIG_SYNTAX` | `configFile` |
+| Unknown YAML key | `UNKNOWN_SETTING` | `configFile` |
+| Recognized YAML setting has an incorrect declared primitive/list shape | `INVALID_VALUE` | `key` |
+| Winning nonsecret scalar has invalid syntax/type, an out-of-range numeric value, or an invalid path/URL/host/enum/boolean | `INVALID_VALUE` | `key` |
+| Winning list contains invalid/empty elements or normalized duplicates; present roots are empty | `INVALID_VALUE` | `key` |
+| Setting exceeds its declared string-byte/list-entry count maximum | `LIMIT_EXCEEDED` | `key` |
+| Neither drive ID setting is supplied | `MISSING_REQUIRED` | `driveIds` |
+| Explicit default drive is not in the configured allowlist | `CONFLICTING_SETTINGS` | `driveId` |
+| Present roots omit a configured drive | `MISSING_REQUIRED` | `roots` |
+| Root selector names an unconfigured drive | `DRIVE_NOT_ALLOWED` | `roots` |
+| An auth-matrix required individual setting is absent | `MISSING_REQUIRED` | that setting's `key` |
+| Authenticated HTTP has no subject or email allowlist entries | `MISSING_REQUIRED` | `oauthAllowedSubjects` |
+| A setting is explicitly forbidden in the selected transport/auth mode | `CONFLICTING_SETTINGS` | forbidden setting's `key` |
+| Explicit audience differs from public URL; proxy issuer equals public URL | `CONFLICTING_SETTINGS` | `oauthAudience`; `oauthIssuer`, respectively |
+| Insecure HTTP public URL violates required loopback origin/port | `CONFLICTING_SETTINGS` | `publicUrl` |
+| Required credential pair has neither selected member | `MISSING_REQUIRED` | `token` or `oauthUpstreamClientSecret` |
+| Selected credential source supplies both pair members, including empty members | `CONFLICTING_SETTINGS` | `token` or `oauthUpstreamClientSecret` |
+| Credential reference is not a valid absolute path | `INVALID_VALUE` | `tokenFile`, `oauthUpstreamClientSecretFile` or `oauthSigningKeyFile` |
+| Selected credential file is absent/unreadable/nonregular/final-symlinked, replacement/identity checks fail, or its reader rejects | `CREDENTIAL_READ_FAILED` | file selector's `key` |
+| Credential file or environment contents exceed the credential byte maximum | `LIMIT_EXCEEDED` | file selector's `key` for files; logical secret `key` for environment |
+| Selected token/upstream-secret contents are empty, malformed UTF-8 or contain forbidden controls; selected signing material is empty | `CREDENTIAL_INVALID` | `token`, `oauthUpstreamClientSecret` or `oauthSigningKeyFile` |
+| No injected resolver is provided | `PREFLIGHT_UNAVAILABLE` | `preflight` |
+| Drive inspection explicitly returns missing, malformed, mismatched, external or unknown-role data | `DRIVE_NOT_ALLOWED` | `driveIds` |
+| Directory resolution explicitly returns missing, ambiguous, malformed, wrong-drive, wrong-ID or non-directory data | `ROOT_NOT_RESOLVED` | `roots` |
+| Injected inspection/resolution throws or rejects unexpectedly | `PREFLIGHT_FAILED` | `preflight` |
+
+The CLI phase first checks only global argv count and total-byte budgets, then
+completes structural validation, then checks recognized raw CLI value budgets
+in argv order, before environment/YAML processing or file reads. Do not impose
+an extra byte ceiling on a complete `--name=value` string or an unknown option.
+Thus a lone recognized oversized `--mode=<65537 bytes>` yields
+`LIMIT_EXCEEDED (mode)`, `--unknown --mode=<65537 bytes>` yields
+`UNKNOWN_OPTION (cli)`, and `--help --mode=<65537 bytes>` yields
+`INVALID_VALUE (cli)`, provided the global argv budgets are not exceeded.
+For remaining phases, apply their raw byte/count budgets before semantic
+checks, subject to the explicit structural precedence below.
+CLI structure is scanned in argv order; an option
+whose next element is another recognized option lacks a value rather than
+consuming that option. Otherwise a following element is its value, including
+one beginning with `-`. Detect information-command mixing before ordinary CLI
+option scanning (after global argv budgets, before recognized raw value budgets).
+Reserved environment names are checked before
+their recognized values, in lexicographic order. In YAML, syntax/structural
+mapping failures precede unknown-key checks, which precede recognized-setting
+primitive-shape checks in inventory order. In effective values, maximum
+byte/count violations precede content/duplicate validation; numeric range
+violations always use `INVALID_VALUE`, not a size-limit code. Credential
+content validation belongs to credential loading, not the nonsecret scalar pass.
+Cross-field checks use their stated phase order, then inventory order; within
+drive/root checks an unconfigured root drive precedes missing root coverage.
+Within file loading, read/identity failure precedes content validation; once a
+byte overflow is observed it immediately returns `LIMIT_EXCEEDED` without
+continuing to decode or inspect contents. An exact exception message is never
+needed to select a code.
+
+### Injected startup-preflight port (BR-021, BR-028)
+
+The injected resolver exposes `inspectDrive(driveId)` returning an untrusted
+`{id, role}` result, and `resolveDirectory(driveId, selector)` returning an
+untrusted `{driveId, id, type}` result or an explicit missing/ambiguous outcome.
+Selectors distinguish an ID from an exact absolute path. Successful directory
+type is exact `dir`; IDs must satisfy the same safe-integer grammar. Validate
+every returned field. A numeric selector requires returned ID equality with
+the requested folder ID; a path selector permits its resolved valid ID. A
+same-drive `dir` response substituting `1` for requested `42` fails with
+`{code: ROOT_NOT_RESOLVED, setting: roots}` and no later selector is called.
+Each configured drive is inspected exactly once; inspect
+no unconfigured drive and resolve no selector on a failed drive-validation pass.
+Each selector is resolved once in configured order; fail immediately on an
+invalid result and never retry. A callback implementation may use multiple
+upstream reads later, but that is outside this port's current contract.
+
+The resolver is credential-bound by its future composition root; this feature
+never hands a token to arbitrary callbacks or changes the foundation metadata
+port. Module construction performs no I/O. A caller can obtain
+`ResolvedConfiguration` only through successful preflight. Ordinary CLI
+invocation has no resolver installed and reports only local validation/runtime
+unavailability, not successful startup preflight. A future runtime must compose
+BR-021 before exposing tools or opening its listener.
+
+## Acceptance criteria and verification
+
+All commands run through existing Docker/Make development facilities. Unit tests
+name their rule with `// BR-NNN` or `TestBRNNN_...`. Each AC is repeated on the
+actual merged `main` SHA; record the SHA, commands and output in #4. The test
+names below are required behavior groups, not claims that tests already exist.
+
+- **AC-01 (BR-016, BR-028):** Given a built/packed executable and an explicit
+  hostile synthetic environment, When standalone help/version run, Then they
+  exit 0, retain version/package identity and perform no deployment/network I/O;
+  When ordinary valid stdio or HTTP configuration runs, Then stderr names only
+  the selected locally validated transport, stdout is empty, exit is 1 and no
+  listener/adapter runs. Verify `tests/cli.test.ts` information/ordinary/invalid
+  argument cases, `tests/package.test.ts`, `make build`, `make pack`.
+- **AC-02 (BR-017, BR-018):** Given conflicting complete sources, When loading,
+  Then every inventory key follows CLI > environment > YAML > default, lists
+  replace and credential pairs select atomically; empty/invalid winning values
+  fail. Given omitted config, unknown/duplicate options or reserved names,
+  malformed/oversized/tagged/aliased/duplicate-key YAML, When parsing, Then no
+  unintended file is read and the documented error is returned. Verify
+  `tests/config.test.ts` table-driven source matrix, source-read spies and
+  malformed YAML/argv fixtures, with a case for every inventory row and the
+  exact condition-to-diagnostic mapping, including unknown/duplicate YAML keys,
+  absent CLI values and overlapping source-structure failures.
+- **AC-03 (BR-019):** Given ID-only, IDs-only, both, neither, default outside the
+  allowlist, duplicates, zero/negative/fraction/unsafe IDs and 65-drive input,
+  When loading, Then the default/order/allowlist or rejection matches BR-019.
+  A resolver seeing additional token drives never adds them. Verify
+  `tests/config.test.ts` drive-selection boundaries and preflight call traces.
+- **AC-04 (BR-020, BR-023):** Given absent roots, explicit whole-drive roots,
+  valid multi-drive ID/path roots, present-empty/missing-drive/unknown-drive/
+  duplicate selectors and invalid path components, When parsing, Then only the
+  documented root selection is produced and no implicit coverage is added.
+  Verify `tests/config.test.ts` root grammar/coverage and limit boundaries,
+  including a comma-containing YAML path and an unrepresentable comma env path.
+- **AC-05 (BR-021, BR-028):** Given a local configuration and synthetic resolver,
+  When preflight executes, Then all drive inspections precede directory calls,
+  only configured admin drives and existing same-drive directories succeed,
+  resolved IDs remain bound, duplicate IDs collapse, and external/unknown/missing
+  drives plus absent/ambiguous/file/wrong-drive/wrong-ID/invalid/rejected roots
+  return no partial result. A same-drive directory response replacing numeric
+  selector `42` with `1` or another valid ID fails with `ROOT_NOT_RESOLVED (roots)`
+  and no later selector is called. Missing resolver fails. Verify
+  `tests/config-preflight.test.ts` ordered call/error fixtures and a compile-time
+  type assertion that local configuration is not resolved configuration.
+- **AC-06 (BR-022, BR-023):** Given each level and boolean combination, When
+  normalizing, Then read remains default and the effective shared-write/public-
+  link switches match their formulas. Given domain/email/subject allowlists,
+  When parsing, Then emptiness, exact case/domain rules, subdomain separation,
+  duplicates, invalid entries and entry/count bounds match the grammar. Verify
+  `tests/config.test.ts` exhaustive switch truth tables and allowlist fixtures.
+- **AC-07 (BR-023):** Given each scalar resource setting's minimum, default,
+  maximum and adjacent invalid values plus malformed scalar/list/path/glob
+  inputs, When parsing, Then values normalize without clamping or unlisted
+  coercion and every bound is enforced. Verify `tests/config.test.ts` generated
+  per-key boundary tables, independent read/extract limits and audit no-open spy.
+- **AC-08 (BR-024, BR-025):** Given both authenticated delegate variants, proxy,
+  insecure HTTP and stdio, When each auth-matrix field is absent/valid/invalid,
+  Then complete safe combinations select their mode and incomplete, misplaced
+  or unsafe ones fail. Insecure HTTP with a valid non-loopback requested host
+  always produces literal `127.0.0.1`. Verify `tests/config.test.ts` auth matrix,
+  URL canonical equality, redirect exactness and loopback rejection fixtures;
+  assert no discovery/JWKS/network action occurs.
+- **AC-09 (BR-026):** Given selected synthetic environment/file credentials,
+  When loading, Then only selected files are read, bounded opaque values load,
+  allowed terminal newline stripping occurs, and conflicts, empties, controls,
+  malformed UTF-8, missing files, final symlinks, replacement races, directories,
+  unreadability and oversize growth fail. Verify `tests/config.test.ts` injected
+  reader fixtures and synthetic filesystem fixtures in the dev container,
+  asserting the mapped read/content/limit code and logical/file setting. No
+  provisioned secret, signing key or account is accessed.
+- **AC-10 (BR-027):** Given canary values in every secret/source, malformed YAML
+  excerpts, sensitive-looking paths and thrown reader/resolver messages, When
+  each failure is reported through the API/CLI, Then only code/setting appear
+  in deterministic order, never canaries, paths, excerpts or stack traces.
+  Verify `tests/config.test.ts`, `tests/config-preflight.test.ts` and executable
+  stderr/stdout assertions covering every condition-to-diagnostic table row,
+  including malformed resolver results and within-phase overlap precedence.
+- **AC-11 (BR-028):** Given the completed feature, When `make check` and mandatory
+  PR CI run on the latest head, Then all configured gates pass without disabling
+  foundation checks. Documentation and records describe local preparation and
+  injected preflight accurately, keep F-002 pending and link accepted foundation
+  markers to actual acceptance evidence. Verify gate output, CI state, scoped
+  document/link checks and fresh independent PR review. A later merged-main
+  acceptance records the same test groups and SHA; no live adapter/server claim
+  or release is made.
+
+## Decisions
+
+1. **Separate local parsing from resolved readiness.** Inject drive-role/folder
+   resolution, including numeric-root existence checks. Reject guessing folder
+   IDs, treating path syntax as authorization or adding a production client in
+   #4: adaptation belongs to #5 and no safe live provisioning is in scope.
+   The dependency is visible rather than falsely accepted as real startup.
+2. **Expose CLI validation without starting a server.** Explicitly replace
+   BR-001's ordinary-invocation behavior through BR-016; preserve no-I/O help/
+   version and make successful preparation visibly non-operational. Reject a
+   second binary or an exit-0 fake server. Future transport features need their
+   own spec to replace this runtime-unavailable path.
+3. **Explicit drive boundary and measured roles.** No IDs means failure, not
+   all token drives. Recognize only the observed `admin` configured-drive role;
+   `external` and unknown roles fail closed. This does not assert that all
+   legitimate Infomaniak accounts use `admin`. #5 can qualify other roles; adding
+   one to this allowlist requires a reviewed contract revision.
+4. **Absent versus present roots.** Preserve the umbrella's intentional absent-
+   roots whole-drive default for explicitly configured IDs. Once roots are
+   supplied, every configured drive needs its own explicit root. Reject silently
+   filling gaps and reject external-drive roots even when shared reads are on.
+5. **Bound every input.** Use decimal MB defaults (5,000,000 and 50,000,000 bytes)
+   because the umbrella says MB, and finite configuration ceilings independent
+   of future extraction internals. Reject unlimited/zero/NaN or clamped values.
+   Whole-list replacement avoids retaining a lower-priority permissive root or
+   allowlist. The small flat YAML schema avoids ambiguous nested merge rules.
+6. **No raw secrets in CLI/YAML.** Environment values and explicit secret-file
+   references satisfy the umbrella while avoiding process-list and config-file
+   dumps. Atomic source selection avoids the surprising combination of an old
+   inline token with a new file selector. Tests use conspicuously synthetic text.
+7. **Syntactic auth readiness only.** Require safe HTTP/identity settings now;
+   do not pretend to qualify issuer capabilities or signing algorithms before
+   #11/#21. Insecure selection always forces literal loopback. Audience equals
+   canonical public URL, resolving §8's canonical-resource requirement rather
+   than permitting a separate resource identity by accident.
+8. **No new ADR.** This config/preflight port preserves the existing foundation
+   architecture and is reversible. A signing algorithm, upstream client design
+   or transport-state choice would be costly to reverse but is explicitly absent.
+
+## Open questions
+
+None. A production resolver is a declared dependency of future runtime
+composition, not an unanswered design choice or a waived acceptance condition.
+All #4 acceptance uses synthetic preflight evidence and explicitly excludes
+real-account startup/HTTP/MCP acceptance.
+
+## Stress-test
+
+### Version 2 — independently approved
+
+Author: GPT-6.1 Sol / high reasoning. This narrow revision resolves the
+overlapping argv-element and raw-value diagnostics identified during development:
+global count/total limits precede complete CLI structure, and recognized raw
+value byte limits follow structure but precede source reads/semantic parsing.
+Fresh independent GPT-6 Astra / high reasoning review returned **approve**, no
+findings, against exact reviewed SHA-256
+`7005d6d3322a10a76dff08cc6fb05dfe3641f8ab07586ca65ccf61563c100d4f`;
+see the v2 review report (archived evidence `runs/4-spec-v2-review-1.md`), 2026-11-01.
+No finding requires disposition. The orchestrator autonomously froze this
+revision at 21:29:17 UTC and notified the user; only status/evidence changed
+after review. Version 1's dispositions below remain historical evidence.
+
+### Version 1 — preserved dispositions
+
+Round 1 author: GPT-6.1 Sol / high reasoning. Reviewer: GPT-6 Astra / high
+reasoning, fresh independent context. Review report (archived evidence `runs/4-spec-review-1.md`),
+2026-11-01: **changes** against SHA-256
+`11982f03bf772a574aecfaac9682efc6cf51a638a92402c3b3ef8eae279e8ea6`.
+
+- **R1 (major), retained:** an untrusted resolver could otherwise substitute
+  another same-drive directory, widening a numeric selector to the drive root.
+  Require exact normalized numeric ID equality in BR-021 and the preflight port;
+  AC-05 now includes requested `42` returned as `1`, the exact diagnostic and
+  fail-fast/no-partial-result behavior. A path selector still resolves to an ID.
+- **R2 (minor), retained:** the error-code allowlist alone did not give tests a
+  deterministic oracle. Add a condition-to-`{code, setting}` table, safe generic
+  settings for unknown names, and precedence for overlapping conditions inside
+  each phase. AC-02/09/10 now require those exact mappings and overlap cases.
+
+No findings rejected. The corrected specification is ready for a new independent
+review. No freeze or implementation authorization is claimed until that approval
+is recorded by the orchestrator.
+
+## Freeze and verification
+
+### Version 2
+
+Autonomously frozen by the orchestrator on 2026-11-01 at 21:29:17 UTC after
+fresh independent GPT-6 Astra/high approval of exact reviewed SHA-256
+`7005d6d3322a10a76dff08cc6fb05dfe3641f8ab07586ca65ccf61563c100d4f`;
+evidence: v2 review (archived evidence `runs/4-spec-v2-review-1.md`). Ticket #4 remains ready
+and no open question remains. Only freeze status/evidence changed after review.
+The user was notified of this hash and the diagnostic ordering. Tests-first
+implementation of this clarification is authorized; acceptance remains pending.
+
+### Version 1 — historical freeze
+
+Autonomously frozen by the orchestrator on 2026-11-01 at 21:18:28 UTC under
+the project override. Ticket #4 is ready and no open question remains. Fresh
+independent GPT-6 Astra/high review approved the exact pre-freeze SHA-256
+`fe6d92d5972f3a88c47bf7597270d8e4aca9d0935f12abff16fd10c75ae0932d`;
+evidence: review round 2 (archived evidence `runs/4-spec-review-2.md`). The freeze changes only
+status and this evidence; the reviewed contract remains unchanged. The user
+was notified of the reviewed hash and decisions in this session.
+Tests-first implementation is authorized. No BR is active, capability accepted,
+spec done, version released or artifact published by this freeze.
+
+## Actual-main acceptance — metadata synchronized in #35
+
+F-002 v2 is done following successful acceptance on 2026-11-01, actual main
+`88bf8caa7412988e11099a4a01f9e600aa38eeee`, tree
+`15adbbf3d80d00a4cdea30d09c808de7780e8227`. All AC-01–AC-11 passed;
+see the final acceptance report (archived evidence `runs/33-acceptance-1.md`) and completed
+#4 (archive issue 4),
+#31 (archive issue 31) and
+#33 (archive issue 33).
+
+The report records the complete Docker/Make quality gate, 408 tests, three packed
+checks, fresh bound coverage, official scanner Quality Gate success, mandatory
+PR/main CI and fresh independent implementation review. BR-016–BR-028 are active;
+BR-001 is superseded by BR-016. This appendix and the status/source metadata
+synchronize accepted markers in the next scoped PR; the reviewed v2 contract,
+freeze evidence and verbatim v1 snapshot are unchanged. Historical pending
+statements above describe the freeze/implementation obligations at that time.
+
+Accepted scope remains local configuration and synthetic injected preflight. No
+production kDrive resolver, HTTP/MCP listener, OAuth-provider runtime, release,
+version bump, tag or publication is established.

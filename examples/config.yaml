@@ -1,0 +1,24 @@
+# Alternative to the environment settings of compose.yaml (F-013, F-014): mount
+# this file read-only at /config/config.yaml and run the runtime image with
+# `--config /config/config.yaml`. Replace every example.com value.
+# Credentials stay in secret files mounted under /run/secrets/.
+transport: http
+mode: read
+oauthMode: proxy
+# Container-internal bind address; no host port is published.
+httpHost: 0.0.0.0
+httpPort: 3000
+publicUrl: https://mcp.example.com/mcp
+driveId: 1
+oauthIssuer: https://idp.example.com
+oauthAllowedEmails:
+  - user@example.com
+oauthUpstreamClientId: kdrive-mcp-client
+oauthAllowedRedirectUris:
+  - https://client.example.org/callback
+tokenFile: /run/secrets/kdrive-token
+oauthUpstreamClientSecretFile: /run/secrets/upstream-client-secret
+oauthSigningKeyFile: /run/secrets/signing-key.pem
+# Optional, on the writable /audit mount (see docs/deployment.md): keep clients
+# and logins across restarts.
+# oauthStateFile: /audit/oauth-state.sqlite

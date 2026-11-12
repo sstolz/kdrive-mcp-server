@@ -1,0 +1,14 @@
+node_modules/
+/.config/qube-token
+/.config/sonar-host-url
+dist/
+artifacts/
+coverage/
+package-lock.json
+# Verbatim frozen evidence and historical sources are never reformatted.
+features/
+SPEC.md
+docs/api-notes.md
+docs/spec-review.md
+AGENTS.md
+runs/

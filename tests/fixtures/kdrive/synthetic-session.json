@@ -1,0 +1,1718 @@
+{
+  "format": "kdrive-recording/1",
+  "origin": "synthetic",
+  "exchanges": [
+    {
+      "template": "/2/drive/init",
+      "params": {},
+      "query": [["with", "drives"]],
+      "hops": [
+        {
+          "status": 200,
+          "headers": {
+            "content-type": "application/json",
+            "content-length": "97"
+          },
+          "json": {
+            "result": "success",
+            "data": {
+              "drives": [
+                {
+                  "id": 1000010,
+                  "role": "admin"
+                },
+                {
+                  "id": 1000011,
+                  "role": "external"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "template": "/3/drive/{d}/files/{f}",
+      "params": {
+        "d": 1000010,
+        "f": 1
+      },
+      "query": [["with", "path,parents,capabilities"]],
+      "hops": [
+        {
+          "status": 200,
+          "headers": {
+            "content-type": "application/json",
+            "content-length": "164"
+          },
+          "json": {
+            "result": "success",
+            "data": {
+              "id": 1,
+              "drive_id": 1000010,
+              "parent_id": 1,
+              "type": "dir",
+              "status": null,
+              "name": "x1",
+              "path": "/",
+              "parents": [],
+              "capabilities": {
+                "can_read": true
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "template": "/3/drive/{d}/files/{f}",
+      "params": {
+        "d": 1000010,
+        "f": 1000001
+      },
+      "query": [["with", "path,parents,capabilities"]],
+      "hops": [
+        {
+          "status": 200,
+          "headers": {
+            "content-type": "application/json",
+            "content-length": "177"
+          },
+          "json": {
+            "result": "success",
+            "data": {
+              "id": 1000001,
+              "drive_id": 1000010,
+              "parent_id": 1,
+              "type": "dir",
+              "status": "ok",
+              "name": "Private",
+              "path": "/Private",
+              "parents": [],
+              "capabilities": {
+                "can_read": true
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "template": "/3/drive/{d}/files/{f}",
+      "params": {
+        "d": 1000010,
+        "f": 1000003
+      },
+      "query": [["with", "path,parents,capabilities"]],
+      "hops": [
+        {
+          "status": 200,
+          "headers": {
+            "content-type": "application/json",
+            "content-length": "343"
+          },
+          "json": {
+            "result": "success",
+            "data": {
+              "id": 1000003,
+              "drive_id": 1000010,
+              "parent_id": 1000002,
+              "type": "file",
+              "status": "ok",
+              "name": "n1",
+              "path": "/Private/n3/n1",
+              "size": 16,
+              "parents": [
+                {
+                  "id": 1000001,
+                  "drive_id": 1000010,
+                  "parent_id": 1,
+                  "type": "dir",
+                  "name": "Private"
+                },
+                {
+                  "id": 1000002,
+                  "drive_id": 1000010,
+                  "parent_id": 1000001,
+                  "type": "dir",
+                  "name": "n3"
+                }
+              ],
+              "capabilities": {
+                "can_read": true
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "template": "/3/drive/{d}/files/{f}",
+      "params": {
+        "d": 1000010,
+        "f": 1000002
+      },
+      "query": [["with", "path,parents,capabilities"]],
+      "hops": [
+        {
+          "status": 200,
+          "headers": {
+            "content-type": "application/json",
+            "content-length": "253"
+          },
+          "json": {
+            "result": "success",
+            "data": {
+              "id": 1000002,
+              "drive_id": 1000010,
+              "parent_id": 1000001,
+              "type": "dir",
+              "status": "ok",
+              "name": "n3",
+              "path": "/Private/n3",
+              "parents": [
+                {
+                  "id": 1000001,
+                  "drive_id": 1000010,
+                  "parent_id": 1,
+                  "type": "dir",
+                  "name": "Private"
+                }
+              ],
+              "capabilities": {
+                "can_read": true
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "template": "/3/drive/{d}/files/{f}",
+      "params": {
+        "d": 1000010,
+        "f": 1000007
+      },
+      "query": [["with", "path,parents,capabilities"]],
+      "hops": [
+        {
+          "status": 200,
+          "headers": {
+            "content-type": "application/json",
+            "content-length": "251"
+          },
+          "json": {
+            "result": "success",
+            "data": {
+              "id": 1000007,
+              "drive_id": 1000010,
+              "parent_id": 1000001,
+              "type": "dir",
+              "status": "ok",
+              "name": "n2",
+              "path": "/Private/n2",
+              "parents": [
+                {
+                  "id": 1000001,
+                  "drive_id": 1000010,
+                  "parent_id": 1,
+                  "type": "dir",
+                  "name": "Private"
+                }
+              ],
+              "capabilities": {
+                "can_read": true
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "template": "/3/drive/{d}/files/{f}",
+      "params": {
+        "d": 1000010,
+        "f": 1000005
+      },
+      "query": [["with", "path,parents,capabilities"]],
+      "hops": [
+        {
+          "status": 200,
+          "headers": {
+            "content-type": "application/json",
+            "content-length": "344"
+          },
+          "json": {
+            "result": "success",
+            "data": {
+              "id": 1000005,
+              "drive_id": 1000010,
+              "parent_id": 1000004,
+              "type": "file",
+              "status": "ok",
+              "name": "n5",
+              "path": "/Private/n6/n5",
+              "size": 3,
+              "parents": [
+                {
+                  "id": 1000001,
+                  "drive_id": 1000010,
+                  "parent_id": 1,
+                  "type": "dir",
+                  "name": "Private"
+                },
+                {
+                  "id": 1000004,
+                  "drive_id": 1000010,
+                  "parent_id": 1000001,
+                  "type": "dir",
+                  "name": "n6"
+                }
+              ],
+              "capabilities": {
+                "can_read": true
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "template": "/3/drive/{d}/files/{f}",
+      "params": {
+        "d": 1000010,
+        "f": 1000004
+      },
+      "query": [["with", "path,parents,capabilities"]],
+      "hops": [
+        {
+          "status": 200,
+          "headers": {
+            "content-type": "application/json",
+            "content-length": "255"
+          },
+          "json": {
+            "result": "success",
+            "data": {
+              "id": 1000004,
+              "drive_id": 1000010,
+              "parent_id": 1000001,
+              "type": "dir",
+              "status": "ok",
+              "name": "n6",
+              "path": "/Private/n6",
+              "parents": [
+                {
+                  "id": 1000001,
+                  "drive_id": 1000010,
+                  "parent_id": 1,
+                  "type": "dir",
+                  "name": "Private"
+                }
+              ],
+              "capabilities": {
+                "can_read": true
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "template": "/3/drive/{d}/files/{f}",
+      "params": {
+        "d": 1000010,
+        "f": 1000008
+      },
+      "query": [["with", "path,parents,capabilities"]],
+      "hops": [
+        {
+          "status": 404,
+          "headers": {
+            "content-type": "application/json",
+            "content-length": "54"
+          },
+          "json": {
+            "result": "error",
+            "error": {
+              "code": "object_not_found"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "template": "/3/drive/{d}/files/{f}",
+      "params": {
+        "d": 1000010,
+        "f": 1000006
+      },
+      "query": [["with", "path,parents,capabilities"]],
+      "hops": [
+        {
+          "status": 200,
+          "headers": {
+            "content-type": "application/json",
+            "content-length": "351"
+          },
+          "json": {
+            "result": "success",
+            "data": {
+              "id": 1000006,
+              "drive_id": 1000010,
+              "parent_id": 1000002,
+              "type": "file",
+              "status": "ok",
+              "name": "n4",
+              "path": "/Private/n3/n4",
+              "size": 16,
+              "parents": [
+                {
+                  "id": 1000001,
+                  "drive_id": 1000010,
+                  "parent_id": 1,
+                  "type": "dir",
+                  "name": "Private"
+                },
+                {
+                  "id": 1000002,
+                  "drive_id": 1000010,
+                  "parent_id": 1000001,
+                  "type": "dir",
+                  "name": "n3"
+                }
+              ],
+              "capabilities": {
+                "can_read": true
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "template": "/3/drive/{d}/files/{f}/files",
+      "params": {
+        "d": 1000010,
+        "f": 1000001
+      },
+      "query": [
+        ["limit", "50"],
+        ["with", "path,parents,capabilities"]
+      ],
+      "hops": [
+        {
+          "status": 200,
+          "headers": {
+            "content-type": "application/json",
+            "content-length": "738"
+          },
+          "json": {
+            "result": "success",
+            "data": [
+              {
+                "id": 1000002,
+                "drive_id": 1000010,
+                "parent_id": 1000001,
+                "type": "dir",
+                "status": "ok",
+                "name": "n3",
+                "path": "/Private/n3",
+                "parents": [
+                  {
+                    "id": 1000001,
+                    "drive_id": 1000010,
+                    "parent_id": 1,
+                    "type": "dir",
+                    "name": "Private"
+                  }
+                ],
+                "capabilities": {
+                  "can_read": true
+                }
+              },
+              {
+                "id": 1000004,
+                "drive_id": 1000010,
+                "parent_id": 1000001,
+                "type": "dir",
+                "status": "ok",
+                "name": "n6",
+                "path": "/Private/n6",
+                "parents": [
+                  {
+                    "id": 1000001,
+                    "drive_id": 1000010,
+                    "parent_id": 1,
+                    "type": "dir",
+                    "name": "Private"
+                  }
+                ],
+                "capabilities": {
+                  "can_read": true
+                }
+              },
+              {
+                "id": 1000007,
+                "drive_id": 1000010,
+                "parent_id": 1000001,
+                "type": "dir",
+                "status": "ok",
+                "name": "n2",
+                "path": "/Private/n2",
+                "parents": [
+                  {
+                    "id": 1000001,
+                    "drive_id": 1000010,
+                    "parent_id": 1,
+                    "type": "dir",
+                    "name": "Private"
+                  }
+                ],
+                "capabilities": {
+                  "can_read": true
+                }
+              }
+            ],
+            "has_more": false,
+            "cursor": null
+          }
+        }
+      ]
+    },
+    {
+      "template": "/3/drive/{d}/files/{f}/files",
+      "params": {
+        "d": 1000010,
+        "f": 1000002
+      },
+      "query": [
+        ["limit", "50"],
+        ["with", "path,parents,capabilities"]
+      ],
+      "hops": [
+        {
+          "status": 200,
+          "headers": {
+            "content-type": "application/json",
+            "content-length": "700"
+          },
+          "json": {
+            "result": "success",
+            "data": [
+              {
+                "id": 1000003,
+                "drive_id": 1000010,
+                "parent_id": 1000002,
+                "type": "file",
+                "status": "ok",
+                "name": "n1",
+                "path": "/Private/n3/n1",
+                "size": 16,
+                "parents": [
+                  {
+                    "id": 1000001,
+                    "drive_id": 1000010,
+                    "parent_id": 1,
+                    "type": "dir",
+                    "name": "Private"
+                  },
+                  {
+                    "id": 1000002,
+                    "drive_id": 1000010,
+                    "parent_id": 1000001,
+                    "type": "dir",
+                    "name": "n3"
+                  }
+                ],
+                "capabilities": {
+                  "can_read": true
+                }
+              },
+              {
+                "id": 1000006,
+                "drive_id": 1000010,
+                "parent_id": 1000002,
+                "type": "file",
+                "status": "ok",
+                "name": "n4",
+                "path": "/Private/n3/n4",
+                "size": 16,
+                "parents": [
+                  {
+                    "id": 1000001,
+                    "drive_id": 1000010,
+                    "parent_id": 1,
+                    "type": "dir",
+                    "name": "Private"
+                  },
+                  {
+                    "id": 1000002,
+                    "drive_id": 1000010,
+                    "parent_id": 1000001,
+                    "type": "dir",
+                    "name": "n3"
+                  }
+                ],
+                "capabilities": {
+                  "can_read": true
+                }
+              }
+            ],
+            "has_more": false,
+            "cursor": null
+          }
+        }
+      ]
+    },
+    {
+      "template": "/3/drive/{d}/files/{f}/files",
+      "params": {
+        "d": 1000010,
+        "f": 1000007
+      },
+      "query": [
+        ["limit", "50"],
+        ["with", "path,parents,capabilities"]
+      ],
+      "hops": [
+        {
+          "status": 200,
+          "headers": {
+            "content-type": "application/json",
+            "content-length": "1287"
+          },
+          "json": {
+            "result": "success",
+            "data": [
+              {
+                "id": 1000018,
+                "drive_id": 1000010,
+                "parent_id": 1000007,
+                "type": "file",
+                "status": "ok",
+                "name": "x2",
+                "path": "/Private/n2/x2",
+                "size": 1,
+                "parents": [
+                  {
+                    "id": 1000001,
+                    "drive_id": 1000010,
+                    "parent_id": 1,
+                    "type": "dir",
+                    "name": "Private"
+                  },
+                  {
+                    "id": 1000007,
+                    "drive_id": 1000010,
+                    "parent_id": 1000001,
+                    "type": "dir",
+                    "name": "n2"
+                  }
+                ],
+                "capabilities": {
+                  "can_read": true
+                }
+              },
+              {
+                "id": 1000019,
+                "drive_id": 1000010,
+                "parent_id": 1000007,
+                "type": "file",
+                "status": "ok",
+                "name": "x3",
+                "path": "/Private/n2/x3",
+                "size": 1,
+                "parents": [
+                  {
+                    "id": 1000001,
+                    "drive_id": 1000010,
+                    "parent_id": 1,
+                    "type": "dir",
+                    "name": "Private"
+                  },
+                  {
+                    "id": 1000007,
+                    "drive_id": 1000010,
+                    "parent_id": 1000001,
+                    "type": "dir",
+                    "name": "n2"
+                  }
+                ],
+                "capabilities": {
+                  "can_read": true
+                }
+              },
+              {
+                "id": 1000020,
+                "drive_id": 1000010,
+                "parent_id": 1000007,
+                "type": "file",
+                "status": "ok",
+                "name": "x4",
+                "path": "/Private/n2/x4",
+                "size": 1,
+                "parents": [
+                  {
+                    "id": 1000001,
+                    "drive_id": 1000010,
+                    "parent_id": 1,
+                    "type": "dir",
+                    "name": "Private"
+                  },
+                  {
+                    "id": 1000007,
+                    "drive_id": 1000010,
+                    "parent_id": 1000001,
+                    "type": "dir",
+                    "name": "n2"
+                  }
+                ],
+                "capabilities": {
+                  "can_read": true
+                }
+              },
+              {
+                "id": 1000021,
+                "drive_id": 1000010,
+                "parent_id": 1000007,
+                "type": "file",
+                "status": "ok",
+                "name": "x5",
+                "path": "/Private/n2/x5",
+                "size": 1,
+                "parents": [
+                  {
+                    "id": 1000001,
+                    "drive_id": 1000010,
+                    "parent_id": 1,
+                    "type": "dir",
+                    "name": "Private"
+                  },
+                  {
+                    "id": 1000007,
+                    "drive_id": 1000010,
+                    "parent_id": 1000001,
+                    "type": "dir",
+                    "name": "n2"
+                  }
+                ],
+                "capabilities": {
+                  "can_read": true
+                }
+              }
+            ],
+            "has_more": true,
+            "cursor": "cursor1"
+          }
+        }
+      ]
+    },
+    {
+      "template": "/3/drive/{d}/files/{f}/files",
+      "params": {
+        "d": 1000010,
+        "f": 1000007
+      },
+      "query": [
+        ["limit", "50"],
+        ["with", "path,parents,capabilities"],
+        ["cursor", "cursor1"]
+      ],
+      "hops": [
+        {
+          "status": 200,
+          "headers": {
+            "content-type": "application/json",
+            "content-length": "1287"
+          },
+          "json": {
+            "result": "success",
+            "data": [
+              {
+                "id": 1000022,
+                "drive_id": 1000010,
+                "parent_id": 1000007,
+                "type": "file",
+                "status": "ok",
+                "name": "x6",
+                "path": "/Private/n2/x6",
+                "size": 1,
+                "parents": [
+                  {
+                    "id": 1000001,
+                    "drive_id": 1000010,
+                    "parent_id": 1,
+                    "type": "dir",
+                    "name": "Private"
+                  },
+                  {
+                    "id": 1000007,
+                    "drive_id": 1000010,
+                    "parent_id": 1000001,
+                    "type": "dir",
+                    "name": "n2"
+                  }
+                ],
+                "capabilities": {
+                  "can_read": true
+                }
+              },
+              {
+                "id": 1000023,
+                "drive_id": 1000010,
+                "parent_id": 1000007,
+                "type": "file",
+                "status": "ok",
+                "name": "x7",
+                "path": "/Private/n2/x7",
+                "size": 1,
+                "parents": [
+                  {
+                    "id": 1000001,
+                    "drive_id": 1000010,
+                    "parent_id": 1,
+                    "type": "dir",
+                    "name": "Private"
+                  },
+                  {
+                    "id": 1000007,
+                    "drive_id": 1000010,
+                    "parent_id": 1000001,
+                    "type": "dir",
+                    "name": "n2"
+                  }
+                ],
+                "capabilities": {
+                  "can_read": true
+                }
+              },
+              {
+                "id": 1000024,
+                "drive_id": 1000010,
+                "parent_id": 1000007,
+                "type": "file",
+                "status": "ok",
+                "name": "x8",
+                "path": "/Private/n2/x8",
+                "size": 1,
+                "parents": [
+                  {
+                    "id": 1000001,
+                    "drive_id": 1000010,
+                    "parent_id": 1,
+                    "type": "dir",
+                    "name": "Private"
+                  },
+                  {
+                    "id": 1000007,
+                    "drive_id": 1000010,
+                    "parent_id": 1000001,
+                    "type": "dir",
+                    "name": "n2"
+                  }
+                ],
+                "capabilities": {
+                  "can_read": true
+                }
+              },
+              {
+                "id": 1000025,
+                "drive_id": 1000010,
+                "parent_id": 1000007,
+                "type": "file",
+                "status": "ok",
+                "name": "x9",
+                "path": "/Private/n2/x9",
+                "size": 1,
+                "parents": [
+                  {
+                    "id": 1000001,
+                    "drive_id": 1000010,
+                    "parent_id": 1,
+                    "type": "dir",
+                    "name": "Private"
+                  },
+                  {
+                    "id": 1000007,
+                    "drive_id": 1000010,
+                    "parent_id": 1000001,
+                    "type": "dir",
+                    "name": "n2"
+                  }
+                ],
+                "capabilities": {
+                  "can_read": true
+                }
+              }
+            ],
+            "has_more": true,
+            "cursor": "cursor2"
+          }
+        }
+      ]
+    },
+    {
+      "template": "/3/drive/{d}/files/{f}/files",
+      "params": {
+        "d": 1000010,
+        "f": 1000007
+      },
+      "query": [
+        ["limit", "50"],
+        ["with", "path,parents,capabilities"],
+        ["cursor", "cursor2"]
+      ],
+      "hops": [
+        {
+          "status": 200,
+          "headers": {
+            "content-type": "application/json",
+            "content-length": "367"
+          },
+          "json": {
+            "result": "success",
+            "data": [
+              {
+                "id": 1000026,
+                "drive_id": 1000010,
+                "parent_id": 1000007,
+                "type": "file",
+                "status": "ok",
+                "name": "x10",
+                "path": "/Private/n2/x10",
+                "size": 1,
+                "parents": [
+                  {
+                    "id": 1000001,
+                    "drive_id": 1000010,
+                    "parent_id": 1,
+                    "type": "dir",
+                    "name": "Private"
+                  },
+                  {
+                    "id": 1000007,
+                    "drive_id": 1000010,
+                    "parent_id": 1000001,
+                    "type": "dir",
+                    "name": "n2"
+                  }
+                ],
+                "capabilities": {
+                  "can_read": true
+                }
+              }
+            ],
+            "has_more": false,
+            "cursor": null
+          }
+        }
+      ]
+    },
+    {
+      "template": "/3/drive/{d}/files/search",
+      "params": {
+        "d": 1000010
+      },
+      "query": [
+        ["query", "n1"],
+        ["limit", "50"],
+        ["with", "path,parents,capabilities"],
+        ["directory_id", "1000001"]
+      ],
+      "hops": [
+        {
+          "status": 200,
+          "headers": {
+            "content-type": "application/json",
+            "content-length": "376"
+          },
+          "json": {
+            "result": "success",
+            "data": [
+              {
+                "id": 1000003,
+                "drive_id": 1000010,
+                "parent_id": 1000002,
+                "type": "file",
+                "status": "ok",
+                "name": "n1",
+                "path": "/Private/n3/n1",
+                "size": 16,
+                "parents": [
+                  {
+                    "id": 1000001,
+                    "drive_id": 1000010,
+                    "parent_id": 1,
+                    "type": "dir",
+                    "name": "Private"
+                  },
+                  {
+                    "id": 1000002,
+                    "drive_id": 1000010,
+                    "parent_id": 1000001,
+                    "type": "dir",
+                    "name": "n3"
+                  }
+                ],
+                "capabilities": {
+                  "can_read": true
+                }
+              }
+            ],
+            "has_more": false,
+            "cursor": null
+          }
+        }
+      ]
+    },
+    {
+      "template": "/3/drive/{d}/files/search",
+      "params": {
+        "d": 1000010
+      },
+      "query": [
+        ["query", "n1"],
+        ["limit", "50"],
+        ["with", "path,parents,capabilities"]
+      ],
+      "hops": [
+        {
+          "status": 200,
+          "headers": {
+            "content-type": "application/json",
+            "content-length": "376"
+          },
+          "json": {
+            "result": "success",
+            "data": [
+              {
+                "id": 1000003,
+                "drive_id": 1000010,
+                "parent_id": 1000002,
+                "type": "file",
+                "status": "ok",
+                "name": "n1",
+                "path": "/Private/n3/n1",
+                "size": 16,
+                "parents": [
+                  {
+                    "id": 1000001,
+                    "drive_id": 1000010,
+                    "parent_id": 1,
+                    "type": "dir",
+                    "name": "Private"
+                  },
+                  {
+                    "id": 1000002,
+                    "drive_id": 1000010,
+                    "parent_id": 1000001,
+                    "type": "dir",
+                    "name": "n3"
+                  }
+                ],
+                "capabilities": {
+                  "can_read": true
+                }
+              }
+            ],
+            "has_more": false,
+            "cursor": null
+          }
+        }
+      ]
+    },
+    {
+      "template": "/3/drive/{d}/files/recents",
+      "params": {
+        "d": 1000010
+      },
+      "query": [
+        ["limit", "50"],
+        ["with", "path,parents,capabilities"]
+      ],
+      "hops": [
+        {
+          "status": 200,
+          "headers": {
+            "content-type": "application/json",
+            "content-length": "979"
+          },
+          "json": {
+            "result": "success",
+            "data": [
+              {
+                "id": 1000001,
+                "drive_id": 1000010,
+                "parent_id": 1,
+                "type": "dir",
+                "status": "ok",
+                "name": "Private",
+                "path": "/Private",
+                "parents": [],
+                "capabilities": {
+                  "can_read": true
+                }
+              },
+              {
+                "id": 1000002,
+                "drive_id": 1000010,
+                "parent_id": 1000001,
+                "type": "dir",
+                "status": "ok",
+                "name": "n3",
+                "path": "/Private/n3",
+                "parents": [
+                  {
+                    "id": 1000001,
+                    "drive_id": 1000010,
+                    "parent_id": 1,
+                    "type": "dir",
+                    "name": "Private"
+                  }
+                ],
+                "capabilities": {
+                  "can_read": true
+                }
+              },
+              {
+                "id": 1000003,
+                "drive_id": 1000010,
+                "parent_id": 1000002,
+                "type": "file",
+                "status": "ok",
+                "name": "n1",
+                "path": "/Private/n3/n1",
+                "size": 16,
+                "parents": [
+                  {
+                    "id": 1000001,
+                    "drive_id": 1000010,
+                    "parent_id": 1,
+                    "type": "dir",
+                    "name": "Private"
+                  },
+                  {
+                    "id": 1000002,
+                    "drive_id": 1000010,
+                    "parent_id": 1000001,
+                    "type": "dir",
+                    "name": "n3"
+                  }
+                ],
+                "capabilities": {
+                  "can_read": true
+                }
+              },
+              {
+                "id": 1000004,
+                "drive_id": 1000010,
+                "parent_id": 1000001,
+                "type": "dir",
+                "status": "ok",
+                "name": "n6",
+                "path": "/Private/n6",
+                "parents": [
+                  {
+                    "id": 1000001,
+                    "drive_id": 1000010,
+                    "parent_id": 1,
+                    "type": "dir",
+                    "name": "Private"
+                  }
+                ],
+                "capabilities": {
+                  "can_read": true
+                }
+              }
+            ],
+            "has_more": true,
+            "cursor": "cursor1"
+          }
+        }
+      ]
+    },
+    {
+      "template": "/3/drive/{d}/files/my_shared",
+      "params": {
+        "d": 1000010
+      },
+      "query": [
+        ["limit", "50"],
+        ["with", "path,parents,capabilities"]
+      ],
+      "hops": [
+        {
+          "status": 200,
+          "headers": {
+            "content-type": "application/json",
+            "content-length": "979"
+          },
+          "json": {
+            "result": "success",
+            "data": [
+              {
+                "id": 1000001,
+                "drive_id": 1000010,
+                "parent_id": 1,
+                "type": "dir",
+                "status": "ok",
+                "name": "Private",
+                "path": "/Private",
+                "parents": [],
+                "capabilities": {
+                  "can_read": true
+                }
+              },
+              {
+                "id": 1000002,
+                "drive_id": 1000010,
+                "parent_id": 1000001,
+                "type": "dir",
+                "status": "ok",
+                "name": "n3",
+                "path": "/Private/n3",
+                "parents": [
+                  {
+                    "id": 1000001,
+                    "drive_id": 1000010,
+                    "parent_id": 1,
+                    "type": "dir",
+                    "name": "Private"
+                  }
+                ],
+                "capabilities": {
+                  "can_read": true
+                }
+              },
+              {
+                "id": 1000003,
+                "drive_id": 1000010,
+                "parent_id": 1000002,
+                "type": "file",
+                "status": "ok",
+                "name": "n1",
+                "path": "/Private/n3/n1",
+                "size": 16,
+                "parents": [
+                  {
+                    "id": 1000001,
+                    "drive_id": 1000010,
+                    "parent_id": 1,
+                    "type": "dir",
+                    "name": "Private"
+                  },
+                  {
+                    "id": 1000002,
+                    "drive_id": 1000010,
+                    "parent_id": 1000001,
+                    "type": "dir",
+                    "name": "n3"
+                  }
+                ],
+                "capabilities": {
+                  "can_read": true
+                }
+              },
+              {
+                "id": 1000004,
+                "drive_id": 1000010,
+                "parent_id": 1000001,
+                "type": "dir",
+                "status": "ok",
+                "name": "n6",
+                "path": "/Private/n6",
+                "parents": [
+                  {
+                    "id": 1000001,
+                    "drive_id": 1000010,
+                    "parent_id": 1,
+                    "type": "dir",
+                    "name": "Private"
+                  }
+                ],
+                "capabilities": {
+                  "can_read": true
+                }
+              }
+            ],
+            "has_more": true,
+            "cursor": "cursor1"
+          }
+        }
+      ]
+    },
+    {
+      "template": "/3/drive/files/shared_with_me",
+      "params": {},
+      "query": [
+        ["limit", "50"],
+        ["with", "path,capabilities"]
+      ],
+      "hops": [
+        {
+          "status": 200,
+          "headers": {
+            "content-type": "application/json",
+            "content-length": "201"
+          },
+          "json": {
+            "result": "success",
+            "data": [
+              {
+                "id": 1000012,
+                "drive_id": 1000011,
+                "parent_id": 1000009,
+                "type": "dir",
+                "status": null,
+                "name": "n12",
+                "path": "/Shared/n12",
+                "capabilities": {
+                  "can_read": true
+                }
+              }
+            ],
+            "has_more": false,
+            "cursor": null
+          }
+        }
+      ]
+    },
+    {
+      "template": "/3/drive/{d}/files/{f}",
+      "params": {
+        "d": 1000011,
+        "f": 1000012
+      },
+      "query": [["with", "path,parents,capabilities"]],
+      "hops": [
+        {
+          "status": 200,
+          "headers": {
+            "content-type": "application/json",
+            "content-length": "181"
+          },
+          "json": {
+            "result": "success",
+            "data": {
+              "id": 1000012,
+              "drive_id": 1000011,
+              "parent_id": 1000009,
+              "type": "dir",
+              "status": null,
+              "name": "n12",
+              "path": "/Shared/n12",
+              "parents": [],
+              "capabilities": {
+                "can_read": true
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "template": "/3/drive/{d}/files/{f}",
+      "params": {
+        "d": 1000011,
+        "f": 1000013
+      },
+      "query": [["with", "path,parents,capabilities"]],
+      "hops": [
+        {
+          "status": 200,
+          "headers": {
+            "content-type": "application/json",
+            "content-length": "291"
+          },
+          "json": {
+            "result": "success",
+            "data": {
+              "id": 1000013,
+              "drive_id": 1000011,
+              "parent_id": 1000012,
+              "type": "file",
+              "status": "ok",
+              "name": "n7",
+              "path": "/Shared/n12/n7",
+              "size": 1,
+              "parents": [
+                {
+                  "id": 1000012,
+                  "drive_id": 1000011,
+                  "parent_id": 1000009,
+                  "type": "dir",
+                  "name": "n12",
+                  "path": "/Shared/n12"
+                }
+              ],
+              "capabilities": {
+                "can_read": true
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "template": "/3/drive/{d}/files/{f}",
+      "params": {
+        "d": 1000011,
+        "f": 1000014
+      },
+      "query": [["with", "path,parents,capabilities"]],
+      "hops": [
+        {
+          "status": 200,
+          "headers": {
+            "content-type": "application/json",
+            "content-length": "291"
+          },
+          "json": {
+            "result": "success",
+            "data": {
+              "id": 1000014,
+              "drive_id": 1000011,
+              "parent_id": 1000012,
+              "type": "file",
+              "status": "ok",
+              "name": "n8",
+              "path": "/Shared/n12/n8",
+              "size": 1,
+              "parents": [
+                {
+                  "id": 1000012,
+                  "drive_id": 1000011,
+                  "parent_id": 1000009,
+                  "type": "dir",
+                  "name": "n12",
+                  "path": "/Shared/n12"
+                }
+              ],
+              "capabilities": {
+                "can_read": true
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "template": "/3/drive/{d}/files/{f}",
+      "params": {
+        "d": 1000011,
+        "f": 1000015
+      },
+      "query": [["with", "path,parents,capabilities"]],
+      "hops": [
+        {
+          "status": 200,
+          "headers": {
+            "content-type": "application/json",
+            "content-length": "291"
+          },
+          "json": {
+            "result": "success",
+            "data": {
+              "id": 1000015,
+              "drive_id": 1000011,
+              "parent_id": 1000012,
+              "type": "file",
+              "status": "ok",
+              "name": "n9",
+              "path": "/Shared/n12/n9",
+              "size": 1,
+              "parents": [
+                {
+                  "id": 1000012,
+                  "drive_id": 1000011,
+                  "parent_id": 1000009,
+                  "type": "dir",
+                  "name": "n12",
+                  "path": "/Shared/n12"
+                }
+              ],
+              "capabilities": {
+                "can_read": true
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "template": "/3/drive/{d}/files/{f}",
+      "params": {
+        "d": 1000011,
+        "f": 1000016
+      },
+      "query": [["with", "path,parents,capabilities"]],
+      "hops": [
+        {
+          "status": 200,
+          "headers": {
+            "content-type": "application/json",
+            "content-length": "291"
+          },
+          "json": {
+            "result": "success",
+            "data": {
+              "id": 1000016,
+              "drive_id": 1000011,
+              "parent_id": 1000012,
+              "type": "file",
+              "status": "ok",
+              "name": "n10",
+              "path": "/Shared/n12/n10",
+              "size": 1,
+              "parents": [
+                {
+                  "id": 1000012,
+                  "drive_id": 1000011,
+                  "parent_id": 1000009,
+                  "type": "dir",
+                  "name": "n12",
+                  "path": "/Shared/n12"
+                }
+              ],
+              "capabilities": {
+                "can_read": true
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "template": "/3/drive/{d}/files/{f}",
+      "params": {
+        "d": 1000011,
+        "f": 1000017
+      },
+      "query": [["with", "path,parents,capabilities"]],
+      "hops": [
+        {
+          "status": 200,
+          "headers": {
+            "content-type": "application/json",
+            "content-length": "291"
+          },
+          "json": {
+            "result": "success",
+            "data": {
+              "id": 1000017,
+              "drive_id": 1000011,
+              "parent_id": 1000012,
+              "type": "file",
+              "status": "ok",
+              "name": "n11",
+              "path": "/Shared/n12/n11",
+              "size": 1,
+              "parents": [
+                {
+                  "id": 1000012,
+                  "drive_id": 1000011,
+                  "parent_id": 1000009,
+                  "type": "dir",
+                  "name": "n12",
+                  "path": "/Shared/n12"
+                }
+              ],
+              "capabilities": {
+                "can_read": true
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "template": "/3/drive/{d}/files/{f}/files",
+      "params": {
+        "d": 1000011,
+        "f": 1000012
+      },
+      "query": [
+        ["limit", "50"],
+        ["with", "path,parents,capabilities"]
+      ],
+      "hops": [
+        {
+          "status": 200,
+          "headers": {
+            "content-type": "application/json",
+            "content-length": "61"
+          },
+          "json": {
+            "result": "success",
+            "data": [],
+            "has_more": false,
+            "cursor": null
+          }
+        }
+      ]
+    },
+    {
+      "template": "/3/drive/{d}/files/{f}/files",
+      "params": {
+        "d": 1000011,
+        "f": 1000013
+      },
+      "query": [
+        ["limit", "50"],
+        ["with", "path,parents,capabilities"]
+      ],
+      "hops": [
+        {
+          "status": 200,
+          "headers": {
+            "content-type": "application/json",
+            "content-length": "61"
+          },
+          "json": {
+            "result": "success",
+            "data": [],
+            "has_more": false,
+            "cursor": null
+          }
+        }
+      ]
+    },
+    {
+      "template": "/2/drive/{d}/files/{f}/download",
+      "params": {
+        "d": 1000010,
+        "f": 1000003
+      },
+      "query": [],
+      "range": "bytes=0-0",
+      "hops": [
+        {
+          "status": 302,
+          "headers": {
+            "content-length": "0",
+            "location": "https://s1.download.kdrive.infomaniakusercontent.com/r"
+          }
+        },
+        {
+          "status": 206,
+          "headers": {
+            "content-length": "1",
+            "content-range": "bytes 0-0/16",
+            "accept-ranges": "bytes",
+            "etag": "\"etag1\""
+          },
+          "body": "MA=="
+        }
+      ]
+    },
+    {
+      "template": "/2/drive/{d}/files/{f}/download",
+      "params": {
+        "d": 1000010,
+        "f": 1000003
+      },
+      "query": [],
+      "range": "bytes=7-9",
+      "hops": [
+        {
+          "status": 302,
+          "headers": {
+            "content-length": "0",
+            "location": "https://s1.download.kdrive.infomaniakusercontent.com/r"
+          }
+        },
+        {
+          "status": 206,
+          "headers": {
+            "content-length": "3",
+            "content-range": "bytes 7-9/16",
+            "accept-ranges": "bytes",
+            "etag": "\"etag1\""
+          },
+          "body": "Nzg5"
+        }
+      ]
+    },
+    {
+      "template": "/2/drive/{d}/files/{f}/download",
+      "params": {
+        "d": 1000010,
+        "f": 1000003
+      },
+      "query": [],
+      "range": "bytes=15-15",
+      "hops": [
+        {
+          "status": 302,
+          "headers": {
+            "content-length": "0",
+            "location": "https://s1.download.kdrive.infomaniakusercontent.com/r"
+          }
+        },
+        {
+          "status": 206,
+          "headers": {
+            "content-length": "1",
+            "content-range": "bytes 15-15/16",
+            "accept-ranges": "bytes",
+            "etag": "\"etag1\""
+          },
+          "body": "Zg=="
+        }
+      ]
+    },
+    {
+      "template": "/2/drive/{d}/files/{f}/download",
+      "params": {
+        "d": 1000010,
+        "f": 1000003
+      },
+      "query": [],
+      "range": "bytes=16-16",
+      "hops": [
+        {
+          "status": 302,
+          "headers": {
+            "content-length": "0",
+            "location": "https://s1.download.kdrive.infomaniakusercontent.com/r"
+          }
+        },
+        {
+          "status": 416,
+          "headers": {
+            "content-type": "text/html",
+            "content-length": "0"
+          }
+        }
+      ]
+    },
+    {
+      "template": "/2/drive/{d}/files/{f}/download",
+      "params": {
+        "d": 1000010,
+        "f": 1000006
+      },
+      "query": [],
+      "range": "bytes=0-0",
+      "hops": [
+        {
+          "status": 302,
+          "headers": {
+            "content-length": "0",
+            "location": "https://s1.download.kdrive.infomaniakusercontent.com/r"
+          }
+        },
+        {
+          "status": 206,
+          "headers": {
+            "content-length": "1",
+            "content-range": "bytes 0-0/16",
+            "accept-ranges": "bytes",
+            "etag": "\"etag1\""
+          }
+        }
+      ]
+    }
+  ]
+}

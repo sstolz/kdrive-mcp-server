@@ -1,0 +1,342 @@
+{
+  "name": "CI",
+  "on": {
+    "pull_request": {
+      "branches": ["main"]
+    },
+    "push": {
+      "branches": ["main"]
+    },
+    "workflow_dispatch": null
+  },
+  "permissions": {
+    "contents": "read"
+  },
+  "env": {
+    "DEV_UID": "1001",
+    "DEV_GID": "1001"
+  },
+  "concurrency": {
+    "group": "ci-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('run-{0}', github.run_id) }}",
+    "cancel-in-progress": "${{ github.event_name == 'pull_request' }}"
+  },
+  "jobs": {
+    "changes": {
+      "runs-on": ["self-hosted", "linux", "x64", "kdrive-ci"],
+      "if": "github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository",
+      "timeout-minutes": 5,
+      "outputs": {
+        "heavy": "${{ steps.classify.outputs.heavy }}",
+        "image": "${{ steps.classify.outputs.image }}"
+      },
+      "steps": [
+        {
+          "uses": "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683",
+          "with": {
+            "fetch-depth": 2,
+            "persist-credentials": false
+          }
+        },
+        {
+          "id": "classify",
+          "run": "make ci-changes"
+        }
+      ]
+    },
+    "lint": {
+      "runs-on": ["self-hosted", "linux", "x64", "kdrive-ci"],
+      "needs": ["changes"],
+      "if": "needs.changes.outputs.heavy != 'false'",
+      "timeout-minutes": 20,
+      "steps": [
+        {
+          "uses": "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683",
+          "with": {
+            "persist-credentials": false
+          }
+        },
+        {
+          "run": "make setup"
+        },
+        {
+          "run": "make lint"
+        }
+      ]
+    },
+    "format": {
+      "runs-on": ["self-hosted", "linux", "x64", "kdrive-ci"],
+      "needs": ["changes"],
+      "if": "needs.changes.outputs.heavy != 'false'",
+      "timeout-minutes": 20,
+      "steps": [
+        {
+          "uses": "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683",
+          "with": {
+            "persist-credentials": false
+          }
+        },
+        {
+          "run": "make setup"
+        },
+        {
+          "run": "make format-check"
+        }
+      ]
+    },
+    "typecheck": {
+      "runs-on": ["self-hosted", "linux", "x64", "kdrive-ci"],
+      "needs": ["changes"],
+      "if": "needs.changes.outputs.heavy != 'false'",
+      "timeout-minutes": 20,
+      "steps": [
+        {
+          "uses": "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683",
+          "with": {
+            "persist-credentials": false
+          }
+        },
+        {
+          "run": "make setup"
+        },
+        {
+          "run": "make typecheck"
+        }
+      ]
+    },
+    "test": {
+      "runs-on": ["self-hosted", "linux", "x64", "kdrive-ci"],
+      "needs": ["changes"],
+      "if": "needs.changes.outputs.heavy != 'false'",
+      "timeout-minutes": 20,
+      "steps": [
+        {
+          "uses": "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683",
+          "with": {
+            "persist-credentials": false
+          }
+        },
+        {
+          "run": "make setup"
+        },
+        {
+          "run": "make build\nmake coverage"
+        }
+      ]
+    },
+    "build": {
+      "runs-on": ["self-hosted", "linux", "x64", "kdrive-ci"],
+      "needs": ["changes"],
+      "if": "needs.changes.outputs.heavy != 'false'",
+      "timeout-minutes": 20,
+      "steps": [
+        {
+          "uses": "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683",
+          "with": {
+            "persist-credentials": false
+          }
+        },
+        {
+          "run": "make setup"
+        },
+        {
+          "run": "make build\nmake pack"
+        }
+      ]
+    },
+    "image": {
+      "runs-on": ["self-hosted", "linux", "x64", "kdrive-ci"],
+      "needs": ["changes"],
+      "if": "needs.changes.outputs.image != 'false'",
+      "permissions": {
+        "contents": "read"
+      },
+      "timeout-minutes": 30,
+      "strategy": {
+        "fail-fast": false,
+        "matrix": {
+          "platform": ["linux/amd64", "linux/arm64"]
+        }
+      },
+      "steps": [
+        {
+          "uses": "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683",
+          "with": {
+            "persist-credentials": false
+          }
+        },
+        {
+          "run": "make image-binfmt",
+          "env": {
+            "IMAGE_PLATFORMS": "${{ matrix.platform }}"
+          }
+        },
+        {
+          "run": "make image",
+          "env": {
+            "IMAGE_PLATFORMS": "${{ matrix.platform }}"
+          }
+        },
+        {
+          "run": "make image-smoke",
+          "env": {
+            "IMAGE_PLATFORMS": "${{ matrix.platform }}"
+          }
+        }
+      ]
+    },
+    "audit": {
+      "runs-on": ["self-hosted", "linux", "x64", "kdrive-ci"],
+      "needs": ["changes"],
+      "if": "needs.changes.outputs.heavy != 'false'",
+      "timeout-minutes": 20,
+      "steps": [
+        {
+          "uses": "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683",
+          "with": {
+            "persist-credentials": false
+          }
+        },
+        {
+          "run": "make setup"
+        },
+        {
+          "run": "make audit"
+        }
+      ]
+    },
+    "sonar": {
+      "runs-on": ["self-hosted", "linux", "x64", "kdrive-ci"],
+      "if": "github.repository == 'sstolz/kdrive-mcp-server' && github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && vars.SONAR_ENABLED == 'true'",
+      "needs": ["lint", "format", "typecheck", "test", "build"],
+      "timeout-minutes": 15,
+      "concurrency": {
+        "group": "sonar-kdrive-mcp-server",
+        "cancel-in-progress": false
+      },
+      "steps": [
+        {
+          "uses": "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683",
+          "with": {
+            "ref": "main",
+            "fetch-depth": 0,
+            "persist-credentials": false
+          }
+        },
+        {
+          "run": "test \"$(git rev-parse HEAD)\" = \"$GITHUB_SHA\"\nif test -L .git || ! test -d .git; then printf '%s\\n' 'The .git entry must be a directory.' >&2; exit 1; fi\nfor name in commondir modules; do\n  if test -e \".git/$name\" || test -L \".git/$name\"; then printf '%s\\n' 'Unsupported Git metadata exists.' >&2; exit 1; fi\ndone\nrm -rf \"$RUNNER_TEMP/pristine\" \"$RUNNER_TEMP/pristine.tar\" \"$RUNNER_TEMP/git-meta\"\nmkdir \"$RUNNER_TEMP/pristine\"\ngit archive --format=tar \"$GITHUB_SHA\" > \"$RUNNER_TEMP/pristine.tar\"\ntar -xf \"$RUNNER_TEMP/pristine.tar\" -C \"$RUNNER_TEMP/pristine\"\nmkdir \"$RUNNER_TEMP/git-meta\"\nfor name in config config.worktree hooks info; do\n  if test -e \".git/$name\" || test -L \".git/$name\"; then cp -a \".git/$name\" \"$RUNNER_TEMP/git-meta/$name\"; fi\ndone"
+        },
+        {
+          "run": "make setup"
+        },
+        {
+          "run": "fail() { printf '%s\\n' \"$1\" >&2; exit 1; }\nif test -L node_modules; then fail 'node_modules must not be a symlink.'; fi\nif test -e node_modules; then\n  test -d node_modules || fail 'node_modules must be the empty mount point.'\n  test -z \"$(ls -A node_modules)\" || fail 'node_modules must be the empty mount point.'\nfi\ndiff -r --no-dereference --exclude=.git --exclude=node_modules \"$RUNNER_TEMP/pristine\" . > /dev/null 2>&1 || fail 'The working tree differs from the pristine archive.'\nnested=$(find . -mindepth 2 \\( -name node_modules -o -name .git \\) -not -path './.git/*' -print -quit)\ntest -z \"$nested\" || fail 'A nested node_modules or .git entry exists.'\nfor name in GNUmakefile makefile ./*.mk compose.override.yaml compose.override.yml docker-compose.override.yaml docker-compose.override.yml .env .config/qube-token .config/sonar-host-url; do\n  if test -e \"$name\" || test -L \"$name\"; then fail 'A forbidden file exists in the checkout.'; fi\ndone\ngit_metadata_ok() {\n  if test -L .git || ! test -d .git; then return 1; fi\n  for name in commondir modules; do\n    if test -e \".git/$name\" || test -L \".git/$name\"; then return 1; fi\n  done\n  for name in config config.worktree hooks info; do\n    saved=\"$RUNNER_TEMP/git-meta/$name\"\n    if test -e \"$saved\" || test -L \"$saved\" || test -e \".git/$name\" || test -L \".git/$name\"; then\n      diff -r --no-dereference \"$saved\" \".git/$name\" > /dev/null 2>&1 || return 1\n    fi\n  done\n}\ngit_metadata_ok || fail 'Git metadata differs from the saved copy.'"
+        },
+        {
+          "run": "make sonar",
+          "env": {
+            "SONAR_ENABLED": "${{ vars.SONAR_ENABLED }}",
+            "SONAR_HOST_URL": "${{ secrets.SONAR_HOST_URL }}",
+            "SONAR_TOKEN": "${{ secrets.SONAR_TOKEN }}",
+            "SONAR_PRISTINE_TAR": "${{ runner.temp }}/pristine.tar"
+          }
+        },
+        {
+          "if": "always()",
+          "run": "if ! test -d \"$RUNNER_TEMP/git-meta\"; then exit 0; fi\ngit_metadata_ok() {\n  if test -L .git || ! test -d .git; then return 1; fi\n  for name in commondir modules; do\n    if test -e \".git/$name\" || test -L \".git/$name\"; then return 1; fi\n  done\n  for name in config config.worktree hooks info; do\n    saved=\"$RUNNER_TEMP/git-meta/$name\"\n    if test -e \"$saved\" || test -L \"$saved\" || test -e \".git/$name\" || test -L \".git/$name\"; then\n      diff -r --no-dereference \"$saved\" \".git/$name\" > /dev/null 2>&1 || return 1\n    fi\n  done\n}\nif git_metadata_ok; then exit 0; fi\nmv -T -- .git .git.quarantine 2> /dev/null || mv -T -- .git \"$RUNNER_TEMP/git-quarantine\" 2> /dev/null || true\nprintf '%s\\n' 'Git metadata differs from the saved copy; .git was moved aside.' >&2\nexit 1"
+        }
+      ]
+    },
+    "sonar-pr": {
+      "runs-on": ["self-hosted", "linux", "x64", "kdrive-ci"],
+      "if": "github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && needs.changes.outputs.heavy != 'false'",
+      "needs": ["changes", "lint", "format", "typecheck", "test", "build"],
+      "timeout-minutes": 15,
+      "concurrency": {
+        "group": "sonar-kdrive-mcp-server-pr",
+        "cancel-in-progress": false
+      },
+      "steps": [
+        {
+          "uses": "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683",
+          "with": {
+            "fetch-depth": 0,
+            "persist-credentials": false
+          }
+        },
+        {
+          "name": "Refuse fork pull requests",
+          "if": "github.event.pull_request.head.repo.full_name != github.repository",
+          "run": "printf '%s\\n' 'Fork pull requests do not run the PR Quality Gate; re-push the reviewed change to a same-repository branch.' >&2\nexit 1"
+        },
+        {
+          "name": "PR Quality Gate disabled",
+          "if": "github.event.pull_request.head.repo.full_name == github.repository && vars.SONAR_ENABLED != 'true'",
+          "run": "printf '%s\\n' 'PR Quality Gate disabled: SONAR_ENABLED is not true; no analysis ran.'"
+        },
+        {
+          "if": "github.event.pull_request.head.repo.full_name == github.repository && vars.SONAR_ENABLED == 'true'",
+          "run": "test \"$(git rev-parse HEAD)\" = \"$GITHUB_SHA\"\nif test -L .git || ! test -d .git; then printf '%s\\n' 'The .git entry must be a directory.' >&2; exit 1; fi\nfor name in commondir modules; do\n  if test -e \".git/$name\" || test -L \".git/$name\"; then printf '%s\\n' 'Unsupported Git metadata exists.' >&2; exit 1; fi\ndone\nrm -rf \"$RUNNER_TEMP/pristine\" \"$RUNNER_TEMP/pristine.tar\" \"$RUNNER_TEMP/git-meta\"\nmkdir \"$RUNNER_TEMP/pristine\"\ngit archive --format=tar \"$GITHUB_SHA\" > \"$RUNNER_TEMP/pristine.tar\"\ntar -xf \"$RUNNER_TEMP/pristine.tar\" -C \"$RUNNER_TEMP/pristine\"\nmkdir \"$RUNNER_TEMP/git-meta\"\nfor name in config config.worktree hooks info; do\n  if test -e \".git/$name\" || test -L \".git/$name\"; then cp -a \".git/$name\" \"$RUNNER_TEMP/git-meta/$name\"; fi\ndone"
+        },
+        {
+          "if": "github.event.pull_request.head.repo.full_name == github.repository && vars.SONAR_ENABLED == 'true'",
+          "run": "make setup"
+        },
+        {
+          "if": "github.event.pull_request.head.repo.full_name == github.repository && vars.SONAR_ENABLED == 'true'",
+          "run": "fail() { printf '%s\\n' \"$1\" >&2; exit 1; }\nif test -L node_modules; then fail 'node_modules must not be a symlink.'; fi\nif test -e node_modules; then\n  test -d node_modules || fail 'node_modules must be the empty mount point.'\n  test -z \"$(ls -A node_modules)\" || fail 'node_modules must be the empty mount point.'\nfi\ndiff -r --no-dereference --exclude=.git --exclude=node_modules \"$RUNNER_TEMP/pristine\" . > /dev/null 2>&1 || fail 'The working tree differs from the pristine archive.'\nnested=$(find . -mindepth 2 \\( -name node_modules -o -name .git \\) -not -path './.git/*' -print -quit)\ntest -z \"$nested\" || fail 'A nested node_modules or .git entry exists.'\nfor name in GNUmakefile makefile ./*.mk compose.override.yaml compose.override.yml docker-compose.override.yaml docker-compose.override.yml .env .config/qube-token .config/sonar-host-url; do\n  if test -e \"$name\" || test -L \"$name\"; then fail 'A forbidden file exists in the checkout.'; fi\ndone\ngit_metadata_ok() {\n  if test -L .git || ! test -d .git; then return 1; fi\n  for name in commondir modules; do\n    if test -e \".git/$name\" || test -L \".git/$name\"; then return 1; fi\n  done\n  for name in config config.worktree hooks info; do\n    saved=\"$RUNNER_TEMP/git-meta/$name\"\n    if test -e \"$saved\" || test -L \"$saved\" || test -e \".git/$name\" || test -L \".git/$name\"; then\n      diff -r --no-dereference \"$saved\" \".git/$name\" > /dev/null 2>&1 || return 1\n    fi\n  done\n}\ngit_metadata_ok || fail 'Git metadata differs from the saved copy.'"
+        },
+        {
+          "if": "github.event.pull_request.head.repo.full_name == github.repository && vars.SONAR_ENABLED == 'true'",
+          "run": "make sonar-pr",
+          "env": {
+            "SONAR_ENABLED": "${{ vars.SONAR_ENABLED }}",
+            "SONAR_HOST_URL": "${{ secrets.SONAR_HOST_URL }}",
+            "SONAR_TOKEN": "${{ secrets.SONAR_PR_TOKEN }}",
+            "SONAR_PRISTINE_TAR": "${{ runner.temp }}/pristine.tar",
+            "SONAR_PR_HEAD_REPOSITORY": "${{ github.event.pull_request.head.repo.full_name }}"
+          }
+        },
+        {
+          "if": "always()",
+          "run": "if ! test -d \"$RUNNER_TEMP/git-meta\"; then exit 0; fi\ngit_metadata_ok() {\n  if test -L .git || ! test -d .git; then return 1; fi\n  for name in commondir modules; do\n    if test -e \".git/$name\" || test -L \".git/$name\"; then return 1; fi\n  done\n  for name in config config.worktree hooks info; do\n    saved=\"$RUNNER_TEMP/git-meta/$name\"\n    if test -e \"$saved\" || test -L \"$saved\" || test -e \".git/$name\" || test -L \".git/$name\"; then\n      diff -r --no-dereference \"$saved\" \".git/$name\" > /dev/null 2>&1 || return 1\n    fi\n  done\n}\nif git_metadata_ok; then exit 0; fi\nmv -T -- .git .git.quarantine 2> /dev/null || mv -T -- .git \"$RUNNER_TEMP/git-quarantine\" 2> /dev/null || true\nprintf '%s\\n' 'Git metadata differs from the saved copy; .git was moved aside.' >&2\nexit 1"
+        }
+      ]
+    },
+    "fork-refusal": {
+      "runs-on": "ubuntu-24.04",
+      "if": "github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository",
+      "permissions": {
+        "contents": "read"
+      },
+      "timeout-minutes": 5,
+      "steps": [
+        {
+          "run": "printf '%s\\n' 'Fork pull requests do not run the PR Quality Gate; re-push the reviewed change to a same-repository branch.' >&2\nexit 1"
+        }
+      ]
+    },
+    "ci-result": {
+      "runs-on": ["self-hosted", "linux", "x64", "kdrive-ci"],
+      "needs": [
+        "changes",
+        "lint",
+        "format",
+        "typecheck",
+        "test",
+        "build",
+        "image",
+        "audit",
+        "sonar",
+        "sonar-pr"
+      ],
+      "if": "always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)",
+      "timeout-minutes": 5,
+      "steps": [
+        {
+          "if": "needs.changes.result != 'success' || contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')",
+          "run": "printf '%s\\n' 'CI failed: the changes job did not succeed, or a job failed or was cancelled.' >&2\nexit 1"
+        }
+      ]
+    }
+  }
+}

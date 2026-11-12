@@ -1,0 +1,38 @@
+{
+  "vmType": "qemu",
+  "arch": "x86_64",
+  "plain": true,
+  "mounts": [],
+  "portForwards": [
+    {
+      "guestIPMustBeZero": false,
+      "guestIP": "0.0.0.0",
+      "guestPortRange": [1, 65535],
+      "proto": "any",
+      "ignore": true
+    }
+  ],
+  "hostResolver": {
+    "enabled": false
+  },
+  "ssh": {
+    "localPort": 60022,
+    "loadDotSSHPubKeys": false,
+    "forwardAgent": false,
+    "forwardX11": false
+  },
+  "containerd": {
+    "system": false,
+    "user": false
+  },
+  "cpus": 4,
+  "memory": "8GiB",
+  "disk": "60GiB",
+  "images": [
+    {
+      "location": "https://cloud.debian.org/images/cloud/bookworm/20260923-2610/debian-12-genericcloud-amd64-20260923-2610.qcow2",
+      "arch": "x86_64",
+      "digest": "sha256:7b3faf645268d65f91676b11cda5ab18294b1f0ac0062238f00d279551bdecad"
+    }
+  ]
+}

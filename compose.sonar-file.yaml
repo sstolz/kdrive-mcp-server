@@ -1,0 +1,12 @@
+# Used only after the POSIX entry guard validates the external physical path.
+services:
+  analysis:
+    environment:
+      - SONAR_TOKEN_FILE=/run/secrets/sonar-token
+    volumes:
+      - type: bind
+        source: ${SONAR_TOKEN_FILE:?Select an explicit external credential file}
+        target: /run/secrets/sonar-token
+        read_only: true
+        bind:
+          create_host_path: false

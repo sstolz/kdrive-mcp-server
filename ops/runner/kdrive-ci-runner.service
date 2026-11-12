@@ -1,0 +1,21 @@
+# F-015 BR-220, BR-224: supervisor of the isolated self-hosted CI runner.
+# Installed by ops/runner/host-setup.sh; started by ops/runner/install.sh. It
+# runs only while the egress table is loaded: stopping or restarting
+# kdrive-runner-nft.service stops or restarts this unit, and with it QEMU.
+[Unit]
+Description=kdrive CI self-hosted runner supervisor
+Requires=kdrive-runner-nft.service
+After=kdrive-runner-nft.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=kdrive-runner
+ExecStart=/opt/kdrive-runner/ops/supervise.sh run
+Restart=always
+RestartSec=60
+NoNewPrivileges=yes
+TimeoutStopSec=120
+
+[Install]
+WantedBy=multi-user.target

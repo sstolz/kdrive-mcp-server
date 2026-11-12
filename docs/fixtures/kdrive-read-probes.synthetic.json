@@ -1,0 +1,68 @@
+{
+  "evidence_class": "synthetic",
+  "notice": "Invented examples only. Not API observations, not account data, not a complete upstream schema or product acceptance tests.",
+  "shared_child_ancestry": {
+    "fixture_alias": "shared-child",
+    "input": { "drive_id": 7001, "file_id": 7102 },
+    "candidate_metadata": {
+      "id": 7102,
+      "drive_id": 7001,
+      "name": "synthetic-child.txt",
+      "parent_id": 7101,
+      "depth": 2,
+      "path": "/Shared/synthetic-root/synthetic-child.txt",
+      "parents": [{ "id": 7101, "name": "synthetic-root" }]
+    },
+    "missing_evidence_variant": { "parents": [] },
+    "question": "Can the actual API prove membership beneath the received-share root? Neither invented variant answers this."
+  },
+  "pagination_boundary": {
+    "fixture_count": 1001,
+    "invented_page_summaries": [
+      { "count": 1000, "has_more": true, "cursor_present": true },
+      { "count": 1, "has_more": false, "cursor_present": false }
+    ],
+    "expected_union_count": 1001,
+    "expected_duplicate_count": 0,
+    "question": "Do measured page summaries reconstruct the independently known fixture set?"
+  },
+  "ranges": {
+    "invented_binary_ascii": "0123456789abcdef",
+    "size_bytes": 16,
+    "candidate_success": {
+      "range": "bytes=7-9",
+      "status": 206,
+      "content_range": "bytes 7-9/16",
+      "expected_ascii": "789"
+    },
+    "ignored_range_variant": {
+      "status": 200,
+      "action": "Abort before reading body; inconclusive."
+    },
+    "unsatisfiable_request": "bytes=16-16",
+    "question": "What status and bounded headers are actually returned? No maximum-size claim follows."
+  },
+  "etag": {
+    "invented_samples": [
+      "synthetic-version-a",
+      "synthetic-version-a",
+      "synthetic-version-b"
+    ],
+    "candidate_summary": {
+      "present": true,
+      "unchanged_fixture_equal": true,
+      "changed_fixture_equal": false
+    },
+    "question": "Do owner-attested live version transitions produce a usable validator?"
+  },
+  "errors": {
+    "candidate_envelope": {
+      "result": "error",
+      "error": {
+        "code": "validation_failed",
+        "errors": [{ "code": "validation_rule_max" }]
+      }
+    },
+    "question": "Which status/code fields are actually present? Never persist error descriptions or context."
+  }
+}
