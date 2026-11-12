@@ -8,7 +8,8 @@ version: 1
 
 Author: Claude Opus 5.5 (effort unknown), spec phase, 2026-11-12.
 Base: branch `claude/beautiful-maxwell-8mdk2w` at `f0983c4`. IDs: F-023,
-BR-341–BR-352, BR-015 v7, BR-149 v3, BR-183 v3, BR-225 v2, BR-227 v2,
+BR-341–BR-352, BR-015 v7, BR-149 v3, BR-183 v3, BR-225 v3, BR-227 v3,
+BR-320 v2,
 BR-229 v2; no ADR. BR-291 and BR-305–BR-311 are reserved and not used.
 Ticket numbers: `#1` is this repository's ticket; older `#N` in cited
 records refer to the archive (PROJECT.md "Repository and ticket numbering").
@@ -54,7 +55,7 @@ keep their rules and change only `runs-on`.
 
 ### Threat model
 
-- T1 fork code on owner hardware: removed by hosted runners (BR-225 v2,
+- T1 fork code on owner hardware: removed by hosted runners (BR-225 v3,
   BR-229 v2, BR-351).
 - T2 deny list disclosure: the patterns themselves name what must stay private;
   printing, echoing, writing or passing them as arguments leaks them (BR-342,
@@ -101,7 +102,13 @@ keep their rules and change only `runs-on`.
   scanning issues, comments or PR edits made
   after the last CI run (T6, D-6).
 - Sonar behaviour, tokens, conditions or summaries (F-011, F-022).
-- Provisioning the secret (owner action before acceptance).
+- Provisioning the secret: an owner action before the feature PR's first
+  green CI, since `privacy-scan` exits 2 without it (BR-344); a merge
+  precondition.
+- Surfaces outside `main` that become public with the repository; they form
+  an owner checklist before going public (#2): other branches and tags,
+  `refs/pull/*` heads, issue, PR and review text, and Actions logs of the
+  private period.
 
 ## Business rules
 
@@ -153,7 +160,9 @@ keep their rules and change only `runs-on`.
   of the head (a PR whose base moved on, or a force push) keeps the range
   scan: `git rev-list <base>..<head>` already lists exactly the commits that
   the base lacks. For each commit of `git rev-list <range>`: its full message
-  (`git log -1 --format=%B`) is scanned by the BR-345 views; and its changed
+  (`git log -1 --format=%B`) is scanned by the BR-345 views; its author and
+  committer name and e-mail (`%an`, `%ae`, `%cn`, `%ce`) are scanned by the
+  same views and reported as `commit <40-hex sha> identity`; and its changed
   blobs are scanned: `git diff-tree -r --no-renames --no-commit-id --root -z <commit>`
   (merge commits list no blobs, as no `-m` is given) gives, NUL-separated and never quoted, every path and its new
   blob id; each new blob that is neither all-zero (deleted entry) nor a
@@ -174,6 +183,7 @@ keep their rules and change only `runs-on`.
   `privacy-scan: hit <location> pattern <n>`, where `<location>` is
   `<path>:<line>`, `commit <40-hex sha> line <line>` (message),
   `commit <40-hex sha> added` (changed blobs and paths of that commit; one hit per commit and pattern),
+  `commit <40-hex sha> identity` (author or committer name or e-mail),
   `pr-title:<line>` or `pr-body:<line>`. When the path itself matches any pattern, `<location>` is
   `file #<k>:<line>` with `k` the 1-based index in `git ls-files` order, and
   one extra line `privacy-scan: hit path file #<k> pattern <n>` is printed. No
@@ -207,7 +217,7 @@ keep their rules and change only `runs-on`.
 
 ## Versioned rules
 
-- **BR-225 v2** — v1 holds with these changes: every job of `ci.yml` has
+- **BR-225 v3** — v2 holds with these changes: every job of `ci.yml` has
   `runs-on` exactly `ubuntu-24.04`; no job of `ci.yml` has `runs-on` containing
   `self-hosted`. Timeouts unchanged, plus `privacy-scan` 20. (v1: label array
   `[self-hosted, linux, x64, kdrive-ci]` except `fork-refusal`.) The label
@@ -215,7 +225,10 @@ keep their rules and change only `runs-on`.
   AC-01, AC-02.
 - **BR-149 v3**, **BR-183 v3** — v2 holds with "the BR-225 label array"
   replaced by `ubuntu-24.04`. Verified by: AC-01.
-- **BR-227 v2** — v1 holds with these changes: every job except `changes`,
+- **BR-320 v2** — v1 holds with "`runs-on` the BR-225 self-hosted label
+  array" replaced by "`runs-on` `ubuntu-24.04`" for the `audit` job.
+  Verified by: AC-01.
+- **BR-227 v3** — v2 holds with these changes: every job except `changes`,
   `privacy-scan`, `fork-refusal` and `ci-result` depends on `changes` directly
   or through `needs`; `ci-result` needs every other job except `fork-refusal`
   (adding `privacy-scan`), and its step `if` is exactly
@@ -225,7 +238,7 @@ keep their rules and change only `runs-on`.
   job `if` exactly `github.repository != 'sstolz/kdrive-mcp-server'`; the
   trigger stays `workflow_dispatch` only. (v1: no job `if`.) Verified by: AC-03.
 - **BR-015 v7** — v6 holds with these changes. The exact job set adds
-  `privacy-scan` (BR-341). Every job runs on `ubuntu-24.04` (BR-225 v2). The
+  `privacy-scan` (BR-341). Every job runs on `ubuntu-24.04` (BR-225 v3). The
   Make-only `run` allowlist adds `make privacy-scan`, admitted only in
   `privacy-scan`; `make setup` is not admitted there. The non-Make `run`
   texts add `PRIVACY_FORK_NOTICE`, admitted only in `privacy-scan` (eleven
@@ -237,12 +250,12 @@ keep their rules and change only `runs-on`.
 
 ## Acceptance criteria
 
-- **AC-01** (BR-015 v7, BR-149 v3, BR-183 v3, BR-225 v2, BR-227 v2, BR-341) —
+- **AC-01** (BR-015 v7, BR-149 v3, BR-183 v3, BR-225 v3, BR-227 v3, BR-341) —
   Given the real `ci.yml`, When the policy validator runs, Then it passes with
   every job on `ubuntu-24.04` and the exact `privacy-scan` and `ci-result`
-  shapes. Verified by: `tests/ci-policy.test.ts` `BR-015 v7 BR-225 v2 accepts
-  the real workflow on hosted runners`, `BR-341 …`, `BR-227 v2 …`.
-- **AC-02** (BR-015 v7, BR-225 v2, BR-227 v2, BR-341, BR-342) — Given fixtures
+  shapes. Verified by: `tests/ci-policy.test.ts` `BR-015 v7 BR-225 v3 accepts
+  the real workflow on hosted runners`, `BR-341 …`, `BR-227 v3 …`.
+- **AC-02** (BR-015 v7, BR-225 v3, BR-227 v3, BR-341, BR-342) — Given fixtures
   mutated to: one job on the label array; `privacy-scan` with `needs` or a job
   `if`; a `make setup` step in `privacy-scan`; the deny secret in another step,
   a `with`, or the job `env`; a Sonar secret in `privacy-scan`; checkout
@@ -282,7 +295,8 @@ keep their rules and change only `runs-on`.
   `commit <B> line <n>` and `commit <C> added` are reported in the first four
   and nothing in the last; given a PR whose base D (on another branch, not an
   ancestor of C) shares only A with C, Then the range `D..C` is scanned (B and
-  C reported, no full-history scan of A); given a commit E whose new blob has a line
+  C reported, no full-history scan of A); given a commit whose author e-mail holds the token,
+  Then exactly one `commit <sha> identity` line is reported; given a commit E whose new blob has a line
   starting with `+++` that holds the token, and a later commit F that deletes
   a file whose path holds the token, Then exactly one `commit <E> added` and
   one `commit <F> added` line are reported; given a commit adding a UTF-16 LE
@@ -304,15 +318,16 @@ keep their rules and change only `runs-on`.
   depend on `_require-setup`; and `scripts/privacy-scan.ts` imports only
   `node:` modules. Verified by: `tests/privacy-scan.test.ts`
   `BR-352 Makefile …`.
-- **AC-13** (BR-015 v7, BR-225 v2, BR-341, BR-346) — Given the owner
-  provisioned `PRIVACY_DENY_PATTERNS`, no runner is attached, and the
-  repository allows squash merging only with the default commit message
+- **AC-13** (BR-015 v7, BR-225 v3, BR-341, BR-346) — Given the owner
+  provisioned `PRIVACY_DENY_PATTERNS`, no runner is attached, the merging
+  account keeps its e-mail private (GitHub `noreply` author on web and API
+  merges), and the repository allows squash merging only with the default commit message
   "Pull request title and description", When the PR CI run, the push-to-`main`
   CI run and a `workflow_dispatch` CI run on `main` (full history) complete,
   Then every job ran on a GitHub-hosted runner, each `privacy-scan` printed
   `0 hits` with a non-zero pattern count, Sonar and `ci-result` are green. The
-  `workflow_dispatch` run with 0 hits is the pre-public gate. Verified by: run links recorded in `runs/` at
-  acceptance.
+  `workflow_dispatch` run with 0 hits is the pre-public gate for `main`
+  only. Verified by: run links recorded in the #1 acceptance comment.
 - **AC-14** (BR-350) — Given the real `ci.yml`, When validated, Then step 1 of
   `privacy-scan` equals `PRIVACY_FORK_NOTICE` under the fork condition.
   Verified by: `tests/ci-policy.test.ts` `BR-350 …`.
@@ -352,8 +367,10 @@ keep their rules and change only `runs-on`.
 - **D-6 Range scan plus PR title and body; full history on demand.** The
   squash message comes from the PR title and body (AC-13 precondition), so
   scanning them makes the PR check preventive. PR and push runs scan only
-  their range; new branches, force pushes and `workflow_dispatch` scan the
-  full history, and the dispatch run is the pre-public gate (AC-13). A
+  their range (a force push or a moved PR base keeps the range scan, BR-346);
+  a new branch, an old tip that is not a commit in the clone, and
+  `workflow_dispatch` scan the full history, and the dispatch run is the
+  pre-public gate for `main` (AC-13). A
   historic hit fails those runs until fixed; it can be fixed only before going
   public by recreating history, which is an owner decision outside this spec.
   Rejected: full history on every run (cost proportional to history on every
@@ -425,3 +442,23 @@ keep their rules and change only `runs-on`.
 3. [minor] `--no-commit-id`, per-blob binary count wording, Round 3 text —
    retained.
 4. [minor] Leftover "added line" in AC-09 — retained.
+
+### Round 5 — reviewed SHA `5ef7a49` (Opus 5.5, `1-spec-review-5-reviewer`, diff-only), verdict approve
+
+No finding.
+
+### Decision pass — reviewed SHA `5ef7a49` (Fable 5.2, `1-spec-decision-1-reviewer`), verdict changes
+
+1. [major] Commit identities not scanned; a squash merge carried a personal
+   e-mail — retained: `%an %ae %cn %ce` scanned as `commit <sha> identity`;
+   AC-09 row; AC-13 precondition (e-mail kept private). The affected commit
+   was removed by recreating the repository (#1 comment
+   `1-history-1-orchestrator`).
+2. [major] BR-225 v2 and BR-227 v2 collided with accepted v2; BR-320 still
+   required the self-hosted array — retained: BR-225 v3, BR-227 v3 ("v2
+   holds"), BR-320 v2.
+3. [minor] "Pre-public gate" overclaimed — retained: "for `main` only", and
+   an owner checklist of the other public surfaces under Out of scope.
+4. [minor] D-6 vs BR-346 on force pushes — retained: aligned.
+5. [minor] Secret needed before the first green CI; round 5 unrecorded —
+   retained: merge precondition; round 5 recorded above.
