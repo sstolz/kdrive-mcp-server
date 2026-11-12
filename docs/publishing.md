@@ -29,9 +29,11 @@ specification of #2, which versions BR-016.
 
 ## Versions
 
-- The public beta is `0.6.0-beta.1`, then `0.6.0-beta.2` and so on. On npm a
-  pre-release goes under the `beta` dist-tag, never `latest`, so
-  `npm install @sstolz/kdrive-mcp-server` installs no beta by default.
+- The public beta is `0.6.0-beta.1`, then `0.6.0-beta.2` and so on. Each beta
+  is published with `npm publish --tag beta --access public`. The npm registry
+  still points `latest` at the first version of a new package, so until 1.0.0
+  exists `latest` may point to the newest beta: install
+  `@sstolz/kdrive-mcp-server@beta` or pin the exact version.
 - The image gets the same version tag. A beta never gets the `latest` tag.
 - `1.0.0` is the first stable release (#6).
 
