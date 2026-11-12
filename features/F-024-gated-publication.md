@@ -234,6 +234,10 @@ GHCR package).
     whether the registry accepted it anyway; if it did, verify the published
     version by hand with the read-back commands, and `read-back`, skipped
     because its `needs` failed, is not re-run;
+  - when `npm publish` reports a failure and `npm view` does not find the
+    version, re-run the failed `publish-npm` job (its `release-check` in
+    phase `npm` expects the pushed image), or delete the GHCR version and
+    dispatch again;
   - when the image push reports a failure and GHCR does not have the
     version, re-run the failed `publish-image` job or dispatch again;
   - when the image push reports a failure but GHCR has the version,
@@ -980,14 +984,15 @@ GHCR package).
   re-run, and re-running `publish-npm` would only fail its `release-check`.
   If the image push failed and GHCR does not have the version, the owner
   re-runs the failed `publish-image` job (its `release-check` in phase
-  `image` expects a 404) or dispatches again. If the npm step failed without publishing,
+  `image` expects a 404) or dispatches again. If the npm step failed
+  without publishing,
   the owner re-runs the failed `publish-npm` job (its `release-check` in
   phase `npm` expects the pushed image), or deletes the GHCR version and
   dispatches again. If the image push reported a failure but GHCR has the
   version, `publish-npm` never ran: re-running `publish-image` fails its
   `release-check` (200 in phase `image`), so the owner deletes the GHCR
-  version and dispatches again, which BR-361 admits only while the release commit is
-  still `main`'s HEAD, or releases the next beta. If npm published but
+  version and dispatches again, which BR-361 admits only while the release
+  commit is still `main`'s HEAD, or releases the next beta. If npm published but
   `read-back` failed, the owner re-runs only the failed `read-back` job,
   which holds no publish permission, or verifies by hand with `npm view`
   and `docker buildx imagetools inspect`; a new dispatch of that version is
@@ -1214,6 +1219,9 @@ Decision pass `2-spec-decision-1-reviewer` (strongest tier, verdict
   BR-354.
 - **R4-3** (minor, retained) — D-8 and BR-354 cover an image push that
   failed with no GHCR version: re-run `publish-image` or dispatch again.
+- **R5-1** (minor, retained; `2-spec-review-5-reviewer`) — BR-354 adds the
+  "npm failed and not published" recovery that D-8 already gave, so both
+  list the same five cases; two D-8 lines re-wrapped.
 - **R3-1** (major, retained; `2-spec-review-3-reviewer`) — AC-16 contradicted
   P-5: its three `dry_run=false` dispatches are now made by the owner; the
   implementing agent only records the run links and results.
