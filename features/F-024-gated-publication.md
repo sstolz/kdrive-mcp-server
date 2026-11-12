@@ -230,11 +230,13 @@ GHCR package).
     `npm view @sstolz/kdrive-mcp-server@<version>` and
     `docker buildx imagetools inspect ghcr.io/sstolz/kdrive-mcp-server:<version>`;
     a new dispatch of that version is refused by BR-363, as intended;
-  - when `npm publish` or the image push reports a failure, first check
-    whether the registry accepted it anyway (`npm view` for npm, the GHCR
-    manifest for the image); if it did, verify the published version by hand
-    with the same commands, and `read-back`, skipped because its `needs`
-    failed, is not re-run;
+  - when `npm publish` reports a failure, first check with `npm view`
+    whether the registry accepted it anyway; if it did, verify the published
+    version by hand with the read-back commands, and `read-back`, skipped
+    because its `needs` failed, is not re-run;
+  - when the image push reports a failure but GHCR has the version,
+    `publish-npm` never ran and npm is unpublished: the owner deletes the
+    GHCR version and dispatches again, or releases the next beta;
   - deleting the GHCR version and dispatching again works only while the
     release commit is still `main`'s HEAD (BR-361); otherwise the next beta
     is released.
@@ -430,8 +432,10 @@ GHCR package).
   `release environment unreadable <code>; refer to the owner` (fail closed:
   the run stops and the decision goes back to the owner); any other
   departure fails with `release environment not protected (P-2)`.
-  `prevent_self_review` is not checked (P-2 keeps it off). Verified by:
-  AC-21, AC-13, AC-16.
+  `prevent_self_review` is not checked (P-2 keeps it off). Both reads rely
+  on the `actions: read` permission that BR-356 grants to `verify`,
+  `publish-image` and `publish-npm`, the only jobs that run `release-check`;
+  removing it makes the check fail closed. Verified by: AC-21, AC-13, AC-16.
 
 ### Output and safety of `scripts/release.ts`
 
@@ -646,8 +650,9 @@ GHCR package).
   P-3 in that order with the P-0 commands ending in `npm logout`, the
   "release commit is `main`'s HEAD" statement, the required green real
   `dry_run=true` dispatch before any `dry_run=false` dispatch, the read-back
-  recovery, the "check the registry first" recovery and the `main`-HEAD
-  limit of a GHCR delete and re-dispatch),
+  recovery, the "check the registry first" recovery for npm, the
+  "image in GHCR but npm never ran" recovery and the `main`-HEAD limit of a
+  GHCR delete and re-dispatch),
   `artifacts/kdrive-mcp-server-` appears in no tracked file outside the
   excluded records, and docs/publishing.md does not say that `latest`
   points to the first beta. Verified by: `tests/release-policy.test.ts`
@@ -819,7 +824,9 @@ GHCR package).
 - **AC-16** (BR-355, BR-356, BR-359–BR-363, BR-365, BR-378) — Real wiring,
   after the merge, on actual `main`, with P-4, P-2 and P-5 in place and
   nothing published. Given
-  three dispatches of `release.yml` from `main` with `dry_run=false`: (a)
+  three dispatches of `release.yml` from `main` with `dry_run=false`, made by
+  the owner (P-5: agents never dispatch `dry_run=false`; the implementing
+  agent only records the run links and results): (a)
   `version=0.1.0` and the `main` SHA; (b) `version=0.6.0-beta.1` and the
   `main` SHA; (c) `version=0.6.0-beta.1` and the parent of the `main` SHA;
   When they run, Then (a) fails input validation with the stable refusal;
@@ -972,7 +979,10 @@ GHCR package).
   only fail its `release-check`. If the npm step failed without publishing,
   the owner re-runs the failed `publish-npm` job (its `release-check` in
   phase `npm` expects the pushed image), or deletes the GHCR version and
-  dispatches again, which BR-361 admits only while the release commit is
+  dispatches again. If the image push reported a failure but GHCR has the
+  version, `publish-npm` never ran: re-running `publish-image` fails its
+  `release-check` (200 in phase `image`), so the owner deletes the GHCR
+  version and dispatches again, which BR-361 admits only while the release commit is
   still `main`'s HEAD, or releases the next beta. If npm published but
   `read-back` failed, the owner re-runs only the failed `read-back` job,
   which holds no publish permission, or verifies by hand with `npm view`
@@ -1190,3 +1200,13 @@ Decision pass `2-spec-decision-1-reviewer` (strongest tier, verdict
   `--cache-from` and `--cache-to`; AC-10, AC-11 and AC-13 add the cases.
 - **D1-9** (retained, orchestrator request) — `## Residual risks` added with
   entries (a)–(e), owner acceptance pending.
+- **R3-1** (major, retained; `2-spec-review-3-reviewer`) — AC-16 contradicted
+  P-5: its three `dry_run=false` dispatches are now made by the owner; the
+  implementing agent only records the run links and results.
+- **R3-2** (minor, retained) — Recovery split: an image push reported as
+  failed while GHCR has the version leaves npm unpublished; the owner
+  deletes the GHCR version and dispatches again (only while the release
+  commit is `main`'s HEAD) or releases the next beta. D-8, BR-354 and AC-02
+  updated.
+- **R3-3** (minor, retained) — BR-378 states that both reads rely on the
+  BR-356 `actions: read` permission and fail closed without it.
