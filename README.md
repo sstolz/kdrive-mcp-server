@@ -1,6 +1,10 @@
 # kdrive-mcp-server
 
-Unofficial project, not affiliated with Infomaniak.
+> **Beta: the interface may change before 1.0.** Tool names, parameters,
+> settings and outputs can still change between beta versions.
+>
+> **Unofficial project, not affiliated with Infomaniak.** It is distinct from
+> the `@infomaniak/mcp-server-kdrive` npm package.
 
 An [MCP](https://modelcontextprotocol.io) server that gives AI clients
 controlled access to an Infomaniak kDrive. A client can browse, search and read
@@ -277,6 +281,8 @@ collects stderr; use a file for a durable trail.
   vulnerability.
 - [Configuration reference](features/F-002-configuration.md),
   [deployment guide](docs/deployment.md), [OAuth proxy notes](docs/oauth-proxy.md).
+- [Publishing](docs/publishing.md): package and image names, versions and the
+  release gate.
 - [Development notes](docs/development.md): building, checks, quality gates and
   feature history, until the developer documentation exists.
 - Contributors follow [AGENTS.md](AGENTS.md) and [PROJECT.md](PROJECT.md).

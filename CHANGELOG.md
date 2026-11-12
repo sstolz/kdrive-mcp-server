@@ -219,6 +219,10 @@ No product release is recorded.
 
 ### Changed
 
+- #2: the README starts with a beta notice (the interface may change before
+  1.0) and the unofficial, non-affiliated notice; the npm description says the
+  same. `docs/publishing.md` records the chosen package and image names, the
+  `0.6.0-beta.N` versions and the release gate.
 - #105 / F-021 v1 (accepted 2026-11-11): behind Traefik, routing to the
   container now waits until Docker reports it `healthy` (up to one 10 s
   interval after each start). Deployments whose effective port differs from
