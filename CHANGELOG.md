@@ -7,6 +7,13 @@ No product release is recorded.
 
 ### Added
 
+- #2 / F-024 v2 (pending acceptance): gated beta publication. The npm package
+  is renamed `@sstolz/kdrive-mcp-server` (command unchanged; `make pack`
+  writes `artifacts/sstolz-kdrive-mcp-server-<version>.tgz`), and a
+  dispatch-only `release.yml` with `make release-*` targets checks the tagged
+  `main` commit, its CI, the registries and the protected `release`
+  environment before an owner-approved image push and npm `beta` publish with
+  provenance, then reads both back. Nothing is published by this change.
 - #1 / F-023 v1 (accepted 2026-11-12): every CI job runs on GitHub-hosted
   `ubuntu-24.04`, and a `privacy-scan` job (`make privacy-scan`, needed by
   `ci-result`) scans the tracked tree, the pushed or PR commits and the PR

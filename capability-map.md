@@ -1,5 +1,20 @@
 # Capability map
 
+## Provisional (pending acceptance) — gated beta publication
+
+[F-024 v2](features/F-024-gated-publication.md) (#2), BR-353–BR-375, BR-378 and
+BR-379 v1 with BR-016 v3 and BR-178 v3. The npm package is renamed
+`@sstolz/kdrive-mcp-server` (the command and server-info name stay
+`kdrive-mcp-server`), and a dispatch-only `release.yml` checks the tagged
+`main` HEAD, its green CI, the registries and the protected `release`
+environment, then, only for `dry_run=false` and after the owner's approval,
+pushes the two-platform image `ghcr.io/sstolz/kdrive-mcp-server:<version>` and
+publishes the verified tarball to npm under `beta` with provenance, and reads
+both back. npm installs still resolve Jimp's nested Zod 3 during the beta
+(residual risk (f), fixed before 1.0 in #12). Provisional: not accepted on
+actual main; nothing is published, and the real-wiring dispatches (AC-16) need
+the owner preconditions.
+
 ## Accepted — hosted CI and privacy scan
 
 [F-023 v1](features/F-023-hosted-ci-privacy-scan.md) (#1), BR-341–BR-352 v1
