@@ -8,7 +8,7 @@ COMPOSE = "$(DOCKER)" compose
 	coverage sonar sonar-pr quality oidc-qualify http-acceptance kdrive-record kdrive-acceptance \
 	kdrive-write-acceptance kdrive-upload-acceptance \
 	image-binfmt image image-smoke \
-	audit ci-changes runner-probe runner-reset-mark runner-reset-check public-export public-commit \
+	audit ci-changes runner-probe runner-reset-mark runner-reset-check \
 	_require-container-config _require-config _require-setup
 
 help:
@@ -39,8 +39,6 @@ help:
 		'  make image         Build runtime and smoke images per IMAGE_PLATFORMS (host Buildx, --load)' \
 		'  make image-smoke   Smoke-test the local images per IMAGE_PLATFORMS (no network, no port)' \
 		'  make image-binfmt  Register arm64 emulation on a non-arm64 host (privileged, opt-in)' \
-		'  make public-export Export, clean and scan the public tree of PUBLIC_REF (default HEAD)' \
-		'  make public-commit Deterministic root commit of the scanned public tree' \
 		'  make help          Show this help without Docker or network access'; }
 
 _require-container-config:
@@ -235,23 +233,3 @@ runner-reset-mark:
 
 runner-reset-check:
 	@/bin/bash ops/runner/probe.sh reset-check
-
-# #95: public export into the ignored artifacts/ directory. Host Git reads the
-# ref (the dev container sees .git read-only and possibly owned by another
-# user) and writes its archive to the ignored artifacts/public-source.tar (no
-# pipe, so a git archive failure stops the recipe under any POSIX shell); the
-# dev container extracts, cleans, rewrites and scans the tree
-# (ops/public/README.md).
-PUBLIC_REF ?= HEAD
-PUBLIC_OUT = artifacts/public-tree
-public-export: _require-setup
-	@source=$$(git log -1 --format=%H "$(PUBLIC_REF)" --) && \
-	date=$$(git log -1 --format=%cI "$$source" --) && \
-	mkdir -p artifacts && \
-	git archive --format=tar -o artifacts/public-source.tar "$$source" && \
-	$(COMPOSE) run --rm -T dev node scripts/public-export.ts export \
-		--archive artifacts/public-source.tar --source-sha "$$source" --source-date "$$date" \
-		--out $(PUBLIC_OUT) --config ops/public --manifest artifacts/public-manifest.txt
-
-public-commit: _require-setup
-	@$(COMPOSE) run --rm -T dev node scripts/public-export.ts commit --out $(PUBLIC_OUT) --config ops/public

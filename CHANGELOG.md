@@ -335,3 +335,7 @@ No product release is recorded.
   official Quality Gate; see the evidence (archived evidence `runs/33-acceptance-1.md`).
 
 ### Removed
+
+- This repository's #1: the public-export tooling (`scripts/public-export.ts`, its tests and the
+  `public-export` and `public-commit` Make targets), used once to publish this
+  repository from the archive.

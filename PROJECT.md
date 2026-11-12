@@ -12,7 +12,7 @@ portable method; everything specific to this repository lives here.
 | Artifact language                | English, unless the user explicitly asks otherwise                                                                                                                                       |
 | Main branch                      | `main`                                                                                                                                                                                   |
 | Forge and tickets                | GitHub issues and pull requests of `sstolz/kdrive-mcp-server`                                                                                                                            |
-| Label taxonomy                   | English `type:*` and `area:*` labels, see [docs/issue-labels.md](docs/issue-labels.md)                                                                                                   |
+| Label taxonomy                   | GitHub default type labels plus `chore` and `research`, and `area/*` labels, see [docs/issue-labels.md](docs/issue-labels.md)                                                            |
 | Local gate (full path)           | `make check` (lint, format, typecheck, build, tests, package verification)                                                                                                               |
 | Local gate (short path)          | `make format-check` plus the content and link checks the change needs                                                                                                                    |
 | Freeze mode                      | autonomous (decision D-1)                                                                                                                                                                |
@@ -42,25 +42,36 @@ packing, and fixture Git operations.
 
 ## Transitional deviations
 
-- **Evidence files in `runs/` (2026-11-11, #92).** AGENTS.md §9 keeps per-run files out of the
-  product repository. This repository still holds its historical `runs/`
-  directory. From #92 on, new evidence goes to tickets and PRs as §9 says;
-  existing `runs/` files are preserved unchanged. Exit condition: the
-  public-publication preparation ticket. Extracting the kDrive API
-  observations into `docs/observations/kdrive-api.md` and keeping `runs/` only
-  in a private archive belongs to the public-publication preparation ticket.
 - **Reviewer publication (2026-11-11, #92).** AGENTS.md §9 has the reviewer publish its own
   verdict. The reviewer tool above has no forge write access, so until it does,
   the orchestrator posts the reviewer's report verbatim and unedited on the PR,
   under the reviewer's evidence identifier, and adds nothing to it. Exit condition: the reviewer tool
   gains forge write access.
 
+## Repository and ticket numbering
+
+Development moved on 2026-11-12 (decision D-9) from the private repository,
+now `sstolz/kdrive-mcp-server-archive`, to this repository, which started
+from a single clean root commit. Ticket numbers restarted at #1 here. In
+records dated before 2026-11-12, a bare `#N` and "archive issue N" refer to
+the archive; this repository's tickets are cited as `#N` from #1 onward in
+records dated 2026-11-12 or later. The archive keeps the full history, the
+evidence files (`runs/`) and the closed tickets; it is private.
+
+## Public-content rule
+
+This repository is meant to be public. Commit messages, issues, pull requests,
+review records and tracked files carry no session links, e-mail addresses
+other than GitHub `noreply` ones, personal names, organisation domains,
+private hostnames or links to private repositories (decision D-9). Evidence
+from private systems is summarised without identifiers.
+
 ## History
 
-- **CI bootstrap.** Tickets #1 and #2 were docs and admin work done before CI
+- **CI bootstrap.** Archive tickets 1 and 2 were docs and admin work done before CI
   existed. For them, an independent `approve` plus successful local document,
   link and content checks stood in for CI. This granted no product waiver and
-  is never called "green CI". CI is mandatory from #3 onward.
+  is never called "green CI". CI is mandatory from archive ticket 3 onward.
 - **README-only exception.** One direct commit to `main` initialized the empty
   repository. That exception is used up and authorizes no further direct-main
   operation.
@@ -104,3 +115,15 @@ Owner decisions that set the parameters above, with their date and source.
   vers Fable 5.2”. The strongest tier maps to Fable 5.2 instead of Fable 5.1;
   the rest of D-3 is unchanged. The milestone 0.4 global pass was already
   served by Fable 5.2 (#100 comment of 2026-11-11).
+- **D-9 — 2026-11-12 — Development in this repository.** Owner's words:
+  “je pense que c'est mieux de basculer le dev sur le nouveau repo” (switch
+  ticket #1). The archive is frozen; its open tickets were recreated here
+  (#2–#8) with neutral text and closed there as moved. The `runs/`
+  transitional deviation ends: this repository holds no `runs/` directory.
+  The public-export tooling was removed (owner go, 2026-11-12). The rule
+  against session links and private data comes from the 0.6 beta decision of
+  2026-11-11 (archive issue 106).
+- **D-10 — 2026-11-12 — Labels.** Owner request to follow common practice:
+  GitHub's default type labels plus `chore` and `research`, and `area/*`
+  domain labels sharing one colour, each with a description
+  ([docs/issue-labels.md](docs/issue-labels.md)).
