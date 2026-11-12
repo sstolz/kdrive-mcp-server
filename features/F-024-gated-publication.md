@@ -53,8 +53,9 @@ or pull the image). The MCP server's runtime behaviour is unchanged.
   dependency's install script, or a step that receives a token it does not
   need (BR-356, BR-358, D-4). Dependencies are installed with
   `--ignore-scripts` (BR-375, D-5), and the OIDC request token exists only in
-  `publish-npm`, which runs no binfmt, image build or dependency install
-  (BR-356, D-5).
+  `publish-npm`, which runs no binfmt, release-image build or dependency
+  install; its only build is the implicit, pinned `Dockerfile.dev` build
+  that `docker compose run` performs on a fresh runner (BR-356, D-5).
 - T4 long-lived credential theft: an npm token stored in GitHub. Avoided by
   npm trusted publishing (OIDC) and the short-lived `GITHUB_TOKEN` (D-3).
 - T5 same-repository writer: an account with write access can dispatch a
@@ -540,7 +541,11 @@ Order: P-0, then P-1; P-2–P-4 before the first non-dry-run dispatch.
   `concurrency` missing, or with `cancel-in-progress: true`;
   `packages: write` or `id-token: write` on `verify`; `id-token: write` on
   `publish-image`, `read-back` or an added job; `packages: write` on
-  `publish-npm`; `publish-image` or `publish-npm` without `environment` or
+  `publish-npm`, `read-back` or an added job; `read-back` with an
+  `environment` or without `publish-npm` in `needs`;
+  `RELEASE_TARBALL_SHA256` on a step other than `publish-npm`'s
+  `make release-npm`; a `RELEASE_PHASE` literal swapped between jobs;
+  `publish-image` or `publish-npm` without `environment` or
   without `inputs.dry_run == false`; `publish-npm` without `publish-image`
   in `needs`; a job without the repository and `main` guard; a `secrets.`
   reference; a `run` with `${{ inputs.version }}`; `GITHUB_TOKEN` on
@@ -673,7 +678,7 @@ Order: P-0, then P-1; P-2–P-4 before the first non-dry-run dispatch.
   in the PR body, and `make check`.
 - **AC-16** (BR-355, BR-356, BR-359–BR-363, BR-365) — Real wiring, after the
   merge, on actual `main`, with P-2 in place and nothing published. Given
-  two dispatches of `release.yml` from `main` with `dry_run=false`: (a)
+  three dispatches of `release.yml` from `main` with `dry_run=false`: (a)
   `version=0.1.0` and the `main` SHA; (b) `version=0.6.0-beta.1` and the
   `main` SHA; (c) `version=0.6.0-beta.1` and the parent of the `main` SHA;
   When they run, Then (a) fails input validation with the stable refusal;
@@ -768,8 +773,9 @@ Order: P-0, then P-1; P-2–P-4 before the first non-dry-run dispatch.
   installs only inside BuildKit containers, which see no runner credential,
   and needs the privileged binfmt step, so it runs in `publish-image` with
   `packages: write` only. `publish-npm` holds `id-token: write` only and
-  runs no binfmt, build or install step, so the OIDC request token never
-  reaches the privileged or build steps; it `needs` `publish-image`, which
+  runs no binfmt, release-image build or dependency install (only the
+  implicit, pinned `Dockerfile.dev` build of `docker compose run`), so the
+  OIDC request token never reaches the privileged or release build steps; it `needs` `publish-image`, which
   keeps the image-first order (D-8). The cost is a second approval (D-1)
   and a `RELEASE_PHASE` input to `release-check`, since in `publish-npm`
   the image of this run already exists. Rejected: one publish job holding
@@ -921,3 +927,12 @@ finding retained.
   command of `compose run … dev <command>`, so `node scripts/release.ts`
   runs the real checks, and the rehearsal runs the four job sequences with
   `GITHUB_SHA`, `GITHUB_OUTPUT` and the digest hand-off.
+- **R2-1** (minor, retained; `2-spec-review-2-reviewer`) — T3 and D-5 now
+  say that `publish-npm` runs no binfmt, release-image build or dependency
+  install, and name its only build: the implicit, pinned `Dockerfile.dev`
+  build of `docker compose run`.
+- **R2-2** (minor, retained) — AC-04 adds mutations for `packages: write` on
+  `read-back` or an added job, `read-back` with an `environment` or without
+  `needs: [publish-npm]`, `RELEASE_TARBALL_SHA256` on another step, and a
+  swapped `RELEASE_PHASE` literal.
+- **R2-3** (minor, retained) — AC-16 says "three dispatches".
