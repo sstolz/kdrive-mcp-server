@@ -1186,10 +1186,13 @@ interface AcceptanceStep {
 }
 interface AcceptanceJob {
   "runs-on": unknown;
+  if?: string;
   "timeout-minutes": number;
   needs?: string[];
   steps: AcceptanceStep[];
 }
+// BR-229 v2: every job carries the repository guard.
+const GUARD = "github.repository != 'sstolz/kdrive-mcp-server'";
 function validateAcceptance(workflow: Record<string, unknown>): void {
   check(
     sameKeys(workflow, ["name", "on", "permissions", "jobs"]),
@@ -1229,6 +1232,7 @@ function validateAcceptance(workflow: Record<string, unknown>): void {
   const expected: Record<string, AcceptanceJob> = {
     probe: {
       "runs-on": LABELS,
+      if: GUARD,
       "timeout-minutes": 10,
       steps: [
         checkout,
@@ -1243,11 +1247,13 @@ function validateAcceptance(workflow: Record<string, unknown>): void {
     },
     "reset-mark": {
       "runs-on": LABELS,
+      if: GUARD,
       "timeout-minutes": 10,
       steps: [checkout, { run: "make runner-reset-mark" }],
     },
     "reset-check": {
       "runs-on": LABELS,
+      if: GUARD,
       "timeout-minutes": 10,
       needs: ["reset-mark"],
       steps: [checkout, { run: "make runner-reset-check" }],
@@ -1294,6 +1300,10 @@ describe("BR-229 runner-acceptance.yml", () => {
     "hosted runner": (w) => {
       const jobs = w.jobs as Record<string, AcceptanceJob>;
       jobs.probe!["runs-on"] = "ubuntu-24.04";
+    },
+    "a job without the BR-229 v2 guard": (w) => {
+      const jobs = w.jobs as Record<string, AcceptanceJob>;
+      delete jobs["reset-check"]!.if;
     },
   };
   it.each(Object.keys(mutations))("BR-229 rejects %s", (name) => {
@@ -1577,6 +1587,15 @@ describe("BR-232 docs/self-hosted-runner.md", () => {
     expect(section).toContain("Run workflows from fork pull requests");
     expect(source).not.toMatch(
       /(required checks|branch protection) (are|is) (now )?(enabled|enforced|active)/iu,
+    );
+  });
+  it("BR-351 states the runner is safe only privately and never attached to this repository", () => {
+    const source = guide().replaceAll(/\s+/gu, " ");
+    expect(source).toContain(
+      "safe only for a private repository or when fork pull-request workflows cannot run",
+    );
+    expect(source).toContain(
+      "It is never attached to `sstolz/kdrive-mcp-server`",
     );
   });
   it("BR-232 records the pinned Lima release and its SHA-256", () => {

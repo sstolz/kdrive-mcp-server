@@ -16,16 +16,24 @@ import {
   CI_RESULT_FAILURE,
   CONCURRENCY,
   expectedAuditJob,
+  expectedPrivacyScanJob,
   DISABLED_NOTICE,
   FINAL_GIT_CHECK,
   FORK_REFUSAL,
   PRISTINE_COMPARISON,
   PRISTINE_EXPORT,
+  HOSTED,
   JOB_CONDITIONS,
   LABELS,
   PR_CONDITIONS,
+  PRIVACY_CONDITIONS,
+  PRIVACY_ENV,
+  PRIVACY_FORK_NOTICE,
+  RUNNER_ACCEPTANCE_GUARD,
   stepRuns,
+  validateRunnerAcceptance,
   validateWorkflow,
+  type AcceptanceWorkflow,
   type Step,
   type Workflow,
 } from "./helpers/ci-policy.js";
@@ -77,10 +85,10 @@ it.each(["skip", "write", "tag", "unpin", "token", "sonar-pr"])(
   },
 );
 
-it("BR-015 v5 BR-183 v2 accepts the real workflow with the changes-gated image job", () => {
+it("BR-015 v7 BR-183 v3 accepts the real workflow with the changes-gated image job on hosted runners", () => {
   const image = workflow().jobs.image;
   expect(image).toEqual({
-    "runs-on": ["self-hosted", "linux", "x64", "kdrive-ci"],
+    "runs-on": "ubuntu-24.04",
     needs: ["changes"],
     if: "needs.changes.outputs.image != 'false'",
     permissions: { contents: "read" },
@@ -372,12 +380,12 @@ it.each(Object.keys(mutations))(
   },
 );
 
-it("BR-149 v2 PR gate runs only for same-repository pull requests, after changes and the gates, serialized", () => {
+it("BR-149 v3 PR gate runs only for same-repository pull requests, after changes and the gates, serialized, on hosted runners", () => {
   const job = workflow().jobs["sonar-pr"];
   expect(job?.if).toBe(
     "github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && needs.changes.outputs.heavy != 'false'",
   );
-  expect(job?.["runs-on"]).toEqual(LABELS);
+  expect(job?.["runs-on"]).toBe("ubuntu-24.04");
   expect(job?.needs).toEqual([
     "changes",
     "lint",
@@ -803,7 +811,7 @@ function job(fixture: Workflow, name: string) {
   return found;
 }
 
-it("BR-015 v5 BR-225 accepts the real workflow on the self-hosted label array", () => {
+it("BR-015 v7 BR-225 v3 accepts the real workflow on hosted runners", () => {
   const fixture = workflow();
   expect(Object.keys(fixture.jobs).sort()).toEqual([
     "audit",
@@ -814,6 +822,7 @@ it("BR-015 v5 BR-225 accepts the real workflow on the self-hosted label array", 
     "format",
     "image",
     "lint",
+    "privacy-scan",
     "sonar",
     "sonar-pr",
     "test",
@@ -822,9 +831,7 @@ it("BR-015 v5 BR-225 accepts the real workflow on the self-hosted label array", 
   const timeouts: Record<string, number> = {};
   for (const [name, entry] of Object.entries(fixture.jobs)) {
     timeouts[name] = entry["timeout-minutes"] ?? 0;
-    expect(entry["runs-on"]).toEqual(
-      name === "fork-refusal" ? "ubuntu-24.04" : LABELS,
-    );
+    expect(entry["runs-on"]).toBe("ubuntu-24.04");
   }
   expect(timeouts).toEqual({
     changes: 5,
@@ -839,14 +846,16 @@ it("BR-015 v5 BR-225 accepts the real workflow on the self-hosted label array", 
     "sonar-pr": 15,
     "ci-result": 5,
     "fork-refusal": 5,
+    "privacy-scan": 20,
   });
-  expect(LABELS).toEqual(["self-hosted", "linux", "x64", "kdrive-ci"]);
+  expect(HOSTED).toBe("ubuntu-24.04");
+  expect(JSON.stringify(fixture)).not.toContain("self-hosted");
   expect(() => {
     validateWorkflow(fixture);
   }).not.toThrow();
 });
 
-it("BR-015 v5 counts exactly ten admitted non-Make run texts", () => {
+it("BR-015 v7 counts exactly eleven admitted non-Make run texts", () => {
   const admitted = [
     PRISTINE_EXPORT,
     PRISTINE_COMPARISON,
@@ -854,27 +863,31 @@ it("BR-015 v5 counts exactly ten admitted non-Make run texts", () => {
     FORK_REFUSAL,
     DISABLED_NOTICE,
     CI_RESULT_FAILURE,
+    PRIVACY_FORK_NOTICE,
   ];
   const count = Object.values(workflow().jobs)
     .flatMap((entry) => entry.steps)
     .filter(
       (step) => step.run !== undefined && admitted.includes(step.run),
     ).length;
-  expect(count).toBe(10);
+  expect(count).toBe(11);
 });
 
 const runnerMutations: Record<string, (fixture: Workflow) => void> = {
-  "a gate job on ubuntu-24.04": (fixture) => {
-    job(fixture, "lint")["runs-on"] = "ubuntu-24.04";
+  "a gate job on the label array": (fixture) => {
+    job(fixture, "lint")["runs-on"] = [...LABELS];
   },
-  "ci-result on ubuntu-24.04": (fixture) => {
-    job(fixture, "ci-result")["runs-on"] = "ubuntu-24.04";
+  "ci-result on the label array": (fixture) => {
+    job(fixture, "ci-result")["runs-on"] = [...LABELS];
   },
   "fork-refusal on the self-hosted labels": (fixture) => {
     job(fixture, "fork-refusal")["runs-on"] = [...LABELS];
   },
-  "a missing label": (fixture) => {
-    job(fixture, "test")["runs-on"] = ["self-hosted", "linux", "x64"];
+  "another hosted image": (fixture) => {
+    job(fixture, "test")["runs-on"] = "ubuntu-22.04";
+  },
+  "a hosted image in an array": (fixture) => {
+    job(fixture, "test")["runs-on"] = ["ubuntu-24.04"];
   },
   "a different timeout-minutes": (fixture) => {
     job(fixture, "build")["timeout-minutes"] = 60;
@@ -905,7 +918,7 @@ const runnerMutations: Record<string, (fixture: Workflow) => void> = {
   },
 };
 it.each(Object.keys(runnerMutations))(
-  "BR-015 v5 BR-225 rejects runner mutation: %s",
+  "BR-015 v7 BR-225 v3 rejects runner mutation: %s",
   (name) => {
     const fixture = workflow();
     runnerMutations[name]?.(fixture);
@@ -916,9 +929,9 @@ it.each(Object.keys(runnerMutations))(
   },
 );
 
-it("BR-227 the changes job classifies with a fork guard and no needs", () => {
+it("BR-227 v3 the changes job classifies with a fork guard and no needs", () => {
   expect(job(workflow(), "changes")).toEqual({
-    "runs-on": LABELS,
+    "runs-on": "ubuntu-24.04",
     if: "github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository",
     "timeout-minutes": 5,
     outputs: {
@@ -941,9 +954,9 @@ it("BR-227 the changes job classifies with a fork guard and no needs", () => {
   }
 });
 
-it("BR-227 ci-result needs every job but fork-refusal and fails on any failure", () => {
+it("BR-227 v3 ci-result needs every job but fork-refusal, privacy-scan included, and fails on any failure", () => {
   expect(job(workflow(), "ci-result")).toEqual({
-    "runs-on": LABELS,
+    "runs-on": "ubuntu-24.04",
     needs: [
       "changes",
       "lint",
@@ -955,12 +968,13 @@ it("BR-227 ci-result needs every job but fork-refusal and fails on any failure",
       "audit",
       "sonar",
       "sonar-pr",
+      "privacy-scan",
     ],
     if: "always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)",
     "timeout-minutes": 5,
     steps: [
       {
-        if: "needs.changes.result != 'success' || contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')",
+        if: "needs.changes.result != 'success' || needs.privacy-scan.result != 'success' || contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')",
         run: CI_RESULT_FAILURE,
       },
     ],
@@ -1110,11 +1124,11 @@ it.each(Object.keys(concurrencyMutations))(
   },
 );
 
-it("TestBR320_audit_job BR-015 v6 BR-225 v2 BR-227 v2 accepts the real workflow with the audit job", () => {
+it("TestBR320_audit_job BR-320 v2 audit job on hosted runners", () => {
   const fixture = workflow();
   expect(fixture.jobs.audit).toEqual(expectedAuditJob);
   expect(expectedAuditJob).toEqual({
-    "runs-on": ["self-hosted", "linux", "x64", "kdrive-ci"],
+    "runs-on": "ubuntu-24.04",
     needs: ["changes"],
     if: "needs.changes.outputs.heavy != 'false'",
     "timeout-minutes": 20,
@@ -1220,17 +1234,237 @@ const auditMutations: Record<string, (fixture: Workflow) => void> = {
     steps(fixture, "audit").push({ run: "make lint" });
   },
   "other runner": (fixture) => {
-    job(fixture, "audit")["runs-on"] = "ubuntu-24.04";
+    job(fixture, "audit")["runs-on"] = [...LABELS];
   },
 };
 it.each(Object.keys(auditMutations))(
-  "TestBR320_audit_job BR-015 v6 rejects audit mutation: %s",
+  "TestBR320_audit_job BR-015 v7 BR-320 v2 rejects audit mutation: %s",
   (name) => {
     const fixture = workflow();
     auditMutations[name]?.(fixture);
     expect(fixture).not.toEqual(workflow());
     expect(() => {
       validateWorkflow(fixture);
+    }).toThrow();
+  },
+);
+
+// ------------------------------------------------- F-023 BR-341, BR-350
+it("BR-341 privacy-scan is a hosted, read-only, three-step job without needs, if or env", () => {
+  const scan = job(workflow(), "privacy-scan");
+  expect(scan).toEqual(expectedPrivacyScanJob);
+  expect(scan).toEqual({
+    "runs-on": "ubuntu-24.04",
+    permissions: { contents: "read" },
+    "timeout-minutes": 20,
+    steps: [
+      {
+        if: "github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository",
+        run: PRIVACY_FORK_NOTICE,
+      },
+      {
+        if: "github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository",
+        uses: "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683",
+        with: { "fetch-depth": 0, "persist-credentials": false },
+      },
+      {
+        if: "github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository",
+        run: "make privacy-scan",
+        env: {
+          PRIVACY_DENY_PATTERNS: "${{ secrets.PRIVACY_DENY_PATTERNS }}",
+          PRIVACY_EVENT: "${{ github.event_name }}",
+          PRIVACY_RANGE_BASE:
+            "${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}",
+          PRIVACY_RANGE_HEAD:
+            "${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}",
+          PRIVACY_PR_TITLE: "${{ github.event.pull_request.title }}",
+          PRIVACY_PR_BODY: "${{ github.event.pull_request.body }}",
+        },
+      },
+    ],
+  });
+  expect(PRIVACY_ENV.PRIVACY_DENY_PATTERNS).toBe(
+    "${{ secrets.PRIVACY_DENY_PATTERNS }}",
+  );
+  // BR-342: the deny secret appears in exactly one place of the workflow.
+  const text = JSON.stringify(workflow());
+  expect(text.split("secrets.PRIVACY_DENY_PATTERNS")).toHaveLength(2);
+  expect(JSON.stringify(scan)).not.toContain("secrets.SONAR");
+  expect(() => {
+    validateWorkflow(workflow());
+  }).not.toThrow();
+});
+
+const privacyMutations: Record<string, (fixture: Workflow) => void> = {
+  "one job on the label array": (fixture) => {
+    job(fixture, "privacy-scan")["runs-on"] = [...LABELS];
+  },
+  "a gate on the label array": (fixture) => {
+    job(fixture, "build")["runs-on"] = [...LABELS];
+  },
+  "privacy-scan with needs": (fixture) => {
+    job(fixture, "privacy-scan").needs = ["changes"];
+  },
+  "privacy-scan with a job if": (fixture) => {
+    job(fixture, "privacy-scan").if = JOB_CONDITIONS.heavy;
+  },
+  "privacy-scan with a job env": (fixture) => {
+    job(fixture, "privacy-scan").env = { PRIVACY_EVENT: "push" };
+  },
+  "a make setup step in privacy-scan": (fixture) => {
+    steps(fixture, "privacy-scan").splice(2, 0, {
+      if: PRIVACY_CONDITIONS.scan,
+      run: "make setup",
+    });
+  },
+  "the deny secret in another step": (fixture) => {
+    find(fixture, "lint", "make lint").env = {
+      PRIVACY_DENY_PATTERNS: "${{ secrets.PRIVACY_DENY_PATTERNS }}",
+    };
+  },
+  "the deny secret in a with": (fixture) => {
+    const checkout = steps(fixture, "privacy-scan")[1];
+    if (checkout?.with)
+      checkout.with.token = "${{ secrets.PRIVACY_DENY_PATTERNS }}";
+  },
+  "the deny secret in the job env": (fixture) => {
+    job(fixture, "privacy-scan").env = {
+      PRIVACY_DENY_PATTERNS: "${{ secrets.PRIVACY_DENY_PATTERNS }}",
+    };
+  },
+  "the deny secret in a Sonar analysis step": (fixture) => {
+    const analysis = find(fixture, "sonar", "make sonar");
+    analysis.env = {
+      ...analysis.env,
+      PRIVACY_DENY_PATTERNS: "${{ secrets.PRIVACY_DENY_PATTERNS }}",
+    };
+  },
+  "a Sonar secret in privacy-scan": (fixture) => {
+    const scan = find(fixture, "privacy-scan", "make privacy-scan");
+    scan.env = { ...scan.env, SONAR_TOKEN: "${{ secrets.SONAR_TOKEN }}" };
+  },
+  "checkout without fetch-depth 0": (fixture) => {
+    delete steps(fixture, "privacy-scan")[1]?.with?.["fetch-depth"];
+  },
+  "checkout with fetch-depth 1": (fixture) => {
+    const checkout = steps(fixture, "privacy-scan")[1];
+    if (checkout?.with) checkout.with["fetch-depth"] = 1;
+  },
+  "checkout persisting credentials": (fixture) => {
+    const checkout = steps(fixture, "privacy-scan")[1];
+    if (checkout?.with) checkout.with["persist-credentials"] = true;
+  },
+  "a scan step without the same-repository if": (fixture) => {
+    delete find(fixture, "privacy-scan", "make privacy-scan").if;
+  },
+  "a scan env value changed": (fixture) => {
+    const scan = find(fixture, "privacy-scan", "make privacy-scan");
+    scan.env = { ...scan.env, PRIVACY_EVENT: "push" };
+  },
+  "a scan env value added": (fixture) => {
+    const scan = find(fixture, "privacy-scan", "make privacy-scan");
+    scan.env = { ...scan.env, PRIVACY_EXTRA: "${{ github.sha }}" };
+  },
+  "make privacy-scan in another job": (fixture) => {
+    steps(fixture, "lint").push({ run: "make privacy-scan" });
+  },
+  "the fork notice in another job": (fixture) => {
+    steps(fixture, "lint").push({ run: PRIVACY_FORK_NOTICE });
+  },
+  "another timeout": (fixture) => {
+    job(fixture, "privacy-scan")["timeout-minutes"] = 30;
+  },
+  "write permission": (fixture) => {
+    job(fixture, "privacy-scan").permissions = { contents: "write" };
+  },
+  "privacy-scan removed": (fixture) => {
+    delete fixture.jobs["privacy-scan"];
+  },
+  "ci-result without privacy-scan": (fixture) => {
+    const entry = job(fixture, "ci-result");
+    entry.needs = (entry.needs ?? []).filter((name) => name !== "privacy-scan");
+  },
+  "ci-result step without the privacy-scan result": (fixture) => {
+    const step = steps(fixture, "ci-result")[0];
+    if (step)
+      step.if =
+        "needs.changes.result != 'success' || contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')";
+  },
+};
+it.each(Object.keys(privacyMutations))(
+  "BR-341 BR-342 rejects privacy-scan mutation: %s",
+  (name) => {
+    const fixture = workflow();
+    privacyMutations[name]?.(fixture);
+    expect(fixture).not.toEqual(workflow());
+    expect(() => {
+      validateWorkflow(fixture);
+    }).toThrow();
+  },
+);
+
+it("BR-350 step 1 of privacy-scan prints the fork notice only for fork pull requests", () => {
+  const [notice] = steps(workflow(), "privacy-scan");
+  expect(notice).toEqual({
+    if: PRIVACY_CONDITIONS.fork,
+    run: PRIVACY_FORK_NOTICE,
+  });
+  expect(PRIVACY_FORK_NOTICE).toBe(
+    "printf '%s\\n' 'privacy-scan: fork pull request; deny patterns are unavailable, no scan was run.'",
+  );
+  expect(PRIVACY_CONDITIONS.fork).toBe(
+    "github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository",
+  );
+  const result = spawnSync("bash", ["-c", PRIVACY_FORK_NOTICE], {
+    encoding: "utf8",
+  });
+  expect(result.status).toBe(0);
+  expect(result.stdout).toBe(
+    "privacy-scan: fork pull request; deny patterns are unavailable, no scan was run.\n",
+  );
+});
+
+// ------------------------------------------------------------ BR-229 v2
+function acceptance(): AcceptanceWorkflow {
+  return JSON.parse(
+    readFileSync(".github/workflows/runner-acceptance.yml", "utf8"),
+  ) as AcceptanceWorkflow;
+}
+it("BR-229 v2 runner acceptance runs only on dispatch and never in this repository", () => {
+  const fixture = acceptance();
+  expect(Object.keys(fixture.on)).toEqual(["workflow_dispatch"]);
+  for (const entry of Object.values(fixture.jobs))
+    expect(entry.if).toBe("github.repository != 'sstolz/kdrive-mcp-server'");
+  expect(RUNNER_ACCEPTANCE_GUARD).toBe(
+    "github.repository != 'sstolz/kdrive-mcp-server'",
+  );
+  expect(() => {
+    validateRunnerAcceptance(fixture);
+  }).not.toThrow();
+});
+const acceptanceMutations: Record<
+  string,
+  (fixture: AcceptanceWorkflow) => void
+> = {
+  "a job without the guard": (fixture) => {
+    const probe = fixture.jobs.probe;
+    if (probe) delete probe.if;
+  },
+  "another guard": (fixture) => {
+    const mark = fixture.jobs["reset-mark"];
+    if (mark) mark.if = "github.repository == 'sstolz/kdrive-mcp-server'";
+  },
+  "a push trigger": (fixture) => {
+    fixture.on.push = { branches: ["main"] };
+  },
+};
+it.each(Object.keys(acceptanceMutations))(
+  "BR-229 v2 rejects runner acceptance mutation: %s",
+  (name) => {
+    const fixture = acceptance();
+    acceptanceMutations[name]?.(fixture);
+    expect(() => {
+      validateRunnerAcceptance(fixture);
     }).toThrow();
   },
 );

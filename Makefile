@@ -8,7 +8,7 @@ COMPOSE = "$(DOCKER)" compose
 	coverage sonar sonar-pr quality oidc-qualify http-acceptance kdrive-record kdrive-acceptance \
 	kdrive-write-acceptance kdrive-upload-acceptance \
 	image-binfmt image image-smoke \
-	audit ci-changes runner-probe runner-reset-mark runner-reset-check \
+	audit ci-changes privacy-scan runner-probe runner-reset-mark runner-reset-check \
 	_require-container-config _require-config _require-setup
 
 help:
@@ -39,6 +39,7 @@ help:
 		'  make image         Build runtime and smoke images per IMAGE_PLATFORMS (host Buildx, --load)' \
 		'  make image-smoke   Smoke-test the local images per IMAGE_PLATFORMS (no network, no port)' \
 		'  make image-binfmt  Register arm64 emulation on a non-arm64 host (privileged, opt-in)' \
+		'  make privacy-scan  CI privacy scan with deny patterns from PRIVACY_DENY_PATTERNS (no setup)' \
 		'  make help          Show this help without Docker or network access'; }
 
 _require-container-config:
@@ -221,6 +222,12 @@ ci-changes:
 	esac; \
 	printf '%s\n' "$$result"; \
 	printf '%s\n' "$$result" >> "$$GITHUB_OUTPUT"
+
+# F-023 BR-342, BR-352: the secret-fed privacy scan. Node built-ins only, so
+# no make setup; every PRIVACY_* value is passed by name, never on the command
+# line.
+privacy-scan: _require-container-config
+	$(COMPOSE) run --rm -T -e PRIVACY_DENY_PATTERNS -e PRIVACY_EVENT -e PRIVACY_RANGE_BASE -e PRIVACY_RANGE_HEAD -e PRIVACY_PR_TITLE -e PRIVACY_PR_BODY dev node scripts/privacy-scan.ts
 
 # F-015 BR-229–BR-231: owner-dispatched runner acceptance
 # (.github/workflows/runner-acceptance.yml). Self-hosted runner only: they use

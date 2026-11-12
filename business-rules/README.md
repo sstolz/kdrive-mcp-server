@@ -1,6 +1,6 @@
 # Business-rule index
 
-All **332 allocated rules** (BR-218–BR-233 belong to F-015, BR-234–BR-259 to F-016, BR-260–BR-278 to F-017, BR-279–BR-289 to F-018, BR-290 and BR-292–BR-314 to F-019, BR-315–BR-321 to F-020, BR-322–BR-327 to F-021, BR-328–BR-340 to F-022; BR-291 and BR-305–BR-311 are reserved for #109 and have no record) now have a canonical record with YAML metadata, Rule,
+All **344 allocated rules** (BR-218–BR-233 belong to F-015, BR-234–BR-259 to F-016, BR-260–BR-278 to F-017, BR-279–BR-289 to F-018, BR-290 and BR-292–BR-314 to F-019, BR-315–BR-321 to F-020, BR-322–BR-327 to F-021, BR-328–BR-340 to F-022, BR-341–BR-352 to F-023; BR-291 and BR-305–BR-311 are reserved for #109 and have no record) now have a canonical record with YAML metadata, Rule,
 Rationale, concrete Given / When / Then Examples, Verification and History. Every
 new record begins its initial BR version1; BR-042 is now version2 under F-003 v2; BR-024 and BR-100
 version 2 were accepted with F-010 (#21) on main `3fc14c3`. BR-010, BR-012 and BR-014 v2 and BR-015 v3
@@ -17,7 +17,7 @@ F-002 acceptance (archived evidence `runs/33-acceptance-1.md`) on
 #4 (archive issue 4),
 #31 (archive issue 31) and
 #33 (archive issue 33).
-There are **325 active and 7 superseded** rules (F-022 v2, with BR-328–BR-340 (BR-335 v2, the others v1) and BR-146 v2, was accepted on actual main `e7d6367` on 2026-11-12; F-021 v1, with BR-322–BR-327 v1 and BR-154 v2, BR-156 v2, BR-162 v2, BR-167 v2, BR-168 v2, BR-180 v2, BR-181 v2, BR-184 v2 and BR-187 v3, was accepted on actual main `e208996` on 2026-11-11; F-020 v1, with BR-315–BR-321 v1 and BR-015 v6, BR-122 v2, BR-225 v2 and BR-227 v2, was accepted on actual main `b6acf86` on 2026-11-11; F-019 v1, with BR-290, BR-292–BR-304 and BR-312–BR-314 v1 and BR-023 v2, BR-024 v3, BR-124 v2, BR-128 v2, BR-139 v2, BR-140 v2, BR-142 v2, BR-143 v2, BR-152 v2 and BR-169 v2, was accepted on actual main `68209fe` on 2026-11-11; F-018 v1, with BR-279–BR-289 and BR-035 v2, BR-060 v6, BR-190 v3, BR-266 v2 and BR-274 v2, was accepted on actual main `0f1852c` on 2026-11-10; F-017 v1, with BR-260–BR-278 and BR-039 v2, BR-060 v5, BR-190 v2 and BR-200 v2, was accepted on actual main `4b59c52` on 2026-11-10; F-016 v1, with BR-234–BR-259 and BR-069/BR-070 v2, was accepted on actual main `005b9ba` on 2026-11-10; F-003 v2 and F-004 v1, with BR-029–BR-058, were accepted on 2026-11-09 through the F-014 production acceptance; F-014 v7, with BR-190–BR-217 and BR-016, BR-028, BR-071, BR-123 and BR-175 v2, was accepted on actual main `2a9c1e3` on 2026-11-09). Acceptance covers local
+There are **325 active, 7 superseded and 12 pending-acceptance** rules (F-023 v1, with BR-341–BR-352 v1 and BR-015 v7, BR-149 v3, BR-183 v3, BR-225 v3, BR-227 v3, BR-229 v2 and BR-320 v2, is pending acceptance; until then the previous versions of the versioned rules stay active; F-022 v2, with BR-328–BR-340 (BR-335 v2, the others v1) and BR-146 v2, was accepted on actual main `e7d6367` on 2026-11-12; F-021 v1, with BR-322–BR-327 v1 and BR-154 v2, BR-156 v2, BR-162 v2, BR-167 v2, BR-168 v2, BR-180 v2, BR-181 v2, BR-184 v2 and BR-187 v3, was accepted on actual main `e208996` on 2026-11-11; F-020 v1, with BR-315–BR-321 v1 and BR-015 v6, BR-122 v2, BR-225 v2 and BR-227 v2, was accepted on actual main `b6acf86` on 2026-11-11; F-019 v1, with BR-290, BR-292–BR-304 and BR-312–BR-314 v1 and BR-023 v2, BR-024 v3, BR-124 v2, BR-128 v2, BR-139 v2, BR-140 v2, BR-142 v2, BR-143 v2, BR-152 v2 and BR-169 v2, was accepted on actual main `68209fe` on 2026-11-11; F-018 v1, with BR-279–BR-289 and BR-035 v2, BR-060 v6, BR-190 v3, BR-266 v2 and BR-274 v2, was accepted on actual main `0f1852c` on 2026-11-10; F-017 v1, with BR-260–BR-278 and BR-039 v2, BR-060 v5, BR-190 v2 and BR-200 v2, was accepted on actual main `4b59c52` on 2026-11-10; F-016 v1, with BR-234–BR-259 and BR-069/BR-070 v2, was accepted on actual main `005b9ba` on 2026-11-10; F-003 v2 and F-004 v1, with BR-029–BR-058, were accepted on 2026-11-09 through the F-014 production acceptance; F-014 v7, with BR-190–BR-217 and BR-016, BR-028, BR-071, BR-123 and BR-175 v2, was accepted on actual main `2a9c1e3` on 2026-11-09). Acceptance covers local
 configuration, synthetic injected preflight, accepted #8/#9/#10 injected scopes and the accepted #11 OIDC qualification tooling and validator, and the accepted #14 injected bounded extraction (F-009); F-008 qualified Infomaniak and Gitea as `proxy-only`. The #12 authenticated HTTP
 listener in proxy mode is accepted with one real claude.ai connection over a synthetic drive. The production read-only
 kDrive adapter and the stdio and HTTP runtime of the packaged CLI are accepted with F-014.
@@ -631,3 +631,32 @@ for BR-146 the new version is the active rule.
 | [BR-339](BR-339.md) | v1      | No change to `ci.yml` or `compose.yaml`.                                   | [F-022 v1](../features/F-022-sonar-gate-summary.md) | Active |
 | [BR-340](BR-340.md) | v1      | Development docs: formats, degraded line, upgrade path.                    | [F-022 v1](../features/F-022-sonar-gate-summary.md) | Active |
 | [BR-146](BR-146.md) | v2      | Summary lines pass through `redact`; fixed messages name no host or token. | [F-022 v1](../features/F-022-sonar-gate-summary.md) | Active |
+
+## Pending acceptance — hosted CI and privacy scan
+
+F-023 v1 (#1) allocates BR-341–BR-352 v1 and versions BR-015 to v7, BR-149,
+BR-183, BR-225 and BR-227 to v3, and BR-229 and BR-320 to v2. All are pending
+acceptance on actual main; until then the previous version of each versioned
+rule stays the active rule.
+
+| ID                  | Version | Rule                                                                 | Source                                                  | Status             |
+| ------------------- | ------- | -------------------------------------------------------------------- | ------------------------------------------------------- | ------------------ |
+| [BR-341](BR-341.md) | v1      | CI `privacy-scan` job: hosted, read-only, 20 min, three exact steps. | [F-023 v1](../features/F-023-hosted-ci-privacy-scan.md) | Pending acceptance |
+| [BR-342](BR-342.md) | v1      | Deny secret only in the scan step; passed by name; never printed.    | [F-023 v1](../features/F-023-hosted-ci-privacy-scan.md) | Pending acceptance |
+| [BR-343](BR-343.md) | v1      | Secret format: lines, `#` comments, `giu` regexes, physical numbers. | [F-023 v1](../features/F-023-hosted-ci-privacy-scan.md) | Pending acceptance |
+| [BR-344](BR-344.md) | v1      | Exit 2 with a fixed message on a missing secret or invalid regex.    | [F-023 v1](../features/F-023-hosted-ci-privacy-scan.md) | Pending acceptance |
+| [BR-345](BR-345.md) | v1      | Tracked entries from the object database; decoders and views.        | [F-023 v1](../features/F-023-hosted-ci-privacy-scan.md) | Pending acceptance |
+| [BR-346](BR-346.md) | v1      | Commit range or full history: messages, identities, changed blobs.   | [F-023 v1](../features/F-023-hosted-ci-privacy-scan.md) | Pending acceptance |
+| [BR-347](BR-347.md) | v1      | PR title and body scanned only on `pull_request`.                    | [F-023 v1](../features/F-023-hosted-ci-privacy-scan.md) | Pending acceptance |
+| [BR-348](BR-348.md) | v1      | Hit lines: location and pattern number only; `file #k` paths.        | [F-023 v1](../features/F-023-hosted-ci-privacy-scan.md) | Pending acceptance |
+| [BR-349](BR-349.md) | v1      | Summary line, exit 0/1, one fixed internal-error line, exit 2.       | [F-023 v1](../features/F-023-hosted-ci-privacy-scan.md) | Pending acceptance |
+| [BR-350](BR-350.md) | v1      | Fork PR notice step, exit 0.                                         | [F-023 v1](../features/F-023-hosted-ci-privacy-scan.md) | Pending acceptance |
+| [BR-351](BR-351.md) | v1      | Runner guide: safe only privately, never attached here.              | [F-023 v1](../features/F-023-hosted-ci-privacy-scan.md) | Pending acceptance |
+| [BR-352](BR-352.md) | v1      | Node built-ins only; `make privacy-scan` without `make setup`.       | [F-023 v1](../features/F-023-hosted-ci-privacy-scan.md) | Pending acceptance |
+| [BR-015](BR-015.md) | v7      | Job set adds `privacy-scan`; hosted runners; deny secret placement.  | [F-023 v1](../features/F-023-hosted-ci-privacy-scan.md) | Pending acceptance |
+| [BR-149](BR-149.md) | v3      | `sonar-pr` on `ubuntu-24.04`.                                        | [F-023 v1](../features/F-023-hosted-ci-privacy-scan.md) | Pending acceptance |
+| [BR-183](BR-183.md) | v3      | `image` on `ubuntu-24.04`.                                           | [F-023 v1](../features/F-023-hosted-ci-privacy-scan.md) | Pending acceptance |
+| [BR-225](BR-225.md) | v3      | Every `ci.yml` job on `ubuntu-24.04`; `privacy-scan` 20.             | [F-023 v1](../features/F-023-hosted-ci-privacy-scan.md) | Pending acceptance |
+| [BR-227](BR-227.md) | v3      | `ci-result` needs `privacy-scan` and fails unless it succeeded.      | [F-023 v1](../features/F-023-hosted-ci-privacy-scan.md) | Pending acceptance |
+| [BR-229](BR-229.md) | v2      | Runner acceptance guarded off this repository.                       | [F-023 v1](../features/F-023-hosted-ci-privacy-scan.md) | Pending acceptance |
+| [BR-320](BR-320.md) | v2      | `audit` on `ubuntu-24.04`.                                           | [F-023 v1](../features/F-023-hosted-ci-privacy-scan.md) | Pending acceptance |

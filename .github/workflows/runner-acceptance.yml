@@ -22,6 +22,7 @@
   "jobs": {
     "probe": {
       "runs-on": ["self-hosted", "linux", "x64", "kdrive-ci"],
+      "if": "github.repository != 'sstolz/kdrive-mcp-server'",
       "timeout-minutes": 10,
       "steps": [
         {
@@ -41,6 +42,7 @@
     },
     "reset-mark": {
       "runs-on": ["self-hosted", "linux", "x64", "kdrive-ci"],
+      "if": "github.repository != 'sstolz/kdrive-mcp-server'",
       "timeout-minutes": 10,
       "steps": [
         {
@@ -56,6 +58,7 @@
     },
     "reset-check": {
       "runs-on": ["self-hosted", "linux", "x64", "kdrive-ci"],
+      "if": "github.repository != 'sstolz/kdrive-mcp-server'",
       "timeout-minutes": 10,
       "needs": ["reset-mark"],
       "steps": [
