@@ -2,6 +2,7 @@
 // temporary Git repositories only. No network.
 import { execFileSync, spawnSync } from "node:child_process";
 import {
+  chmodSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -458,8 +459,40 @@ describe("BR-349 internal error", () => {
   });
 });
 
+describe("BR-342 secret confinement", () => {
+  it("BR-342 no git child receives PRIVACY_* variables or a pattern", () => {
+    const fixture = repository();
+    fixture.write("a.txt", "plain\n");
+    const head = fixture.commit("init");
+    const realGit = execFileSync("/bin/sh", ["-c", "command -v git"], {
+      encoding: "utf8",
+    }).trim();
+    const stubDir = temporary("privacy-scan-stub-");
+    const log = join(stubDir, "calls.log");
+    const stub = join(stubDir, "git");
+    writeFileSync(
+      stub,
+      `#!/bin/sh\n{ printf 'ARGV %s\\n' "$*"; env; } >> '${log}'\nexec '${realGit}' "$@"\n`,
+    );
+    chmodSync(stub, 0o755);
+    const result = scan(fixture.root, {
+      PATH: `${stubDir}:${process.env.PATH ?? "/usr/bin:/bin"}`,
+      PRIVACY_DENY_PATTERNS: PATTERNS,
+      PRIVACY_EVENT: "push",
+      PRIVACY_RANGE_BASE: "",
+      PRIVACY_RANGE_HEAD: head,
+    });
+    expect(result.status).toBe(0);
+    const calls = readFileSync(log, "utf8");
+    expect(calls).toContain("ARGV ");
+    expect(calls).not.toContain("PRIVACY_");
+    for (const pattern of PATTERNS.split("\n").filter((line) => line.trim()))
+      expect(calls).not.toContain(pattern);
+  });
+});
+
 describe("BR-352 Makefile and imports", () => {
-  it("BR-352 Makefile runs the scan in dev by variable name only, without setup", () => {
+  it("BR-342 BR-352 Makefile runs the scan in dev by variable name only, without setup", () => {
     const makefile = readFileSync("Makefile", "utf8");
     const block = /^privacy-scan:(.*)\n((?:\t.*\n)+)/mu.exec(makefile);
     expect(block?.[1]).toBe(" _require-container-config");

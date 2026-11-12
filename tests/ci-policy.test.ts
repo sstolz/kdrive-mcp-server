@@ -1392,7 +1392,7 @@ const privacyMutations: Record<string, (fixture: Workflow) => void> = {
   },
 };
 it.each(Object.keys(privacyMutations))(
-  "BR-341 rejects privacy-scan mutation: %s",
+  "BR-341 BR-342 rejects privacy-scan mutation: %s",
   (name) => {
     const fixture = workflow();
     privacyMutations[name]?.(fixture);
