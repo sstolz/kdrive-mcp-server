@@ -509,6 +509,26 @@ describe("F-024 AC-08 registry checks", () => {
       "unexpected GHCR token status 401; refer to the owner",
     ],
     [
+      "GHCR token 200 without a token",
+      "true",
+      "verify",
+      (s) => {
+        s.ghcrToken = { status: 200, body: { access_token: 1 } };
+      },
+      ["GHCR image"],
+      "unexpected GHCR token status 0; refer to the owner",
+    ],
+    [
+      "GHCR token 200 with a non-string token",
+      "true",
+      "verify",
+      (s) => {
+        s.ghcrToken = { status: 200, body: { token: 7 } };
+      },
+      ["GHCR image"],
+      "unexpected GHCR token status 0; refer to the owner",
+    ],
+    [
       "dry run false npm 404",
       "false",
       "verify",
@@ -573,6 +593,10 @@ describe("F-024 AC-08 registry checks", () => {
     ["a body without versions", "true", { "dist-tags": { latest: "x" } }],
     ["a body without versions", "false", { "dist-tags": { latest: "x" } }],
     ["versions not an object", "true", { versions: "0.6.0-beta.1" }],
+    ["a body without time", "true", { versions: {} }],
+    ["a body without time", "false", { versions: {} }],
+    ["time not an object", "true", { versions: {}, time: "0.6.0-beta.1" }],
+    ["time an array", "false", { versions: {}, time: ["0.6.0-beta.1"] }],
   ])(
     "BR-363 already published: npm 200 with %s fails closed (dry run %s)",
     async (_name, dryRun, body) => {
@@ -908,15 +932,19 @@ describe("F-024 AC-10 npm publish", () => {
   const publishes = (calls: NpmCall[]) =>
     calls.filter((call) => call.argv[0] === "publish");
 
-  it("BR-369 npm publish: dry run", async () => {
+  it("BR-368 BR-369 npm publish: dry run", async () => {
     const { result, calls, digest } = await publish({});
     expect(result.status, result.stdout + result.stderr).toBe(0);
     expect(result.stdout).toContain(`release-npm: tarball sha256 ${digest}\n`);
     expect(publishes(calls)).toHaveLength(1);
     expectPublishArgv(publishes(calls)[0]!.argv, true);
+    expect(calls.map((call) => call.argv)).toEqual([
+      ["--version"],
+      [...PUBLISH_ARGV, "--dry-run"],
+    ]);
   });
 
-  it("BR-369 npm publish: real run with OIDC and the verify digest", async () => {
+  it("BR-368 BR-369 npm publish: real run with OIDC and the verify digest", async () => {
     const { result, calls, digest } = await publish((verified) => ({
       env: {
         RELEASE_DRY_RUN: "false",
@@ -928,6 +956,10 @@ describe("F-024 AC-10 npm publish", () => {
     expect(result.stdout).toContain(`release-npm: tarball sha256 ${digest}\n`);
     expect(publishes(calls)).toHaveLength(1);
     expectPublishArgv(publishes(calls)[0]!.argv, false);
+    expect(calls.map((call) => call.argv)).toEqual([
+      ["--version"],
+      PUBLISH_ARGV,
+    ]);
   });
 
   it.each([
@@ -1100,6 +1132,53 @@ describe("F-024 AC-10 npm publish", () => {
       expect(result.status).toBe(code === 0 ? 0 : 1);
     },
   );
+  it("BR-369 npm publish: a failed publish prints only npm's bare error code (BR-365)", async () => {
+    const { result, calls } = await publish({
+      env: {
+        FAKE_NPM_STATUS: "1",
+        FAKE_NPM_PUBLISH_OUTPUT: [
+          '{"_id":"@sstolz/kdrive-mcp-server","BODY-MARKER":"registry"}',
+          "npm error code E403",
+          "npm error 403 Forbidden - PUT BODY-MARKER",
+          "npm error code E403 BODY-MARKER",
+          " npm error code EBODYMARKER",
+        ].join("\n"),
+      },
+    });
+    expect(publishes(calls)).toHaveLength(1);
+    const output = result.stdout + result.stderr;
+    expect(output).not.toContain("BODY-MARKER");
+    expect(output).not.toContain("EBODYMARKER");
+    expect(output).not.toContain("Forbidden");
+    expect(result.stderr).toBe("");
+    expect(result.stdout).toContain(
+      "release-npm: publish exit 1\nrelease-npm: npm error code E403\n",
+    );
+    expect(result.stdout.split("npm error code").length - 1).toBe(1);
+    expect(result.status).toBe(1);
+  });
+  it("BR-369 npm publish: a failed publish without an error code prints no code line", async () => {
+    const { result } = await publish({
+      env: {
+        FAKE_NPM_STATUS: "1",
+        FAKE_NPM_PUBLISH_OUTPUT: "npm ERR! code e403\nnpm ERR! code E403 x",
+      },
+    });
+    expect(result.stdout).not.toContain("npm error code");
+    expect(result.stdout).toContain("release-npm: publish exit 1\n");
+    expect(result.status).toBe(1);
+  });
+  it("BR-369 npm publish: the legacy npm ERR! prefix is recognised (BR-365)", async () => {
+    const { result } = await publish({
+      env: {
+        FAKE_NPM_STATUS: "1",
+        FAKE_NPM_PUBLISH_OUTPUT: "BODY-MARKER\nnpm ERR! code E404",
+      },
+    });
+    expect(result.stdout).toContain("release-npm: npm error code E404\n");
+    expect(result.stdout).not.toContain("BODY-MARKER");
+    expect(result.status).toBe(1);
+  });
   it.each(refusals)("BR-369 npm publish: %s", async (_name, setup, message) => {
     const { result, calls } = await publish(setup);
     expect(result.status).toBe(1);
@@ -1166,7 +1245,7 @@ describe("F-024 AC-11 image build", () => {
     expect(create).toMatch(/image=moby\/buildkit:v[\d.]+@sha256:[0-9a-f]{64}/u);
   });
 
-  it("BR-370 image build: real run logs in through stdin, pushes one tag and logs out", async () => {
+  it("BR-368 BR-370 image build: real run logs in through stdin, pushes one tag and logs out", async () => {
     const { result, calls, stdin } = await image({
       RELEASE_DRY_RUN: "false",
       GITHUB_TOKEN: TOKEN,

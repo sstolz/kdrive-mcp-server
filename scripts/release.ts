@@ -401,8 +401,11 @@ function npmChecks(report: Report, inputs: Inputs, answer: Answer): void {
     published = inputs.dryRun ? null : "npm registry status 404";
   else if (answer.status !== 200)
     published = `npm registry status ${String(answer.status)}`;
-  else if (!isRecord(field(document, "versions")))
-    // A 200 body that is not an object with a `versions` object fails closed.
+  else if (
+    !isRecord(field(document, "versions")) ||
+    !isRecord(field(document, "time"))
+  )
+    // A 200 body without `versions` and `time` objects fails closed.
     published = "npm document unreadable; refer to the owner";
   else if (
     hasKey(field(document, "versions"), inputs.version) ||
@@ -441,11 +444,11 @@ async function ghcrToken(
     { headers },
   );
   const token = field(parse(answer), "token");
-  return {
-    status:
-      answer.status === 200 && typeof token === "string" ? 200 : answer.status,
-    token: typeof token === "string" ? token : "",
-  };
+  if (answer.status !== 200) return { status: answer.status, token: "" };
+  // A 200 answer without a token string fails closed (status 0).
+  return typeof token === "string"
+    ? { status: 200, token }
+    : { status: 0, token: "" };
 }
 const manifest = (tag: string, token: string, method = "GET") =>
   request(`${endpoint("RELEASE_GHCR_URL")}/v2/${IMAGE}/manifests/${tag}`, {
@@ -527,8 +530,17 @@ function npmChild(args: string[]) {
   // eslint-disable-next-line sonarjs/no-os-command-from-path -- F-024: the Docker-only dev image fixes PATH (Dockerfile.dev)
   return spawnSync("npm", args, {
     encoding: "utf8",
+    maxBuffer: 16 * 1024 * 1024,
     stdio: ["ignore", "pipe", "pipe"],
   });
+}
+/** BR-365: only npm's bare error code, from an anchored whole-line match. */
+function npmErrorCode(output: string): string | null {
+  for (const line of output.split(/\r?\n/u)) {
+    const match = /^npm (?:error|ERR!) code (E[A-Z0-9_]+)$/u.exec(line);
+    if (match?.[1]) return match[1];
+  }
+  return null;
 }
 function npmVersionOk(): boolean {
   const result = npmChild(["--version"]);
@@ -606,6 +618,10 @@ function publishNpm(): number {
   if (result.error) throw result.error;
   const code = result.status ?? 1;
   process.stdout.write(`release-npm: publish exit ${String(code)}\n`);
+  const errorCode =
+    code === 0 ? null : npmErrorCode(`${result.stdout}\n${result.stderr}`);
+  if (errorCode)
+    process.stdout.write(`release-npm: npm error code ${errorCode}\n`);
   if (code !== 0) throw new FixedExit(1, "npm publish failed");
   process.stdout.write("release-npm: done\n");
   return 0;
