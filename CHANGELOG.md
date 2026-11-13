@@ -11,7 +11,7 @@ release (BR-321 v1 pins the #104 lines under Unreleased until then).
 
 ### Added
 
-- #2 / F-024 v2 (pending acceptance): gated beta publication. The npm package
+- #2 / F-024 v2 (accepted 2026-11-13): gated beta publication. The npm package
   is renamed `@sstolz/kdrive-mcp-server` (command unchanged; `make pack`
   writes `artifacts/sstolz-kdrive-mcp-server-<version>.tgz`), and a
   dispatch-only `release.yml` with `make release-*` targets checks the tagged
