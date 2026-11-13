@@ -1,4 +1,5 @@
 // F-026: bounded invocation queue in front of the single invocation slot.
+import { getEventListeners } from "node:events";
 import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createStderrSink } from "../src/audit/sink.js";
@@ -318,11 +319,24 @@ describe("F-026 bounded invocation queue (controller)", () => {
     const probe = await setup();
     await probe.c.invoke("kdrive_info", { file_id: 3 });
     const perInfo = probe.f.inspect.mock.calls.length;
+    const firsts: string[] = [];
     for (const timerFirst of [true, false]) {
-      const g = await setup(() => later(12_000, ok()));
+      const order: string[] = [];
+      const g = await setup(
+        () =>
+          new Promise((resolve) =>
+            setTimeout(() => {
+              order.push("release");
+              resolve(ok());
+            }, 12_000),
+          ),
+      );
       void g.c.mutate("kdrive_rename", renameFile, stdio);
       if (!timerFirst) await vi.advanceTimersByTimeAsync(0);
-      const a = g.c.invoke("kdrive_info", { file_id: 3 });
+      const a = g.c.invoke("kdrive_info", { file_id: 3 }).then((r) => {
+        order.push("waiter");
+        return r;
+      });
       await vi.advanceTimersByTimeAsync(1);
       const b = g.c.invoke("kdrive_info", { file_id: 3 });
       const calls = g.f.inspect.mock.calls.length;
@@ -332,10 +346,16 @@ describe("F-026 bounded invocation queue (controller)", () => {
       expect((await b).isError).toBeUndefined();
       // Only b's own lookup ran: the refused waiter made no request.
       expect(g.f.inspect.mock.calls.length - calls).toBe(perInfo);
+      firsts.push(order[0] ?? "");
     }
+    // The two passes ran the two callbacks in opposite orders.
+    expect(firsts).toEqual(["waiter", "release"]);
   });
 
   it("TestBR383_taker_rechecks_abort_with_zero_requests", async () => {
+    const probe = await setup();
+    await probe.c.invoke("kdrive_info", { file_id: 3 });
+    const perInfo = probe.f.inspect.mock.calls.length;
     const h = await setup();
     const release = h.holdInspect();
     const running = h.c.invoke("kdrive_info", { file_id: 3 });
@@ -344,15 +364,20 @@ describe("F-026 bounded invocation queue (controller)", () => {
     const next = h.c.invoke("kdrive_info", { file_id: 3 });
     await settle();
     const calls = h.f.inspect.mock.calls.length;
+    // The abort lands in the same step as the release, before the running
+    // invocation settles; the abort listener removes the waiter, and the
+    // re-check in `next()` stays a defensive guard for the same outcome.
     release();
     abort.abort();
     await running;
     expect(await aborted).toEqual(DENIED);
     expect((await next).isError).toBeUndefined();
-    expect(h.f.inspect.mock.calls.length).toBeGreaterThan(calls);
+    // Only `next` made requests after the release: the aborted waiter none.
+    expect(h.f.inspect.mock.calls.length - calls).toBe(perInfo);
   });
 
   it("TestBR385_aborted_waiter_leaves_queue_with_zero_requests", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     const h = await setup();
     const release = h.holdInspect();
     const running = h.c.invoke("kdrive_info", { file_id: 3 });
@@ -366,10 +391,15 @@ describe("F-026 bounded invocation queue (controller)", () => {
       .invoke("kdrive_info", { file_id: 3 })
       .then(() => order.push("C"));
     await settle();
-    const calls = h.f.inspect.mock.calls.length;
+    const calls = h.f.inspect.mock.calls.length,
+      timers = vi.getTimerCount();
+    expect(getEventListeners(abort.signal, "abort")).toHaveLength(1);
     abort.abort();
     expect(await b).toEqual(DENIED);
     expect(h.f.inspect.mock.calls).toHaveLength(calls);
+    // B's wait timer and abort listener are gone.
+    expect(getEventListeners(abort.signal, "abort")).toHaveLength(0);
+    expect(vi.getTimerCount()).toBe(timers - 1);
     release();
     await Promise.all([running, a, c]);
     expect(order).toEqual(["A", "C"]);

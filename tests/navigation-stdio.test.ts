@@ -261,6 +261,7 @@ describe("BR-070 finite outbound ownership", () => {
     };
   };
   it("TestBR388_seventh_waiting_frame_is_admitted_eighth_closes", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     const output = new Writable({ highWaterMark: 1, write() {} }),
       w = make(output);
     await w.transport.start();
@@ -268,13 +269,14 @@ describe("BR-070 finite outbound ownership", () => {
     const sends = Array.from({ length: 7 }, () =>
       w.transport.send(message(10)).catch(() => "closed"),
     );
-    await new Promise((r) => setTimeout(r, 5));
+    await vi.advanceTimersByTimeAsync(5);
     expect(output.destroyed).toBe(false);
     expect(w.diagnostics()).toBe("");
     await expect(w.transport.send(message(10))).rejects.toThrow();
     expect(await Promise.all(sends)).toEqual(Array(7).fill("closed"));
     expect(output.destroyed).toBe(true);
     expect(output.listenerCount("drain")).toBe(0);
+    expect(vi.getTimerCount()).toBe(0);
     expect(w.diagnostics()).toBe("STDIO_OUTPUT_FAILED\n");
     expect(w.failures()).toBe(1);
     await w.transport.close();
