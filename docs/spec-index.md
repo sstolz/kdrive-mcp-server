@@ -71,7 +71,7 @@ override the current Docker-only development contract.
 | F-023 | #1      | `features/F-023-hosted-ci-privacy-scan.md`     | Done v1, accepted on main ad25fa2 (2026-11-12); BR-341–352 and BR-015 v7, BR-149/183/225/227 v3, BR-229/320 v2 active                                                                                           |
 | F-024 | #2      | `features/F-024-gated-publication.md`          | Done v2, accepted on main 163e701 (2026-11-13; v1 in history); BR-353–375, BR-378, BR-379 and BR-016/178 v3 active; BR-376/377 withdrawn, never reused                                                          |
 | F-025 | #2      | `features/F-025-changelog-release-sections.md` | Done v1, accepted on main e857db3 (2026-11-13); BR-321 v3 active (v2 withdrawn in F-024 v2, never reused)                                                                                                       |
-| F-026 | #16     | `features/F-026-bounded-invocation-queue.md`   | Frozen v1; BR-380–388 v1 and BR-258 v2, BR-070 v3, BR-118 v2 pending acceptance; until then BR-258 v1, BR-070 v2 and BR-118 v1 stay active                                        |
+| F-026 | #16     | `features/F-026-bounded-invocation-queue.md`   | Frozen v1; BR-380–388 v1 and BR-258 v2, BR-070 v3, BR-118 v2 pending acceptance; until then BR-258 v1, BR-070 v2 and BR-118 v1 stay active                                                                      |
 
 Version history: [v1 immutable snapshot](../features/history/F-001-v1.md),
 [v2 immutable snapshot](../features/history/F-001-v2.md),
