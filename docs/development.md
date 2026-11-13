@@ -176,8 +176,9 @@ injected MCP registration does not qualify a production adapter/runtime:
 production AC-14/AC-15 and #6 AC-19/AC-20 remain blocked and mandatory. See the
 [security boundary](../SECURITY.md) for the bounded read revocation lag and races.
 
-The development version is `0.1.0` ([VERSION](../VERSION)); changes remain under
-[Unreleased](../CHANGELOG.md#unreleased) until an explicitly authorized release.
+The current version is the beta `0.6.0-beta.1` ([VERSION](../VERSION)); new
+changes go under [Unreleased](../CHANGELOG.md#unreleased) until the next
+explicitly authorized release.
 
 ## Local development
 

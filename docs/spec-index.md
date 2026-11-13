@@ -204,7 +204,7 @@ No template or planning entry grants implementation permission.
 
 ## Readiness and remaining product decisions
 
-The current initial unreleased VERSION remains 0.1.0; this index creates no
+The current VERSION is the first beta, 0.6.0-beta.1 (#2); this index creates no
 release. Product decisions D-03–D-07 and probes E-01–E-03 remain with their
 affected backlog tickets (archive `docs/github-backlog.md`). F-002 validates local configuration
 and an injected preflight boundary only; it does not qualify a real provider,

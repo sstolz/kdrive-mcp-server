@@ -13,9 +13,11 @@ rename, move, trash, restore and upload. Every call goes through a policy
 (configured roots, deny patterns, received-share rules) and every write is
 recorded in an audit log before and after it is sent.
 
-**Status:** development version `0.1.0` ([VERSION](VERSION)). No release has been
-published yet, so you build the image or the package from this repository.
-Changes are listed under [Unreleased](CHANGELOG.md#unreleased).
+**Status:** beta `0.6.0-beta.1` ([VERSION](VERSION)), to be published through
+the gated release workflow described in [docs/publishing.md](docs/publishing.md)
+as npm `@sstolz/kdrive-mcp-server@beta` and image
+`ghcr.io/sstolz/kdrive-mcp-server:0.6.0-beta.1`. You can also build the image or
+the package from this repository. Changes are listed in [CHANGELOG.md](CHANGELOG.md).
 
 ## What it offers
 
@@ -42,12 +44,12 @@ Build from a checkout of this repository:
 ```sh
 make setup        # build the development container and install dependencies
 make image        # container image: kdrive-mcp-server:runtime-<arch>
-make pack         # npm package: ./artifacts/sstolz-kdrive-mcp-server-0.1.0.tgz
+make pack         # npm package: ./artifacts/sstolz-kdrive-mcp-server-0.6.0-beta.1.tgz
 ```
 
 `make image IMAGE_PLATFORMS=linux/amd64` builds one architecture only. Nothing
 is pushed to a registry. To use the CLI on your machine, install the package
-with `npm install -g ./artifacts/sstolz-kdrive-mcp-server-0.1.0.tgz` (keep the
+with `npm install -g ./artifacts/sstolz-kdrive-mcp-server-0.6.0-beta.1.tgz` (keep the
 leading `./`, without which npm reads the argument as a GitHub shorthand); it
 provides the `kdrive-mcp-server` command. `kdrive-mcp-server --help` and
 `--version` need no configuration.

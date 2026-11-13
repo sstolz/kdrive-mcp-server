@@ -83,7 +83,7 @@ chains and frozen meanings; the #35 migration creates initial versioned records
 without inventing earlier BR versions. [The capability map](../capability-map.md) distinguishes provisional
 entries from accepted capabilities. Keep [Unreleased](../CHANGELOG.md) truthful.
 F-001 v1 established the initial unreleased version at 0.1.0; #3 created VERSION
-and package metadata. Both remain at 0.1.0. Changes accumulate under Unreleased
+and package metadata. The first beta is 0.6.0-beta.1 (#2). Changes accumulate under Unreleased
 until an explicitly authorized release; documentation updates do not bump the
 version, create a tag or publish a release.
 
