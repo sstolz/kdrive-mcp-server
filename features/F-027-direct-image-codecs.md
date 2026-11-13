@@ -2,13 +2,16 @@
 id: F-027
 title: Direct image codecs without Jimp
 ticket: "#12"
-status: draft
+status: frozen
 version: 1
 ---
 
 # F-027 — Direct image codecs without Jimp
 
 Author: Claude Opus 5.5 (effort unknown), spec phase, 2026-11-13.
+Frozen 2026-11-13 (autonomous mode, PROJECT.md D-1) on reviewed revision
+`cf27035` after spec reviews 1 (`changes`), 2 and 3 (`approve`), published
+on #12.
 Base: branch `claude/beautiful-maxwell-8mdk2w`, based on `main` at
 `768f1b6`. IDs: F-027, BR-389–BR-392 v1, BR-122 v3, BR-315 v2, BR-318 v2,
 BR-320 v3, BR-321 v4; BR-317 superseded by BR-390; ADR-010 (supersedes
