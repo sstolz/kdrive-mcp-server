@@ -570,19 +570,19 @@ BR-122, BR-225 and BR-227 to v2. All were accepted on actual main `b6acf86` on
 2026-11-11 (evidence (archive issue 104)); for the versioned rules the new version is the
 active rule.
 
-| ID                  | Version | Rule                                                                | Source                                            | Status                                                                            |
-| ------------------- | ------- | ------------------------------------------------------------------- | ------------------------------------------------- | --------------------------------------------------------------------------------- |
-| [BR-315](BR-315.md) | v1      | `package.json` overrides: Jimp `zod` to `$zod`, `minimatch` 11.0.8. | [F-020 v1](../features/F-020-dependency-audit.md) | Active                                                                            |
-| [BR-316](BR-316.md) | v1      | Lockfile: one root `zod` >= 4.6.6, every `minimatch` >= 11.0.1.     | [F-020 v1](../features/F-020-dependency-audit.md) | Active                                                                            |
-| [BR-317](BR-317.md) | v1      | Jimp resolves the root Zod; image route and Zod errors unchanged.   | [F-020 v1](../features/F-020-dependency-audit.md) | Active                                                                            |
-| [BR-318](BR-318.md) | v1      | `skipLibCheck: true` only; locally typed `image.resize` options.    | [F-020 v1](../features/F-020-dependency-audit.md) | Active                                                                            |
-| [BR-319](BR-319.md) | v1      | `make audit` runs `npm audit --audit-level=high`; not in `check`.   | [F-020 v1](../features/F-020-dependency-audit.md) | Active                                                                            |
-| [BR-320](BR-320.md) | v1      | CI `audit` job, needed by `ci-result`, not a Sonar gate.            | [F-020 v1](../features/F-020-dependency-audit.md) | Active                                                                            |
-| [BR-321](BR-321.md) | v1      | Audit documentation: development, `SECURITY.md`, changelog.         | [F-020 v1](../features/F-020-dependency-audit.md) | Active; v3 ([F-025 v1](../features/F-025-changelog-release-sections.md)) accepted |
-| [BR-015](BR-015.md) | v6      | Job set adds `audit`; `make audit` admitted only there.             | [F-020 v1](../features/F-020-dependency-audit.md) | Active                                                                            |
-| [BR-122](BR-122.md) | v2      | Jimp schemas run on the single root Zod 4.                          | [F-020 v1](../features/F-020-dependency-audit.md) | Active                                                                            |
-| [BR-225](BR-225.md) | v2      | `audit` on the label array, `timeout-minutes` 20.                   | [F-020 v1](../features/F-020-dependency-audit.md) | Active                                                                            |
-| [BR-227](BR-227.md) | v2      | `audit` gated on `changes`; `ci-result` needs it.                   | [F-020 v1](../features/F-020-dependency-audit.md) | Active                                                                            |
+| ID                  | Version | Rule                                                                | Source                                            | Status                                                                              |
+| ------------------- | ------- | ------------------------------------------------------------------- | ------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| [BR-315](BR-315.md) | v1      | `package.json` overrides: Jimp `zod` to `$zod`, `minimatch` 11.0.8. | [F-020 v1](../features/F-020-dependency-audit.md) | Active                                                                              |
+| [BR-316](BR-316.md) | v1      | Lockfile: one root `zod` >= 4.6.6, every `minimatch` >= 11.0.1.     | [F-020 v1](../features/F-020-dependency-audit.md) | Active                                                                              |
+| [BR-317](BR-317.md) | v1      | Jimp resolves the root Zod; image route and Zod errors unchanged.   | [F-020 v1](../features/F-020-dependency-audit.md) | Active                                                                              |
+| [BR-318](BR-318.md) | v1      | `skipLibCheck: true` only; locally typed `image.resize` options.    | [F-020 v1](../features/F-020-dependency-audit.md) | Active                                                                              |
+| [BR-319](BR-319.md) | v1      | `make audit` runs `npm audit --audit-level=high`; not in `check`.   | [F-020 v1](../features/F-020-dependency-audit.md) | Active                                                                              |
+| [BR-320](BR-320.md) | v1      | CI `audit` job, needed by `ci-result`, not a Sonar gate.            | [F-020 v1](../features/F-020-dependency-audit.md) | Active                                                                              |
+| [BR-321](BR-321.md) | v1      | Audit documentation: development, `SECURITY.md`, changelog.         | [F-020 v1](../features/F-020-dependency-audit.md) | Active; v3 active since [F-025 v1](../features/F-025-changelog-release-sections.md) |
+| [BR-015](BR-015.md) | v6      | Job set adds `audit`; `make audit` admitted only there.             | [F-020 v1](../features/F-020-dependency-audit.md) | Active                                                                              |
+| [BR-122](BR-122.md) | v2      | Jimp schemas run on the single root Zod 4.                          | [F-020 v1](../features/F-020-dependency-audit.md) | Active                                                                              |
+| [BR-225](BR-225.md) | v2      | `audit` on the label array, `timeout-minutes` 20.                   | [F-020 v1](../features/F-020-dependency-audit.md) | Active                                                                              |
+| [BR-227](BR-227.md) | v2      | `audit` gated on `changes`; `ci-result` needs it.                   | [F-020 v1](../features/F-020-dependency-audit.md) | Active                                                                              |
 
 ## Accepted — container health check
 
