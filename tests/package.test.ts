@@ -78,7 +78,7 @@ it("BR-004 real package allowlist excludes synthetic secrets, source, tests and 
     expect(result.status).toBe(
       args[0] === "--version" || args[0] === "--help" ? 0 : 1,
     );
-    if (args[0] === "--version") expect(result.stdout).toBe("0.1.0\n");
+    if (args[0] === "--version") expect(result.stdout).toBe("0.6.0-beta.1\n");
     else if (args[0] === "--help")
       expect(result.stdout).toContain("Usage: kdrive-mcp-server");
     else {
@@ -259,7 +259,7 @@ function packScoped(): { directory: string; filename: string; count: number } {
 it("BR-016 v3 packs the scoped package with the unchanged command", () => {
   const { directory, filename, count } = packScoped();
   expect(count).toBe(1);
-  expect(filename).toBe("sstolz-kdrive-mcp-server-0.1.0.tgz");
+  expect(filename).toBe("sstolz-kdrive-mcp-server-0.6.0-beta.1.tgz");
   const manifest = JSON.parse(
     readFileSync(join(directory, "package/package.json"), "utf8"),
   ) as { name: string; bin: unknown; repository: unknown };
@@ -275,7 +275,7 @@ it("BR-016 v3 packs the scoped package with the unchanged command", () => {
   const cli = join(directory, "package/dist/cli.js");
   const version = runDiagnostic(cli, ["--version"]);
   expect(version.status).toBe(0);
-  expect(version.stdout).toBe("0.1.0\n");
+  expect(version.stdout).toBe("0.6.0-beta.1\n");
   const help = runDiagnostic(cli, ["--help"]);
   expect(help.stdout.startsWith("Usage: kdrive-mcp-server")).toBe(true);
   // The MCP server-info name and the User-Agent product token stay unscoped.

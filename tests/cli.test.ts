@@ -5,7 +5,7 @@ import { runDiagnostic, runGuarded } from "./helpers/diagnostic.js";
 describe("BR-016 BR-028 diagnostic executable without network or deployment configuration", () => {
   const cli = resolve("dist/cli.js");
   it.each([
-    { args: ["--version"], code: 0, stdout: "0.1.0\n", stderr: "" },
+    { args: ["--version"], code: 0, stdout: "0.6.0-beta.1\n", stderr: "" },
     { args: ["--help"], code: 0, stdout: undefined, stderr: "" },
     {
       args: [],

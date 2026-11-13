@@ -65,7 +65,7 @@ wait)
 logs)
   kind=$(cat "$s/kind-$1")
   case "$kind" in
-    runtime-version) if test "$f" = "$kind"; then echo 9.9.9; else echo 0.1.0; fi ;;
+    runtime-version) if test "$f" = "$kind"; then echo 9.9.9; else echo 0.6.0-beta.1; fi ;;
     runtime-http) if test "$f" = "$kind"; then echo other >&2; else echo 'Configuration error [PREFLIGHT_FAILED] (preflight).' >&2; fi ;;
     runtime-find) if test "$f" = "$kind"; then echo /app/dist; fi ;;
     runtime-uid) if test "$f" = "$kind"; then echo 0; else echo 1000; fi ;;
