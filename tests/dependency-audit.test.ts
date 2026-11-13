@@ -271,16 +271,150 @@ it("TestBR321_audit_docs development, security and changelog state the audit con
   expect(text).toContain("npm install -g");
   expect(text).toMatch(/Zod 3/u);
   const changelog = readFileSync("CHANGELOG.md", "utf8");
-  const unreleased =
-    /^## \[Unreleased\]\n([\s\S]*?)(?=^## |(?![\s\S]))/mu.exec(
-      changelog,
-    )?.[1] ?? "";
-  const fixed = /^### Fixed\n([\s\S]*?)(?=^### |(?![\s\S]))/mu.exec(
-    unreleased,
-  )?.[1];
-  const added = /^### Added\n([\s\S]*?)(?=^### |(?![\s\S]))/mu.exec(
-    unreleased,
-  )?.[1];
-  expect(fixed).toMatch(/#104[\s\S]*GHSA-mrhx-c7xc-m3w5/u);
-  expect(added).toMatch(/#104[\s\S]*make audit/u);
+  expect(changelogAuditSection(changelog)).toBe(
+    "## [0.6.0-beta.1] - 2026-11-13",
+  );
+});
+
+// BR-321 v3: the #104 Fixed and Added lines live in the first release section
+// citing #104 in file order, or under Unreleased when there is no release
+// section. Returns the heading of the section that holds them.
+const RELEASE_HEADING =
+  /^## \[\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?\] - \d{4}-\d{2}-\d{2}$/u;
+const CITES_104 = /#104\b/u;
+
+function changelogAuditSection(changelog: string): string {
+  const sections = changelog
+    .split(/^(?=## )/mu)
+    .filter((part) => part.startsWith("## "))
+    .map((part) => {
+      const end = part.indexOf("\n");
+      return end < 0
+        ? { heading: part, body: "" }
+        : { heading: part.slice(0, end), body: part.slice(end + 1) };
+    });
+  const releases = sections.filter((s) => RELEASE_HEADING.test(s.heading));
+  const target =
+    releases.length > 0
+      ? releases.find((s) => CITES_104.test(s.body))
+      : sections.find((s) => s.heading === "## [Unreleased]");
+  check(target, "no changelog section holds the #104 lines");
+  const holds = (name: string, marker: string) => {
+    const body =
+      new RegExp(
+        `^### ${name}\\n([\\s\\S]*?)(?=^### |(?![\\s\\S]))`,
+        "mu",
+      ).exec(target?.body ?? "")?.[1] ?? "";
+    return body
+      .split(/^(?=- )/mu)
+      .some((entry) => CITES_104.test(entry) && entry.includes(marker));
+  };
+  check(holds("Fixed", "GHSA-mrhx-c7xc-m3w5"), "missing #104 Fixed line");
+  check(holds("Added", "make audit"), "missing #104 Added line");
+  return target?.heading ?? "";
+}
+
+const FIXED_104 = "- #104: advisory GHSA-mrhx-c7xc-m3w5 is fixed.\n";
+const ADDED_104 = "- #104: `make audit` and the CI `audit` job.\n";
+const OTHER = "- #7: another change.\n";
+
+function changelogFixture(
+  ...sections: [heading: string, fixed: string, added: string][]
+): string {
+  let text = "# Changelog\n\nIntro.\n";
+  for (const [heading, fixed, added] of sections) {
+    text += `\n${heading}\n`;
+    if (added) text += `\n### Added\n\n${added}`;
+    if (fixed) text += `\n### Fixed\n\n${fixed}`;
+  }
+  return text;
+}
+
+it("TestBR321_audit_docs changelog release section holding the #104 lines passes", () => {
+  const fixture = changelogFixture(
+    ["## [Unreleased]", "", ""],
+    ["## [0.6.0-beta.1] - 2026-11-13", FIXED_104 + OTHER, OTHER + ADDED_104],
+  );
+  expect(changelogAuditSection(fixture)).toBe("## [0.6.0-beta.1] - 2026-11-13");
+});
+
+it("TestBR321_audit_docs changelog release section missing the #104 lines fails", () => {
+  const release = "## [0.6.0-beta.1] - 2026-11-13";
+  expect(() =>
+    changelogAuditSection(
+      changelogFixture(
+        ["## [Unreleased]", "", ""],
+        [release, OTHER, ADDED_104],
+      ),
+    ),
+  ).toThrow("missing #104 Fixed line");
+  expect(() =>
+    changelogAuditSection(
+      changelogFixture(
+        ["## [Unreleased]", "", ""],
+        [release, FIXED_104, OTHER],
+      ),
+    ),
+  ).toThrow("missing #104 Added line");
+  expect(() =>
+    changelogAuditSection(
+      changelogFixture(
+        ["## [Unreleased]", FIXED_104, ADDED_104],
+        [release, OTHER, OTHER],
+      ),
+    ),
+  ).toThrow("no changelog section holds the #104 lines");
+});
+
+it("TestBR321_audit_docs changelog without a release section reads Unreleased", () => {
+  const unreleased: [string, string, string] = [
+    "## [Unreleased]",
+    FIXED_104,
+    ADDED_104,
+  ];
+  expect(changelogAuditSection(changelogFixture(unreleased))).toBe(
+    "## [Unreleased]",
+  );
+  expect(
+    changelogAuditSection(
+      changelogFixture(unreleased, ["## [0.7.0]", OTHER, OTHER]),
+    ),
+  ).toBe("## [Unreleased]");
+  expect(() =>
+    changelogAuditSection(
+      changelogFixture(["## [Unreleased]", OTHER, ADDED_104]),
+    ),
+  ).toThrow("missing #104 Fixed line");
+  expect(() =>
+    changelogAuditSection(
+      changelogFixture(["## [Unreleased]", FIXED_104, OTHER]),
+    ),
+  ).toThrow("missing #104 Added line");
+});
+
+it("TestBR321_audit_docs changelog selects the first release section citing #104", () => {
+  const empty: [string, string, string] = ["## [Unreleased]", "", ""];
+  expect(() =>
+    changelogAuditSection(
+      changelogFixture(empty, ["## [0.6.0-beta.1] - 2026-11-13", OTHER, OTHER]),
+    ),
+  ).toThrow("no changelog section holds the #104 lines");
+  expect(() =>
+    changelogAuditSection(
+      changelogFixture(empty, [
+        "## [0.6.0-beta.1] - 2026-11-13",
+        FIXED_104.replace("#104", "#1040"),
+        ADDED_104.replace("#104", "#1040"),
+      ]),
+    ),
+  ).toThrow("no changelog section holds the #104 lines");
+  expect(
+    changelogAuditSection(
+      changelogFixture(
+        empty,
+        ["## [0.7.0] - 2026-12-01", OTHER, OTHER],
+        ["## [0.6.0-beta.1] - 2026-11-13", FIXED_104, ADDED_104],
+      ),
+    ),
+  ).toBe("## [0.6.0-beta.1] - 2026-11-13");
 });

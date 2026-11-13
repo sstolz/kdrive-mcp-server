@@ -2,16 +2,13 @@
 
 User-facing changes follow Keep a Changelog and Semantic Versioning.
 
-Version `0.6.0-beta.1` (2026-11-13) is the first public beta (#2). It contains
-every entry listed under Unreleased below; the interface may change before 1.0.
-The entries move to a `0.6.0-beta.1` section in the records PR that follows the
-release (BR-321 v1 pins the #104 lines under Unreleased until then).
-
 ## [Unreleased]
+
+## [0.6.0-beta.1] - 2026-11-13
 
 ### Added
 
-- #2 / F-024 v2 (pending acceptance): gated beta publication. The npm package
+- #2 / F-024 v2 (accepted 2026-11-13): gated beta publication. The npm package
   is renamed `@sstolz/kdrive-mcp-server` (command unchanged; `make pack`
   writes `artifacts/sstolz-kdrive-mcp-server-<version>.tgz`), and a
   dispatch-only `release.yml` with `make release-*` targets checks the tagged

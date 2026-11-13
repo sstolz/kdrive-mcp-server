@@ -2,7 +2,7 @@
 id: F-024
 title: Scoped package name and gated beta publication
 ticket: "#2"
-status: frozen
+status: done
 version: 2
 ---
 

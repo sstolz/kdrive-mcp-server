@@ -1,6 +1,16 @@
 # Capability map
 
-## Provisional (pending acceptance) — gated beta publication
+## Provisional (pending acceptance) — changelog release sections
+
+[F-025 v1](features/F-025-changelog-release-sections.md) (#2), BR-321 v3.
+`CHANGELOG.md` keeps released entries under dated release sections
+(`## [<version>] - <YYYY-MM-DD>`), the first being `0.6.0-beta.1`, and the
+dependency-audit check reads the #104 lines from the first release section that
+cites #104, or from `## [Unreleased]` while no release section exists.
+Provisional: not accepted on actual main; BR-321 v1 stays the accepted rule
+until then.
+
+## Accepted — gated beta publication
 
 [F-024 v2](features/F-024-gated-publication.md) (#2), BR-353–BR-375, BR-378 and
 BR-379 v1 with BR-016 v3 and BR-178 v3. The npm package is renamed
@@ -11,9 +21,11 @@ environment, then, only for `dry_run=false` and after the owner's approval,
 pushes the two-platform image `ghcr.io/sstolz/kdrive-mcp-server:<version>` and
 publishes the verified tarball to npm under `beta` with provenance, and reads
 both back. npm installs still resolve Jimp's nested Zod 3 during the beta
-(residual risk (f), fixed before 1.0 in #12). Provisional: not accepted on
-actual main; nothing is published, and the real-wiring dispatches (AC-16) need
-the owner preconditions.
+(residual risk (f), fixed before 1.0 in #12). Accepted on actual main
+`163e701` on 2026-11-13: `make check` rc=0 (4028 tests), AC-16 refused
+dispatches 43374504547, 43375479137 and 43374822744, AC-22 dry run 43410611002,
+and release run 43412989345 published `0.6.0-beta.1`
+([evidence](https://github.com/sstolz/kdrive-mcp-server/issues/2#issuecomment-6851666057)).
 
 ## Accepted — hosted CI and privacy scan
 
