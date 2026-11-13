@@ -1,5 +1,15 @@
 # Capability map
 
+## Provisional (pending acceptance) — changelog release sections
+
+[F-025 v1](features/F-025-changelog-release-sections.md) (#2), BR-321 v3.
+`CHANGELOG.md` keeps released entries under dated release sections
+(`## [<version>] - <YYYY-MM-DD>`), the first being `0.6.0-beta.1`, and the
+dependency-audit check reads the #104 lines from the first release section that
+cites #104, or from `## [Unreleased]` while no release section exists.
+Provisional: not accepted on actual main; BR-321 v1 stays the accepted rule
+until then.
+
 ## Accepted — gated beta publication
 
 [F-024 v2](features/F-024-gated-publication.md) (#2), BR-353–BR-375, BR-378 and
