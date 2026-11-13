@@ -13,9 +13,9 @@ rename, move, trash, restore and upload. Every call goes through a policy
 (configured roots, deny patterns, received-share rules) and every write is
 recorded in an audit log before and after it is sent.
 
-**Status:** beta `0.6.0-beta.1` ([VERSION](VERSION)), published through the
-gated release workflow described in [docs/publishing.md](docs/publishing.md):
-npm `@sstolz/kdrive-mcp-server@beta` and image
+**Status:** beta `0.6.0-beta.1` ([VERSION](VERSION)), to be published through
+the gated release workflow described in [docs/publishing.md](docs/publishing.md)
+as npm `@sstolz/kdrive-mcp-server@beta` and image
 `ghcr.io/sstolz/kdrive-mcp-server:0.6.0-beta.1`. You can also build the image or
 the package from this repository. Changes are listed in [CHANGELOG.md](CHANGELOG.md).
 
