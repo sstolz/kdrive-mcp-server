@@ -79,8 +79,8 @@ dans `docs/api-notes.md`.
 Un seul paquet npm, un seul binaire :
 
 ```
-npx kdrive-mcp-server                          # stdio (défaut), clients locaux
-npx kdrive-mcp-server --http --port 3000       # Streamable HTTP, derrière un reverse proxy
+npx @sstolz/kdrive-mcp-server                  # stdio (défaut), clients locaux
+npx @sstolz/kdrive-mcp-server --http --port 3000 # Streamable HTTP, derrière un reverse proxy
 docker run … ghcr.io/<owner>/kdrive-mcp-server # image du projet, mode HTTP
 ```
 

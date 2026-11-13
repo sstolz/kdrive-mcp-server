@@ -213,3 +213,85 @@ it("BR-171 AC-23 the packed artifact holds no scripts entry and the SDK client s
   expect(files.filter((file) => file.startsWith("scripts/"))).toEqual([]);
   expect(files).toContain("dist/http/index.js");
 });
+
+// F-024: scoped package (BR-016 v3, BR-353).
+interface Lockfile {
+  name: string;
+  version: string;
+  lockfileVersion: number;
+  packages: Record<string, Record<string, unknown>>;
+}
+let scopedPack:
+  { directory: string; filename: string; count: number } | undefined;
+/** The make pack recipe in a temporary copy: npm pack, then unpack. */
+function packScoped(): { directory: string; filename: string; count: number } {
+  if (scopedPack) return scopedPack;
+  const directory = mkdtempSync(join(tmpdir(), "kdrive-scoped-package-"));
+  for (const path of [
+    "dist",
+    "LICENSE",
+    "NOTICE",
+    "README.md",
+    "package.json",
+  ]) {
+    mkdirSync(dirname(join(directory, path)), { recursive: true });
+    cpSync(path, join(directory, path), { recursive: true });
+  }
+  const results = JSON.parse(
+    execFileSync("npm", ["pack", "--json", "--ignore-scripts"], {
+      cwd: directory,
+      encoding: "utf8",
+    }),
+  ) as Packed[];
+  execFileSync("tar", [
+    "-xzf",
+    join(directory, results[0]?.filename ?? ""),
+    "-C",
+    directory,
+  ]);
+  scopedPack = {
+    directory,
+    filename: results[0]?.filename ?? "",
+    count: results.length,
+  };
+  return scopedPack;
+}
+it("BR-016 v3 packs the scoped package with the unchanged command", () => {
+  const { directory, filename, count } = packScoped();
+  expect(count).toBe(1);
+  expect(filename).toBe("sstolz-kdrive-mcp-server-0.1.0.tgz");
+  const manifest = JSON.parse(
+    readFileSync(join(directory, "package/package.json"), "utf8"),
+  ) as { name: string; bin: unknown; repository: unknown };
+  expect(manifest.name).toBe("@sstolz/kdrive-mcp-server");
+  expect(manifest.bin).toEqual({ "kdrive-mcp-server": "dist/cli.js" });
+  expect(manifest.repository).toEqual({
+    type: "git",
+    url: "https://github.com/sstolz/kdrive-mcp-server.git",
+  });
+  cpSync("node_modules/yaml", join(directory, "package/node_modules/yaml"), {
+    recursive: true,
+  });
+  const cli = join(directory, "package/dist/cli.js");
+  const version = runDiagnostic(cli, ["--version"]);
+  expect(version.status).toBe(0);
+  expect(version.stdout).toBe("0.1.0\n");
+  const help = runDiagnostic(cli, ["--help"]);
+  expect(help.stdout.startsWith("Usage: kdrive-mcp-server")).toBe(true);
+  // The MCP server-info name and the User-Agent product token stay unscoped.
+  expect(readFileSync("src/navigation.ts", "utf8")).toContain(
+    '{ name: "kdrive-mcp-server", version: PACKAGE_VERSION }',
+  );
+});
+
+it("BR-353 lockfile names", () => {
+  const lock = JSON.parse(
+    readFileSync("package-lock.json", "utf8"),
+  ) as Lockfile;
+  expect(lock.name).toBe("@sstolz/kdrive-mcp-server");
+  expect(lock.packages[""]?.name).toBe("@sstolz/kdrive-mcp-server");
+  const manifest = JSON.parse(readFileSync("package.json", "utf8")) as {
+    name: string;
+  };
+  expect(manifest.name).toBe("@sstolz/kdrive-mcp-server");
+});

@@ -1,5 +1,5 @@
 {
-  "name": "kdrive-mcp-server",
+  "name": "@sstolz/kdrive-mcp-server",
   "version": "0.1.0",
   "description": "Beta, interface may change: unofficial MCP server for kDrive, not affiliated with Infomaniak",
   "license": "MIT",

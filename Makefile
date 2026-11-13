@@ -9,6 +9,7 @@ COMPOSE = "$(DOCKER)" compose
 	kdrive-write-acceptance kdrive-upload-acceptance \
 	image-binfmt image image-smoke \
 	audit ci-changes privacy-scan runner-probe runner-reset-mark runner-reset-check \
+	release-check release-setup release-npm release-image release-verify \
 	_require-container-config _require-config _require-setup
 
 help:
@@ -40,6 +41,11 @@ help:
 		'  make image-smoke   Smoke-test the local images per IMAGE_PLATFORMS (no network, no port)' \
 		'  make image-binfmt  Register arm64 emulation on a non-arm64 host (privileged, opt-in)' \
 		'  make privacy-scan  CI privacy scan with deny patterns from PRIVACY_DENY_PATTERNS (no setup)' \
+		'  make release-check   Release checks for RELEASE_VERSION and RELEASE_SHA (release.yml)' \
+		'  make release-setup   Build dev and install locked dependencies without install scripts' \
+		'  make release-npm     Check the packed tarball, then the npm release step (release.yml)' \
+		'  make release-image   Build both release image platforms; real runs only in release.yml' \
+		'  make release-verify  Read back the released npm version and image (release.yml)' \
 		'  make help          Show this help without Docker or network access'; }
 
 _require-container-config:
@@ -240,3 +246,29 @@ runner-reset-mark:
 
 runner-reset-check:
 	@/bin/bash ops/runner/probe.sh reset-check
+
+# F-024 BR-375: release targets driven by .github/workflows/release.yml. The
+# scripts/release.ts targets use Node built-ins only (no make setup) and pass
+# every variable by name; none of these targets is a prerequisite of another.
+release-check: _require-container-config
+	$(COMPOSE) run --rm -T -e GITHUB_ACTIONS -e GITHUB_SHA -e GITHUB_TOKEN -e RELEASE_VERSION -e RELEASE_SHA -e RELEASE_DRY_RUN -e RELEASE_PHASE -e RELEASE_GITHUB_API_URL -e RELEASE_NPM_REGISTRY_URL -e RELEASE_GHCR_URL dev node scripts/release.ts check
+
+release-setup: _require-container-config
+	$(COMPOSE) build dev
+	$(COMPOSE) run --rm -T dev npm ci --ignore-scripts
+
+# After the script exits 0 (the version is validated), a dry run in CI hands
+# the tarball digest to later jobs as the verify job output (BR-356).
+release-npm: _require-container-config
+	$(COMPOSE) run --rm -T -e GITHUB_ACTIONS -e ACTIONS_ID_TOKEN_REQUEST_URL -e ACTIONS_ID_TOKEN_REQUEST_TOKEN -e GITHUB_EVENT_NAME -e GITHUB_REF -e GITHUB_REPOSITORY -e GITHUB_REPOSITORY_ID -e GITHUB_REPOSITORY_OWNER_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_RUN_ID -e GITHUB_SERVER_URL -e GITHUB_SHA -e GITHUB_WORKFLOW_REF -e RUNNER_ENVIRONMENT -e RELEASE_VERSION -e RELEASE_SHA -e RELEASE_DRY_RUN -e RELEASE_TARBALL_SHA256 dev node scripts/release.ts npm
+	@if test "$${RELEASE_DRY_RUN:-}" = true && test -n "$${GITHUB_OUTPUT:-}"; then \
+		sum=$$(sha256sum "artifacts/sstolz-kdrive-mcp-server-$$RELEASE_VERSION.tgz") || exit 1; \
+		printf 'tarball-sha256=%s\n' "$$(printf '%s' "$$sum" | cut -c1-64)" >> "$$GITHUB_OUTPUT"; \
+	fi
+
+# Host Docker (BR-370): the script validates its inputs before any docker call.
+release-image:
+	/bin/sh scripts/release-image.sh
+
+release-verify: _require-container-config
+	$(COMPOSE) run --rm -T -e GITHUB_ACTIONS -e GITHUB_TOKEN -e RELEASE_VERSION -e RELEASE_SHA -e RELEASE_DRY_RUN -e RELEASE_TARBALL_SHA256 -e RELEASE_GITHUB_API_URL -e RELEASE_NPM_REGISTRY_URL -e RELEASE_GHCR_URL dev node scripts/release.ts verify

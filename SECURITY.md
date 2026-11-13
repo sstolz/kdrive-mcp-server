@@ -248,7 +248,8 @@ Zod 4 and pin `minimatch` (see
 [ADR-009](architecture-decisions/ADR-009-dependency-overrides-skiplibcheck.md)).
 npm applies `overrides` only in the root project: the container image, built
 with `npm ci` on this repository's lockfile, is covered, but an install of the
-packed tarball (`npm install -g`) resolves its dependencies afresh and can
-resolve Jimp's nested Zod 3 again, with its high advisory
+packed tarball or of the published package (`npm install -g`) resolves its
+dependencies afresh and can resolve Jimp's nested Zod 3 again, with its high
+advisory
 ([GHSA-mrhx-c7xc-m3w5](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5)).
-That limit is accepted until the public-publication preparation ticket.
+That limit is accepted for the beta, fixed before 1.0 in #12.

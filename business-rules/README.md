@@ -1,6 +1,6 @@
 # Business-rule index
 
-All **344 allocated rules** (BR-218–BR-233 belong to F-015, BR-234–BR-259 to F-016, BR-260–BR-278 to F-017, BR-279–BR-289 to F-018, BR-290 and BR-292–BR-314 to F-019, BR-315–BR-321 to F-020, BR-322–BR-327 to F-021, BR-328–BR-340 to F-022, BR-341–BR-352 to F-023; BR-291 and BR-305–BR-311 are reserved for #109 and have no record) now have a canonical record with YAML metadata, Rule,
+All **369 allocated rules** (BR-218–BR-233 belong to F-015, BR-234–BR-259 to F-016, BR-260–BR-278 to F-017, BR-279–BR-289 to F-018, BR-290 and BR-292–BR-314 to F-019, BR-315–BR-321 to F-020, BR-322–BR-327 to F-021, BR-328–BR-340 to F-022, BR-341–BR-352 to F-023, BR-353–BR-375, BR-378 and BR-379 to F-024; BR-291 and BR-305–BR-311 are reserved for #109 and have no record; BR-376 and BR-377 were withdrawn in F-024 v2, were never accepted, have no record and are never reused) now have a canonical record with YAML metadata, Rule,
 Rationale, concrete Given / When / Then Examples, Verification and History. Every
 new record begins its initial BR version1; BR-042 is now version2 under F-003 v2; BR-024 and BR-100
 version 2 were accepted with F-010 (#21) on main `3fc14c3`. BR-010, BR-012 and BR-014 v2 and BR-015 v3
@@ -17,7 +17,7 @@ F-002 acceptance (archived evidence `runs/33-acceptance-1.md`) on
 #4 (archive issue 4),
 #31 (archive issue 31) and
 #33 (archive issue 33).
-There are **337 active, 7 superseded and 0 pending-acceptance** rules (F-023 v1, with BR-341–BR-352 v1 and BR-015 v7, BR-149 v3, BR-183 v3, BR-225 v3, BR-227 v3, BR-229 v2 and BR-320 v2, was accepted on actual main `ad25fa2` on 2026-11-12; F-022 v2, with BR-328–BR-340 (BR-335 v2, the others v1) and BR-146 v2, was accepted on actual main `e7d6367` on 2026-11-12; F-021 v1, with BR-322–BR-327 v1 and BR-154 v2, BR-156 v2, BR-162 v2, BR-167 v2, BR-168 v2, BR-180 v2, BR-181 v2, BR-184 v2 and BR-187 v3, was accepted on actual main `e208996` on 2026-11-11; F-020 v1, with BR-315–BR-321 v1 and BR-015 v6, BR-122 v2, BR-225 v2 and BR-227 v2, was accepted on actual main `b6acf86` on 2026-11-11; F-019 v1, with BR-290, BR-292–BR-304 and BR-312–BR-314 v1 and BR-023 v2, BR-024 v3, BR-124 v2, BR-128 v2, BR-139 v2, BR-140 v2, BR-142 v2, BR-143 v2, BR-152 v2 and BR-169 v2, was accepted on actual main `68209fe` on 2026-11-11; F-018 v1, with BR-279–BR-289 and BR-035 v2, BR-060 v6, BR-190 v3, BR-266 v2 and BR-274 v2, was accepted on actual main `0f1852c` on 2026-11-10; F-017 v1, with BR-260–BR-278 and BR-039 v2, BR-060 v5, BR-190 v2 and BR-200 v2, was accepted on actual main `4b59c52` on 2026-11-10; F-016 v1, with BR-234–BR-259 and BR-069/BR-070 v2, was accepted on actual main `005b9ba` on 2026-11-10; F-003 v2 and F-004 v1, with BR-029–BR-058, were accepted on 2026-11-09 through the F-014 production acceptance; F-014 v7, with BR-190–BR-217 and BR-016, BR-028, BR-071, BR-123 and BR-175 v2, was accepted on actual main `2a9c1e3` on 2026-11-09). Acceptance covers local
+There are **337 active, 7 superseded and 25 pending-acceptance** rules (F-024 v2, with BR-353–BR-375, BR-378 and BR-379 v1 and BR-016 v3 and BR-178 v3, is pending acceptance; until then BR-016 v2 and BR-178 v2 stay active; BR-376, BR-377 and the BR-321 v2 of F-024 v1 were withdrawn in F-024 v2, and BR-321 stays at v1; F-023 v1, with BR-341–BR-352 v1 and BR-015 v7, BR-149 v3, BR-183 v3, BR-225 v3, BR-227 v3, BR-229 v2 and BR-320 v2, was accepted on actual main `ad25fa2` on 2026-11-12; F-022 v2, with BR-328–BR-340 (BR-335 v2, the others v1) and BR-146 v2, was accepted on actual main `e7d6367` on 2026-11-12; F-021 v1, with BR-322–BR-327 v1 and BR-154 v2, BR-156 v2, BR-162 v2, BR-167 v2, BR-168 v2, BR-180 v2, BR-181 v2, BR-184 v2 and BR-187 v3, was accepted on actual main `e208996` on 2026-11-11; F-020 v1, with BR-315–BR-321 v1 and BR-015 v6, BR-122 v2, BR-225 v2 and BR-227 v2, was accepted on actual main `b6acf86` on 2026-11-11; F-019 v1, with BR-290, BR-292–BR-304 and BR-312–BR-314 v1 and BR-023 v2, BR-024 v3, BR-124 v2, BR-128 v2, BR-139 v2, BR-140 v2, BR-142 v2, BR-143 v2, BR-152 v2 and BR-169 v2, was accepted on actual main `68209fe` on 2026-11-11; F-018 v1, with BR-279–BR-289 and BR-035 v2, BR-060 v6, BR-190 v3, BR-266 v2 and BR-274 v2, was accepted on actual main `0f1852c` on 2026-11-10; F-017 v1, with BR-260–BR-278 and BR-039 v2, BR-060 v5, BR-190 v2 and BR-200 v2, was accepted on actual main `4b59c52` on 2026-11-10; F-016 v1, with BR-234–BR-259 and BR-069/BR-070 v2, was accepted on actual main `005b9ba` on 2026-11-10; F-003 v2 and F-004 v1, with BR-029–BR-058, were accepted on 2026-11-09 through the F-014 production acceptance; F-014 v7, with BR-190–BR-217 and BR-016, BR-028, BR-071, BR-123 and BR-175 v2, was accepted on actual main `2a9c1e3` on 2026-11-09). Acceptance covers local
 configuration, synthetic injected preflight, accepted #8/#9/#10 injected scopes and the accepted #11 OIDC qualification tooling and validator, and the accepted #14 injected bounded extraction (F-009); F-008 qualified Infomaniak and Gitea as `proxy-only`. The #12 authenticated HTTP
 listener in proxy mode is accepted with one real claude.ai connection over a synthetic drive. The production read-only
 kDrive adapter and the stdio and HTTP runtime of the packaged CLI are accepted with F-014.
@@ -142,7 +142,7 @@ Keep navigation aligned with the [allocation ledger](../docs/spec-index.md),
 canonical records, examples and actual-main acceptance evidence in the same
 appropriately scoped, reviewed PR. Pending precedes acceptance; accepted markers
 are synchronized according to the existing workflow before release. The next
-unused BR ID is BR-353 (BR-291 and BR-305–BR-311 are reserved for #109). No new delivery step, product contract or release
+unused BR ID is BR-380 (BR-291 and BR-305–BR-311 are reserved for #109; BR-376 and BR-377 are withdrawn and never reused). No new delivery step, product contract or release
 authorization is introduced. The [capability map](../capability-map.md) describes
 accepted user-facing scope and explicitly provisional entries.
 
@@ -660,3 +660,42 @@ for each versioned rule the new version is the active rule.
 | [BR-227](BR-227.md) | v3      | `ci-result` needs `privacy-scan` and fails unless it succeeded.      | [F-023 v1](../features/F-023-hosted-ci-privacy-scan.md) | Active |
 | [BR-229](BR-229.md) | v2      | Runner acceptance guarded off this repository.                       | [F-023 v1](../features/F-023-hosted-ci-privacy-scan.md) | Active |
 | [BR-320](BR-320.md) | v2      | `audit` on `ubuntu-24.04`.                                           | [F-023 v1](../features/F-023-hosted-ci-privacy-scan.md) | Active |
+
+## Pending acceptance — gated beta publication
+
+F-024 v2 (#2) allocates BR-353–BR-375, BR-378 and BR-379 v1 and versions
+BR-016 and BR-178 to v3. All are pending acceptance on actual main; until then
+BR-016 v2 and BR-178 v2 stay the active rules. BR-376 and BR-377 (the
+production shrinkwrap of F-024 v1) and the BR-321 v2 of F-024 v1 were
+withdrawn in F-024 v2: they were never accepted, have no record, and BR-376
+and BR-377 are never reused; BR-321 stays at v1.
+
+| ID                  | Version | Rule                                                                           | Source                                             | Status             |
+| ------------------- | ------- | ------------------------------------------------------------------------------ | -------------------------------------------------- | ------------------ |
+| [BR-353](BR-353.md) | v1      | Scoped lockfile names; `make pack` writes one scoped tarball.                  | [F-024 v2](../features/F-024-gated-publication.md) | Pending acceptance |
+| [BR-354](BR-354.md) | v1      | README, SPEC.md and publishing docs: scoped name, preconditions, recovery.     | [F-024 v2](../features/F-024-gated-publication.md) | Pending acceptance |
+| [BR-355](BR-355.md) | v1      | `release.yml`: dispatch-only, three inputs, `{}` permissions, four jobs.       | [F-024 v2](../features/F-024-gated-publication.md) | Pending acceptance |
+| [BR-356](BR-356.md) | v1      | Job guards, permissions and needs; one job per publishing credential.          | [F-024 v2](../features/F-024-gated-publication.md) | Pending acceptance |
+| [BR-357](BR-357.md) | v1      | Exact steps per job; checkout of the dispatched `main` HEAD only.              | [F-024 v2](../features/F-024-gated-publication.md) | Pending acceptance |
+| [BR-358](BR-358.md) | v1      | Closed-set keys, step env, inputs and the single `GITHUB_TOKEN` credential.    | [F-024 v2](../features/F-024-gated-publication.md) | Pending acceptance |
+| [BR-359](BR-359.md) | v1      | Input validation first: beta SemVer, full sha, boolean, phase.                 | [F-024 v2](../features/F-024-gated-publication.md) | Pending acceptance |
+| [BR-360](BR-360.md) | v1      | Release commit: `VERSION`, `package.json` and lockfile versions.               | [F-024 v2](../features/F-024-gated-publication.md) | Pending acceptance |
+| [BR-361](BR-361.md) | v1      | Tag on the commit, commit on `main`, `GITHUB_SHA` equals the sha.              | [F-024 v2](../features/F-024-gated-publication.md) | Pending acceptance |
+| [BR-362](BR-362.md) | v1      | Green `ci-result` on a `main` push or dispatch run of the sha.                 | [F-024 v2](../features/F-024-gated-publication.md) | Pending acceptance |
+| [BR-363](BR-363.md) | v1      | Version unpublished; npm placeholder on `latest`; GHCR per phase.              | [F-024 v2](../features/F-024-gated-publication.md) | Pending acceptance |
+| [BR-364](BR-364.md) | v1      | Checks only read and all run after input validation.                           | [F-024 v2](../features/F-024-gated-publication.md) | Pending acceptance |
+| [BR-365](BR-365.md) | v1      | One line per check and a summary; no token or body in output.                  | [F-024 v2](../features/F-024-gated-publication.md) | Pending acceptance |
+| [BR-366](BR-366.md) | v1      | One internal-error line on stderr and exit 2.                                  | [F-024 v2](../features/F-024-gated-publication.md) | Pending acceptance |
+| [BR-367](BR-367.md) | v1      | Endpoint overrides for doubles; refused in CI with exit 2.                     | [F-024 v2](../features/F-024-gated-publication.md) | Pending acceptance |
+| [BR-368](BR-368.md) | v1      | npm dist-tag `beta`; one version image tag; never `latest`.                    | [F-024 v2](../features/F-024-gated-publication.md) | Pending acceptance |
+| [BR-369](BR-369.md) | v1      | Checked tarball, npm >= 11.5.1, OIDC only, exact publish argv.                 | [F-024 v2](../features/F-024-gated-publication.md) | Pending acceptance |
+| [BR-370](BR-370.md) | v1      | Two-platform image build; login, push and labels only for real runs.           | [F-024 v2](../features/F-024-gated-publication.md) | Pending acceptance |
+| [BR-371](BR-371.md) | v1      | `publish-npm` needs `publish-image`.                                           | [F-024 v2](../features/F-024-gated-publication.md) | Pending acceptance |
+| [BR-372](BR-372.md) | v1      | npm read-back with retries: version, `beta`, placeholder, attestations.        | [F-024 v2](../features/F-024-gated-publication.md) | Pending acceptance |
+| [BR-373](BR-373.md) | v1      | GHCR read-back: two platforms, not `latest`, public, digest printed.           | [F-024 v2](../features/F-024-gated-publication.md) | Pending acceptance |
+| [BR-374](BR-374.md) | v1      | `ci.yml` and `runner-acceptance.yml` unchanged.                                | [F-024 v2](../features/F-024-gated-publication.md) | Pending acceptance |
+| [BR-375](BR-375.md) | v1      | Release Make targets: container, `-e` lists, `GITHUB_OUTPUT` digest line.      | [F-024 v2](../features/F-024-gated-publication.md) | Pending acceptance |
+| [BR-378](BR-378.md) | v1      | `release` environment requires a reviewer and admits only `main`.              | [F-024 v2](../features/F-024-gated-publication.md) | Pending acceptance |
+| [BR-379](BR-379.md) | v1      | Published npm tarball digest equals the `verify` digest.                       | [F-024 v2](../features/F-024-gated-publication.md) | Pending acceptance |
+| [BR-016](BR-016.md) | v3      | Scoped package name; command, server-info name and User-Agent unchanged.       | [F-024 v2](../features/F-024-gated-publication.md) | Pending acceptance |
+| [BR-178](BR-178.md) | v3      | Publish markers admitted once in the release scripts only; adds `npm publish`. | [F-024 v2](../features/F-024-gated-publication.md) | Pending acceptance |
