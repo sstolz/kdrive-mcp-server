@@ -116,7 +116,7 @@ it("BR-068 actual metadata response keeps instruction-like names only as JSON da
     await w.session.close();
   }
 });
-it("BR-070 actual SDK cancellation suppresses a late result and busy response never starts protected work", async () => {
+it("BR-070 actual SDK cancellation suppresses a late result and a waiting request never starts protected work early", async () => {
   const f = await navigationFixture();
   let release!: (value: unknown) => void, started!: () => void;
   const inspecting = new Promise<void>((r) => {
@@ -147,10 +147,9 @@ it("BR-070 actual SDK cancellation suppresses a late result and busy response ne
       method: "tools/call",
       params: { name: "kdrive_info", arguments: { file_id: 3 } },
     });
-    expect((await w.read(3)).result).toMatchObject({
-      isError: true,
-      content: [{ type: "text", text: "SERVER_BUSY" }],
-    });
+    // F-026: request 3 waits for the slot and starts no protected work.
+    await new Promise((r) => setTimeout(r, 5));
+    expect(w.responses().find((r) => r.id === 3)).toBeUndefined();
     expect(f.inspect).toHaveBeenCalledTimes(1);
     w.send({
       jsonrpc: "2.0",
@@ -159,14 +158,15 @@ it("BR-070 actual SDK cancellation suppresses a late result and busy response ne
     });
     await new Promise((r) => setImmediate(r));
     f.inspect.mockResolvedValue(f.file);
+    release(f.file);
+    expect((await w.read(3)).result).not.toMatchObject({ isError: true });
     w.send({
       jsonrpc: "2.0",
       id: 4,
       method: "tools/call",
       params: { name: "kdrive_info", arguments: { file_id: 3 } },
     });
-    await w.read(4);
-    release(f.file);
+    expect((await w.read(4)).result).not.toMatchObject({ isError: true });
     await new Promise((r) => setTimeout(r, 5));
     expect(w.responses().find((r) => r.id === 2)).toBeUndefined();
     expect(w.stdout() + w.stderr()).not.toContain("CANARY_CANCEL");

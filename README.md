@@ -197,6 +197,11 @@ Key limits:
 - Listings return at most 256 items per call and continue with single-use
   cursors that expire after five minutes; downloads continue with
   `offset_bytes` and the previous chunk's `etag`.
+- One tool call per session runs at a time. Up to 4 further calls wait in
+  arrival order, each for at most 12 seconds. `SERVER_BUSY` means the call
+  was refused before any kDrive request, so it is safe to retry, writes
+  included, once an earlier call has completed (see
+  [docs/mcp-client-compatibility.md](docs/mcp-client-compatibility.md#parallel-tool-calls)).
 
 The full read behaviour (pagination, encodings, PDF profile, bounds) is
 described in [docs/development.md](docs/development.md).

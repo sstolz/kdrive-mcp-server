@@ -545,7 +545,7 @@ describe("AC-10 same-name concurrency on a synthetic server", () => {
     expect(second.result).toBe("succeeded");
     check(p, results, ["from-one", "from-two"]);
   });
-  it("TestBR284_concurrent_calls_in_one_session_are_SERVER_BUSY", async () => {
+  it("TestBR284_concurrent_calls_in_one_session_run_one_after_the_other", async () => {
     const s = store();
     let release: () => void = () => undefined;
     s.hold = () =>
@@ -556,12 +556,17 @@ describe("AC-10 same-name concurrency on a synthetic server", () => {
     const first = c.upload(args("from-one"));
     for (let i = 0; i < 2000 && s.count === 0; i++)
       await new Promise((r) => setImmediate(r));
-    const busy = await c.raw(args("from-two"));
-    expect((busy.content as { text: string }[])[0]?.text).toBe("SERVER_BUSY");
+    // F-026: the second call waits for the slot and sends nothing meanwhile.
+    const second = c.upload(args("from-two"));
+    for (let i = 0; i < 20; i++) await new Promise((r) => setImmediate(r));
     expect(c.writes()).toHaveLength(1);
+    delete s.hold;
     release();
     expect((await first).result).toBe("succeeded");
-    expect(c.writes()).toHaveLength(1);
+    // Same name with `conflict=error` (BR-284): the second, run afterwards,
+    // sends its one request and gets the definite conflict failure.
+    expect((await second).result).toBe("failed");
+    expect(c.writes()).toHaveLength(2);
   });
 });
 

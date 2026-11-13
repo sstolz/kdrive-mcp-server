@@ -260,19 +260,77 @@ describe("BR-070 finite outbound ownership", () => {
       failures: () => failures,
     };
   };
-  it("one pending write and a second send close, settle, destroy and remove owned listeners", async () => {
+  it("TestBR388_seventh_waiting_frame_is_admitted_eighth_closes", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     const output = new Writable({ highWaterMark: 1, write() {} }),
       w = make(output);
     await w.transport.start();
-    const pending = w.transport.send(message(10));
-    const settled = pending.catch(() => "closed");
+    // One frame being written and six waiting keep the session open.
+    const sends = Array.from({ length: 7 }, () =>
+      w.transport.send(message(10)).catch(() => "closed"),
+    );
+    await vi.advanceTimersByTimeAsync(5);
+    expect(output.destroyed).toBe(false);
+    expect(w.diagnostics()).toBe("");
     await expect(w.transport.send(message(10))).rejects.toThrow();
-    expect(await settled).toBe("closed");
+    expect(await Promise.all(sends)).toEqual(Array(7).fill("closed"));
     expect(output.destroyed).toBe(true);
     expect(output.listenerCount("drain")).toBe(0);
+    expect(vi.getTimerCount()).toBe(0);
     expect(w.diagnostics()).toBe("STDIO_OUTPUT_FAILED\n");
     expect(w.failures()).toBe(1);
     await w.transport.close();
+  });
+  it("TestBR388_frames_are_written_in_send_order", async () => {
+    const chunks: string[] = [];
+    const output = new Writable({
+        write(chunk: Buffer, _encoding, callback) {
+          setTimeout(() => {
+            chunks.push(chunk.toString());
+            callback();
+          }, 1);
+        },
+      }),
+      w = make(output);
+    await w.transport.start();
+    const sent = Array.from({ length: 7 }, (_, i) => message(i + 1));
+    await Promise.all(sent.map((m) => w.transport.send(m)));
+    expect(chunks.map((c) => JSON.parse(c) as unknown)).toEqual(
+      sent.map((m) => JSON.parse(JSON.stringify(m)) as unknown),
+    );
+    expect(w.diagnostics()).toBe("");
+    await w.transport.close();
+  });
+  it("TestBR388_write_bound_counts_from_write_start", async () => {
+    vi.useFakeTimers();
+    for (const late of [999, 1000]) {
+      const callbacks: ((error?: Error | null) => void)[] = [];
+      const output = new Writable({
+          write(_chunk, _encoding, callback) {
+            callbacks.push(callback);
+          },
+        }),
+        w = make(output);
+      await w.transport.start();
+      const first = w.transport.send(message(1)).catch(() => "closed");
+      const second = w.transport.send(message(2)).catch(() => "closed");
+      await vi.advanceTimersByTimeAsync(900);
+      callbacks[0]?.();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(await first).toBeUndefined();
+      expect(callbacks).toHaveLength(2);
+      await vi.advanceTimersByTimeAsync(late === 999 ? 999 : 1000);
+      if (late === 999) {
+        callbacks[1]?.();
+        await vi.advanceTimersByTimeAsync(0);
+        expect(await second).toBeUndefined();
+        expect(w.diagnostics()).toBe("");
+      } else {
+        expect(await second).toBe("closed");
+        expect(w.diagnostics()).toBe("STDIO_OUTPUT_FAILED\n");
+      }
+      await w.transport.close();
+    }
   });
   it("never-draining output times out at exactly 1000ms", async () => {
     vi.useFakeTimers();

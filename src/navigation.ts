@@ -175,6 +175,19 @@ interface Invocation {
   readonly mutation?: AbortController;
   cancelled?: boolean;
 }
+/** F-026 D-2: at most 4 waiting calls, each for at most 12,000 ms. */
+export const MAX_WAITING = 4;
+export const MAX_WAIT_MS = 12000;
+type QueueCode = "SERVER_BUSY" | "ACCESS_DENIED";
+interface Waiter {
+  readonly joined: number;
+  readonly signal: AbortSignal | undefined;
+  /** Takes the slot: creates the invocation and sets `current`. */
+  readonly start: () => void;
+  readonly settle: (code: QueueCode | undefined) => void;
+  /** Clears the wait timer and the wait abort listener. */
+  readonly leave: () => void;
+}
 export interface NavigationOptions {
   /** F-016: the process mutation gate; `mutate` refuses without it. */
   readonly gate?: MutationGate | undefined;
@@ -213,6 +226,74 @@ export function createNavigationController(
   const gate = options.gate;
   let closed = false,
     current: Invocation | undefined;
+  /** F-026 BR-380: calls waiting, in join order, for the single slot. */
+  const waiting: Waiter[] = [];
+  /** BR-383: assign a released slot to the oldest eligible waiter, synchronously. */
+  function next() {
+    while (!current && waiting.length) {
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- the loop condition checked the length
+      const waiter = waiting.shift()!;
+      waiter.leave();
+      if (closed || waiter.signal?.aborted) waiter.settle("ACCESS_DENIED");
+      else if (performance.now() - waiter.joined >= MAX_WAIT_MS)
+        waiter.settle("SERVER_BUSY");
+      else {
+        waiter.start();
+        waiter.settle(undefined);
+      }
+    }
+  }
+  /** BR-380–BR-386: run `start` now, or wait in the bounded queue for the slot. */
+  function admit(
+    signal: AbortSignal | undefined,
+    start: () => void,
+  ): Promise<QueueCode | undefined> {
+    if (!current && !waiting.length) {
+      start();
+      return Promise.resolve(undefined);
+    }
+    if (waiting.length >= MAX_WAITING) return Promise.resolve("SERVER_BUSY");
+    return new Promise((resolve) => {
+      const remove = (code: QueueCode) => {
+        const at = waiting.indexOf(waiter);
+        if (at < 0) return;
+        waiting.splice(at, 1);
+        waiter.leave();
+        resolve(code);
+      };
+      const onAbort = () => {
+        remove("ACCESS_DENIED");
+      };
+      const timer = setTimeout(() => {
+        remove("SERVER_BUSY");
+      }, MAX_WAIT_MS);
+      const waiter: Waiter = {
+        joined: performance.now(),
+        signal,
+        start,
+        settle: resolve,
+        leave() {
+          clearTimeout(timer);
+          signal?.removeEventListener("abort", onAbort);
+        },
+      };
+      signal?.addEventListener("abort", onAbort, { once: true });
+      waiting.push(waiter);
+    });
+  }
+  /** BR-386: every waiting call leaves at close with ACCESS_DENIED. */
+  function closeQueue() {
+    for (const waiter of waiting.splice(0)) {
+      waiter.leave();
+      waiter.settle("ACCESS_DENIED");
+    }
+  }
+  /** BR-383: release the slot held by `inv` and hand it to the next waiter. */
+  function release(inv: Invocation) {
+    if (current !== inv) return;
+    current = undefined;
+    next();
+  }
   function alive(inv: Invocation) {
     if (closed || inv.controller.signal.aborted)
       throw new BoundFailure(inv.code ?? "ACCESS_DENIED");
@@ -529,25 +610,30 @@ export function createNavigationController(
     signal?: AbortSignal,
   ): Promise<{ ok: true; value: T } | { ok: false; code: string }> {
     if (closed || signal?.aborted) return { ok: false, code: "ACCESS_DENIED" };
-    if (current) return { ok: false, code: "SERVER_BUSY" };
-    const inv: Invocation = {
-      controller: new AbortController(),
-      deadline: performance.now() + 10000,
-      calls: 0,
-      lists: 0,
-      paged,
-    };
-    current = inv;
-    boundCode = undefined;
+    let inv!: Invocation, timer!: ReturnType<typeof setTimeout>;
     const cancel = () => {
       inv.code = "ACCESS_DENIED";
       inv.controller.abort();
     };
-    signal?.addEventListener("abort", cancel, { once: true });
-    const timer = setTimeout(() => {
-      inv.code = "REQUEST_TIMEOUT";
-      inv.controller.abort();
-    }, 10000);
+    // BR-384: the deadline and budgets start when the slot is taken.
+    const start = () => {
+      inv = {
+        controller: new AbortController(),
+        deadline: performance.now() + 10000,
+        calls: 0,
+        lists: 0,
+        paged,
+      };
+      current = inv;
+      boundCode = undefined;
+      signal?.addEventListener("abort", cancel, { once: true });
+      timer = setTimeout(() => {
+        inv.code = "REQUEST_TIMEOUT";
+        inv.controller.abort();
+      }, 10000);
+    };
+    const refused = await admit(signal, start);
+    if (refused) return { ok: false, code: refused };
     let success = false;
     try {
       const value = await work();
@@ -562,7 +648,6 @@ export function createNavigationController(
       return { ok: true, value };
     } catch (error) {
       if (inv.code) return { ok: false, code: inv.code };
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- F-011: defensive runtime check kept; the value can change outside the static type flow
       if (boundCode) return { ok: false, code: boundCode };
       const contentCode = contentFailure(error);
       if (contentCode) return { ok: false, code: contentCode };
@@ -577,7 +662,7 @@ export function createNavigationController(
       pagination.finish(success);
       clearTimeout(timer);
       signal?.removeEventListener("abort", cancel);
-      if (current === inv) current = undefined;
+      release(inv);
     }
   }
   /** BR-258: the only entry point of a gate run. */
@@ -590,28 +675,33 @@ export function createNavigationController(
   ): Promise<MutateResult> {
     if (!gate || closed || signal?.aborted)
       return { ok: false, code: "ACCESS_DENIED" };
-    if (current) return { ok: false, code: "SERVER_BUSY" };
-    const inv: Invocation = {
-      controller: new AbortController(),
-      deadline: performance.now() + 10000,
-      calls: 0,
-      lists: 0,
-      paged: false,
-      mutation: new AbortController(),
-    };
-    current = inv;
-    boundCode = undefined;
+    let inv!: Invocation, timer!: ReturnType<typeof setTimeout>;
     const cancel = () => {
       inv.code = "ACCESS_DENIED";
       inv.cancelled = true;
       inv.mutation?.abort();
       inv.controller.abort();
     };
-    signal?.addEventListener("abort", cancel, { once: true });
-    const timer = setTimeout(() => {
-      inv.code = "REQUEST_TIMEOUT";
-      inv.controller.abort();
-    }, 10000);
+    // F-026 BR-258 v2: wait in the shared queue; the deadline starts at the slot.
+    const start = () => {
+      inv = {
+        controller: new AbortController(),
+        deadline: performance.now() + 10000,
+        calls: 0,
+        lists: 0,
+        paged: false,
+        mutation: new AbortController(),
+      };
+      current = inv;
+      boundCode = undefined;
+      signal?.addEventListener("abort", cancel, { once: true });
+      timer = setTimeout(() => {
+        inv.code = "REQUEST_TIMEOUT";
+        inv.controller.abort();
+      }, 10000);
+    };
+    const refused = await admit(signal, start);
+    if (refused) return { ok: false, code: refused };
     try {
       const result = await gate.run({
         tool,
@@ -636,7 +726,7 @@ export function createNavigationController(
       pagination.finish(true);
       clearTimeout(timer);
       signal?.removeEventListener("abort", cancel);
-      if (current === inv) current = undefined;
+      release(inv);
     }
   }
   /** BR-258: a result over the output bound is returned without `value`. */
@@ -691,6 +781,7 @@ export function createNavigationController(
     invokeMutation,
     close() {
       closed = true;
+      closeQueue();
       pagination.close();
       current?.mutation?.abort();
       current?.controller.abort();

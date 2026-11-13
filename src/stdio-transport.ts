@@ -9,6 +9,8 @@ const byteLimit = 1048576;
 type OutboundMessage =
   | JSONRPCMessage
   | { jsonrpc: "2.0"; id: null; error: { code: number; message: string } };
+/** F-026 D-7: `MAX_WAITING + 2` frames may wait behind the frame being written. */
+const MAX_OUTBOUND_WAITING = 6;
 const allowedResourceErrors = new Set([
   "ACCESS_DENIED",
   "PAGINATION_UNAVAILABLE",
@@ -94,6 +96,12 @@ export function createOwnedStdioTransport(
     pumping = false;
   let buffer: Buffer = Buffer.alloc(0);
   let pending: { reject(error: Error): void; cleanup(): void } | undefined;
+  /** F-026 BR-388: frames waiting, in send order, behind the frame being written. */
+  const outbound: {
+    frame: string;
+    resolve(): void;
+    reject(error: Error): void;
+  }[] = [];
   const internalError = () => new Error("STDIO_CLOSED");
   function fail(message: "STDIO_INPUT_FAILED\n" | "STDIO_OUTPUT_FAILED\n") {
     if (closed) return;
@@ -120,6 +128,7 @@ export function createOwnedStdioTransport(
     pending = undefined;
     active?.cleanup();
     active?.reject(internalError());
+    for (const waiting of outbound.splice(0)) waiting.reject(internalError());
     output.off("error", outputError);
     // Destroy without an error argument: do not create another unhandled error event.
     output.destroy();
@@ -147,10 +156,36 @@ export function createOwnedStdioTransport(
       fail("STDIO_OUTPUT_FAILED\n");
       throw internalError();
     }
-    if (pending || Buffer.byteLength(frame) > byteLimit) {
+    if (Buffer.byteLength(frame) > byteLimit) {
       fail("STDIO_OUTPUT_FAILED\n");
       throw internalError();
     }
+    if (!pending) return write(frame);
+    // BR-388: at most 6 frames wait; a seventh waiting frame closes the session.
+    if (outbound.length >= MAX_OUTBOUND_WAITING) {
+      fail("STDIO_OUTPUT_FAILED\n");
+      throw internalError();
+    }
+    return new Promise<void>((resolve, reject) => {
+      outbound.push({ frame, resolve, reject });
+    });
+  }
+  /** BR-388: start the oldest waiting frame once the previous one settled. */
+  function writeNext() {
+    if (pending || closed) return;
+    const entry = outbound.shift();
+    if (entry)
+      write(entry.frame).then(
+        () => {
+          entry.resolve();
+        },
+        (error: unknown) => {
+          entry.reject(error as Error);
+        },
+      );
+  }
+  /** BR-070 v3: one frame; its 1,000 ms bound counts from its write start. */
+  function write(frame: string): Promise<void> {
     const deadline = performance.now() + 1000;
     return new Promise<void>((resolve, reject) => {
       let callbackDone = false,
@@ -176,6 +211,7 @@ export function createOwnedStdioTransport(
           cleanup();
           pending = undefined;
           resolve();
+          writeNext();
         }
       };
       function drain() {

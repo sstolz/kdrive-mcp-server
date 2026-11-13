@@ -4,6 +4,14 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed
+
+- #16 / F-026 v1 (pending acceptance): parallel tool calls of one session
+  wait in a bounded queue (up to 4 calls, at most 12 seconds each) instead of
+  failing at once with `SERVER_BUSY`; `SERVER_BUSY` is now documented as
+  retryable, and stdio writes queued responses in order instead of closing
+  the session.
+
 ## [0.6.0-beta.1] - 2026-11-13
 
 ### Added

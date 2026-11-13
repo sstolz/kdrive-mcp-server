@@ -40,3 +40,21 @@ search excerpt.
 | Claude Code    | 2026-11-02 | [Claude Code MCP](https://code.claude.com/docs/en/mcp), [Claude connector authentication](https://claude.com/docs/connectors/building/authentication)                                                                                                            | supported            | unverified | supported        | unverified                                 | `http://localhost:<port>/callback`; `http://127.0.0.1/callback` | `http://localhost:<port>/callback`; `http://127.0.0.1/callback` | unverified                | unverified       | not tested | Manual entry: `--client-id`, `--client-secret` (masked prompt or `MCP_CLIENT_SECRET`) and `--callback-port`. CIMD appeared only in a summarized part of the Claude Code page. The connector page lists `http://localhost/callback` and `http://127.0.0.1/callback` with the port ignored. The Claude Code page mentions protocol revision 2026-07-28 but states no authorization specification version.                                                                                                                                                                                            |
 | ChatGPT        | 2026-11-02 | [OpenAI authentication (owner-supplied)](https://developers.openai.com/plugins/build/auth), [Apps SDK authentication (search excerpt)](https://developers.openai.com/apps-sdk/build/auth), [Codex MCP (owner-supplied)](https://developers.openai.com/codex/mcp) | supported            | supported  | supported        | supported                                  | `https://chatgpt.com/connector_platform_oauth_redirect`         | `https://chatgpt.com/connector/oauth/{callback_id}`             | 2025-11-25                | no               | not tested | Owner-supplied pages. CIMD is preferred (client ID `https://chatgpt.com/oauth/client.json` or a per-callback document) with token authentication `none` or `private_key_jwt` only; dynamic registration happens once per connection; predefined OAuth clients are supported. PKCE S256 is mandatory and `resource` is sent on both requests. The rejection of a mismatched or missing advertised `iss` is stated on the Codex MCP page for the flow shared by the ChatGPT desktop app, the Codex CLI and the IDE extension. The authentication page also cites 2026-07-28 for response validation. |
 | Codex          | 2026-11-02 | [Codex MCP (owner-supplied)](https://developers.openai.com/codex/mcp), [OpenAI authentication (owner-supplied)](https://developers.openai.com/plugins/build/auth)                                                                                                | supported            | supported  | supported        | supported                                  | `http://127.0.0.1/callback`                                     | `http://127.0.0.1:<port>/callback/<callback_id>`                | 2025-11-25                | no               | not tested | Owner-supplied pages. CIMD is chosen only when `client_id_metadata_document_supported` is `true`, `none` is listed and a loopback callback is supported (document `https://chatgpt.com/oauth/codex/client.json`, or a per-callback document). Manual entry: `codex mcp add --oauth-client-id` and `[mcp_servers.<name>.oauth]` `client_id`. The authorization server must accept a variable loopback port (RFC 8252 §7.3). The Codex page states no authorization version; the version comes from the authentication page, which covers ChatGPT and Codex.                                         |
+
+## Parallel tool calls
+
+Some clients, claude.ai among them, send several tool calls of one session in
+parallel. The server runs one tool call (or resource read) per session at a
+time, in arrival order:
+
+- up to 4 further calls wait for the running one to finish, each for at most
+  12 seconds; a waiting call makes no kDrive request;
+- a call that finds 4 calls already waiting, or that waits 12 seconds, gets
+  `SERVER_BUSY`;
+- `SERVER_BUSY` means the call was refused before any kDrive request, so it is
+  safe to retry, writes included, once an earlier call has completed;
+- each call's own 10-second deadline and request budgets start only when it
+  runs, so waiting does not shorten them.
+
+Sessions never wait for each other: each stdio process and each HTTP session
+has its own queue.
