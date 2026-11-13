@@ -152,7 +152,11 @@ and cannot be part of `make check`.
    BR-390 encode options (Jimp's `png().encode` defaults), and
    `encodeJpeg(bitmap)`, which returns `encode(bitmap, 100).data` of
    `jpeg-js` (Jimp's `jpeg().encode` default quality 100), so every fixture
-   keeps the bytes Jimp produced (AC-01 pins them). Every `@jimp/*`
+   keeps the bytes Jimp produced (AC-01 pins them). It also exports
+   `decodePng(data)`, which returns `{ data, width, height }` of
+   `PNG.sync.read(data)`, and `decodeJpeg(data, options)`, which returns
+   `jpeg-js` `decode(data, options)` (Jimp's pass-through), so the tests'
+   `png().decode` and `jpeg().decode` calls keep their assertions. Every `@jimp/*`
    reference in the tests changes, file by file:
    - `tests/read-image.test.ts`: the imports at lines 2–3 become the helper;
      the route test at line 149 (`TestBR317_jimp_on_root_zod image route
@@ -337,7 +341,7 @@ scripts/install-check.ts` and exits with its status; `make help` lists
   (`npm install -g`) resolves no `zod` below 4.6.6, and the CI `audit` job
   checks this with `make install-check`; (b) in one sentence, that earlier
   published versions (`0.6.0-beta.1` and older) still resolve the nested
-  `zod` 3.25.76 (GHSA-mrhx-c7xc-m3w5) on such an install, and that their
+  Zod 3 (`zod` 3.25.76, GHSA-mrhx-c7xc-m3w5) on such an install, and that their
   users upgrade to the first release that includes #12 or use the container
   image, whose `npm ci` install is not affected. The section may name the
   former image library (Jimp) only in sentence (b); it contains neither
@@ -643,3 +647,13 @@ Review 1 (12-spec-review-1-reviewer), findings on `24a1ff3`; all retained:
    implementation like the other records) record the supersession (D-6).
    `docs/spec-index.md` is not changed in the spec phase: it lists ADRs in
    prose with their acceptance, and ADR-010 is not accepted yet.
+
+Review 2 (12-spec-review-2-reviewer), `approve` on `331e670` with two minor
+findings; both retained:
+
+1. [minor] The test helper had no decode functions for the tests'
+   `png().decode` and `jpeg().decode` calls. Retained: Scope item 6 adds
+   `decodePng` and `decodeJpeg`.
+2. [minor] BR-321 v4 (b) could be met without the literal `Zod 3`, so a
+   compliant section could fail AC-12. Retained: sentence (b) now names
+   Zod 3 literally.
