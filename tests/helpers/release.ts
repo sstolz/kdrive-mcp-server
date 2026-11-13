@@ -418,7 +418,8 @@ export function packTarball(
 /**
  * Fake npm: records each call as one JSON line (argv and the environment
  * names) in $FAKE_NPM_LOG, answers --version with $FAKE_NPM_VERSION, creates
- * node_modules/.package-lock.json for ci, and copies $FAKE_NPM_TARBALL for pack.
+ * node_modules/.package-lock.json for ci, copies $FAKE_NPM_TARBALL for pack, and
+ * prints $FAKE_NPM_PUBLISH_OUTPUT to stdout and stderr for publish.
  */
 export const FAKE_NPM = `#!/usr/bin/env node
 const fs = require("node:fs");
@@ -436,6 +437,7 @@ if (argv[0] === "pack") {
   fs.copyFileSync(process.env.FAKE_NPM_TARBALL, path.join(destination, name));
   process.exit(0);
 }
+if (argv[0] === "publish" && process.env.FAKE_NPM_PUBLISH_OUTPUT) { process.stdout.write(process.env.FAKE_NPM_PUBLISH_OUTPUT + "\\n"); process.stderr.write(process.env.FAKE_NPM_PUBLISH_OUTPUT + "\\n"); }
 process.exit(Number(process.env.FAKE_NPM_STATUS || "0"));
 `;
 

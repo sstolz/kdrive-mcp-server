@@ -399,13 +399,17 @@ function npmChecks(report: Report, inputs: Inputs, answer: Answer): void {
   let published: string | null;
   if (answer.status === 404)
     published = inputs.dryRun ? null : "npm registry status 404";
-  else if (answer.status === 200)
-    published =
-      hasKey(field(document, "versions"), inputs.version) ||
-      hasKey(field(document, "time"), inputs.version)
-        ? "version already published on npm"
-        : null;
-  else published = `npm registry status ${String(answer.status)}`;
+  else if (answer.status !== 200)
+    published = `npm registry status ${String(answer.status)}`;
+  else if (!isRecord(field(document, "versions")))
+    // A 200 body that is not an object with a `versions` object fails closed.
+    published = "npm document unreadable; refer to the owner";
+  else if (
+    hasKey(field(document, "versions"), inputs.version) ||
+    hasKey(field(document, "time"), inputs.version)
+  )
+    published = "version already published on npm";
+  else published = null;
   report.check("npm version not published", published);
   if (inputs.dryRun) return;
   let placeholder: string | null = null;
@@ -518,17 +522,16 @@ function npmTokenPresent(): boolean {
   });
 }
 
-function npmChild(args: string[], inherit: boolean) {
+/** BR-365: npm output is captured and never printed (it may hold a body). */
+function npmChild(args: string[]) {
   // eslint-disable-next-line sonarjs/no-os-command-from-path -- F-024: the Docker-only dev image fixes PATH (Dockerfile.dev)
   return spawnSync("npm", args, {
     encoding: "utf8",
-    stdio: inherit
-      ? ["ignore", "inherit", "inherit"]
-      : ["ignore", "pipe", "pipe"],
+    stdio: ["ignore", "pipe", "pipe"],
   });
 }
 function npmVersionOk(): boolean {
-  const result = npmChild(["--version"], false);
+  const result = npmChild(["--version"]);
   if (result.error) throw result.error;
   const match = /^(\d+)\.(\d+)\.(\d+)$/u.exec(result.stdout.trim());
   if (result.status !== 0 || !match) return false;
@@ -599,9 +602,11 @@ function publishNpm(): number {
     "--provenance",
   ];
   if (inputs.dryRun) args.push("--dry-run");
-  const result = npmChild(args, true);
+  const result = npmChild(args);
   if (result.error) throw result.error;
-  if (result.status !== 0) throw new FixedExit(1, "npm publish failed");
+  const code = result.status ?? 1;
+  process.stdout.write(`release-npm: publish exit ${String(code)}\n`);
+  if (code !== 0) throw new FixedExit(1, "npm publish failed");
   process.stdout.write("release-npm: done\n");
   return 0;
 }

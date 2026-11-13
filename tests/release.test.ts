@@ -566,6 +566,34 @@ describe("F-024 AC-08 registry checks", () => {
       "image not pushed",
     ],
   ];
+  it.each([
+    ["a non-JSON body", "true", "<html>not json</html>"],
+    ["a non-JSON body", "false", "<html>not json</html>"],
+    ["a JSON array", "true", [1, 2]],
+    ["a body without versions", "true", { "dist-tags": { latest: "x" } }],
+    ["a body without versions", "false", { "dist-tags": { latest: "x" } }],
+    ["versions not an object", "true", { versions: "0.6.0-beta.1" }],
+  ])(
+    "BR-363 already published: npm 200 with %s fails closed (dry run %s)",
+    async (_name, dryRun, body) => {
+      const repo = releaseRepo();
+      const state = releaseState(repo.sha);
+      state.npm = { status: 200, body };
+      const server = await startDouble(state);
+      const result = await release(
+        "check",
+        repo.root,
+        checkEnv(repo, server.url, { RELEASE_DRY_RUN: dryRun }),
+      );
+      expect(
+        line(result.stdout, "release-check", "npm version not published"),
+      ).toBe(
+        "release-check: npm version not published FAIL npm document unreadable; refer to the owner",
+      );
+      expect(result.status).toBe(1);
+      expect(result.stdout).not.toContain("not json");
+    },
+  );
   it.each(cases)(
     "BR-363 already published: %s",
     async (_name, dryRun, phase, change, expected, reason) => {
@@ -1048,6 +1076,30 @@ describe("F-024 AC-10 npm publish", () => {
       "publishConfig refused",
     ],
   ];
+  it.each([
+    ["0", 0],
+    ["1", 1],
+  ])(
+    "BR-369 npm publish: output hidden, fixed status line (BR-365, npm exit %s)",
+    async (status, code) => {
+      const { result, calls } = await publish({
+        env: {
+          FAKE_NPM_STATUS: status,
+          FAKE_NPM_PUBLISH_OUTPUT:
+            '{"_id":"@sstolz/kdrive-mcp-server","BODY-MARKER":"registry"}',
+        },
+      });
+      expect(publishes(calls)).toHaveLength(1);
+      const output = result.stdout + result.stderr;
+      expect(output).not.toContain("BODY-MARKER");
+      expect(output).not.toContain("_id");
+      expect(result.stderr).toBe("");
+      expect(result.stdout).toContain(
+        `release-npm: publish exit ${String(code)}\n`,
+      );
+      expect(result.status).toBe(code === 0 ? 0 : 1);
+    },
+  );
   it.each(refusals)("BR-369 npm publish: %s", async (_name, setup, message) => {
     const { result, calls } = await publish(setup);
     expect(result.status).toBe(1);
