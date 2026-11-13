@@ -1,14 +1,14 @@
 # Capability map
 
-## Provisional (pending acceptance) — changelog release sections
+## Accepted — changelog release sections
 
 [F-025 v1](features/F-025-changelog-release-sections.md) (#2), BR-321 v3.
 `CHANGELOG.md` keeps released entries under dated release sections
 (`## [<version>] - <YYYY-MM-DD>`), the first being `0.6.0-beta.1`, and the
 dependency-audit check reads the #104 lines from the first release section that
 cites #104, or from `## [Unreleased]` while no release section exists.
-Provisional: not accepted on actual main; BR-321 v1 stays the accepted rule
-until then.
+Accepted on actual main `e857db3` on 2026-11-13 (`make check` rc=0, 4032 tests;
+AC-06 changelog diff checked; [evidence](https://github.com/sstolz/kdrive-mcp-server/issues/2#issuecomment-6852513497)).
 
 ## Accepted — gated beta publication
 

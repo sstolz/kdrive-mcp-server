@@ -2,7 +2,7 @@
 id: F-025
 title: Changelog release sections
 ticket: "#2"
-status: frozen
+status: done
 version: 1
 ---
 
