@@ -6,7 +6,8 @@ accepted with the acceptance of F-027 on `main`. Supersedes
 [ADR-009](ADR-009-dependency-overrides-skiplibcheck.md) and the image-codec
 choice (Jimp modules) of
 [ADR-004](ADR-004-bounded-extraction-dependencies.md); the rest of ADR-004
-stands.
+stands. ADR-004 and ADR-009 are accepted and keep their text unchanged
+(AGENTS.md §7); this ADR and `docs/spec-index.md` record the supersession.
 
 ## Context
 
@@ -34,15 +35,20 @@ halving steps.
   passed, and resizes with a local nearest-neighbour function using Jimp's
   formula (`Math.floor((i * hSrc) / hDst)`, `Math.floor((j * wSrc) / wDst)`)
   on the current bitmap (BR-389, BR-390, BR-391). Both codecs are exact
-  `dependencies`; no `@jimp/*` package remains.
-- Characterization tests written on the Jimp path pin the output bytes and
-  stay green after the switch (BR-391).
+  `dependencies`; no `@jimp/*` package remains. Codec exceptions propagate
+  from `extractImage` unchanged and the extraction worker keeps mapping them
+  to `CONTENT_UNAVAILABLE` (BR-390).
+- Characterization tests written on the Jimp path pin the output (the
+  inflated-IDAT digest on every architecture, the PNG-byte digest on the
+  reference architecture linux/amd64) and the codec-error outcomes, and
+  stay green after the switch (BR-390, BR-391).
 - `overrides` keep only `minimatch` 11.0.8 (BR-315 v2). The lockfile still
   holds one `zod` at `>=4.6.6` (BR-316, unchanged).
 - `tsconfig.json` no longer sets `skipLibCheck` (BR-318 v2).
 - `make install-check` packs the package, installs the tarball into an
-  empty prefix from the npm registry, and fails on any installed `zod`
-  below 4.6.6 or any `@jimp/*` package; the CI `audit` job runs it after
+  empty prefix from the npm registry, walks every installed package at
+  every depth without following symbolic links, and fails on any installed
+  `zod` below 4.6.6, any `@jimp/*` package or any symbolic link; the CI `audit` job runs it after
   `make audit` (BR-392, BR-320 v3).
 - `make audit` and the CI `audit` job otherwise stay as ADR-009 set them
   (BR-319, BR-320).
@@ -63,8 +69,11 @@ halving steps.
 
 ## Consequences
 
-- Every install, container or npm, resolves no Zod 3; the runtime tree
-  loses `@jimp/*`, `file-type`, `mime`, `exif-parser`, `await-to-js` and
+- From the first release that includes #12, every install, container or
+  npm, resolves no Zod 3. Published versions up to `0.6.0-beta.1` still
+  resolve the nested `zod` 3.25.76 on a tarball or `npm install -g` install;
+  `SECURITY.md` tells their users to upgrade or use the container image. The
+  runtime tree loses `@jimp/*`, `file-type`, `mime`, `exif-parser`, `await-to-js` and
   `tinycolor2`.
 - The project owns a short resize function; its formula and operation order
   are pinned by unit and characterization tests.
@@ -73,7 +82,9 @@ halving steps.
 - The install check depends on the registry state at run time: an upstream
   release that brings back a Zod below 4.6.6 turns CI red on an unrelated
   PR, which is intended.
-- The characterization digests depend on the Node zlib of the dev image; a
-  Node upgrade that changes deflate output updates them in its own ticket.
+- The PNG-byte characterization digests depend on the Node zlib of the dev
+  image and are asserted on linux/amd64 only; a Node upgrade that changes
+  deflate output updates them in its own ticket, while the zlib-independent
+  inflated-IDAT digests must stay unchanged.
 - Reversing the decision means re-adding Jimp, its overrides and
   `skipLibCheck`, and accepting the tarball-install advisory again.
