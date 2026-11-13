@@ -2,7 +2,7 @@
 id: F-026
 title: Bounded invocation queue
 ticket: "#16"
-status: ready-for-freeze
+status: frozen
 version: 1
 ---
 
@@ -77,9 +77,9 @@ listed under Scope that observe the old immediate refusal).
   `docs/mcp-client-compatibility.md`, and one `CHANGELOG.md` line under
   `## [Unreleased]`.
 - Existing tests that observe the immediate `SERVER_BUSY` change to observe
-  waiting, or reach `SERVER_BUSY` through a full queue or a wait timeout. No
-  rule changes for these BRs; only their tests (and, for BR-118, one
-  example) change:
+  waiting, or reach `SERVER_BUSY` through a full queue or a wait timeout.
+  BR-089 v1 and BR-284 v1 keep their rule and examples; BR-070 v3, BR-118
+  v2 and BR-258 v2 are versioned under Business rules:
   - BR-070 (v3, see below): `tests/navigation.test.ts` ("BR-070
     never-settling evidence times out and concurrent requests are busy"),
     `tests/navigation-wire-boundaries.test.ts` ("BR-070 actual SDK
@@ -208,7 +208,8 @@ listed under Scope that observe the old immediate refusal).
   output) — the v2 rule plus: on stdio, a second outbound frame while one
   is being written waits in the BR-388 queue instead of closing the
   session; only a queue overflow, an oversized frame or a frame not written
-  within its 1,000 ms closes it. Verified by: AC-12, AC-15.
+  within its 1,000 ms closes it, besides a write error or a serialization
+  failure, which still close it as today. Verified by: AC-12, AC-15.
 - **BR-118 v2** (rule text unchanged) — its example "a pending read and a
   concurrent info call → `SERVER_BUSY`" becomes "the info call waits and
   runs after the read settles; a call refused by a full queue gets
@@ -425,8 +426,8 @@ unless another file is named.
 - **D-7 — Stdio outbound FIFO of 6 waiting frames (BR-388).** Chosen:
   frames wait in send order behind the frame being written; the cap is
   `MAX_WAITING + 2` = 6. A session has at most 1 running and 4 waiting
-  invocations, so at most 5 invocation responses can be pending at once
-  (4 waiting frames behind the one being written); the 2 extra places
+  invocations, so a burst of parallel calls produces at most 5 invocation
+  responses (4 waiting frames behind the one being written); the 2 extra places
   cover frames produced at once without an invocation (a `SERVER_BUSY`
   refusal of a fifth call, a parse or invalid-request error, a `ping` or
   `tools/list` answer). At most 7 frames of at most 1 MiB are held. The
@@ -435,8 +436,9 @@ unless another file is named.
   session within 1,000 ms of the first frame's write start. Accepted
   residual: a peer that sends more than about 7 requests answered in the
   same tick (for example 12 parallel calls, whose refusals answer at once)
-  while stdout is not drained gets the session closed; today the second
-  frame closes it. Rejected: (a) keep closing on the second pending send,
+  while stdout is not drained, or that keeps pipelining requests while not
+  draining stdout, gets the session closed; today the second frame closes
+  it. Rejected: (a) keep closing on the second pending send,
   because the queue makes overlapping responses normal and the session
   would die (review 1, finding 1); (b) an unbounded queue, because a
   non-reading peer would grow memory without limit; (c) serializing
@@ -491,3 +493,18 @@ changes):
 5. **minor, retained** — BR-118's example changed without a version bump.
    BR-118 goes to v2 (rule text unchanged, example changed, History line);
    v1 stays the active rule until acceptance.
+
+Review 2 (`16-spec-review-2-reviewer`, revision 01dc831): `approve` with
+three minor findings, all retained and applied editorially by the
+orchestrator before freeze:
+
+1. **minor, retained** — BR-070 v3 and its F-026 entry omitted the write
+   error and serialization failure that still close the stdio session;
+   both now say so.
+2. **minor, retained** — the sentence on existing tests said no rule text
+   changes; it now names BR-089 v1 and BR-284 v1 as unchanged and BR-070
+   v3, BR-118 v2 and BR-258 v2 as versioned.
+3. **minor, retained** — "at most 5 invocation responses pending" was not
+   structural; D-7 and BR-388 now bound a burst of parallel calls, and the
+   D-7 residual includes a peer that keeps pipelining while not draining
+   stdout.
