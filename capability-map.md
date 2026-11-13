@@ -1,5 +1,20 @@
 # Capability map
 
+## Accepted — bounded invocation queue
+
+[F-026 v1](features/F-026-bounded-invocation-queue.md) (#16), BR-380–BR-388 v1
+with BR-070 v3, BR-118 v2 and BR-258 v2. A tool call, resource read or gate run
+that arrives while another invocation of the same session runs waits in a
+per-session first-in first-out queue (at most 4 waiting calls, at most 12
+seconds each) instead of failing at once; execution stays one at a time, so
+writes stay serialized, and each invocation's 10-second deadline and budgets
+start when it takes the slot. A full queue or a wait timeout answers
+`SERVER_BUSY` before any kDrive request, documented as retryable; abort or
+close while waiting answers `ACCESS_DENIED`. The stdio transport queues up to
+6 outbound frames behind the frame being written instead of closing the
+session. Accepted on actual main `2d10e19` on 2026-11-13 (`make check` rc=0,
+4060 tests; [evidence](https://github.com/sstolz/kdrive-mcp-server/issues/16#issuecomment-6863879656)).
+
 ## Accepted — changelog release sections
 
 [F-025 v1](features/F-025-changelog-release-sections.md) (#2), BR-321 v3.

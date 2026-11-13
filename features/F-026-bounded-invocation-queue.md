@@ -2,7 +2,7 @@
 id: F-026
 title: Bounded invocation queue
 ticket: "#16"
-status: frozen
+status: done
 version: 1
 ---
 
