@@ -193,18 +193,26 @@ it("TestBR109_fresh_policy retries reauthorize and never retries body reads", as
     c.close();
   }
 });
-it("TestBR118_worker_lifecycle timeout, busy, cancellation and slot recovery", async () => {
+it("TestBR118_worker_lifecycle timeout, waiting, cancellation and slot recovery", async () => {
   const f = await contentFixture(
       { KDRIVE_MCP_EXTRACT_TIMEOUT_MS: "1" },
       Buffer.from("a".repeat(100000)),
     ),
     c = createNavigationController(f.config, f.dependencies);
   try {
-    const task = c.invoke("kdrive_read", read);
-    expect(await c.invoke("kdrive_info", { file_id: 3 })).toEqual(
-      contentError("SERVER_BUSY"),
-    );
+    const order: string[] = [];
+    const task = c.invoke("kdrive_read", read).then((r) => {
+      order.push("read");
+      return r;
+    });
+    // BR-118 v2: the info call waits and runs after the read settles.
+    const info = c.invoke("kdrive_info", { file_id: 3 }).then((r) => {
+      order.push("info");
+      return r;
+    });
     expect(await task).toEqual(contentError("REQUEST_TIMEOUT"));
+    expect((await info).isError).toBeUndefined();
+    expect(order).toEqual(["read", "info"]);
     expect(
       (await c.invoke("kdrive_info", { file_id: 3 })).isError,
     ).toBeUndefined();

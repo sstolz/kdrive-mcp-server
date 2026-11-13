@@ -149,9 +149,14 @@ describe("central read retry and bounded lifecycle", () => {
         pending = c.invoke("kdrive_download", { file_id: 3 }, abort.signal);
       await vi.advanceTimersByTimeAsync(0);
       expect(response).toBeDefined();
-      await expect(c.readResource("kdrive://7/file/3")).rejects.toThrow(
-        "SERVER_BUSY",
-      );
+      // F-026: a concurrent read waits without opening content; its own
+      // cancellation removes it with ACCESS_DENIED.
+      const other = new AbortController(),
+        waiter = c.readResource("kdrive://7/file/3", other.signal);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(f.content.open).toHaveBeenCalledOnce();
+      other.abort();
+      await expect(waiter).rejects.toThrow("ACCESS_DENIED");
       if (action === "cancel") abort.abort();
       else if (action === "close") c.close();
       else await vi.advanceTimersByTimeAsync(10000);

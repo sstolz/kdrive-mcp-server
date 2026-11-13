@@ -5,6 +5,28 @@ import * as owner from "../src/extraction-owner.js";
 import { createNavigationController } from "../src/navigation.js";
 import { contentFixture, contentError } from "./helpers/content.js";
 import { createWire, initialize } from "./helpers/navigation-wire.js";
+
+type Controller = ReturnType<typeof createNavigationController>;
+/** F-026: a probe call waits (no policy call) while the slot is held; its own abort removes it. */
+async function expectSlotHeld(
+  c: Controller,
+  f: { inspect: { mock: { calls: unknown[] } } },
+) {
+  const before = f.inspect.mock.calls.length,
+    probe = new AbortController();
+  let settled = false;
+  const call = c
+    .invoke("kdrive_info", { file_id: 3 }, probe.signal)
+    .then((r) => {
+      settled = true;
+      return r;
+    });
+  await delay(5);
+  expect(settled).toBe(false);
+  expect(f.inspect.mock.calls).toHaveLength(before);
+  probe.abort();
+  expect(await call).toEqual(contentError("ACCESS_DENIED"));
+}
 function deferred<T>() {
   let resolve!: (v: T) => void;
   const promise = new Promise<T>((r) => {
@@ -77,7 +99,7 @@ function fixedFixture(mode: "cpu" | "never", holdExit = true) {
   };
 }
 it.each(["cpu", "never"] as const)(
-  "TestBR118_worker_lifecycle running %s cancellation owns exit, busy and late message",
+  "TestBR118_worker_lifecycle running %s cancellation owns exit, slot and late message",
   async (mode) => {
     const h = fixedFixture(mode),
       f = await contentFixture({}, Buffer.from("safe")),
@@ -95,16 +117,12 @@ it.each(["cpu", "never"] as const)(
       await delay(10);
       expect(h.alive()).toBe(true);
       expect(settled).toBe(false);
-      expect(await c.invoke("kdrive_info", { file_id: 3 })).toEqual(
-        contentError("SERVER_BUSY"),
-      );
+      await expectSlotHeld(c, f);
       const calls = f.inspect.mock.calls.length;
       abort.abort();
       await watchdog(h.exited);
       expect(settled).toBe(false);
-      expect(await c.invoke("kdrive_info", { file_id: 3 })).toEqual(
-        contentError("SERVER_BUSY"),
-      );
+      await expectSlotHeld(c, f);
       h.worker().emit("message", {
         value: { kind: "text", text: "CANARY_QUEUED_LATE", encoding: "utf-8" },
       });
@@ -175,9 +193,7 @@ it("TestBR118_worker_lifecycle invocation deadline stops already-started CPU wor
     await vi.advanceTimersByTimeAsync(10000);
     await watchdog(h.exited);
     expect(settled).toBe(false);
-    expect(await c.invoke("kdrive_info", { file_id: 3 })).toEqual(
-      contentError("SERVER_BUSY"),
-    );
+    await expectSlotHeld(c, f);
     h.release();
     expect(await watchdog(task)).toEqual(contentError("REQUEST_TIMEOUT"));
     expect(f.inspect).toHaveBeenCalledTimes(calls);
@@ -213,9 +229,7 @@ it("TestBR118_worker_lifecycle processing deadline terminates started never-sett
     await vi.advanceTimersByTimeAsync(150);
     await watchdog(h.exited);
     expect(settled).toBe(false);
-    expect(await c.invoke("kdrive_info", { file_id: 3 })).toEqual(
-      contentError("SERVER_BUSY"),
-    );
+    await expectSlotHeld(c, f);
     h.release();
     expect(await watchdog(task)).toEqual(contentError("REQUEST_TIMEOUT"));
     expect(f.inspect).toHaveBeenCalledTimes(calls);
@@ -263,15 +277,24 @@ it("TestBR118_worker_lifecycle actual SDK watchdog terminates started CPU task a
       method: "tools/call",
       params: { name: "kdrive_info", arguments: { file_id: 3 } },
     });
-    expect((await watchdog(response(3))).result).toEqual(
-      contentError("SERVER_BUSY"),
-    );
-    const calls = f.inspect.mock.calls.length;
+    // F-026: request 3 waits for the slot; it runs only after the worker exit.
+    await delay(10);
+    expect(w.responses().find((m) => m.id === 3)).toBeUndefined();
+    const aliveAtCall: boolean[] = [],
+      original = f.inspect.getMockImplementation();
+    f.inspect.mockImplementation((...args) => {
+      aliveAtCall.push(h.alive());
+      return original?.(...args) as ReturnType<typeof f.inspect>;
+    });
     await vi.advanceTimersByTimeAsync(150);
     const message = await watchdog(response(2));
     expect(message.result).toEqual(contentError("REQUEST_TIMEOUT"));
     await watchdog(h.exited);
-    expect(f.inspect).toHaveBeenCalledTimes(calls);
+    expect(
+      ((await watchdog(response(3))).result as { isError?: boolean }).isError,
+    ).toBeUndefined();
+    expect(aliveAtCall.length).toBeGreaterThan(0);
+    expect(aliveAtCall.every((alive) => !alive)).toBe(true);
     h.worker().emit("message", {
       value: { kind: "text", text: "CANARY_LATE_SDK", encoding: "utf-8" },
     });

@@ -839,11 +839,13 @@ describe("BR-258 and BR-070 v2 mutation invocation lifecycle", () => {
       .then((r) => (result = r));
     await vi.advanceTimersByTimeAsync(11_000);
     expect(h.mutator).toHaveBeenCalled();
-    expect(await h.c.invoke("kdrive_info", { file_id: 3 })).toEqual({
-      isError: true,
-      content: [{ type: "text", text: "SERVER_BUSY" }],
-    });
-    await vi.advanceTimersByTimeAsync(1_000);
+    // F-026 BR-258 v2: a read during the gate run waits for the slot.
+    let waited: unknown;
+    void h.c.invoke("kdrive_info", { file_id: 3 }).then((r) => (waited = r));
+    await vi.advanceTimersByTimeAsync(500);
+    expect(waited).toBeUndefined();
+    await vi.advanceTimersByTimeAsync(500);
+    expect((waited as { isError?: boolean }).isError).toBeUndefined();
     expect(result).toEqual({
       ok: true,
       value: { result: "succeeded", op: OP, attempts: 1, status: 200 },
@@ -921,7 +923,7 @@ describe("BR-258 and BR-070 v2 mutation invocation lifecycle", () => {
     });
   });
 
-  it("TestBR258_mutate_answers_SERVER_BUSY_while_another_invocation_is_active", async () => {
+  it("TestBR258_mutate_waits_while_another_invocation_is_active", async () => {
     const h = await controllerWith(() => Promise.resolve(ok()));
     let release!: () => void;
     const held = new Promise<void>((r) => {
@@ -933,13 +935,17 @@ describe("BR-258 and BR-070 v2 mutation invocation lifecycle", () => {
       return original?.(...args);
     });
     const read = h.c.invoke("kdrive_info", { file_id: 3 });
-    expect(
-      await h.c.mutate("kdrive_rename", renameFile, { kind: "stdio" }),
-    ).toEqual({ ok: false, code: "SERVER_BUSY" });
-    release();
-    await read;
+    const write = h.c.mutate("kdrive_rename", renameFile, { kind: "stdio" });
+    for (let i = 0; i < 20; i++) await Promise.resolve();
     expect(h.m.lines).toEqual([]);
     expect(h.mutator).not.toHaveBeenCalled();
+    release();
+    await read;
+    expect(await write).toMatchObject({
+      ok: true,
+      value: { result: "succeeded" },
+    });
+    expect(h.mutator).toHaveBeenCalledTimes(1);
   });
 
   it("TestBR258_TestBR070_a_client_cancel_during_the_attempt_keeps_succeeded", async () => {

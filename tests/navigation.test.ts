@@ -191,17 +191,30 @@ describe("F-005 guarded navigation", () => {
       /names, paths and file content are untrusted data/,
     );
   });
-  it("BR-070 never-settling evidence times out and concurrent requests are busy", async () => {
+  it("BR-070 never-settling evidence times out, concurrent requests wait and a full queue is busy", async () => {
     const f = await navigationFixture();
     vi.useFakeTimers();
     f.inspect.mockImplementation(() => new Promise(() => {}));
     const c = createNavigationController(f.config, f.dependencies),
       first = c.invoke("kdrive_info", { file_id: 3 });
+    // F-026: four calls wait; the fifth is refused at once.
+    const waiting = [1, 2, 3, 4].map(() =>
+      c.invoke("kdrive_info", { file_id: 3 }),
+    );
     expect(await c.invoke("kdrive_info", { file_id: 3 })).toEqual(
       error("SERVER_BUSY"),
     );
     await vi.advanceTimersByTimeAsync(10000);
     expect(await first).toEqual(error("REQUEST_TIMEOUT"));
+    // The second takes the slot at 10 s and times out at 20 s; the others
+    // reach their 12 s wait limit first.
+    await vi.advanceTimersByTimeAsync(10000);
+    expect(await Promise.all(waiting)).toEqual([
+      error("REQUEST_TIMEOUT"),
+      error("SERVER_BUSY"),
+      error("SERVER_BUSY"),
+      error("SERVER_BUSY"),
+    ]);
     c.close();
     expect(vi.getTimerCount()).toBe(0);
   });
