@@ -2,7 +2,7 @@
 id: F-034
 title: PDF text extraction for common generator output
 ticket: "#4"
-status: ready-for-freeze
+status: frozen
 version: 1
 ---
 
@@ -178,7 +178,7 @@ findings follow (10 from the spec review 4 rows):
    LibreOffice and cairo, every ReportLab stream) and admit a program-less
    projection or a small decoder.
 10. The `Tf` size changes no projected text while the lines fit their page. Size
-    0 drops every line end, and above 200,000 a line of three words no longer
+    0 drops every line end, and at 250,000 a line of three words no longer
     fits the largest admissible page, so PDF.js leaves out its last glyphs; the
     projection admits nonzero sizes up to 100,000 in absolute value.
 
@@ -285,7 +285,7 @@ findings follow (10 from the spec review 4 rows):
   filter, font, encoding, glyph name or operator, an inline image of unknown
   length) or fails an F-009 operand check (arity, type, the 1,000,000 numeric
   bound, the 32-level `q` nesting of BR-416) or the `Tf` size check of BR-416,
-  each keeping its F-009 code and is not a ceiling; and with
+  each keeps its F-009 code and is not a ceiling; and with
   `CONTENT_UNAVAILABLE` when the file contradicts its own structure (an offset
   that does not hold the object it names, a cycle, a length that overruns its
   data, a missing required object or resource). Verified by: AC-01, AC-09,
@@ -424,8 +424,8 @@ findings follow (10 from the spec review 4 rows):
   100,000 in absolute value (otherwise `UNSUPPORTED_FORMAT`); negative and
   fractional sizes are admitted. This measured bound replaces the F-009 size
   range 1–512: within it the size only changes the geometry of PDF.js's items,
-  as it does on the source, while size 0 drops PDF.js's line ends and, above
-  200,000, a line of three words no longer fits the largest page the numeric
+  as it does on the source, while size 0 drops PDF.js's line ends and, at
+  250,000, a line of three words no longer fits the largest page the numeric
   check admits, so PDF.js leaves out its last glyphs (F-034 Measurement 3,
   D-13). Text state is part of the graphics state: it persists across `BT`/`ET`,
   is saved and restored by `q`/`Q`, `BT` resets only the text matrices, and text
@@ -1153,7 +1153,10 @@ the processing order.
   leaves out its last glyphs; 100,000 stays a factor of two below the first
   loss. Text placed outside its page is left out by PDF.js at any size (a
   120-character line at size 12 on a Letter page is cut at its edge), on the
-  source as on the projection, and is not a projection loss. Rejected: keeping
+  source as on the projection, and is not a projection loss. PDF.js also
+  joins lines that overlap at any size, tiny sizes included (a `T*` advance
+  of 1.2 times a size near the numeral limit vanishes in float64 rounding);
+  this is the same residual on the source and is accepted. Rejected: keeping
   1–512 (refuses negative and fractional sizes measured exact); the numeric
   check alone (admits 0 and sizes whose text fits no admissible page, losing
   text silently); refusing text outside the page box (needs a model of PDF.js's
@@ -1359,3 +1362,11 @@ Spec review 4 (`4-spec-review-4-reviewer`, changes):
    `/ASCIIHexDecode` data holding `G` and data without `>`.
 4. minor (CHANGELOG wrap) — retained: the F-034 entry of `CHANGELOG.md`
    rewrapped to 80 columns.
+
+Spec review 5 (`4-spec-review-5-reviewer`, approve; ready to freeze):
+
+- (minor) Lines merging at tiny sizes were not stated in D-13. Retained:
+  D-13 states the overlapping-lines residual, tiny sizes included.
+- (minor) "above 200,000" overstated the measurement. Retained: "at
+  250,000" in Measurement 3, BR-416 and its record.
+- (minor) Grammar in BR-114 v2. Retained: fixed in the spec and its record.
