@@ -616,7 +616,7 @@ it("BR-171 v3 AC-04 only the entry script mounts the state directory", () => {
       const allowed =
         path.includes(`${STATE_TARGET}/${STATE_FILE}`) ||
         file === "docs/oauth-proxy.md" ||
-        // F-013 production example (docs/deployment.md, out of F-029 scope).
+        // F-029 v2 AC-04: the F-013 production path in docs/deployment.md.
         (file === "docs/deployment.md" &&
           path.endsWith("/audit/oauth-state.sqlite"));
       expect(allowed, `${file}: ${path}`).toBe(true);

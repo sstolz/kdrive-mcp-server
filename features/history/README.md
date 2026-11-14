@@ -32,6 +32,7 @@ canonical-file context; use the live spec/index for current navigable references
 | F-024 v1 | [Original frozen text](F-024-v1.md) | Frozen 2026-11-12 at `0624a1b` (#2); [draft v2](../F-024-gated-publication.md) withdraws BR-376, BR-377, BR-321 v2 and AC-17–AC-20 after the D-14 stop condition and adds residual risk (f) (owner decision 2026-11-12); no acceptance claimed; snapshot SHA-256 `bdb653f6c6323bad4502071baeb867e2c2c2cc4ea0fc366c03f3e6c29864319f` |
 | F-027 v1 | [Original frozen text](F-027-v1.md) | Frozen 2026-11-13 at `cf27035` (#12); [v2](../F-027-direct-image-codecs.md) limits the BR-321 v4 changelog selection to the text before `## [0.6.0-beta.1]`; snapshot SHA-256 `65d6566541d955cc9356af3d0861bbb0c4f31a661d6698456398b9839f91d0c1` |
 | F-028 v1 | [Original frozen text](F-028-v1.md) | Frozen 2026-11-14 at `67efaf8` (#3); [v2](../F-028-client-id-metadata-documents.md) blocks the owner run until #25; snapshot SHA-256 `84ecbd0191336e27644a503f6f8651170fd6cdfe0d07f25bb86c4964aabc0ce8` |
+| F-029 v1 | [Original frozen text](F-029-v1.md) | Frozen 2026-11-14 at `07ba2c6` (#25); [v2](../F-029-acceptance-launcher-oauth-state.md) adds the F-013 `/audit/` path to the AC-04 scan; snapshot SHA-256 `9f55a73eb901246f84d91301605c399550874747a5399bfc0703091fee4c6fb2` |
 
 F-001 v2 retains BR-001–BR-004, supersedes BR-005 with BR-007 and BR-006 with BR-008,
 and adds BR-009. The v1 snapshot is a byte-for-byte copy made before v2 editing.

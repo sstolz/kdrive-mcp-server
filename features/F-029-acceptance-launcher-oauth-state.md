@@ -2,16 +2,20 @@
 id: F-029
 title: Persisted OAuth proxy state in the owner-run HTTP acceptance launcher
 ticket: "#25"
-status: frozen
-version: 1
+status: ready-for-freeze
+version: 2
 ---
 
 # F-029 — Persisted OAuth proxy state in the owner-run HTTP acceptance launcher
 
 Author: Claude Opus 5.5 (effort unknown), spec phase, 2026-11-14.
-Frozen 2026-11-14 (autonomous mode, PROJECT.md D-1) on reviewed revision
-`07ba2c6` after spec reviews 1 and 2 (`changes`) and 3 (`approve`), published
-on #25.
+Version 1 frozen 2026-11-14 (autonomous mode, PROJECT.md D-1) on reviewed
+revision `07ba2c6` after spec reviews 1 and 2 (`changes`) and 3 (`approve`),
+published on #25; kept in `features/history/F-029-v1.md`. Version 2
+(2026-11-14) changes only AC-04 and the BR-171 v3 reference to it: the scan
+also allows the existing F-013 production path `/audit/oauth-state.sqlite` in
+`docs/deployment.md`. It becomes frozen only after an independent review
+approves it on the pull request.
 Base: branch `claude/beautiful-maxwell-8mdk2w` at `01b43ff` (main `7a8c239`).
 IDs: F-029; BR-396–BR-398 v1; BR-171 v3. No ADR: the change is confined to
 an owner-run launcher and is cheap to reverse. Next free IDs checked on main
@@ -183,7 +187,9 @@ package changes.
   line, the entry script and `docs/oauth-proxy.md` name
   `HTTP_ACCEPTANCE_STATE_DIR`, no `OAUTH_STATE_FILE=` value is relative or
   under `/workspace`, and no `oauth-state.sqlite` path appears other than under
-  `/run/oauth-state` or in the `docs/oauth-proxy.md` examples. Verified by: `BR-171 v3 AC-04` in
+  `/run/oauth-state`, in the `docs/oauth-proxy.md` examples, or as the F-013
+  production path `/audit/oauth-state.sqlite` in `docs/deployment.md` (out of
+  F-029 scope, unchanged). Verified by: `BR-171 v3 AC-04` in
   `tests/http/acceptance-entry.test.ts`.
 - **AC-05** (BR-396, BR-397, BR-171 v3) — launcher rehearsal of the owner run.
   Given the AC-25 fixture checkout, a fake `docker` that records each argument
@@ -328,3 +334,11 @@ findings; all retained (applied by the orchestrator):
 2. The tunnel recovery says a dead tunnel needs a new `MCP_PUBLIC_URL`, which
    then fails with `OAUTH_STATE_MISMATCH`; step 4 points to it.
 3. Check (6) gives the exact POSIX `find -perm` expression.
+
+Code review 1 (25-code-review-1-reviewer, PR #28), version 2 (2026-11-14):
+
+1. [major] AC-04 had no exception for the existing F-013 production path
+   `/audit/oauth-state.sqlite` in `docs/deployment.md`, which the scan would
+   refuse; the implementation allowed it outside the frozen text. Retained:
+   v2 adds it to AC-04 (BR-171 v3 refers to AC-04's scan); code and test
+   assertions are unchanged.
