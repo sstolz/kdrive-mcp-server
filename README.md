@@ -17,8 +17,8 @@ recorded in an audit log before and after it is sent.
 
 **Status:** beta `0.6.0-beta.1` ([VERSION](VERSION)). The container image is
 published on GHCR as `ghcr.io/sstolz/kdrive-mcp-server:0.6.0-beta.1`
-(`linux/amd64` and `linux/arm64`; pin it by digest). The npm package
-`@sstolz/kdrive-mcp-server@beta` goes through the same gated release workflow
+(`linux/amd64` and `linux/arm64`; pin it by digest), and the npm package as
+`@sstolz/kdrive-mcp-server@beta`; both went through the gated release workflow
 ([docs/publishing.md](docs/publishing.md)). The published beta predates the
 changes under Unreleased in [CHANGELOG.md](CHANGELOG.md); build the image or
 the package from this repository to get them.
@@ -86,7 +86,7 @@ the leading `./`, without which npm reads the argument as a GitHub shorthand); i
 provides the `kdrive-mcp-server` command. `kdrive-mcp-server --help` and
 `--version` need no configuration.
 
-When the beta is on the npm registry, install it with
+Install the published beta with
 `npm install -g @sstolz/kdrive-mcp-server@beta`
 ([publishing](docs/publishing.md)).
 
