@@ -35,7 +35,9 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
   Encrypted files, fonts whose text depends on their program, inline images of
   unknown length and other filters on text streams still return
   `UNSUPPORTED_FORMAT`; `kdrive_download` returns their bytes. A cross-reference
-  stream no longer refuses as `CONTENT_UNAVAILABLE`.
+  stream no longer refuses as `CONTENT_UNAVAILABLE`. The npm package and the
+  runtime image ship the Apache-2.0 licence text as `LICENSES/Apache-2.0.txt`
+  (BR-173 v2, BR-392 v2).
 - #3 / F-028 v2 (accepted 2026-11-14): the OAuth state file is at format
   version 2 while it holds a CIMD refresh family (ADR-011); earlier releases
   refuse such a file with `OAUTH_STATE_VERSION`. Removing the origins and

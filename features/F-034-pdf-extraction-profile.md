@@ -18,15 +18,19 @@ assignment and each stream is parsed once (BR-417), a CIDFont `W` covers at most
 (BR-415), the resources of pages that are not selected are never resolved
 (BR-415), and a Form projection too long to be emitted is neither held nor kept
 (BR-419); the ceiling table, Hostile input and AC-02, AC-03, AC-05, AC-07, AC-11
-and AC-12 follow. BR versions are unchanged: the rules are pending acceptance
-and are edited in place. See `## Stress-test`, Code reviews.
+and AC-12 follow. The versions of BR-114 and BR-412–BR-420 are unchanged: those
+rules are pending acceptance and are edited in place. Code review 2 versions the
+active BR-173, BR-226 and BR-392 to v2 so that the Apache-2.0 licence text ships
+with the package and the image; their v1 stays the accepted rule until
+acceptance. See `## Stress-test`, Code reviews.
 
 Author: Claude Opus 5.5 (effort unknown), spec phase, 2026-11-14; revised
 after spec reviews 1, 2 and 3, the spec decision pass and spec review 4 by
 fresh authors, Claude Opus 5.5 (effort unknown), 2026-11-14.
 Base: branch `feat/4-pdf-profile` (main `3151786`).
-IDs: F-034; BR-114 v2; BR-412–BR-420 v1; AC-01–AC-13; ADR-012 (proposed,
-supersedes the PDF admission profile of ADR-004 and nothing else).
+IDs: F-034; BR-114 v2; BR-173 v2, BR-226 v2 and BR-392 v2; BR-412–BR-420 v1;
+AC-01–AC-13; ADR-012 (proposed, supersedes the PDF admission profile of ADR-004
+and nothing else).
 Next free IDs checked on main (`docs/spec-index.md`, `business-rules/`,
 `architecture-decisions/`): F-034, BR-412, ADR-012.
 
@@ -234,6 +238,11 @@ findings follow (10 from the spec review 4 rows):
   `UNSUPPORTED_FORMAT`; files inconsistent with their own structure refuse as
   `CONTENT_UNAVAILABLE`; the first failing check in processing order decides
   (BR-114 v2).
+- **Licence.** The character tables derive from PDF.js (Apache-2.0), whose §4(a)
+  requires a copy of the licence with every redistribution:
+  `LICENSES/Apache-2.0.txt` ships in the npm package and the runtime image, is
+  copied by the install check and is an image input (BR-173 v2, BR-392 v2,
+  BR-226 v2).
 - **Docs.** README "Limits" bullet and the `docs/development.md` PDF section:
   what is extracted, what refuses and why, and `kdrive_download` as the
   fallback for a refused file; ADR-012.
@@ -666,6 +675,17 @@ findings follow (10 from the spec review 4 rows):
   other name, a `C` or `c` name with hexadecimal digits included (PDF.js then
   rereads every such name of the font as hexadecimal), refuses. Verified by:
   AC-07, AC-12.
+- **BR-173 v2** — v1 holds, except that `runtime` also copies
+  `LICENSES/Apache-2.0.txt` into `/app/LICENSES/`: the files it copies into
+  `/app` are `dist/` (from `build`), `node_modules/` (from `deps`),
+  `package.json`, `package-lock.json`, `LICENSE`, `NOTICE`, `README.md` and
+  `LICENSES/Apache-2.0.txt`. Verified by: the image policy test.
+- **BR-226 v2** — v1 holds, except that a path under `LICENSES/` is also an
+  image input. Verified by: the ci-changes test.
+- **BR-392 v2** — v1 holds, except that `scripts/install-check.ts` also copies
+  `LICENSES/` into the temporary directory: it copies `dist/`, `LICENSE`,
+  `LICENSES/`, `NOTICE`, `README.md` and `package.json`. Verified by: no test
+  (the CI `audit` job runs `make install-check`).
 
 ## Contract details
 
@@ -1229,6 +1249,13 @@ the processing order.
   text silently); refusing text outside the page box (needs a model of PDF.js's
   glyph geometry); following PDF.js for nested text objects (state rules outside
   ISO, unmeasured).
+- **D-14 — Ship the Apache-2.0 text (BR-173 v2, BR-226 v2, BR-392 v2).**
+  Apache-2.0 §4(a) requires that recipients of the work or a derivative receive
+  a copy of the licence, and the tables of F-034 derive from PDF.js. The three
+  rules are active, so they change through a pending v2 each, and v1 stays the
+  accepted rule until acceptance. Rejected: editing the active rules in place
+  (AGENTS.md, BR versioning); a link to the licence instead of its text (§4(a)
+  asks for a copy).
 
 ## Open questions
 
@@ -1482,13 +1509,14 @@ amendment:
 
 Code review 2 (4-code-review-2-reviewer, changes):
 
-1. major (Apache-2.0 §4(a): no copy of the licence shipped) — retained, no
-   F-034 rule change: `LICENSES/Apache-2.0.txt` holds the Apache License 2.0
-   text, verbatim from `pdfjs-dist/LICENSE`, ships in the npm package and the
-   runtime image, and `NOTICE` refers to it. `NOTICE` and the two table files
-   carry the copyright lines with years: PDF.js "Copyright 2024 Mozilla
-   Foundation" and the Adobe Glyph List "Copyright 2002-2019 Adobe
-   (http://www.adobe.com/).". BR-173, BR-226 and BR-392 list the file.
+1. major (Apache-2.0 §4(a): no copy of the licence shipped) — retained:
+   `LICENSES/Apache-2.0.txt` holds the Apache License 2.0 text, verbatim from
+   `pdfjs-dist/LICENSE`, ships in the npm package and the runtime image, and
+   `NOTICE` refers to it. `NOTICE` and the two table files carry the copyright
+   lines with years: PDF.js "Copyright 2024 Mozilla Foundation" and the Adobe
+   Glyph List "Copyright 2002-2019 Adobe (http://www.adobe.com/).". BR-173,
+   BR-226 and BR-392 list the file in a pending v2 each, v1 staying active
+   (D-14).
 2. minor (a tokenizer `LIMIT_EXCEEDED` at the glyph position other than a
    name's) — retained, no rule change (BR-420 makes a malformed cleartext
    `UNSUPPORTED_FORMAT`, only a name over 31 bytes `LIMIT_EXCEEDED`): only a
