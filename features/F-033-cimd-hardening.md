@@ -113,7 +113,9 @@ page.
   has at most 8,192 bytes. A header block is the bytes from its status line
   through the `\r\n\r\n` that ends it, inclusive; each interim `1xx` block
   and the final block are bounded separately, the count restarting at the
-  byte after an interim block. The bound is checked on each received chunk
+  byte after an interim block. The v1 body count starts after the final
+  (non-`1xx`) block, so it still fails at the 5,121st body byte after any
+  interim block. The bound is checked on each received chunk
   before Node's HTTP parser receives that chunk (the byte watcher's `data`
   listener is added with `socket.prependListener`, since Node's client
   attaches its parser listener before it emits `socket`), and therefore
@@ -139,7 +141,10 @@ Existing rules this feature relies on without change:
 - **BR-394 v1**: `size` is an existing `reason`. A header-bound `size`
   always has `status` 0: BR-306 v2 decides it before any status line is
   parsed, even when the oversized block starts with one (a 503 or a 302
-  included), so no response status was received in BR-394's sense. A
+  included), so no response status was received in BR-394's sense. BR-394
+  needs no new version: its rule defines `status` 0 as "no response status
+  was received", which a header-bound `size` meets; its parenthetical list
+  of such reasons predates the header bound and is read as examples (D-4). A
   terminal `size` deletes a stale entry and gives the 400 page under BR-309.
 - **BR-143 v4**: no new event or field; the header bound adds no logged text.
 
@@ -150,8 +155,10 @@ Proxy tests use the fake fetch port, clock and logger of
 `tests/auth/cimd-fetch.test.ts`.
 
 - **AC-01** (BR-129 v6) — Given a CIMD document whose `client_name` is `Pay`
-  followed by each of U+061C, U+200E, U+200F, U+202A, U+202E, U+2066, U+2069,
-  U+2028 or U+2029 and then `Pal`, When authorize resolves it with `lang=en` and
+  followed by each of U+061C, U+200E, U+200F, U+202A, U+202B, U+202C, U+202D,
+  U+202E, U+2066, U+2067, U+2068, U+2069 (all twelve `\p{Bidi_Control}` code
+  points), U+2028 or U+2029 and then `Pal`, When authorize resolves it with
+  `lang=en` and
   with `lang=fr`, Then the consent page is 200, its name line holds
   `unnamed client` (`client sans nom`) and no self-declared suffix, the page
   contains neither `Pal` nor the character, the client ID, host and notice
@@ -218,7 +225,10 @@ Proxy tests use the fake fetch port, clock and logger of
   block has 8,193 bytes, Then the fetch fails as `size`, terminal, status 0;
   given an interim block of 8,193 bytes, Then the same; and given an interim
   block of 8,192 bytes followed by a final 200 JSON block of 8,192 bytes,
-  Then the fetch succeeds (each block is bounded on its own). Verified by:
+  Then the fetch succeeds (each block is bounded on its own); and given an
+  interim `103` block followed by a 200 JSON response with `Content-Length:
+  10` and 5,121 body bytes, Then the fetch fails as `size` (the body count
+  starts after the final block). Verified by:
   `BR-306 v2 AC-09 each interim and final header block is bounded at 8,192
   bytes` in `tests/auth/cimd-fetch.test.ts`.
 
@@ -260,7 +270,10 @@ Proxy tests use the fake fetch port, clock and logger of
   Node's limit above it whatever `--max-http-header-size` says. Each
   interim `1xx` block is bounded too, so no block escapes the bound by
   following an interim one. `status` 0 follows BR-394 since no status was
-  parsed. Rejected: `connection` transient (what Node's limit gives today;
+  parsed; BR-394 is not versioned, because its rule text ("no response status
+  was received") already covers this case and its parenthetical list of
+  reasons is read as examples. Rejected: `connection` transient (what
+  Node's limit gives today;
   it would treat oversized headers unlike an oversized body); checking after
   the status (the outcome would depend on chunking); one cumulative bound
   over all blocks (no added protection: a finished interim block is not
