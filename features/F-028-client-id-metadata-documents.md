@@ -43,8 +43,11 @@ The client matrix (`docs/mcp-client-compatibility.md`, checked 2026-11-02)
 lists CIMD as supported by claude.ai, Claude iOS, Claude Desktop, ChatGPT and
 Codex, and states that claude.ai uses CIMD whenever the metadata sets
 `client_id_metadata_document_supported` and lists `none`. The matrix
-documents no fallback to dynamic registration once CIMD is advertised, and
-no client documents the origin of its metadata document.
+documents no fallback to dynamic registration once CIMD is advertised.
+claude.ai documents no metadata document URL; the matrix records the document
+URLs that ChatGPT and Codex document (`docs/mcp-client-compatibility.md`,
+ChatGPT and Codex rows), each with a per-callback alternative, from
+owner-supplied pages and unverified. This spec names none of them (D-12).
 
 Fetching a URL named by an unauthenticated authorization request is a
 server-side request forgery (SSRF) primitive. The proxy runs next to the
@@ -123,10 +126,8 @@ unchanged.
 ### Client ID Metadata Documents
 
 - **BR-305** — A `client_id` that starts with `https://` is a CIMD client ID.
-  It is acceptable only when: it has at most 1,024 bytes; its WHATWG URL
-  serialization is byte-identical to it; it has no userinfo, query or
-  fragment; its host is a DNS name (not an IP literal); its path is not `/`
-  and has no `.` or `..` segment, also percent-encoded (`%2e`, `%2E`); it is
+  It is acceptable only when: it meets every check of Contract details "CIMD
+  client ID syntax"; it is
   not byte-identical to the proxy issuer, the audience or the upstream issuer;
   and its origin (`https://host[:port]`, port omitted when 443) is
   byte-identical to an entry of the current `oauthAllowedClientIdOrigins`. At
@@ -156,8 +157,12 @@ unchanged.
   5,000 ms deadline passes the proxy calls the resolver's `cancel()`, so no
   query outlives the fetch. Every returned address is checked under BR-307,
   and if any is blocked, or the union is empty, the fetch fails without
-  connecting. Otherwise the agent's `lookup` returns only the checked
-  addresses from memory, and no second resolution happens for this fetch. The
+  connecting. Otherwise the agent's `lookup` returns, from memory, every
+  checked address and only those (the `all` form, `resolve4` answers first,
+  then `resolve6` answers, each in answer order), and the connection is made
+  with `autoSelectFamily` true, so Node's connection attempts fall over from
+  one checked address to the next until one connects or the 5,000 ms
+  deadline passes; no second resolution happens for this fetch. The
   fetch succeeds only with status 200 (no redirect is followed; every other
   status fails), a `Content-Type` media type `application/json` or
   `application/<name>+json` (parameters ignored, case-insensitive), no
@@ -225,8 +230,12 @@ unchanged.
   `cancel()`, destroys the request and its socket, and frees the slot at that
   moment. A
   transient failure with no usable stale entry gives the 503 HTML error page;
-  a terminal failure gives the 400 HTML error page; neither redirects.
-  Verified by: AC-06.
+  a terminal failure gives the 400 HTML error page; neither redirects. When
+  the HTTP server's `close()` closes the handler (BR-169 v2 step (2)), the
+  proxy cancels every in-flight fetch in the same way (resolver `cancel()`,
+  request and socket destroyed, slot freed), and every authorization request
+  waiting on one gets the 503 HTML error page without redirect, settled in
+  that step, and creates no pending consent. Verified by: AC-06.
 - **BR-310** — At the token endpoint a CIMD client ID is authenticated with
   method `none` only: it is presented as `client_id` in the body, without
   `client_secret` and without Basic, and it is acceptable under BR-305 with the
@@ -245,9 +254,13 @@ unchanged.
   URL as client ID and count against the family bound (BR-303). The store
   format becomes version 2 (Contract details, ADR-011): the version 1 schema
   unchanged, with the family row rule extended so that a family's
-  `client_id` either names a client row or is a CIMD client ID meeting the
-  syntax checks of BR-305 (all except the origin, issuer and audience checks)
-  with no client row. A committed transaction that inserts a CIMD family sets
+  `client_id` either names a client row or meets Contract details "CIMD
+  client ID syntax" with no client row. That syntax stands on its own (no
+  origin, issuer or audience check), so a version 2 file read at startup and
+  a row to be written are checked without the configuration (a family whose
+  `client_id` names no client row and fails that syntax is
+  `OAUTH_STATE_CORRUPT` at load and a failed write at write). A committed
+  transaction that inserts a CIMD family sets
   `user_version` to 2 in that transaction; the startup transaction (BR-295 v2
   step (11)) sets it to 2 when a CIMD family remains after the purge and to 1
   otherwise. Between startups the version never goes back to 1: it stays 2
@@ -269,11 +282,15 @@ unchanged.
   `This client redirects to this computer only (loopback).` The page of a
   registered client is unchanged. Verified by: AC-09.
 - **BR-394** — The proxy adds the event `client_metadata_refused` (handler
-  `authorize`, fields `reason` and `status`) logged once per refused CIMD
-  authorization request, with `reason` one of `not_allowed` (BR-305),
-  `blocked_address`, `resolution`, `connection`, `certificate`, `timeout`,
-  `status`, `content_type`, `size`, `document` (BR-306–BR-308) or `busy`
-  (BR-309), and the event `client_metadata_fetched` (fields `status` and
+  `authorize`, fields `reason` and `status`), with `reason` one of
+  `not_allowed` (BR-305), `blocked_address`, `resolution`, `connection`,
+  `certificate`, `timeout`, `status`, `content_type`, `size`, `document`
+  (BR-306–BR-308, and a `redirect_uri` not kept from the document) or `busy`
+  (BR-309). Every refused authorization request logs exactly one event, the
+  one Contract details "Authorization refusal events" assigns to it: with an
+  empty list, and for a `client_id` that does not start with `https://`,
+  today's event only; `client_metadata_refused` only with a nonempty list.
+  The proxy also adds the event `client_metadata_fetched` (fields `status` and
   `count`, where `count` is the number of cache entries) logged once per
   completed successful fetch. In both events `status` is the HTTP status code
   of the document response, or `0` when no response status was received
@@ -294,7 +311,9 @@ unchanged.
   stays empty; that an origin is listed only when its vendor controls every
   path under it (no multi-tenant hosting where third parties can publish
   files under the origin), because any document under a listed origin is
-  accepted; the origin discovery procedure of Contract details; that a
+  accepted; that one client may use several document URLs under one origin
+  (for example a per-callback document), which is why origins, not URLs, are
+  listed; the origin discovery procedure of Contract details; that a
   document's redirect URIs are still limited to `OAUTH_ALLOWED_REDIRECT_URIS`,
   which acts only at authorization: removing a URI from it does not cut off a
   CIMD client already holding a refresh family; the fetch limits of BR-306,
@@ -302,7 +321,9 @@ unchanged.
   unusable where egress must go through a proxy, and that
   `NODE_EXTRA_CA_CERTS` extends the CAs trusted for the fetch; that removing an
   origin is the only cut-off for its clients, effective at the restart that
-  applies it (refresh tokens refused, families purged); that the state file moves to version 2 while it
+  applies it (refresh tokens refused, families purged), while access tokens
+  already issued to those clients stay valid until they expire (one hour)
+  unless the signing key is replaced; that the state file moves to version 2 while it
   holds a CIMD family and that an older release then refuses it with
   `OAUTH_STATE_VERSION` (operator action: remove the origins, start this
   release once, then downgrade); and the accepted residual risks of D-8.
@@ -328,7 +349,8 @@ unchanged.
   kept from the document; otherwise the 400 page, no redirect. Registered
   clients keep today's order. The authorize handler becomes asynchronous: the
   BR-299 latch is checked again after the resolution, and a latched store
-  answers the 503 page.
+  answers the 503 page and creates no pending consent. The event of each
+  refusal follows Contract details "Authorization refusal events".
 - **BR-129 v2** — the consent page content of BR-393 for CIMD clients.
 - **BR-136 v2** — a CIMD client ID is authenticated under BR-310; registered
   clients are unchanged.
@@ -368,11 +390,51 @@ unchanged.
 `2001:db8::/32`, `2002::/16` (6to4, blocked whatever it embeds),
 `3fff::/20`. Everything outside `2000::/3` is blocked.
 
+### CIMD client ID syntax (BR-305, BR-311)
+
+A string meets the CIMD client ID syntax when every check holds; none reads
+the configuration:
+
+1. it starts with the bytes `https://`;
+2. it has at most 1,024 bytes;
+3. it parses as a WHATWG URL whose serialization is byte-identical to it;
+4. that URL has an empty username and password, and the string contains no
+   `?` and no `#` (no query, not even an empty one, and no fragment);
+5. the URL host is a domain: neither an IPv4 address nor a bracketed IPv6
+   literal;
+6. the URL path is not `/`, and no path segment is `.` or `..`, also when
+   any dot is percent-encoded (`%2e` or `%2E`).
+
+### Authorization refusal events (BR-394, BR-128 v3)
+
+Each refused authorization request logs exactly one event, handler
+`authorize`. "Today's" means the event, page and redirect of the current
+authorize handler, unchanged.
+
+| Request                                                                                                          | Event                     | `reason`                                     | Answer                                |
+| ---------------------------------------------------------------------------------------------------------------- | ------------------------- | -------------------------------------------- | ------------------------------------- |
+| List empty, any `client_id` (CIMD or not)                                                                        | today's                   | none                                         | today's (an `https` ID: 400, unknown) |
+| List nonempty, `client_id` not starting with `https://`                                                          | today's                   | none                                         | today's                               |
+| Store latched on entry                                                                                           | `authorization_refused`   | none                                         | 503 page                              |
+| CIMD ID, repeated parameter (check 1)                                                                            | `authorization_refused`   | none                                         | 400 page                              |
+| CIMD ID, not acceptable under BR-305 (check 2)                                                                   | `client_metadata_refused` | `not_allowed`                                | 400 page                              |
+| CIMD ID, `redirect_uri` absent or not allowlisted (check 3)                                                      | `authorization_refused`   | none                                         | 400 page                              |
+| CIMD ID, fifth concurrent fetch                                                                                  | `client_metadata_refused` | `busy`                                       | 503 page                              |
+| CIMD ID, fetch fails, no usable stale entry                                                                      | `client_metadata_refused` | the failure (BR-306–BR-308)                  | 503 or 400 page (BR-309)              |
+| CIMD ID, `redirect_uri` not kept from the resolved document                                                      | `client_metadata_refused` | `document`                                   | 400 page                              |
+| CIMD ID, server closing while the fetch is pending (BR-309)                                                      | `authorization_refused`   | none                                         | 503 page                              |
+| CIMD ID, store latched after the resolution                                                                      | `authorization_refused`   | none                                         | 503 page                              |
+| CIMD ID resolved, later check fails (`response_type`, `state`, PKCE, `resource`) or consent store full           | today's                   | none                                         | today's (redirect or 503 page)        |
+
+`client_metadata_refused` is therefore logged only with a nonempty list. With
+`reason` `document` its `status` is 200 (the document's response, fetched or
+cached).
+
 ### Store format version 2 (BR-311, BR-295 v2)
 
 - Schema: the version 1 schema, unchanged.
-- Row rules: version 1, except that a family row's `client_id` may instead be
-  a CIMD client ID (BR-305 syntax checks only) with no client row.
+- Row rules: version 1, except that a family row's `client_id` may instead
+  meet "CIMD client ID syntax" below with no client row.
 - `user_version`: set to 2 by a commit that inserts a CIMD family; set by
   each startup transaction to 2 when a CIMD family remains after the purge
   and to 1 otherwise; between startups it is never lowered, so a file stays at
@@ -445,7 +507,9 @@ unchanged.
   that changes its answer on a second call is called once and the connection
   goes to a first-answer address; it refuses 301, 302, 307, 308 without
   following, and 404, as terminal; 429 and 503 as transient; `text/html` as
-  terminal; accepts `application/json; charset=utf-8` and
+  terminal; a resolver answering two addresses of which the first has no
+  listener (`127.0.0.2`, server bound to `127.0.0.1` only) and the second is
+  the server succeeds through the second; accepts `application/json; charset=utf-8` and
   `application/cimd+json`; refuses a 5,121-byte body (also with a false
   `Content-Length` of 100) and accepts 5,120 bytes; a body stalled past
   5,000 ms and a resolver that never answers fail as `timeout` at 5,000 ms on
@@ -497,7 +561,12 @@ unchanged.
   fails terminally, Then the 400 page and the entry is gone; ten concurrent
   requests for one URL make one call; four distinct URLs pending make a fifth
   get 503 without a call; right after one of four pending fetches times out,
-  a fifth URL is fetched; the 101st URL evicts the entry discarded first.
+  a fifth URL is fetched; the 101st URL evicts the entry discarded first;
+  When the store latches while a fetch is pending and the fetch then
+  succeeds, Then the 503 page and no pending consent is created (BR-128 v3);
+  When the HTTP server's `close()` runs while a fetch is pending, Then the
+  resolver's `cancel()` is called, the fetch socket is destroyed, the request
+  gets the 503 page and no pending consent is created (BR-169 v2).
   Verified by: `tests/auth/proxy-cimd.test.ts`.
 - **AC-07** (BR-310, BR-136 v2) — Given a CIMD client that completed
   authorization, When it redeems its code with `client_id` in the body and no
@@ -516,9 +585,14 @@ unchanged.
   write commits without latching and the file holds a family with the URL as
   client ID, no client row, and `user_version` 2; When that family is then
   revoked, Then `user_version` stays 2 until the next startup; When a
-  transaction writes a family row whose client ID fails the BR-305 syntax
-  checks and names no client row, Then it is a failed write and the store
-  latches; When the proxy is rebuilt on the file with the same list, Then the
+  transaction writes a family row whose client ID fails the CIMD client ID
+  syntax (`https://127.0.0.1/c`) and names no client row, Then it is a failed write and the store
+  latches, while one whose client ID `https://client.example.com/c.json`
+  meets the CIMD client ID syntax commits whatever the list holds; Given a
+  version 2 file holding a family with client ID
+  `https://client.example.com/a/%2E%2E/b` and no client row, Then
+  `OAUTH_STATE_CORRUPT`, and with `https://client.example.com/c.json` and
+  the origin listed, Then it loads; When the proxy is rebuilt on the file with the same list, Then the
   refresh succeeds without fetch; When it is rebuilt with the CIMD client's
   redirect URI removed from the allowlist but the origin listed, Then the
   family is kept and the refresh succeeds; When it is rebuilt with the origin
@@ -537,19 +611,28 @@ unchanged.
   `localhost.example.com`, the loopback line is absent; a registered client's page is
   byte-identical to today's. Verified by: `tests/auth/proxy-consent.test.ts`.
 - **AC-10** (BR-394, BR-143 v3) — Given every refusal path of AC-02 to AC-08
-  with a capturing logger and captured stderr, Then each refusal logs one
-  `client_metadata_refused` with the expected `reason`, each successful fetch
+  with a capturing logger and captured stderr, Then each refusal logs exactly
+  one event, the event and `reason` of its row in Contract details
+  "Authorization refusal events" (with an empty list, an `https` client ID
+  logs today's `authorization_refused` and no `client_metadata_refused`; a
+  `redirect_uri` not kept from the document logs `document`), each successful fetch
   one `client_metadata_fetched`, and no event, response or line contains the
   CIMD URL, its host, a resolved address, a document member or a TLS message.
   Verified by: `tests/auth/proxy-secrecy.test.ts`.
 - **AC-11** (BR-395) — Given the updated documents, When the content tests
-  run, Then each BR-395 statement, the variable and the discovery procedure
-  are present in the named files. Verified by:
+  run, Then each BR-395 statement (including several document URLs under one
+  origin, and access tokens staying valid for up to one hour after an origin
+  is removed unless the signing key is replaced), the variable and the
+  discovery procedure are present in the named files. Verified by:
   `tests/docs/oauth-cimd-docs.test.ts`.
 - **AC-12** (BR-305–BR-311, BR-393; rehearsal for the owner run) — Given
   `scripts/http-acceptance.ts` with the real HTTP layer, a fake upstream, a
   temporary state file, a local TLS CIMD client double (test CA and loopback
-  allowed only through the rehearsal seam) and a listed origin, When a scripted
+  allowed only through the rehearsal seam), the real c-ares `Resolver`
+  pointed through the DNS server list seam at a stub UDP DNS server that
+  answers an A record `127.0.0.1` for the double's host (so only the CA and
+  the loopback allowance are substituted, and the real resolution feeds the
+  pinned `lookup`) and a listed origin, When a scripted
   client follows the discovery procedure (placeholder origin first, then the
   real one), authorizes with its URL client ID, checks the consent page's
   `Client host:` line, approves, redeems, calls a tool, the server restarts on
@@ -593,8 +676,10 @@ client matrix.
   for a listed origin, and redirect URIs stay within
   `OAUTH_ALLOWED_REDIRECT_URIS`, so CIMD never widens where codes can go.
   Rejected: open CIMD with address checks only (anyone could make the server
-  fetch any public URL); an exact client-ID URL list (no client documents its
-  URL, and origins are what the draft's trust policies describe); CIMD on by
+  fetch any public URL); an exact client-ID URL list (claude.ai documents no
+  URL, one client may use several document URLs under one origin, such as
+  per-callback documents, and origins are what the draft's trust policies
+  describe); CIMD on by
   default (moves every listed client at once with no known origins).
 - **D-2 — Shipped empty; discovery procedure instead of guessed origins.** A
   nonempty list advertises CIMD to every client and the matrix documents no
@@ -790,3 +875,34 @@ findings; all retained:
 4. AC-13 also excludes an injected DNS server list from production.
 5. AC-14 measures the outstanding-query check with the stub UDP server and
    the child's open handles.
+
+Decision pass 1 (3-spec-decision-1-fable), on `90b553f`, eight minor
+findings; all retained:
+
+1. BR-306: the agent's `lookup` returns every checked address and the
+   connection uses `autoSelectFamily`, so attempts fall over between them
+   within the 5,000 ms deadline; AC-03 case (unreachable first address,
+   reachable second).
+2. BR-394 and BR-128 v3: new Contract details "Authorization refusal events"
+   maps each refusal to exactly one event: an empty list and non-CIMD client
+   IDs keep today's events (Scope 1); `client_metadata_refused` only with a
+   nonempty list; the repeated-parameter and `redirect_uri` pre-fetch checks
+   log `authorization_refused`; a `redirect_uri` not kept from the document
+   logs `document`. AC-10 checks against the table.
+3. BR-128 v3: the latch re-check after the resolution creates no pending
+   consent; AC-06 case.
+4. New Contract details "CIMD client ID syntax", standalone and
+   configuration-free, used by BR-305, BR-311, the version 2 row rule and
+   ADR-011, so `OAUTH_STATE_CORRUPT` at load and the failed write are fully
+   defined; AC-08 cases on each side for load and write.
+5. Context reworded: claude.ai documents no document URL; the ChatGPT and
+   Codex URLs are recorded in the matrix, unverified, and not repeated here
+   (D-12 kept). BR-395 and D-1: one client may use several document URLs
+   under one origin.
+6. AC-12 resolves the double's host through the real c-ares `Resolver` and
+   the DNS server list seam (stub UDP server answering an A record), so only
+   the CA and the loopback allowance are substituted.
+7. BR-309: the HTTP server's `close()` (BR-169 v2 step (2)) cancels in-flight
+   fetches and their requests get the 503 page; AC-06 case.
+8. BR-395 and AC-11: access tokens already issued stay valid until expiry
+   (one hour) after an origin removal, unless the signing key is replaced.

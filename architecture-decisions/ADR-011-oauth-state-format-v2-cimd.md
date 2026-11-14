@@ -18,8 +18,14 @@ written in the field cannot be withdrawn: every later release must read it.
 ## Decision
 
 Define format version 2 as the version 1 schema with one relaxed row rule: a
-family's `client_id` may be a CIMD client ID (syntax checks only) with no
-client row. The version is content-dependent: a transaction that inserts a
+family's `client_id` may, with no client row, be a string that meets the
+CIMD client ID syntax of F-028 Contract details, which reads no configuration:
+it starts with `https://`, has at most 1,024 bytes, equals its WHATWG URL
+serialization, has no userinfo, query or fragment, has a domain host (not an
+IPv4 address or bracketed IPv6 literal), and has a path other than `/` with no
+`.` or `..` segment, also percent-encoded. A family that names no client row
+and fails it is `OAUTH_STATE_CORRUPT` when a file is loaded and a failed write
+when a row is written. The version is content-dependent: a transaction that inserts a
 CIMD family sets `user_version` to 2, and the startup transaction sets it to
 2 when a CIMD family survives the purge and to 1 otherwise; between startups
 the version is never lowered, so a file stays at 2 after its last CIMD family
