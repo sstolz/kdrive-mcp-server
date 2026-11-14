@@ -77,8 +77,9 @@ incremental updates, metadata, structure, embedded subset fonts with
 known length, graphics around the text) become readable within the unchanged
 F-009 ceilings plus the F-034 ceilings. Encrypted files, Type3 fonts,
 predefined CMaps, CFF or symbolic TrueType fonts without a mapping outside
-their program, simple fonts with a GBK name that PDF.js reads as composite, inline images of unknown length, damaged offsets and non-Flate
-filters on text streams still refuse; the documentation points to
+their program, simple fonts with a GBK name that PDF.js reads as composite,
+inline images of unknown length, damaged offsets and non-Flate filters on text
+streams still refuse; the documentation points to
 `kdrive_download`. The preflight grows (cross-reference streams, object
 streams, a CMap reader, a Type 1 cleartext reader, encoding tables copied
 from PDF.js and pinned by a test, Form inlining, a content re-serializer) and

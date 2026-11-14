@@ -9,7 +9,7 @@ version: 1
 # F-034 — PDF text extraction for common generator output
 
 Author: Claude Opus 5.5 (effort unknown), spec phase, 2026-11-14; revised
-after spec reviews 1 and 2 by fresh authors, Claude Opus 5.5 (effort
+after spec reviews 1, 2 and 3 by fresh authors, Claude Opus 5.5 (effort
 unknown), 2026-11-14.
 Base: branch `feat/4-pdf-profile` (main `3151786`).
 IDs: F-034; BR-114 v2; BR-412–BR-420 v1; AC-01–AC-13; ADR-012 (proposed,
@@ -218,7 +218,9 @@ exactly. Two further findings follow:
   that needs it first resolves it. A failing check refuses with `LIMIT_EXCEEDED`
   when it is a declared or computed ceiling of F-009 or F-034, every bound of
   the table "Ceilings added by F-034" included, whatever the wording of the BR
-  that states it (the count or size that passes the ceiling fails); with
+  that states it (the count or size that passes the ceiling fails); the
+  computed size of a Flate inline image is a consistency check, not a ceiling,
+  and Flate output over it refuses as `CONTENT_UNAVAILABLE` (BR-416); with
   `UNSUPPORTED_FORMAT` when the file is well-formed but uses a feature outside
   the profile (encryption, an unadmitted filter, font, encoding or operator, an
   inline image of unknown length) or fails an F-009 operand check (arity, type,
@@ -263,7 +265,10 @@ exactly. Two further findings follow:
   generation 0 and is not a stream; `/Extends` is ignored. An indirect
   `/Length` resolves to a nonnegative integer object; resolving it never
   requires framing the stream it measures and opens at most one object
-  stream, whose own `/Length` is direct or a type 1 integer object. A
+  stream, whose own `/Length` is direct or a type 1 integer object; an
+  indirect `/Length` that needs more than one object stream, or an object
+  stream whose own `/Length` is neither (a type 2 object, one living inside
+  that object stream itself included), refuses as `CONTENT_UNAVAILABLE`. A
   reference to a free, absent or mismatched object in a role the projection
   needs refuses. At most 4,096 distinct objects are resolved per invocation
   (the F-009 indirect-object ceiling); an object resolved again is served
@@ -282,13 +287,13 @@ exactly. Two further findings follow:
   `maxOutputLength` set to the smaller of its computed size and the remaining B
   and without `rejectGarbageAfterEnd`, since the content after its data is not
   garbage; its data length is the number of input bytes the inflate consumed up
-  to the end of the zlib stream. A Type 1 program (BR-420) takes no
-  `/DecodeParms` and is inflated by a streaming inflate that stops as soon as it
-  has produced `/Length1` bytes and reads no further input; a `/Length1` over
-  the remaining B refuses as `LIMIT_EXCEEDED` before inflating, a program whose
-  output (or unfiltered data) ends before `/Length1` bytes refuses as
-  `CONTENT_UNAVAILABLE`, and the `/Length1` bytes count against B. Verified by:
-  AC-04.
+  to the end of the zlib stream. A Type 1 program (BR-420) with `/DecodeParms`
+  refuses as `UNSUPPORTED_FORMAT`; one without is inflated by a streaming
+  inflate that stops as soon as it has produced `/Length1` bytes and reads no
+  further input; a `/Length1` over the remaining B refuses as `LIMIT_EXCEEDED`
+  before inflating, a program whose output (or unfiltered data) ends before
+  `/Length1` bytes refuses as `CONTENT_UNAVAILABLE`, and the `/Length1` bytes
+  count against B. Verified by: AC-04.
 - **BR-415** — The canonical document holds exactly: a Catalog with `Type`
   and `Pages`; every Pages node with `Type`, `Kids`, `Count` and `Parent`
   except at the root; every page with `Type`, `Parent`, its `MediaBox`
@@ -314,7 +319,8 @@ exactly. Two further findings follow:
   canonical stream of the page, the `q` that wraps each inlined Form and the
   Forms' own `q`s included (BR-419); the `q` that opens a 33rd level refuses as
   `UNSUPPORTED_FORMAT`. String bytes are not restricted to 0x20–0xFF and `Tf`
-  takes a font name of the resource scope and a finite size. Text state is part
+  takes a font name of the resource scope and a size of 1–512, the F-009 `Tf`
+  size check (another size refuses as `UNSUPPORTED_FORMAT`). Text state is part
   of the graphics state: it persists across `BT`/`ET`, is saved and restored by
   `q`/`Q`, `BT` resets only the text matrices, and text state operators are kept
   inside or outside `BT`/`ET`. A text-show operator with no font set refuses as
@@ -339,11 +345,11 @@ exactly. Two further findings follow:
   come optional white space and `EI` followed by white space, a delimiter or the
   end. An inline image whose length is none of these refuses as
   `UNSUPPORTED_FORMAT`; framing that overruns the content or is not followed by
-  `EI` refuses as `CONTENT_UNAVAILABLE`; an inflate that would produce more than
-  its `maxOutputLength` refuses as `LIMIT_EXCEEDED` when the remaining B is the
-  smaller value or equal to the computed size, and otherwise, being over the
-  computed size, as `CONTENT_UNAVAILABLE`, as does a zlib stream that does not
-  end within the content; inflated inline bytes count against B. `Do` of a Form
+  `EI` refuses as `CONTENT_UNAVAILABLE`; an inflate whose output passes the
+  remaining B refuses as `LIMIT_EXCEEDED`; one whose output passes the computed
+  size first, a consistency check and not a ceiling, refuses as
+  `CONTENT_UNAVAILABLE`, as does a zlib stream that does not end within the
+  content; inflated inline bytes count against B. `Do` of a Form
   XObject is inlined by BR-419. `Do` inside `BT`/`ET`, `d0`, `d1` and any other
   operator refuse as `UNSUPPORTED_FORMAT`. A `Q` with no open `q` of the same
   content stream or Form is dropped, and `Q`s are appended for the `q`s left
@@ -373,10 +379,12 @@ exactly. Two further findings follow:
   `<< /Registry (Adobe) /Ordering (Identity) /Supplement 0 >>` after the source
   value is checked (a dictionary with `Registry` and `Ordering` strings of at
   most 64 bytes and an integer `Supplement`). A kept `FontDescriptor` holds
-  `Type`, `FontName`, `FontBBox` (four finite numbers), `ItalicAngle`, `Ascent`,
-  `Descent`, `CapHeight`, `StemV` and `MissingWidth` (finite numbers, each
-  optional except `FontName`), and `Flags` set to the source `Flags` with the
-  Symbolic flag (value 4) cleared and the Nonsymbolic flag (value 32) set; a
+  `Type`, `FontName` (emitted equal to the projected `BaseFont` of the font that
+  holds it, whatever its source value, since PDF.js 6.5.438 uses `FontName` when
+  it differs from `BaseFont`), `FontBBox` (four finite numbers), `ItalicAngle`,
+  `Ascent`, `Descent`, `CapHeight`, `StemV` and `MissingWidth` (finite numbers,
+  each optional except `FontName`), and `Flags` set to the source `Flags` with
+  the Symbolic flag (value 4) cleared and the Nonsymbolic flag (value 32) set; a
   simple font without a source `FontDescriptor` gets none. `FontFile`,
   `FontFile2`, `FontFile3` and a stream `CIDToGIDMap` are never emitted. A
   `ToUnicode` CMap is parsed with the bounded tokenizer: only code space ranges,
@@ -477,7 +485,8 @@ exactly. Two further findings follow:
   encrypted part is never read. The tables are those of PDF.js 6.5.438. A shown
   code that the `ToUnicode` CMap does not map and that resolves to no glyph name
   or to `.notdef` refuses as `UNSUPPORTED_FORMAT`. A simple font whose
-  `BaseFont` is one of the ten GBK font names that PDF.js 6.5.438 turns into a
+  projected `BaseFont`, which the kept `FontName` equals (BR-417), is one of
+  the ten GBK font names that PDF.js 6.5.438 turns into a
   composite `GBK-EUC-H` font when it has no program and a `WinAnsiEncoding` base
   (its `chineseFontNames` list, such as `/#CB#CE#CC#E5`) refuses as
   `UNSUPPORTED_FORMAT`, since PDF.js would return none of its text. Verified by:
@@ -488,12 +497,14 @@ exactly. Two further findings follow:
 ### Ceilings added by F-034
 
 All are per invocation, cumulative under BR-117 (equality permitted), and
-passing any of them refuses as `LIMIT_EXCEEDED`, in the BR texts and here
-alike; a value below a lower bound or of the wrong type refuses as its BR
-says. The F-009 operand checks (arity, type, the 1,000,000 numeric bound,
-32 nested `q` levels) are not ceilings and keep their F-009 code,
-`UNSUPPORTED_FORMAT`. F-009 ceilings are unchanged. AC-13 covers one example
-on each side of every ceiling not covered by AC-02–AC-12.
+passing any of them refuses as `LIMIT_EXCEEDED`, in the BR texts and here alike;
+a value below a lower bound or of the wrong type refuses as its BR says. Flate
+inline image output over its computed size is a consistency check, not a
+ceiling, and refuses as `CONTENT_UNAVAILABLE` (BR-416). The F-009 operand checks
+(arity, type, the 1,000,000 numeric bound, 32 nested `q` levels) are not
+ceilings and keep their F-009 code, `UNSUPPORTED_FORMAT`. F-009 ceilings are
+unchanged. AC-13 covers one example on each side of every ceiling not covered by
+AC-02–AC-12.
 
 | Work | Ceiling |
 | --- | --- |
@@ -502,12 +513,11 @@ on each side of every ceiling not covered by AC-02–AC-12.
 | `/W` field width; `/Index` pairs | 8 bytes each (`W[1]` ≥ 1); 4,096 |
 | Distinct objects resolved | 4,096 (F-009 ceiling, now counted on first resolution) |
 | Objects in one object stream (`/N`) | 4,096 |
-| Object streams opened to resolve one indirect `/Length` | 1 |
 | PNG predictor `/Columns` (with `/Colors` up to 4) | 65,536 |
 | `Contents` array references | 1,024 |
 | Distinct Forms; Form nesting; Form executions | 256; 8; 4,096 |
 | Inline image dictionary pairs; `W`, `H` | 32; 65,536 each |
-| Flate inline image output | min(computed size, remaining B) |
+| Flate inline image output | remaining B |
 | Distinct fonts read | 128 |
 | `Widths` numbers; `Differences` codes; glyph name | 256; 256; 31 bytes |
 | CIDFont `W` numbers | 65,536 |
@@ -545,9 +555,9 @@ emitted token (BR-418). Streams that are never decoded add nothing.
   canonically, so PDF.js never parses a source CMap; every shown code that
   `ToUnicode` does not map is listed in `/Differences`, so the base table PDF.js
   picks (from `Flags` or the font name, as when it drops the `WinAnsiEncoding`
-  base of a nonembedded `Symbol`, `ZapfDingbats`, `Dingbats` or `Wingdings`
-  font) never decides a shown code; the GBK font names PDF.js turns into a
-  composite font refuse.
+  base of a nonembedded `Symbol`, `ZapfDingbats`, `Dingbats`, `Wingdings`,
+  `Wingdings-Bold` or `Wingdings-Regular` font) never decides a shown code; the
+  GBK font names PDF.js turns into a composite font refuse.
 - Repeated execution: every Form execution is inlined and counted, so a Form
   drawn many times or nested many ways costs its full output against B, the item
   ceiling and the 4,096-execution ceiling before PDF.js starts; the running
@@ -602,8 +612,9 @@ the processing order.
   lives inside itself, (g) a generation mismatch on the page object, (h) a
   page tree that needs 4,096 and 4,097 distinct resolved objects, (i) a page
   tree that resolves the same 4,000 objects twice, (j) header offsets
-  `0 10 10`, (k) `/N` 4,096 and 4,097, When page 1 is read, Then (a), (e)
-  and (i) give the text, (b), (c), (d), (f), (g) and (j) are
+  `0 10 10`, (k) `/N` 4,096 and 4,097, (l) an object stream whose `/Length`
+  is a type 2 object of another object stream, When page 1 is read, Then (a),
+  (e) and (i) give the text, (b), (c), (d), (f), (g), (j) and (l) are
   `CONTENT_UNAVAILABLE`, and (h) and (k) give the text then
   `LIMIT_EXCEEDED`, each refusal before PDF.js. Verified by: `BR-413 AC-03
   object resolution`.
@@ -645,16 +656,16 @@ the processing order.
   0x21–0x7E, (q) a Flate inline image with `W` and `H` 65,536, `BPC` 16 and
   `/CMYK` (computed size 2^35 bytes) whose data inflates to more than the
   remaining B, (r) a Flate inline image whose data inflates to one byte more
-  than its computed size, (s) an unfiltered image mask with `/IM true` and no
-  `/BPC`, framed by size, (t) an unfiltered `/G` image with `BPC` 1, `H` 1 and
-  `W` 65,536 and 65,537, (u) `/A85` data holding `>` before its `~>`, When the
-  page(s) are read, Then (a), (b), (f), (g), (h), (j), (p), (s) and (u) give the
-  text (h for pages `[1, 2]`) and the canonical content holds only kept
-  operators, hexadecimal strings and `#`-escaped names, (c), (m) and (r) are
-  `CONTENT_UNAVAILABLE`, (q) is `LIMIT_EXCEEDED` with no more than the remaining
-  B inflated, (d), (e), (k), (l) and (o) are `UNSUPPORTED_FORMAT`, (i), (n) and
-  (t) give the text then `LIMIT_EXCEEDED`, each refusal before PDF.js. Verified
-  by: `BR-416 AC-06 content projection`.
+  than its computed size, below the remaining B, (s) an unfiltered image mask
+  with `/IM true` and no `/BPC`, framed by size, (t) an unfiltered `/G` image
+  with `BPC` 1, `H` 1 and `W` 65,536 and 65,537, (u) `/A85` data holding `>`
+  before its `~>`, When the page(s) are read, Then (a), (b), (f), (g), (h), (j),
+  (p), (s) and (u) give the text (h for pages `[1, 2]`) and the canonical
+  content holds only kept operators, hexadecimal strings and `#`-escaped names,
+  (c), (m) and (r) are `CONTENT_UNAVAILABLE`, (q) is `LIMIT_EXCEEDED` with no
+  more than the remaining B inflated, (d), (e), (k), (l) and (o) are
+  `UNSUPPORTED_FORMAT`, (i), (n) and (t) give the text then `LIMIT_EXCEEDED`,
+  each refusal before PDF.js. Verified by: `BR-416 AC-06 content projection`.
 - **AC-07** (BR-417) — Given (a) a TrueType font in WinAnsiEncoding whose
   `FontFile2` holds random bytes, (b) a Type0 Identity-H font whose
   `ToUnicode` maps one code to `ffi`, (c) a Type0 font without `ToUnicode`,
@@ -740,12 +751,16 @@ the processing order.
   cleartext `10 array` that puts code 12, (p) a `FontFile` that inflates to
   fewer than `/Length1` bytes, (q) a nonembedded `Symbol` font with
   `/Differences` for its shown codes, (r) fonts whose `BaseFont` is
-  `/#CB#CE#CC#E5` and `/#B7#41`, When page 1 is read, Then (a), (b), (c), (m)
-  and (q) give their text, (m) without its program being read, (n) gives the
-  text of the last group, the canonical font carries `/BaseEncoding
+  `/#CB#CE#CC#E5` and `/#B7#41`, (s) a nonembedded font with `BaseFont /Foo`, a
+  `FontDescriptor` with `FontName /#CB#CE#CC#E5`, a `WinAnsiEncoding` base and
+  `/Differences` for its shown codes, (t) a `Type1` font whose `FontFile` has
+  `/DecodeParms` and a shown code that needs its built-in encoding, When page 1
+  is read, Then (a), (b), (c), (m), (q) and (s) give their text, (s) with
+  `FontName /Foo` in the canonical font, (m) without its program being read, (n)
+  gives the text of the last group, the canonical font carries `/BaseEncoding
   /WinAnsiEncoding` with every shown code in `/Differences` and `Flags` with
-  Nonsymbolic set and Symbolic clear, (d), (e), (i), (j), (k), (o) and (r) at
-  `/#CB#CE#CC#E5` are `UNSUPPORTED_FORMAT` while (r) at `/#B7#41` gives the
+  Nonsymbolic set and Symbolic clear, (d), (e), (i), (j), (k), (o), (t) and (r)
+  at `/#CB#CE#CC#E5` are `UNSUPPORTED_FORMAT` while (r) at `/#B7#41` gives the
   text, (p) is `CONTENT_UNAVAILABLE`, (f), (g) and (h) give the text then
   `LIMIT_EXCEEDED`, and (l) holds. Verified by: `BR-420 AC-12 simple font
   encoding`.
@@ -820,14 +835,14 @@ the processing order.
   whose mapping can only come from the program. The base table PDF.js ends up
   with therefore never decides a shown code: PDF.js 6.5.438 drops the
   `WinAnsiEncoding` base of a nonembedded font named `Symbol`, `ZapfDingbats`,
-  `Dingbats` or `Wingdings` (measured: such fonts with `/Differences` still give
-  their text), and turns a nonembedded font with a `WinAnsiEncoding` base and
-  one of ten GBK names into a composite `GBK-EUC-H` font (measured: no text), so
-  those names refuse. Type0 needs `ToUnicode` for every shown code because,
-  without the program, Identity codes have no text meaning. Rejected: passing
-  font programs (parser surface, memory); predefined CMaps (need external CMap
-  data, refused by BR-122); letting PDF.js fall back on `Flags` (S26 measured
-  wrong text).
+  `Dingbats`, `Wingdings`, `Wingdings-Bold` or `Wingdings-Regular` (measured:
+  such fonts with `/Differences` still give their text), and turns a nonembedded
+  font with a `WinAnsiEncoding` base and one of ten GBK names into a composite
+  `GBK-EUC-H` font (measured: no text), so those names refuse. Type0 needs
+  `ToUnicode` for every shown code because, without the program, Identity codes
+  have no text meaning. Rejected: passing font programs (parser surface,
+  memory); predefined CMaps (need external CMap data, refused by BR-122);
+  letting PDF.js fall back on `Flags` (S26 measured wrong text).
 - **D-6 — Selected pages only (BR-415).** F-009 read every page's content;
   a feature on page 30 refused a read of page 1. Projecting only the
   selected pages reads less untrusted data and admits more files; other
@@ -974,3 +989,26 @@ Spec review 2 (`4-spec-review-2-reviewer`, changes):
    AC-12 (q), (r).
 9. minor (base branch, line width) — retained: base `feat/4-pdf-profile`;
    prose rewrapped to 80 columns (tables excepted).
+
+Spec review 3 (`4-spec-review-3-reviewer`, changes, all minor):
+
+1. minor (GBK check bypass through `FontName`) — retained: PDF.js 6.5.438
+   uses the `FontDescriptor` `/FontName` when it differs from `BaseFont`, so
+   the projection emits `FontName` equal to the projected `BaseFont` (BR-417)
+   and the ten-name GBK check applies to that projected name (BR-420).
+   AC-12 (s).
+2. minor (inline Flate ceiling) — retained: the ceiling row is the remaining
+   B; output over the computed size is a consistency check giving
+   `CONTENT_UNAVAILABLE`, stated in BR-114 v2, BR-416 and the table
+   preamble. AC-06 (r).
+3. minor (object stream `/Length` row) — retained: the row is dropped; BR-413
+   states that an indirect `/Length` needing more than one object stream, or
+   an object stream whose own `/Length` is not direct or a type 1 integer
+   object, refuses as `CONTENT_UNAVAILABLE`. AC-03 (f), (l).
+4. minor (`Tf` size) — retained: `Tf` keeps the F-009 size check, 1–512
+   (`src/extraction-pdf-profile.ts`), `UNSUPPORTED_FORMAT`.
+5. minor (Type 1 `/DecodeParms`) — retained: refuses as `UNSUPPORTED_FORMAT`
+   (BR-414). AC-12 (t).
+6. minor (line width, symbol font names) — retained: ADR-012 rewrapped to 80
+   columns; `Wingdings-Bold` and `Wingdings-Regular` added to the names whose
+   `WinAnsiEncoding` base PDF.js drops (hostile input, D-5).
