@@ -2,7 +2,7 @@
 id: F-028
 title: Client ID Metadata Documents in the OAuth proxy
 ticket: "#3"
-status: frozen
+status: done
 version: 2
 ---
 

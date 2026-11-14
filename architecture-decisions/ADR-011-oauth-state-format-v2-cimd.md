@@ -1,8 +1,9 @@
 # ADR-011 — OAuth state file version 2 for CIMD families
 
-Status: proposed (2026-11-14). Design of
+Status: accepted (2026-11-14). Design of
 [F-028 v2](../features/F-028-client-id-metadata-documents.md) (ticket #3,
-D-10, BR-311, BR-295 v2, BR-298 v2, BR-299 v2). Not frozen.
+D-10, BR-311, BR-295 v2, BR-298 v2, BR-299 v2), accepted on main `aa540d4`
+(#3 comment `3-acceptance-1-orchestrator`).
 
 ## Context
 
