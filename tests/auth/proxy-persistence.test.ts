@@ -16,6 +16,7 @@ import {
   COOKIE,
   Clock,
   DAY,
+  LOOPBACK,
   PUBLIC_URL,
   harness,
   header,
@@ -29,6 +30,7 @@ import {
   type HarnessOptions,
   type Registered,
 } from "../helpers/proxy.js";
+import { FakeMetadata } from "../helpers/cimd.js";
 
 afterEach(() => {
   removeStateFiles();
@@ -762,5 +764,159 @@ describe("BR-298 BR-295 reopening files written by the proxy (AC-23)", () => {
     );
     reopened.close();
     expectReopens(path, clock);
+  });
+});
+
+// F-028 AC-08: CIMD families on the state file (BR-311, BR-295 v2,
+// BR-298 v2, BR-299 v2, BR-302 v2).
+describe("BR-311 CIMD families persist without a client row (F-028 AC-08)", () => {
+  const CIMD_URL = "https://client.example.com/c.json";
+  const ORIGINS = ["https://client.example.com"];
+  const cimd: Registered = { clientId: CIMD_URL, method: "none", redirect: CLAUDE };
+  const userVersion = (path: string) => {
+    const db = new DatabaseSync(path, { readOnly: true });
+    try {
+      return (db.prepare("PRAGMA user_version").get() as { user_version: number })
+        .user_version;
+    } finally {
+      db.close();
+    }
+  };
+
+  async function cimdOnFile(
+    path: string,
+    clock: Clock,
+    options: { origins?: string[]; redirects?: string[] } = {},
+  ) {
+    const origins = options.origins ?? ORIGINS;
+    const store = openState(path, {
+      clock,
+      origins,
+      ...(options.redirects === undefined
+        ? {}
+        : { redirects: options.redirects }),
+    });
+    const meta = new FakeMetadata();
+    const h = await harness({
+      clock,
+      store,
+      origins,
+      clientMetadata: meta,
+      ...(options.redirects === undefined
+        ? {}
+        : { redirects: options.redirects }),
+    });
+    return { h, store, meta };
+  }
+
+  it("BR-311 BR-298 v2 the first CIMD family on a version 1 file commits, sets version 2 and survives restarts", async () => {
+    const path = stateFile();
+    const clock = new Clock();
+    const a = await cimdOnFile(path, clock);
+    const done = await a.h.login(cimd);
+    const issued = json(await a.h.redeem(done));
+    expect(typeof issued.refresh_token).toBe("string");
+    expect(events(a.h, "store_write_failed")).toEqual([]);
+    a.store.close();
+    expect(userVersion(path)).toBe(2);
+    const rows = readState(path);
+    expect(rows.clients).toEqual([]);
+    expect(rows.families.map((row) => row.client_id)).toEqual([CIMD_URL]);
+
+    // Same list: the refresh succeeds without a fetch.
+    const b = await cimdOnFile(path, clock);
+    expect(events(b.h, "store_loaded")).toEqual([
+      { name: "store_loaded", fields: { clients: 0, families: 1 } },
+    ]);
+    const first = await b.h.refresh(cimd, issued.refresh_token as string);
+    expect(first.status).toBe(200);
+    expect(b.meta.calls).toEqual([]);
+    b.store.close();
+
+    // Redirect URI removed, origin still listed: the family is kept.
+    const c = await cimdOnFile(path, clock, { redirects: [LOOPBACK] });
+    const second = await c.h.refresh(
+      cimd,
+      json(first).refresh_token as string,
+    );
+    expect(second.status).toBe(200);
+    expect(c.meta.calls).toEqual([]);
+    c.store.close();
+
+    // Origin removed: the family is purged at startup and the version is 1.
+    const d = await cimdOnFile(path, clock, { origins: [] });
+    expect(events(d.h, "store_loaded")).toEqual([
+      { name: "store_loaded", fields: { clients: 0, families: 0 } },
+    ]);
+    const refused = await d.h.refresh(cimd, json(second).refresh_token as string);
+    expect(refused.status).toBe(401);
+    d.store.close();
+    expect(userVersion(path)).toBe(1);
+    expect(readState(path).families).toEqual([]);
+  });
+
+  it("BR-311 a revoked CIMD family leaves the version at 2 until the next startup", async () => {
+    const path = stateFile();
+    const clock = new Clock();
+    const a = await cimdOnFile(path, clock);
+    const done = await a.h.login(cimd);
+    const issued = json(await a.h.redeem(done));
+    const token = issued.refresh_token as string;
+    expect((await a.h.refresh(cimd, token)).status).toBe(200);
+    // Replaying the rotated token revokes the family (BR-140 v2).
+    expect((await a.h.refresh(cimd, token)).status).toBe(400);
+    expect(readState(path).families).toEqual([]);
+    expect(userVersion(path)).toBe(2);
+    a.store.close();
+    openState(path, { clock, origins: ORIGINS }).close();
+    expect(userVersion(path)).toBe(1);
+  });
+
+  it("BR-142 v2 the family bound evicts CIMD families like the others", async () => {
+    const path = stateFile();
+    const clock = new Clock();
+    const seed = openState(path, { clock, origins: ORIGINS });
+    const writes: StoreWrite[] = [];
+    const registered: StoredClient = {
+      id: "r".repeat(43),
+      redirectUris: [CLAUDE],
+      grantTypes: ["authorization_code", "refresh_token"],
+      method: "none",
+      name: null,
+      secretHash: null,
+      lastUse: clock.ms,
+    };
+    writes.push({ op: "insertClient", client: registered });
+    const row = (n: number, clientId: string, created: number): StoredFamily => ({
+      id: String(n).padStart(22, "f"),
+      clientId,
+      sub: "user-1",
+      email: null,
+      emailVerified: null,
+      resource: PUBLIC_URL,
+      created,
+      tokenHash: new Uint8Array(32).fill(n % 256),
+      tokenIssued: created,
+    });
+    // The oldest family is a CIMD family; 999 registered ones follow.
+    writes.push({
+      op: "insertFamily",
+      family: row(0, CIMD_URL, clock.ms - 10_000),
+    });
+    for (let n = 1; n < 1000; n++)
+      writes.push({
+        op: "insertFamily",
+        family: row(n, registered.id, clock.ms - 5000),
+      });
+    expect(seed.commit(writes)).toBe("committed");
+    seed.close();
+    const a = await cimdOnFile(path, clock);
+    const done = await a.h.login(cimd);
+    expect(json(await a.h.redeem(done)).refresh_token).toBeDefined();
+    a.store.close();
+    const families = readState(path).families;
+    expect(families).toHaveLength(1000);
+    expect(families.some((f) => f.id === row(0, CIMD_URL, 0).id)).toBe(false);
+    expect(families.filter((f) => f.client_id === CIMD_URL)).toHaveLength(1);
   });
 });

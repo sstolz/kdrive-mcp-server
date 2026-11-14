@@ -28,6 +28,19 @@ import {
   type Harness,
   type HarnessOptions,
 } from "../helpers/proxy.js";
+import { createClientMetadataFetch } from "../../src/auth/proxy/client-metadata-fetch.js";
+import {
+  CIMD_HOST,
+  CIMD_ORIGIN,
+  CIMD_URL,
+  FakeMetadata,
+  cimdCertificates,
+  cimdDocument,
+  reply,
+  scriptedResolver,
+  startDocumentServer,
+  type Served,
+} from "../helpers/cimd.js";
 
 afterEach(() => {
   removeStateFiles();
@@ -48,6 +61,9 @@ const EVENTS = [
   // BR-143 v2 / BR-312.
   "store_write_failed",
   "store_loaded",
+  // BR-143 v3 / BR-394.
+  "client_metadata_refused",
+  "client_metadata_fetched",
 ];
 const FIELDS = [
   "handler",
@@ -58,6 +74,8 @@ const FIELDS = [
   // BR-143 v2 / BR-312.
   "clients",
   "families",
+  // BR-143 v3 / BR-394.
+  "reason",
 ];
 
 function record(h: Harness): ProxyResponse[] {
@@ -485,5 +503,241 @@ describe("BR-312 BR-143 v2 store events and refusals carry no secret (AC-19)", (
       for (const value of forbidden) expect(text).not.toContain(value);
     }
     expect(stderr).not.toHaveBeenCalled();
+  });
+});
+
+// F-028 AC-10: one event per refused CIMD authorization, the BR-394 events
+// and no CIMD URL, host, address, document member or TLS text anywhere.
+describe("BR-394 BR-143 v3 CIMD refusal events and secrecy (F-028 AC-10)", () => {
+  const VERIFIER = `synthetic-secrecy-verifier-${"v".repeat(24)}`;
+  const MARKER = "SYNTHETIC-DOCUMENT-MEMBER-9c1e";
+  const documentWithMarker = cimdDocument(CIMD_URL, {
+    client_name: "Name-For-Consent-Only",
+    logo_uri: `${CIMD_ORIGIN}/${MARKER}.png`,
+    software_id: MARKER,
+  });
+
+  interface Case {
+    name: string;
+    origins?: string[];
+    clientId?: string;
+    redirect?: string;
+    served?: Served;
+    query?: Record<string, string | undefined>;
+    event: string;
+    reason?: string;
+    status: number;
+  }
+
+  const cases: Case[] = [
+    {
+      name: "an empty list",
+      origins: [],
+      event: "authorization_refused",
+      status: 400,
+    },
+    {
+      name: "a non-CIMD client ID with a nonempty list",
+      clientId: "unknown-client",
+      event: "authorization_refused",
+      status: 400,
+    },
+    {
+      name: "a repeated parameter",
+      query: { duplicate: "1" },
+      event: "authorization_refused",
+      status: 400,
+    },
+    {
+      name: "an unlisted origin",
+      clientId: "https://other.example.com/c.json",
+      event: "client_metadata_refused",
+      reason: "not_allowed",
+      status: 400,
+    },
+    {
+      name: "a redirect_uri outside the allowlist",
+      redirect: "https://evil.example/cb",
+      event: "authorization_refused",
+      status: 400,
+    },
+    ...(
+      [
+        ["blocked_address", 0, false, 400],
+        ["resolution", 0, true, 503],
+        ["connection", 0, true, 503],
+        ["certificate", 0, false, 400],
+        ["timeout", 0, true, 503],
+        ["status", 404, false, 400],
+        ["status", 503, true, 503],
+        ["content_type", 200, false, 400],
+        ["size", 200, false, 400],
+      ] as const
+    ).map(
+      ([reason, status, transient, page]): Case => ({
+        name: `a ${reason} failure (${String(status)})`,
+        served: { failure: { reason, status, transient } },
+        event: "client_metadata_refused",
+        reason,
+        status: page,
+      }),
+    ),
+    {
+      name: "an invalid document",
+      served: { body: cimdDocument(CIMD_URL, { client_secret: MARKER }) },
+      event: "client_metadata_refused",
+      reason: "document",
+      status: 400,
+    },
+    {
+      name: "a redirect_uri not kept from the document",
+      redirect: "http://localhost/callback",
+      served: { body: documentWithMarker },
+      event: "client_metadata_refused",
+      reason: "document",
+      status: 400,
+    },
+    {
+      name: "a later check after resolution",
+      query: { response_type: "token" },
+      served: { body: documentWithMarker },
+      event: "authorization_refused",
+      status: 302,
+    },
+  ];
+
+  it.each(cases)(
+    "BR-394 $name logs exactly its one event and no CIMD detail",
+    async (row) => {
+      const stderr = vi.spyOn(process.stderr, "write");
+      const meta = new FakeMetadata();
+      if (row.served) meta.serve.set(CIMD_URL, row.served);
+      const h = await harness({
+        origins: row.origins ?? [CIMD_ORIGIN],
+        clientMetadata: meta,
+      });
+      const query = h.authorizeQuery(
+        {
+          clientId: row.clientId ?? CIMD_URL,
+          method: "none",
+          redirect: row.redirect ?? CLAUDE,
+        },
+        s256(VERIFIER),
+        row.query ?? {},
+      );
+      if (row.query?.duplicate !== undefined) {
+        query.delete("duplicate");
+        query.append("state", "again");
+      }
+      const response = await h.proxy.authorize({ query });
+      expect(response.status).toBe(row.status);
+      const refusals = h.logs.filter(
+        (entry) => entry.name !== "client_metadata_fetched",
+      );
+      expect(refusals).toHaveLength(1);
+      expect(refusals[0]?.name).toBe(row.event);
+      if (row.event === "client_metadata_refused") {
+        expect(refusals[0]?.fields.reason).toBe(row.reason);
+        expect(Object.keys(refusals[0]?.fields ?? {}).sort()).toEqual([
+          "handler",
+          "reason",
+          "status",
+        ]);
+      } else expect(refusals[0]?.fields).not.toHaveProperty("reason");
+      if (row.reason === "document")
+        expect(refusals[0]?.fields.status).toBe(200);
+      const fetched = h.logs.filter(
+        (entry) => entry.name === "client_metadata_fetched",
+      );
+      expect(fetched).toHaveLength(
+        row.served && !row.served.failure ? 1 : 0,
+      );
+      for (const entry of fetched)
+        expect(entry.fields).toEqual({ status: 200, count: 1 });
+      const text = [
+        JSON.stringify(h.logs),
+        JSON.stringify(response.headers),
+        response.body,
+        ...stderr.mock.calls.map((call) => String(call[0])),
+      ].join("\n");
+      for (const value of [CIMD_URL, CIMD_HOST, MARKER, "other.example.com"])
+        expect(text).not.toContain(value);
+    },
+  );
+
+  it("BR-394 a successful fetch logs client_metadata_fetched with status 200 and the cache count", async () => {
+    const meta = new FakeMetadata();
+    const h = await harness({ origins: [CIMD_ORIGIN], clientMetadata: meta });
+    for (const path of ["/a.json", "/b.json"])
+      expect(
+        (
+          await h.proxy.authorize({
+            query: h.authorizeQuery(
+              { clientId: `${CIMD_ORIGIN}${path}`, method: "none", redirect: CLAUDE },
+              s256(VERIFIER),
+            ),
+          })
+        ).status,
+      ).toBe(200);
+    expect(h.logs).toEqual([
+      { name: "client_metadata_fetched", fields: { status: 200, count: 1 } },
+      { name: "client_metadata_fetched", fields: { status: 200, count: 2 } },
+    ]);
+  });
+
+  it("BR-394 the production port leaks no address or TLS text for a blocked or untrusted host", async () => {
+    const stderr = vi.spyOn(process.stderr, "write");
+    const untrusted = await startDocumentServer(
+      (_request, response) => {
+        reply(response, 200, "{}");
+      },
+      { untrusted: true },
+    );
+    try {
+      const origin = `https://${CIMD_HOST}:${String(untrusted.port)}`;
+      for (const reason of ["blocked_address", "certificate"] as const) {
+        // The resolver answers loopback: the production policy blocks it;
+        // the allow-all policy reaches the untrusted server.
+        const port = createClientMetadataFetch({
+          resolver: scriptedResolver({ v4: ["127.0.0.1"] }).factory,
+          ...(reason === "certificate"
+            ? { addressPolicy: { allows: () => true } }
+            : {}),
+          ca: [cimdCertificates().ca],
+        });
+        const h = await harness({ origins: [origin], clientMetadata: port });
+        const response = await h.proxy.authorize({
+          query: h.authorizeQuery(
+            { clientId: `${origin}/c.json`, method: "none", redirect: CLAUDE },
+            s256(VERIFIER),
+          ),
+        });
+        expect(response.status).toBe(400);
+        expect(h.logs).toEqual([
+          {
+            name: "client_metadata_refused",
+            fields: { handler: "authorize", reason, status: 0 },
+          },
+        ]);
+        const text = [
+          JSON.stringify(h.logs),
+          response.body,
+          ...stderr.mock.calls.map((call) => String(call[0])),
+        ].join("\n");
+        for (const value of [
+          CIMD_HOST,
+          "127.0.0.1",
+          "self-signed",
+          "self signed",
+          "certificate",
+          "DEPTH_ZERO",
+        ])
+          expect(text.replace(/"reason":"certificate"/gu, "")).not.toContain(
+            value,
+          );
+      }
+    } finally {
+      await untrusted.close();
+    }
   });
 });

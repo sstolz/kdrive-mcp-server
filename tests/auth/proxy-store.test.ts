@@ -979,20 +979,20 @@ describe("BR-295 format checks and BR-296 binding (AC-05)", () => {
     expect(attempt(path)).toBe("opened");
   });
 
-  it("BR-295 user_version 2 on a version 1 schema gives OAUTH_STATE_VERSION", () => {
+  it("BR-295 v2 user_version 3 on a version 1 schema gives OAUTH_STATE_VERSION", () => {
     const path = statePath();
     seed(path);
     raw(path, (db) => {
-      db.exec("PRAGMA user_version=2");
+      db.exec("PRAGMA user_version=3");
     });
     expectRefusedUnchanged(path, "OAUTH_STATE_VERSION");
   });
 
-  it("BR-295 user_version 2 with an extra table and a bad row gives OAUTH_STATE_VERSION", () => {
+  it("BR-295 v2 user_version 3 with an extra table and a bad row gives OAUTH_STATE_VERSION", () => {
     const path = statePath();
     seed(path);
     raw(path, (db) => {
-      db.exec("PRAGMA user_version=2; CREATE TABLE extra(x INTEGER) STRICT");
+      db.exec("PRAGMA user_version=3; CREATE TABLE extra(x INTEGER) STRICT");
       db.exec("UPDATE clients SET method = 'private_key_jwt'");
     });
     expectRefusedUnchanged(path, "OAUTH_STATE_VERSION");
@@ -1368,4 +1368,175 @@ describe("BR-298 writes, BR-303 bounds and BR-304 close", () => {
     expect(store.commit([insertClient(client(2))])).toBe("closed");
     expect(await tryChild(path)).toBe("open 1");
   }, 30_000);
+});
+
+// F-028 AC-08: store format version 2 for CIMD families (BR-311, BR-295 v2,
+// BR-298 v2, BR-299 v2, BR-302 v2, ADR-011).
+describe("BR-311 store format version 2 (F-028 AC-08)", () => {
+  const CIMD = "https://client.example.com/c.json";
+  const ORIGINS = ["https://client.example.com"];
+  const version = (path: string) =>
+    (query(path, "PRAGMA user_version") as Array<{ user_version: number }>)[0]
+      ?.user_version;
+
+  it("BR-311 BR-298 v2 a CIMD family insert on a version 1 file commits and sets user_version 2", () => {
+    const path = statePath();
+    seed(path);
+    expect(version(path)).toBe(1);
+    const store = open(path, { allowedClientIdOrigins: ORIGINS });
+    try {
+      expect(store.commit([insertFamily(family(2, CIMD))])).toBe("committed");
+      expect(version(path)).toBe(2);
+      expect(query(path, "SELECT id, client_id FROM families ORDER BY id")).toEqual(
+        [
+          { id: family(1, client(1).id).id, client_id: client(1).id },
+          { id: family(2, CIMD).id, client_id: CIMD },
+        ],
+      );
+      expect(
+        query(path, `SELECT COUNT(*) AS n FROM clients WHERE id = '${CIMD}'`),
+      ).toEqual([{ n: 0 }]);
+      // Deleting the last CIMD family does not lower the version (BR-311).
+      expect(
+        store.commit([{ op: "deleteFamily", id: family(2, CIMD).id }]),
+      ).toBe("committed");
+      expect(version(path)).toBe(2);
+      expect(store.commit([insertClient(client(3))])).toBe("committed");
+      expect(version(path)).toBe(2);
+    } finally {
+      store.close();
+    }
+    // The next startup transaction writes version 1: no CIMD family remains.
+    open(path, { allowedClientIdOrigins: ORIGINS }).close();
+    expect(version(path)).toBe(1);
+  });
+
+  it("BR-299 v2 a family whose client ID fails the CIMD syntax and names no client row is a failed write", () => {
+    const path = statePath();
+    seed(path);
+    const store = open(path, { allowedClientIdOrigins: ORIGINS });
+    try {
+      expect(
+        store.commit([insertFamily(family(2, "https://127.0.0.1/c"))]),
+      ).toBe("failed");
+      // The store is latched (BR-299).
+      expect(store.commit([insertClient(client(3))])).toBe("failed");
+    } finally {
+      store.close();
+    }
+    expect(version(path)).toBe(1);
+  });
+
+  it("BR-311 a family meeting the CIMD syntax commits whatever the list holds", () => {
+    const path = statePath();
+    seed(path);
+    const store = open(path);
+    try {
+      expect(store.commit([insertFamily(family(2, CIMD))])).toBe("committed");
+    } finally {
+      store.close();
+    }
+    expect(version(path)).toBe(2);
+  });
+
+  it("BR-295 v2 a version 2 file with a family failing the CIMD syntax is OAUTH_STATE_CORRUPT", () => {
+    const path = statePath();
+    seed(path);
+    raw(path, (db) => {
+      db.prepare(
+        "INSERT INTO families(id, client_id, sub, email, email_verified, resource, created, token_hash, token_issued) VALUES (?, ?, 'user-1', NULL, NULL, ?, ?, ?, ?)",
+      ).run(
+        family(2, CIMD).id,
+        "https://client.example.com/a/%2E%2E/b",
+        binding.audience,
+        NOW - 1000,
+        hash(2),
+        NOW - 1000,
+      );
+      db.exec("PRAGMA user_version=2");
+    });
+    expectRefusedUnchanged(path, "OAUTH_STATE_CORRUPT");
+  });
+
+  it("BR-295 v2 a version 2 file with a CIMD family of a listed origin loads; removing the origin purges it", () => {
+    const path = statePath();
+    seed(path);
+    const first = open(path, { allowedClientIdOrigins: ORIGINS });
+    expect(first.commit([insertFamily(family(2, CIMD))])).toBe("committed");
+    first.close();
+    const second = open(path, { allowedClientIdOrigins: ORIGINS });
+    try {
+      expect(second.families.map((row) => row.clientId)).toEqual([
+        client(1).id,
+        CIMD,
+      ]);
+    } finally {
+      second.close();
+    }
+    expect(version(path)).toBe(2);
+    const third = open(path);
+    try {
+      expect(third.families.map((row) => row.clientId)).toEqual([client(1).id]);
+    } finally {
+      third.close();
+    }
+    expect(version(path)).toBe(1);
+    expect(query(path, "SELECT client_id FROM families")).toEqual([
+      { client_id: client(1).id },
+    ]);
+  });
+
+  it("BR-302 v2 a CIMD family survives the removal of every redirect URI while its origin is listed", () => {
+    const path = statePath();
+    seed(path, [], []);
+    const first = open(path, { allowedClientIdOrigins: ORIGINS });
+    expect(first.commit([insertFamily(family(2, CIMD))])).toBe("committed");
+    first.close();
+    const second = open(path, {
+      allowedClientIdOrigins: ORIGINS,
+      allowedRedirectUris: ["https://other.example/cb"],
+    });
+    try {
+      expect(second.families.map((row) => row.clientId)).toEqual([CIMD]);
+    } finally {
+      second.close();
+    }
+  });
+
+  it("BR-302 v2 a CIMD family of the issuer or the audience is purged at startup", () => {
+    const path = statePath();
+    seed(path, [], []);
+    const first = open(path, { allowedClientIdOrigins: ORIGINS });
+    expect(
+      first.commit([insertFamily(family(2, binding.issuer))]),
+    ).toBe("committed");
+    first.close();
+    const second = open(path, {
+      allowedClientIdOrigins: [new URL(binding.issuer).origin],
+    });
+    try {
+      expect(second.families).toEqual([]);
+    } finally {
+      second.close();
+    }
+  });
+
+  it("BR-295 v2 a version 1 file holding a CIMD family row is OAUTH_STATE_CORRUPT", () => {
+    const path = statePath();
+    seed(path);
+    raw(path, (db) => {
+      db.prepare(
+        "INSERT INTO families(id, client_id, sub, email, email_verified, resource, created, token_hash, token_issued) VALUES (?, ?, 'user-1', NULL, NULL, ?, ?, ?, ?)",
+      ).run(
+        family(2, CIMD).id,
+        CIMD,
+        binding.audience,
+        NOW - 1000,
+        hash(2),
+        NOW - 1000,
+      );
+    });
+    expect(version(path)).toBe(1);
+    expectRefusedUnchanged(path, "OAUTH_STATE_CORRUPT");
+  });
 });

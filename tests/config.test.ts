@@ -46,7 +46,7 @@ function error(code: string, setting: string) {
 afterEach(() => vi.restoreAllMocks());
 
 describe("BR-017 BR-018 inventory and source precedence", () => {
-  // Every one of the 33 inventory rows is represented, including both secret pairs.
+  // Every one of the 34 inventory rows is represented, including both secret pairs.
   const rows = [
     ["transport", "KDRIVE_MCP_TRANSPORT", "--http", "http", "http"],
     ["token", "KDRIVE_TOKEN", "", "SYNTHETIC_INLINE", "SYNTHETIC_INLINE"],
@@ -213,6 +213,14 @@ describe("BR-017 BR-018 inventory and source precedence", () => {
       "--oauth-state-file",
       "state/oauth.sqlite",
       "/work/state/oauth.sqlite",
+    ],
+    // F-028 BR-291: the CIMD origin list.
+    [
+      "oauthAllowedClientIdOrigins",
+      "OAUTH_ALLOWED_CLIENT_ID_ORIGINS",
+      "--oauth-allowed-client-id-origins",
+      "https://client.example.com,https://other.example.org:8443",
+      ["https://client.example.com", "https://other.example.org:8443"],
     ],
   ] as const;
   it.each(rows)(
@@ -1401,4 +1409,139 @@ describe("BR-290 BR-023 v2 BR-024 v3 OAuth state file setting (F-019 AC-01)", ()
       ).rejects.toMatchObject(error("INVALID_VALUE", "oauthStateFile"));
     },
   );
+});
+
+describe("BR-291 BR-023 v3 BR-024 v4 CIMD origin list (F-028 AC-01)", () => {
+  const VALID = [
+    "https://client.example.com",
+    "https://xn--bcher-kva.example",
+    "https://a-b.example.org:8443",
+    "https://a.b.c.example:65535",
+    `https://${"a".repeat(63)}.example`,
+  ];
+  async function viaEach(value: string[]) {
+    const env = await load({
+      ...proxy,
+      OAUTH_ALLOWED_CLIENT_ID_ORIGINS: value.join(","),
+    });
+    const option = await load(proxy, [
+      `--oauth-allowed-client-id-origins=${value.join(",")}`,
+    ]);
+    const yaml = await load(
+      proxy,
+      ["--config", "settings.yaml"],
+      `oauthAllowedClientIdOrigins: ${JSON.stringify(value)}\n`,
+    );
+    return [env, option, yaml].map(
+      (config) => config.oauthAllowedClientIdOrigins,
+    );
+  }
+
+  it("BR-291 loads valid lists from environment, option and YAML", async () => {
+    expect(await viaEach(VALID)).toEqual([VALID, VALID, VALID]);
+    const sixteen = Array.from(
+      { length: 16 },
+      (_, n) => `https://c${String(n)}.example.com`,
+    );
+    expect(await viaEach(sixteen)).toEqual([sixteen, sixteen, sixteen]);
+  });
+
+  it("BR-291 defaults to an empty list, also for an empty environment value", async () => {
+    expect((await load(proxy)).oauthAllowedClientIdOrigins).toEqual([]);
+    expect(
+      (await load({ ...proxy, OAUTH_ALLOWED_CLIENT_ID_ORIGINS: "" }))
+        .oauthAllowedClientIdOrigins,
+    ).toEqual([]);
+  });
+
+  const host253 = `${["a".repeat(63), "b".repeat(63), "c".repeat(63)].join(".")}.${"d".repeat(61)}`;
+  const INVALID: Array<[string, string[]]> = [
+    [
+      "17 entries",
+      Array.from({ length: 17 }, (_, n) => `https://c${String(n)}.example.com`),
+    ],
+    ["a duplicate", ["https://client.example.com", "https://client.example.com"]],
+    ["a 1,025-character entry", [`https://${"a".repeat(1009)}.example`]],
+    ["http://", ["http://client.example.com"]],
+    ["an uppercase host", ["https://Client.example.com"]],
+    ["an IP host", ["https://192.0.2.1"]],
+    ["localhost", ["https://localhost"]],
+    ["a one-label host", ["https://client"]],
+    ["a trailing dot", ["https://client.example.com."]],
+    ["an all-digit last label", ["https://a.123"]],
+    ["an underscore", ["https://client_a.example.com"]],
+    ["a label starting with a hyphen", ["https://-client.example.com"]],
+    ["a label ending with a hyphen", ["https://client-.example.com"]],
+    ["a 64-character label", [`https://${"a".repeat(64)}.example`]],
+    ["a 254-character host", [`https://${host253}a`]],
+    ["the Unicode host", ["https://b\u00fccher.example"]],
+    ["port 443", ["https://client.example.com:443"]],
+    ["port 0", ["https://client.example.com:0"]],
+    ["port 08080", ["https://client.example.com:08080"]],
+    ["port 65536", ["https://client.example.com:65536"]],
+    ["a path", ["https://client.example.com/c.json"]],
+    ["a trailing slash", ["https://client.example.com/"]],
+    ["userinfo", ["https://user@client.example.com"]],
+    ["a query", ["https://client.example.com?x=1"]],
+    ["a fragment", ["https://client.example.com#f"]],
+  ];
+
+  it("BR-291 the 253-character host is valid", async () => {
+    expect(host253.length).toBe(253);
+    expect(await viaEach([`https://${host253}`])).toEqual([
+      [`https://${host253}`],
+      [`https://${host253}`],
+      [`https://${host253}`],
+    ]);
+  });
+
+  it.each(INVALID)(
+    "BR-291 refuses %s with INVALID_VALUE from every source",
+    async (_case, value) => {
+      const expected = error("INVALID_VALUE", "oauthAllowedClientIdOrigins");
+      await expect(
+        load({ ...proxy, OAUTH_ALLOWED_CLIENT_ID_ORIGINS: value.join(",") }),
+      ).rejects.toMatchObject(expected);
+      await expect(
+        load(proxy, [`--oauth-allowed-client-id-origins=${value.join(",")}`]),
+      ).rejects.toMatchObject(expected);
+      await expect(
+        load(
+          proxy,
+          ["--config", "settings.yaml"],
+          `oauthAllowedClientIdOrigins: ${JSON.stringify(value)}\n`,
+        ),
+      ).rejects.toMatchObject(expected);
+    },
+  );
+
+  it.each([
+    ["stdio", {}],
+    ["delegate", http],
+    [
+      "authentication off",
+      { KDRIVE_MCP_TRANSPORT: "http", KDRIVE_MCP_INSECURE_NO_AUTH: "1" },
+    ],
+  ])("BR-291 refuses the list with %s as CONFLICTING_SETTINGS", async (_case, env) => {
+    await expect(
+      load({
+        ...env,
+        OAUTH_ALLOWED_CLIENT_ID_ORIGINS: "https://client.example.com",
+      }),
+    ).rejects.toMatchObject(
+      error("CONFLICTING_SETTINGS", "oauthAllowedClientIdOrigins"),
+    );
+  });
+
+  it("BR-291 refuses an entry equal to the publicUrl or oauthIssuer origin", async () => {
+    for (const origin of ["https://service.example", "https://issuer.example"])
+      await expect(
+        load({
+          ...proxy,
+          OAUTH_ALLOWED_CLIENT_ID_ORIGINS: `https://client.example.com,${origin}`,
+        }),
+      ).rejects.toMatchObject(
+        error("CONFLICTING_SETTINGS", "oauthAllowedClientIdOrigins"),
+      );
+  });
 });

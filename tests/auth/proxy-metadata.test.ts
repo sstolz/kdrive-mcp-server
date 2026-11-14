@@ -75,3 +75,45 @@ describe("BR-125 authorization-server metadata", () => {
     },
   );
 });
+
+describe("BR-125 v2 CIMD advertisement (F-028 AC-02)", () => {
+  function metadataWith(origins?: string[]) {
+    return createOAuthProxy({
+      config: {
+        publicUrl: "https://mcp.test/mcp",
+        oauthIssuer: UPSTREAM,
+        oauthAllowedSubjects: ["user-1"],
+        oauthAllowedEmails: [],
+        oauthUpstreamClientId: "c",
+        oauthUpstreamClientSecret: "s",
+        oauthSigningKey: new TextEncoder().encode(syntheticPem()),
+        oauthAllowedRedirectUris: [LOOPBACK],
+        ...(origins === undefined
+          ? {}
+          : { oauthAllowedClientIdOrigins: origins }),
+      },
+      clock: () => new Date(),
+      randomBytes: counterRandom(),
+      upstream: {
+        fetchJson: () => Promise.reject(new Error("no")),
+        postForm: () => Promise.reject(new Error("no")),
+      },
+    }).metadata();
+  }
+
+  it("BR-125 v2 an empty or absent list has no client_id_metadata_document_supported", () => {
+    for (const origins of [undefined, []]) {
+      const document = json(metadataWith(origins));
+      expect(document).not.toHaveProperty(
+        "client_id_metadata_document_supported",
+      );
+      expect(document.token_endpoint_auth_methods_supported).toContain("none");
+    }
+  });
+
+  it("BR-125 v2 a nonempty list advertises client_id_metadata_document_supported true", () => {
+    const document = json(metadataWith(["https://client.example.com"]));
+    expect(document.client_id_metadata_document_supported).toBe(true);
+    expect(document.token_endpoint_auth_methods_supported).toContain("none");
+  });
+});

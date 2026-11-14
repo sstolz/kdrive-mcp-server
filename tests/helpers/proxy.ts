@@ -12,6 +12,7 @@ import {
   type ProxyResponse,
   type UpstreamOidcPort,
 } from "../../src/auth/proxy/index.js";
+import type { ClientMetadataFetch } from "../../src/auth/proxy/client-metadata.js";
 import {
   openOAuthStateStore,
   type OAuthStateStore,
@@ -211,6 +212,10 @@ export interface HarnessOptions {
   upstreamKey?: UpstreamKey;
   /** F-019: the opened state store handed to the proxy (BR-124 v2). */
   store?: OAuthStateStore;
+  /** F-028 BR-291: `oauthAllowedClientIdOrigins`. */
+  origins?: string[];
+  /** F-028: the CIMD fetch port (a fake; never the production port). */
+  clientMetadata?: ClientMetadataFetch;
 }
 
 export interface UpstreamKey {
@@ -257,6 +262,9 @@ export async function harness(options: HarnessOptions = {}) {
       LOOPBACK,
       LOCALHOST,
     ],
+    ...(options.origins === undefined
+      ? {}
+      : { oauthAllowedClientIdOrigins: options.origins }),
   };
   const proxy: OAuthProxy = createOAuthProxy({
     config,
@@ -265,6 +273,9 @@ export async function harness(options: HarnessOptions = {}) {
     upstream,
     logger: { event: (name, fields) => logs.push({ name, fields }) },
     ...(options.store === undefined ? {} : { store: options.store }),
+    ...(options.clientMetadata === undefined
+      ? {}
+      : { clientMetadataFetch: options.clientMetadata }),
   });
 
   async function register(
@@ -523,6 +534,8 @@ export function openState(
     clock?: Clock;
     redirects?: readonly string[];
     port?: Partial<OAuthStateStorePort>;
+    /** F-028 BR-302 v2: the current `oauthAllowedClientIdOrigins`. */
+    origins?: readonly string[];
   } = {},
 ): OAuthStateStore {
   const clock = options.clock ?? new Clock();
@@ -530,6 +543,9 @@ export function openState(
     path,
     binding: STATE_BINDING,
     allowedRedirectUris: options.redirects ?? [CLAUDE, LOOPBACK, LOCALHOST],
+    ...(options.origins === undefined
+      ? {}
+      : { allowedClientIdOrigins: options.origins }),
     clock: clock.now,
     ...(options.port === undefined ? {} : { port: options.port }),
   });

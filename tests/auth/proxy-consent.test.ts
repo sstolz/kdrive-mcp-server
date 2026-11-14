@@ -11,6 +11,7 @@ import {
   type Harness,
   type Registered,
 } from "../helpers/proxy.js";
+import { FakeMetadata, cimdDocument } from "../helpers/cimd.js";
 
 const challenge = s256("v".repeat(43));
 const ATTRIBUTES = "; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=600";
@@ -170,5 +171,94 @@ describe("BR-130 browser binding of the consent", () => {
     expect(headers(flow.upstreamRedirect, "set-cookie")).toEqual([
       `${flow.cookie}${ATTRIBUTES}`,
     ]);
+  });
+});
+
+// F-028 AC-09: the consent page of a CIMD client (BR-393, BR-129 v2).
+describe("BR-393 BR-129 v2 consent page of a CIMD client", () => {
+  const URL_ID = "https://client.example.com/c.json";
+  const redirects = [
+    "http://127.0.0.1/cb",
+    "http://127.0.0.2/cb",
+    "http://[::1]/cb",
+    "http://localhost/cb",
+    "https://app.example/cb",
+    "http://localhost.example.com/cb",
+  ];
+  async function cimdPage(redirect: string) {
+    const meta = new FakeMetadata();
+    meta.serve.set(URL_ID, {
+      body: cimdDocument(URL_ID, {
+        client_name: "<b>Claude</b>",
+        redirect_uris: redirects,
+      }),
+    });
+    const h = await harness({
+      origins: ["https://client.example.com"],
+      clientMetadata: meta,
+      redirects,
+    });
+    return page(h, { clientId: URL_ID, method: "none", redirect });
+  }
+
+  it.each([
+    "http://127.0.0.1:33418/cb",
+    "http://127.0.0.2/cb",
+    "http://[::1]/cb",
+    "http://localhost:8080/cb",
+  ])(
+    "BR-393 shows the client ID, its host, the unverified name and the loopback line for %s",
+    async (redirect) => {
+      const response = await cimdPage(redirect);
+      expect(response.status).toBe(200);
+      const body = response.body;
+      expect(body).toContain(`<code>${URL_ID}</code>`);
+      expect(body).toContain("Client host: client.example.com");
+      expect(body).toContain("&lt;b&gt;Claude&lt;/b&gt;");
+      expect(body).not.toContain("<b>Claude</b>");
+      expect(body).toContain(
+        "This name comes from the client's metadata document and is unverified.",
+      );
+      expect(body).toContain(
+        "This client redirects to this computer only (loopback).",
+      );
+      expect(body.indexOf(URL_ID)).toBeLessThan(body.indexOf("Claude"));
+      expect(body.indexOf("Client host:")).toBeLessThan(
+        body.indexOf("Claude"),
+      );
+    },
+  );
+
+  it.each(["https://app.example/cb", "http://localhost.example.com/cb"])(
+    "BR-393 omits the loopback line for %s",
+    async (redirect) => {
+      const response = await cimdPage(redirect);
+      expect(response.status).toBe(200);
+      expect(response.body).toContain("Client host: client.example.com");
+      expect(response.body).not.toContain("(loopback)");
+    },
+  );
+
+  it("BR-129 v2 a registered client's page is byte-identical to the F-010 page", async () => {
+    const h = await harness();
+    const client = await h.register({ client_name: "Plain" });
+    const response = await page(h, client);
+    const consentId = h.consentId(response);
+    expect(response.body).toBe(
+      [
+        '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Authorize access</title></head><body>',
+        "<h1>Authorize access</h1>",
+        "<p>Client name: <strong>Plain (self-declared, unverified)</strong></p>",
+        "<p>The client name is self-declared and unverified.</p>",
+        `<p>Client ID: <code>${client.clientId}</code></p>`,
+        `<p>Redirect URI: <code>${client.redirect}</code></p>`,
+        `<p>Protected resource: <code>${PUBLIC_URL}</code></p>`,
+        `<form method="post" action="${PUBLIC_URL}/oauth/consent">`,
+        `<input type="hidden" name="consent" value="${consentId}">`,
+        '<button type="submit" name="decision" value="approve">Approve</button>',
+        '<button type="submit" name="decision" value="deny">Deny</button>',
+        "</form></body></html>",
+      ].join(""),
+    );
   });
 });
