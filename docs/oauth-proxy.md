@@ -372,3 +372,54 @@ and `OAUTH_ALLOWED_REDIRECT_URIS` in the environment. The port
 (`HTTP_ACCEPTANCE_PORT`, default 3000) is published on the host's `127.0.0.1`
 only; point your HTTPS reverse proxy or tunnel at it. The upstream client
 secret is refused inline. Events are written to stderr as JSON lines.
+
+Persisted state across restarts (F-029): `HTTP_ACCEPTANCE_STATE_DIR` is
+optional. Without it the proxy keeps its state in memory, so a restart loses every client and login. With it, the launcher
+keeps registered clients and refresh families in `oauth-state.sqlite` in that
+directory, which is mounted read-write at `/run/oauth-state` for this run only
+(`OAUTH_STATE_FILE` is set by the entry script; setting it yourself is
+refused). The directory must be absolute, outside the checkout and the secrets
+directory, owned by the dev container user, mode `0700`, and hold nothing but
+the state file and its journal (`oauth-state.sqlite` and
+`oauth-state.sqlite-journal`); otherwise the entry script refuses with a fixed
+line before any Docker command. On Linux the host account that owns the
+directory must have the uid the dev image was built with (`DEV_UID=… make
+setup`, see `docs/development.md`), otherwise the server stops with
+`OAUTH_STATE_UNAVAILABLE`.
+
+```sh
+HTTP_ACCEPTANCE_SECRETS_DIR=/abs/secrets HTTP_ACCEPTANCE_STATE_DIR=/abs/state make http-acceptance
+```
+
+Keep one tunnel and the same `MCP_PUBLIC_URL` across restarts. If the tunnel
+dies, its new URL needs a new `MCP_PUBLIC_URL`, and starting with it fails
+with `OAUTH_STATE_MISMATCH`; then delete `oauth-state.sqlite` and its
+`-journal` while the server is stopped and start over. The directory is a
+credential store: delete `oauth-state.sqlite` and its `-journal` while the
+server is stopped to revoke everything.
+
+F-028 owner-run claude.ai check (restart without a new login):
+
+1. After pulling main, run `make setup`; on Linux your account's uid must be
+   the `DEV_UID` the image was built with (`docs/development.md`). Create a
+   state directory outside the checkout, owned by that account, `chmod 700`,
+   empty.
+2. Start one quick tunnel and keep it running until step 5; set
+   `MCP_PUBLIC_URL` to its URL and keep it for every start below; set
+   `OAUTH_ISSUER`, `OAUTH_ALLOWED_SUBJECTS`, `OAUTH_UPSTREAM_CLIENT_ID`,
+   `OAUTH_ALLOWED_REDIRECT_URIS` and a placeholder
+   `OAUTH_ALLOWED_CLIENT_ID_ORIGINS`; run
+   `HTTP_ACCEPTANCE_SECRETS_DIR=… HTTP_ACCEPTANCE_STATE_DIR=… make http-acceptance`.
+3. Add the connector in claude.ai; read the `client_id` origin from the
+   refused authorize address bar; stop the server.
+4. Set `OAUTH_ALLOWED_CLIENT_ID_ORIGINS` to that origin, start again with the
+   same state directory, connect claude.ai, check that the consent page shows
+   the client host, approve, log in upstream, call a tool. If the tunnel died
+   since step 2, see the recovery in step 5.
+5. Stop and start the server again with the same settings, tunnel and
+   directory; call a tool from the same claude.ai conversation without logging
+   in again. If the tunnel died, its new URL needs a new `MCP_PUBLIC_URL`, and
+   starting with it fails with `OAUTH_STATE_MISMATCH`: stop, delete
+   `oauth-state.sqlite` and its `-journal`, and start over from step 2.
+6. Record the origin in the client matrix and the result on the ticket. To
+   clean up, stop the server and delete the state directory.

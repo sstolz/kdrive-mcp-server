@@ -182,19 +182,30 @@ const SETTINGS = [
   "OAUTH_SIGNING_KEY_FILE",
   "OAUTH_ALLOWED_REDIRECT_URIS",
   "OAUTH_ALLOWED_CLIENT_ID_ORIGINS",
+  // BR-396: the entry script sets it only for a mounted state directory.
+  "OAUTH_STATE_FILE",
 ];
 
+/** BR-396: the non-empty launcher settings, and no other name. */
+export function acceptanceSettings(
+  env: Readonly<Record<string, string | undefined>>,
+): Record<string, string> {
+  const settings: Record<string, string> = {};
+  for (const name of SETTINGS) {
+    const value = env[name];
+    if (value) settings[name] = value;
+  }
+  return settings;
+}
+
 async function main(): Promise<void> {
-  const env: Record<string, string | undefined> = {};
-  for (const name of SETTINGS)
-    if (process.env[name]) env[name] = process.env[name];
   try {
-    const started = await startAcceptance({ env });
+    const run = await startAcceptance({ env: acceptanceSettings(process.env) });
     process.stdout.write(
-      `http-acceptance listening on ${started.address.address}:${String(started.address.port)}\n`,
+      `http-acceptance listening on ${run.address.address}:${String(run.address.port)}\n`,
     );
     const stop = () => {
-      void started.close().then(() => process.exit(0));
+      void run.close().then(() => process.exit(0));
     };
     process.on("SIGINT", stop);
     process.on("SIGTERM", stop);
