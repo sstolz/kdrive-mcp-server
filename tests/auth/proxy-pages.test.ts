@@ -195,8 +195,8 @@ function luminance(hex: string): number {
 }
 
 function contrast(a: string, b: string): number {
-  const [high, low] = [luminance(a), luminance(b)].sort((x, y) => y - x);
-  return (high + 0.05) / (low + 0.05);
+  const [x, y] = [luminance(a), luminance(b)];
+  return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
 }
 
 const TOKENS = [
@@ -231,10 +231,18 @@ const LIGHT_BLOCK = /:root\s*\{([^}]*)\}/u;
 const DARK_BLOCK =
   /@media\s*\(prefers-color-scheme:\s*dark\)\s*\{\s*:root\s*\{([^}]*)\}\s*\}/u;
 
+/** The trimmed declarations of a CSS fragment, split at `{`, `}` and `;`. */
+function declarationsOf(css: string): string[] {
+  return css.split(/[{};]/u).map((part) => part.trim());
+}
+
 function tokens(block: string): Map<string, string> {
   const map = new Map<string, string>();
-  for (const match of block.matchAll(/--([a-z-]+)\s*:\s*([^;]+);?/gu))
-    map.set(match[1] ?? "", (match[2] ?? "").trim());
+  for (const part of declarationsOf(block)) {
+    const colon = part.indexOf(":");
+    if (part.startsWith("--"))
+      map.set(part.slice(2, colon), part.slice(colon + 1).trim());
+  }
   return map;
 }
 
@@ -252,9 +260,15 @@ describe("BR-400 stylesheet", () => {
       expect(value).toMatch(/^#[0-9a-f]{6}$/u);
     expect(lightBlock).toMatch(/color-scheme:\s*light dark/u);
     const rest = css.replace(DARK_BLOCK, "").replace(LIGHT_BLOCK, "");
-    expect(rest).not.toMatch(/--[a-z-]+\s*:/u);
+    expect(
+      declarationsOf(rest).filter((part) => part.startsWith("--")),
+    ).toEqual([]);
+    expect(rest).not.toMatch(/#[0-9a-f]{3,8}\b/iu);
     expect(rest).not.toMatch(
-      /#[0-9a-f]{3,8}\b|\b(rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\(|\b(transparent|currentcolor|white|black|gr[ae]y|silver|red|blue|green|navy)\b/iu,
+      /\b(rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\(/iu,
+    );
+    expect(rest).not.toMatch(
+      /\b(transparent|currentcolor|white|black|gr[ae]y|silver|red|blue|green|navy)\b/iu,
     );
     for (const match of rest.matchAll(/var\(--([a-z-]+)\)/gu))
       expect(TOKENS).toContain(match[1]);
@@ -290,11 +304,16 @@ describe("BR-400 stylesheet", () => {
     // (3) nothing moves.
     expect(css).not.toMatch(/transition|animation|@keyframes/iu);
     // (4) visible focus on buttons and links.
-    const focus = /([^{}]*:focus-visible[^{}]*)\{([^}]*)\}/u.exec(css);
-    expect(focus?.[1]).toMatch(/\bbutton:focus-visible\b/u);
-    expect(focus?.[1]).toMatch(/\ba:focus-visible\b/u);
+    const at = css.indexOf(":focus-visible");
+    const open = css.indexOf("{", at);
+    const selector = css.slice(css.lastIndexOf("}", at) + 1, open);
+    const declarations = css.slice(open + 1, css.indexOf("}", open));
+    expect(selector.split(",").sort()).toEqual([
+      "a:focus-visible",
+      "button:focus-visible",
+    ]);
     const outline = /outline:\s*(\d+)px solid var\(--([a-z-]+)\)/u.exec(
-      focus?.[2] ?? "",
+      declarations,
     );
     expect(Number(outline?.[1])).toBeGreaterThanOrEqual(2);
     expect(TOKENS).toContain(outline?.[2]);
