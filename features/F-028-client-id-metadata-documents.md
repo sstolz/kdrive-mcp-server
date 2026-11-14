@@ -2,7 +2,7 @@
 id: F-028
 title: Client ID Metadata Documents in the OAuth proxy
 ticket: "#3"
-status: ready-for-freeze
+status: frozen
 version: 2
 ---
 
@@ -12,8 +12,9 @@ pass 1 (Fable, `approve`), review 3 (`changes`) and review 4 (`approve`),
 published on #3; kept in `features/history/F-028-v1.md`. Version 2
 (2026-11-14) changes only the owner-run acceptance paragraph and D-13: the
 owner run is blocked until #25 makes the launcher persist the OAuth state;
-see `## Stress-test`, Code review 1. It becomes frozen only after an
-independent review approves it on the pull request.
+see `## Stress-test`, Code review 1. Version 2 frozen 2026-11-14 on
+reviewed revision `315f3ae` after 3-code-review-3-reviewer approved it
+(PR #24).
 
 Author: Claude Opus 5.5 (effort unknown), spec phase, 2026-11-14.
 Base: branch `claude/beautiful-maxwell-8mdk2w` at `254d5da` (main `75c9f48`).
@@ -783,8 +784,8 @@ client matrix.
   blocked until #25 lands; #25's run through the real launcher (settings
   filtering and a restart on the same state file) is its rehearsal (AGENTS.md
   §6). AC-12 stays a test with the state file injected, which does not
-  rehearse the launcher. Rejected: making the real claude.ai run an acceptance condition
-  (depends on a third-party service and a tunnel outside the gate).
+  rehearse the launcher. Rejected: making the real claude.ai run an
+  acceptance condition (depends on a third-party service and a tunnel outside the gate).
 
 ### Deviations from the MCP specification and the IETF draft
 
@@ -943,6 +944,10 @@ Code review 1 (3-code-review-1-reviewer, PR #24), version 2 (2026-11-14):
    contract (its mount rule), CIMD ships off with an empty origin list, and
    the owner run is not a merge condition; F-028 v2 blocks the owner run
    until #25 adds the state file and its rehearsal.
-2. Code review 2 (3-code-review-2-reviewer): D-13 now carries the v2 change
-   (the stray paragraph under Deviations is removed) and v2 stays
-   `ready-for-freeze` until an approving review.
+Code review 2 (3-code-review-2-reviewer, PR #24), version 2 (2026-11-14):
+
+1. D-13 now carries the v2 change (the stray paragraph under Deviations is
+   removed) and v2 stayed `ready-for-freeze` until an approving review.
+
+Code review 3 (3-code-review-3-reviewer, PR #24): `approve`; v2 freezable;
+two layout minors (a long D-13 line, this entry's heading) applied at freeze.
