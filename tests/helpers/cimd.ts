@@ -251,15 +251,21 @@ export async function startRawDocumentServer(
 /**
  * F-033: one response header block of exactly `size` bytes, terminator
  * included, padded with an `X-Pad` field; `lead` CR/LF bytes come first and
- * count toward `size`.
+ * count toward `size`; `version` is the status line's HTTP version.
  */
 export function headerBlock(
   size: number,
-  options: { status?: string; fields?: readonly string[]; lead?: string } = {},
+  options: {
+    status?: string;
+    fields?: readonly string[];
+    lead?: string;
+    version?: string;
+  } = {},
 ): Buffer {
   const lead = options.lead ?? "";
+  const version = options.version ?? "1.1";
   const fields = (options.fields ?? []).map((field) => field + "\r\n");
-  const start = `${lead}HTTP/1.1 ${options.status ?? "200 OK"}\r\n${fields.join("")}X-Pad: `;
+  const start = `${lead}HTTP/${version} ${options.status ?? "200 OK"}\r\n${fields.join("")}X-Pad: `;
   const pad = size - start.length - "\r\n\r\n".length;
   if (pad < 1) throw new Error(`header block too small: ${String(size)}`);
   const block = Buffer.from(`${start}${"a".repeat(pad)}\r\n\r\n`, "latin1");

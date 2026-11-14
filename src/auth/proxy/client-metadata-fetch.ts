@@ -124,7 +124,12 @@ const MAX_HEADER_BLOCK_BYTES = 8192;
 const CR = 0x0d;
 const LF = 0x0a;
 const TERMINATOR = [CR, LF, CR, LF] as const;
-const INTERIM = /^HTTP\/1\.[01] 1\d\d[ \r]/u;
+/** A status line Node's parser accepts: versions 0.9, 1.0, 1.1 and 2.0. */
+const STATUS_LINE = String.raw`^HTTP\/(?:0\.9|1\.[01]|2\.0) `;
+/** An interim block; Node's parser treats 101 as final. */
+const INTERIM = new RegExp(String.raw`${STATUS_LINE}(?!101)1\d\d[ \r]`, "u");
+/** A final 200 block, with or without a reason phrase. */
+const OK = new RegExp(String.raw`${STATUS_LINE}200[ \r]`, "u");
 /** `scanBlock`: the block passed the bound before it ended. */
 const OVERFLOW = -2;
 /** `scanBlock`: the block did not end in this chunk. */
@@ -201,9 +206,7 @@ function watchResponseBytes(socket: Socket, limits: ResponseLimits): void {
   /** The body bytes of the chunk being delivered. */
   let fresh = 0;
   const onFinal = (text: string, rest: number) => {
-    counted =
-      /^HTTP\/1\.[01] 200 /u.test(text) &&
-      !/\r\ntransfer-encoding[ \t]*:/iu.test(text);
+    counted = OK.test(text) && !/\r\ntransfer-encoding[ \t]*:/iu.test(text);
     fresh = rest;
   };
   socket.prependListener("data", (chunk: Buffer) => {

@@ -531,18 +531,22 @@ const jsonResponse = (size: number, lead = "") =>
   ]);
 const singleBytes = (bytes: Buffer) =>
   [...bytes].map((byte) => Buffer.from([byte]));
-const earlyHints = (size?: number) =>
+const earlyHints = (size?: number, version = "1.1") =>
   size === undefined
-    ? Buffer.from("HTTP/1.1 103 Early Hints\r\nLink: </s.css>\r\n\r\n")
-    : headerBlock(size, { status: "103 Early Hints" });
+    ? Buffer.from(`HTTP/${version} 103 Early Hints\r\nLink: </s.css>\r\n\r\n`)
+    : headerBlock(size, { status: "103 Early Hints", version });
 /** A 200 JSON response announcing 10 body bytes and sending 5,121. */
-const overlongBody = () =>
+const overlongBody = (statusLine = "HTTP/1.1 200 OK") =>
   Buffer.concat([
     Buffer.from(
-      "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 10\r\nConnection: close\r\n\r\n",
+      `${statusLine}\r\nContent-Type: application/json\r\nContent-Length: 10\r\nConnection: close\r\n\r\n`,
     ),
     Buffer.alloc(5121, 0x20),
   ]);
+
+/** A 101 response whose header block has `size` bytes. */
+const switching = (size: number) =>
+  headerBlock(size, { status: "101 Switching Protocols" });
 
 describe("BR-306 v2 BR-394 v2 header block bound (F-033)", () => {
   it("BR-306 v2 AC-05 the header block is bounded at 8,192 bytes", async () => {
@@ -637,9 +641,31 @@ describe("BR-306 v2 BR-394 v2 header block bound (F-033)", () => {
       { parts: [earlyHints(), jsonResponse(8193)] },
       { parts: [earlyHints(8193), jsonResponse(8192)] },
       { parts: [earlyHints(), jsonResponse(8193, "\r\n\r\n")] },
+      { parts: [earlyHints(undefined, "2.0"), jsonResponse(8193)] },
+      { parts: [earlyHints(undefined, "0.9"), jsonResponse(8193)] },
+      { parts: [switching(8193)] },
+      {
+        parts: [
+          switching(8193).subarray(0, 4096),
+          switching(8193).subarray(4096),
+        ],
+        gapMs: 20,
+      },
     ];
     for (const script of refused)
       expect((await fetchRaw(script)).outcome).toEqual(HEADER_SIZE);
+    // A 101 block is final, as Node's parser treats it, however it is written.
+    const trailing = Buffer.alloc(8193, 0x61);
+    for (const script of [
+      { parts: [Buffer.concat([switching(256), trailing])] },
+      { parts: [switching(256), trailing], gapMs: 20 },
+    ])
+      expect((await fetchRaw(script)).outcome).toEqual({
+        ok: false,
+        reason: "status",
+        status: 101,
+        transient: false,
+      });
     expect(
       (await fetchRaw({ parts: [earlyHints(8192), jsonResponse(8192)] }))
         .outcome,
@@ -655,6 +681,18 @@ describe("BR-306 v2 BR-394 v2 header block bound (F-033)", () => {
       ).outcome,
     ).toEqual(BODY_SIZE);
   }, 30_000);
+
+  it("BR-306 the body bound applies whatever the form of the 200 status line", async () => {
+    for (const statusLine of [
+      "HTTP/1.1 200",
+      "HTTP/1.0 200 OK",
+      "HTTP/2.0 200 OK",
+      "HTTP/0.9 200 OK",
+    ])
+      expect(
+        (await fetchRaw({ parts: [overlongBody(statusLine)] })).outcome,
+      ).toEqual(BODY_SIZE);
+  });
 
   it("BR-306 v2 AC-10 the body bound runs after the status and media-type checks", async () => {
     const html = Buffer.from(
