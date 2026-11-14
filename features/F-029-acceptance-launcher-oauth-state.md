@@ -101,7 +101,8 @@ package changes.
   entries" check of the secrets directory already refuses first, so no test
   reaches it;
   (6) its mode grants any permission to group or others, read through POSIX
-  `find -prune -perm` tests on the mode bits (ACLs are not read; see D-3)
+  `find "$d" -prune \( -perm -040 -o -perm -020 -o -perm -010 -o -perm -004
+  -o -perm -002 -o -perm -001 \)` (ACLs are not read; see D-3)
   (`The acceptance state directory is not private.`);
   (7) it holds an entry, hidden ones included, other than `oauth-state.sqlite`
   and `oauth-state.sqlite-journal`
@@ -135,7 +136,8 @@ package changes.
   owns the directory must have the uid the dev image was built with
   (`DEV_UID=… make setup`, `docs/development.md`), otherwise the server stops
   with `OAUTH_STATE_UNAVAILABLE`, that one tunnel and the same
-  `MCP_PUBLIC_URL` must be kept across restarts (a new URL fails startup with
+  `MCP_PUBLIC_URL` must be kept across restarts (if the tunnel dies, its new
+  URL needs a new `MCP_PUBLIC_URL`, and starting with it fails with
   `OAUTH_STATE_MISMATCH`; then delete `oauth-state.sqlite` and its `-journal`
   while stopped and start over), that it is a credential store
   (delete `oauth-state.sqlite` and its `-journal` while stopped to revoke
@@ -157,7 +159,7 @@ package changes.
   directory and one variant per BR-397 refusal (1)–(8), with these
   sub-cases: (2) a relative path, a `..` component and a `:`; (3) a missing
   path and a symlink to a directory; (4) the checkout, a directory under it,
-  an ancestor of it and `/`; (5) the secrets directory itself and an ancestor
+  an ancestor of it; (5) the secrets directory itself and an ancestor
   of it; (6) mode `0750` and mode `0701`; (7) a `.hidden` file; (8)
   `oauth-state.sqlite` as a symlink and as a directory, When `make http-acceptance` runs with a fake `docker`, Then it
   exits 1, stderr is exactly the fixed line, no Docker command or `build`
@@ -229,12 +231,13 @@ Rehearsed end to end by AC-05 (AGENTS.md §6). Recorded on #3.
    refused authorize address bar (F-028 discovery procedure); stop the server.
 4. Set `OAUTH_ALLOWED_CLIENT_ID_ORIGINS` to that origin, start again with the
    same state directory, connect claude.ai, check that the consent page shows
-   the client host, approve, log in upstream, call a tool.
+   the client host, approve, log in upstream, call a tool. If the tunnel died
+   since step 2, see the recovery in step 5.
 5. Stop and start the server again with the same settings, tunnel and
    directory; call a tool from the same claude.ai conversation without logging
-   in again. If the tunnel URL changed, the start fails with
-   `OAUTH_STATE_MISMATCH`: stop, delete `oauth-state.sqlite` and its
-   `-journal`, and start over from step 2.
+   in again. If the tunnel died, its new URL needs a new `MCP_PUBLIC_URL`, and
+   starting with it fails with `OAUTH_STATE_MISMATCH`: stop, delete
+   `oauth-state.sqlite` and its `-journal`, and start over from step 2.
 6. Record the origin in the client matrix and the result on #3. To clean up,
    stop the server and delete the state directory.
 
@@ -313,3 +316,12 @@ retained (applied by the orchestrator, economical mode agreed with the owner):
    residual risks; (6) is read through POSIX mode tests.
 9. [minor] BR-171 v3 source, History line, renamed v2 tests and the AC-05
    test name are specified.
+
+Review 2 (25-spec-review-2-reviewer), `changes` on `f59775c` with three minor
+findings; all retained (applied by the orchestrator):
+
+1. AC-02 drops `/` from the (4) sub-cases: refusal (3) stops it first for a
+   non-root test user.
+2. The tunnel recovery says a dead tunnel needs a new `MCP_PUBLIC_URL`, which
+   then fails with `OAUTH_STATE_MISMATCH`; step 4 points to it.
+3. Check (6) gives the exact POSIX `find -perm` expression.
