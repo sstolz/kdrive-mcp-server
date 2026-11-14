@@ -2,7 +2,7 @@
 id: F-031
 title: OAuth proxy pages in English and French
 ticket: "#31"
-status: frozen
+status: done
 version: 1
 ---
 
