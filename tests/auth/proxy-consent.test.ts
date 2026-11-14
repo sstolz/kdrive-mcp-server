@@ -825,6 +825,42 @@ describe("BR-411 BR-129 v5 BR-142 v3 repeated consent POST", () => {
     expect((await post(h, newest.id, newest.cookie, "deny")).status).toBe(302);
   }
 
+  /** BR-411 (5): when every record is pending, a new first POST records nothing. */
+  async function allPendingRecords(): Promise<void> {
+    const h = await harness();
+    const client = await h.register();
+    const hold = holdDiscovery(h);
+    const firsts: Array<Promise<ProxyResponse>> = [];
+    for (let index = 0; index < STORE_LIMIT; index += 1) {
+      const c = await pending(h, client);
+      firsts.push(post(h, c.id, c.cookie));
+    }
+    const pendingIds = recorded(h);
+    expect(pendingIds).toHaveLength(STORE_LIMIT);
+    expect(pendingIds.every(([, settled]) => settled === false)).toBe(true);
+    const extra = await pending(h, client);
+    const extraFirst = post(h, extra.id, extra.cookie);
+    const deny = await pending(h, client);
+    const refusalsBefore = refusals(h);
+    const denied = await post(h, deny.id, deny.cookie, "deny");
+    expect(denied.status).toBe(302);
+    expect(location(denied).searchParams.get("error")).toBe("access_denied");
+    const ids = recorded(h).map(([id]) => id);
+    expect(ids).toHaveLength(STORE_LIMIT);
+    expect(ids).not.toContain(extra.id);
+    expect(ids).not.toContain(deny.id);
+    expectConsentPage(await post(h, deny.id, deny.cookie, "deny"));
+    expect(refusals(h)).toBe(refusalsBefore + 2);
+    hold.release();
+    for (const first of firsts) expect((await first).status).toBe(302);
+    const late = await extraFirst;
+    expect(late.status).toBe(302);
+    expect(location(late).searchParams.get("error")).toBe(
+      "temporarily_unavailable",
+    );
+    expectConsentPage(await post(h, extra.id, extra.cookie));
+  }
+
   async function purgedRecords(): Promise<void> {
     const h = await harness();
     const client = await h.register();
@@ -874,6 +910,7 @@ describe("BR-411 BR-129 v5 BR-142 v3 repeated consent POST", () => {
     { timeout: 60_000 },
     async () => {
       await boundedRecords();
+      await allPendingRecords();
       await purgedRecords();
       await neverStored();
     },
