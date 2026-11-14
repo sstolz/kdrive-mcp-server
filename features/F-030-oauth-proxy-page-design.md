@@ -2,13 +2,16 @@
 id: F-030
 title: Designed OAuth proxy consent and error pages
 ticket: "#23"
-status: draft
+status: frozen
 version: 1
 ---
 
 # F-030 — Designed OAuth proxy consent and error pages
 
 Author: Claude Opus 5.5 (effort unknown), spec phase, 2026-11-14.
+Frozen 2026-11-14 (autonomous mode, PROJECT.md D-1) on reviewed revision
+`5ce8712` after spec reviews 1–3 (`changes`) and 4 (`approve`), published on
+#23.
 Base: branch `claude/beautiful-maxwell-8mdk2w` (main `029f747`).
 IDs: F-030; BR-399–BR-403 v1; BR-129 v3; BR-393 v2. No ADR: the change is
 confined to static page markup and one CSP directive and is cheap to reverse.
