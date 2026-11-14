@@ -21,7 +21,7 @@ const LINK = `<a href="${GITHUB}" target="_blank" rel="noopener noreferrer">Sour
 const INTRO =
   "An application is asking to connect to this kdrive-mcp-server. The server gives MCP clients, such as AI assistants, access to files in kDrive, limited to the folders and mode its operator configured. Approve only if you started this connection yourself and recognise the client below.";
 const AFTER =
-  "Approve takes you to sign in with your account; the client gets access only after that sign-in. Deny returns to the client without access. Enter your password only on your identity provider&#39;s sign-in page, never on this page.";
+  "Approve takes you to sign in with your account; the client gets access only after that sign-in. Deny returns to the client without access. Enter your password only on your identity provider's sign-in page, never on this page.";
 const ERROR_NOTE =
   "This request was not completed. If your application is not connected, return to it and start the connection again.";
 const ERROR_TEXT: Record<ErrorPage, string> = {
@@ -414,7 +414,7 @@ describe("BR-402 consent page layout", () => {
         `<p>Client ID: <code>${CIMD_ID}</code></p>`,
         "<p>Client host: client.example.com</p>",
         "<p>Client name: <strong>&lt;b&gt;Claude&lt;/b&gt; (self-declared, unverified)</strong></p>",
-        "<p>This name comes from the client&#39;s metadata document and is unverified.</p>",
+        "<p>This name comes from the client's metadata document and is unverified.</p>",
         ...(loopback ? [loopbackLine] : []),
         `<p>Redirect URI: <code>${redirect}</code></p>`,
         `<p>Protected resource: <code>${PUBLIC_URL}</code></p>`,
