@@ -1,7 +1,7 @@
-// F-033 AC-08: a child started with NODE_OPTIONS=--max-http-header-size=4096.
-// The production fetch port gets an injected resolver (127.0.0.1), an
-// allow-all address policy and the test CA, then fetches a response with an
-// 8,192-byte header block and one with an 8,193-byte header block.
+// F-033: a child started with the NODE_OPTIONS its test passes (AC-08:
+// --max-http-header-size=4096). The production fetch port gets an injected
+// resolver (127.0.0.1), an allow-all address policy and the test CA, then
+// fetches the scripted responses served on the two ports it is given.
 import { createClientMetadataFetch } from "../../dist/auth/proxy/client-metadata-fetch.js";
 
 const exactPort = process.argv[2];

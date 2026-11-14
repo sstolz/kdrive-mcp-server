@@ -523,6 +523,42 @@ async function fetchRaw(script: RawScript) {
   return { outcome, elapsed: Date.now() - started };
 }
 
+/**
+ * Runs tests/helpers/cimd-header-child.mjs with `nodeOptions` against two raw
+ * servers and returns the summaries it prints.
+ */
+async function runHeaderChild(
+  nodeOptions: string,
+  exact: { port: number },
+  over: { port: number },
+): Promise<unknown> {
+  const child = spawn(
+    process.execPath,
+    [
+      resolve("tests/helpers/cimd-header-child.mjs"),
+      String(exact.port),
+      String(over.port),
+    ],
+    {
+      env: {
+        PATH: process.env.PATH,
+        NODE_OPTIONS: nodeOptions,
+        CIMD_TEST_CA: cimdCertificates().ca,
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    },
+  );
+  let out = "";
+  child.stdout.on("data", (data: Buffer) => {
+    out += data.toString();
+  });
+  const code = await new Promise<number | null>((done) =>
+    child.on("close", done),
+  );
+  expect(code).toBe(0);
+  return JSON.parse(out.trim());
+}
+
 /** A complete 200 JSON response whose final header block has `size` bytes. */
 const jsonResponse = (size: number, lead = "") =>
   Buffer.concat([
@@ -543,6 +579,10 @@ const overlongBody = (statusLine = "HTTP/1.1 200 OK") =>
     ),
     Buffer.alloc(5121, 0x20),
   ]);
+
+/** A short 103 block whose status line starts with `protocol`. */
+const foreignHints = (protocol: string) =>
+  Buffer.from(`${protocol} 103 Early Hints\r\nLink: </s.css>\r\n\r\n`);
 
 /** A 101 response whose header block has `size` bytes. */
 const switching = (size: number) =>
@@ -606,34 +646,24 @@ describe("BR-306 v2 BR-394 v2 header block bound (F-033)", () => {
   it("BR-306 v2 AC-08 the 8,192-byte header bound decides with --max-http-header-size=4096 in a child process", async () => {
     const exact = await serveRaw({ parts: [jsonResponse(8192)] });
     const over = await serveRaw({ parts: [jsonResponse(8193)] });
-    const child = spawn(
-      process.execPath,
-      [
-        resolve("tests/helpers/cimd-header-child.mjs"),
-        String(exact.port),
-        String(over.port),
-      ],
-      {
-        env: {
-          PATH: process.env.PATH,
-          NODE_OPTIONS: "--max-http-header-size=4096",
-          CIMD_TEST_CA: cimdCertificates().ca,
-        },
-        stdio: ["ignore", "pipe", "pipe"],
-      },
+    expect(
+      await runHeaderChild("--max-http-header-size=4096", exact, over),
+    ).toEqual({ exact: { ok: true, status: 200 }, over: HEADER_SIZE });
+  });
+
+  it("BR-306 the request ignores --insecure-http-parser in a child process", async () => {
+    const lfHints = Buffer.from("HTTP/1.1 103 Early Hints\nLink: </s.css>\n\n");
+    const exact = await serveRaw({ parts: [lfHints, jsonResponse(512)] });
+    const over = await serveRaw({ parts: [lfHints, overlongBody()] });
+    const refused = {
+      ok: false,
+      reason: "connection",
+      status: 0,
+      transient: true,
+    };
+    expect(await runHeaderChild("--insecure-http-parser", exact, over)).toEqual(
+      { exact: refused, over: refused },
     );
-    let out = "";
-    child.stdout.on("data", (data: Buffer) => {
-      out += data.toString();
-    });
-    const code = await new Promise<number | null>((done) =>
-      child.on("close", done),
-    );
-    expect(code).toBe(0);
-    expect(JSON.parse(out.trim())).toEqual({
-      exact: { ok: true, status: 200 },
-      over: HEADER_SIZE,
-    });
   });
 
   it("BR-306 v2 AC-09 each interim and final header block is bounded at 8,192 bytes", async () => {
@@ -643,6 +673,8 @@ describe("BR-306 v2 BR-394 v2 header block bound (F-033)", () => {
       { parts: [earlyHints(), jsonResponse(8193, "\r\n\r\n")] },
       { parts: [earlyHints(undefined, "2.0"), jsonResponse(8193)] },
       { parts: [earlyHints(undefined, "0.9"), jsonResponse(8193)] },
+      { parts: [foreignHints("RTSP/1.1"), jsonResponse(8193)] },
+      { parts: [foreignHints("ICE/1.0"), jsonResponse(8193)] },
       { parts: [switching(8193)] },
       {
         parts: [
@@ -688,10 +720,16 @@ describe("BR-306 v2 BR-394 v2 header block bound (F-033)", () => {
       "HTTP/1.0 200 OK",
       "HTTP/2.0 200 OK",
       "HTTP/0.9 200 OK",
+      "RTSP/1.0 200 OK",
+      "ICE/1.0 200 OK",
     ])
       expect(
         (await fetchRaw({ parts: [overlongBody(statusLine)] })).outcome,
       ).toEqual(BODY_SIZE);
+    expect(
+      (await fetchRaw({ parts: [foreignHints("RTSP/1.0"), overlongBody()] }))
+        .outcome,
+    ).toEqual(BODY_SIZE);
   });
 
   it("BR-306 v2 AC-10 the body bound runs after the status and media-type checks", async () => {

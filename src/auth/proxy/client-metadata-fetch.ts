@@ -124,12 +124,14 @@ const MAX_HEADER_BLOCK_BYTES = 8192;
 const CR = 0x0d;
 const LF = 0x0a;
 const TERMINATOR = [CR, LF, CR, LF] as const;
-/** A status line Node's parser accepts: versions 0.9, 1.0, 1.1 and 2.0. */
-const STATUS_LINE = String.raw`^HTTP\/(?:0\.9|1\.[01]|2\.0) `;
+/*
+ * Blocks are classified by status code alone: Node's parser also accepts
+ * `RTSP/` and `ICE/` status lines, and a line it refuses fails the fetch.
+ */
 /** An interim block; Node's parser treats 101 as final. */
-const INTERIM = new RegExp(String.raw`${STATUS_LINE}(?!101)1\d\d[ \r]`, "u");
+const INTERIM = /^[^ \r\n]+ (?!101)1\d\d(?!\d)/u;
 /** A final 200 block, with or without a reason phrase. */
-const OK = new RegExp(String.raw`${STATUS_LINE}200[ \r]`, "u");
+const OK = /^[^ \r\n]+ 200(?!\d)/u;
 /** `scanBlock`: the block passed the bound before it ended. */
 const OVERFLOW = -2;
 /** `scanBlock`: the block did not end in this chunk. */
@@ -330,6 +332,8 @@ function runFetch(
           rejectUnauthorized: true,
           // BR-306 v2: Node's own limit stays above the 8,192-byte bound.
           maxHeaderSize: 16_384,
+          // BR-306 v2: the block watcher relies on strict CRLF parsing.
+          insecureHTTPParser: false,
           headers: {
             Accept: "application/json",
             "User-Agent": USER_AGENT,
