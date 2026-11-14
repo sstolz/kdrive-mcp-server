@@ -2,13 +2,17 @@
 id: F-031
 title: OAuth proxy pages in English and French
 ticket: "#31"
-status: draft
+status: frozen
 version: 1
 ---
 
 # F-031 — OAuth proxy pages in English and French
 
 Author: Claude Opus 5.5 (effort unknown), spec phase, 2026-11-14.
+Frozen 2026-11-14 (autonomous mode, PROJECT.md D-1) after spec reviews 1
+(`changes`) and 2 (`approve`) and decision pass 1 (Fable, `approve`) on
+reviewed revision `c8ade5e`, with the decision pass's three minors applied
+at freeze as it allowed; published on #31.
 Base: branch `claude/beautiful-maxwell-8mdk2w` (main `3ff195b`).
 IDs: F-031; BR-404–BR-410 v1; BR-129 v4; BR-143 v4; BR-393 v3; BR-399 v2;
 BR-402 v2; BR-403 v2. No ADR: the change is confined to page texts, one query parameter
@@ -125,7 +129,8 @@ response to them (redirects, JSON) changes.
   `fr;q=0` → none; `FR-ch` → `fr`; `fr;q=0.5, en;q=0.5` → `fr`;
   `fr;q=2` → none; `fr_CH` → none; `fr;level=1` → none;
   `en;q=0, *` → `fr`; `en-GB;q=0, *` → `fr` (an item counts as `en` or `fr`
-  by its primary subtag, weight 0 included). Verified by: AC-01.
+  by its primary subtag, weight 0 included); `en;q=0.1, *` → `en` (intended:
+  `*` falls back to English first). Verified by: AC-01.
 - **BR-407** — The fixed texts of the pages come from one catalogue object
   per language, `MESSAGES.en` and `MESSAGES.fr`, both typed by one `Messages`
   type so that a missing or extra key fails `tsc`; the error sentences are a
@@ -315,7 +320,9 @@ No language switch submits a form, re-posts a consent or replays a callback.
   and the new identifier approves normally; given a store filled to 1000
   including that consent, the switch still shows the consent page; and given
   the same switch without the cookie, or the same request without `lang`, or
-  with a different `state`, Then a consent is added and none deleted; and
+  with a different `state`, or the same request with `lang` and another
+  well-formed cookie C2, Then a consent is added and none deleted (the
+  identifier issued to C still approves with C); and
   given two live consents equal to the request with C, Then only the older one
   is replaced.
   Verified by: `BR-409 AC-05` in `tests/auth/proxy-language.test.ts`.
@@ -344,7 +351,8 @@ No language switch submits a form, re-posts a consent or replays a callback.
   to `/oauth/consent?lang=fr` with an unknown identifier and to
   `/oauth/consent` with `Accept-Language: fr` each give the French `consent`
   page; a callback with an unknown `state` and `Accept-Language: fr` gives the
-  French `callback` page; a CIMD loopback request with `lang=fr` shows the
+  French `callback` page, and one with `?lang=fr` and no header gives the
+  French `callback` page too; a CIMD loopback request with `lang=fr` shows the
   French BR-393 lines. Verified by: `BR-129 v4 ...` and `BR-393 v3 ...` in
   `tests/auth/proxy-consent.test.ts`.
 - **AC-09** (all) — Given the branch, When `make check` runs in Docker, Then
@@ -426,3 +434,9 @@ Review 2 (31-spec-review-2-reviewer), `approve` on `b4850ea` with two minor
 findings; both retained (applied by the orchestrator): AC-04 names the
 encodings of `state` its test checks; BR-406 adds `en-GB;q=0, *` → `fr`
 (primary subtag decides).
+
+Decision pass 1 (31-spec-decision-1-fable), `approve` on `c8ade5e` with three
+minor findings; all retained and applied at freeze (the pass allowed it
+without another round): AC-05 adds a second browser's cookie C2 that must not
+delete C's consent; AC-08 adds a callback error page chosen by `?lang=fr`;
+BR-406 records `en;q=0.1, *` → `en` as intended.
