@@ -164,8 +164,9 @@ codes, events and limits do not change.
   footer with the exact GitHub link as the only `<a>`, after `</main>` and
   outside the form. Verified by: `BR-399 AC-01` in
   `tests/auth/proxy-pages.test.ts`.
-- **AC-02** (BR-399) — Given the same pages with every `ConsentView` value,
-  `clientName` included, chosen to contain `<script>`, `" onload="`, `style=`, `http://evil.example` and
+- **AC-02** (BR-399) — Given the same pages with every `ConsentView` string
+  value listed in BR-399 (`clientName` included; not the server-generated
+  `consentId` nor the boolean `cimd.loopback`) chosen to contain `<script>`, `" onload="`, `style=`, `http://evil.example` and
   `javascript:`, rendered through direct `consentPage` and `errorPage` calls,
   When the body is scanned after removing the escaped `ConsentView` values of
   BR-399, Then it holds none of the forbidden elements or attributes and no
@@ -283,3 +284,8 @@ Review 2 (23-spec-review-2-reviewer), `changes` on `77ddcb3`; both retained
    hostile values of AC-02.
 2. [minor] BR-400 (5) and AC-03: `box-sizing: border-box` and no
    `width`/`min-width` other than `%` or `auto`, checkable by string.
+
+Review 3 (23-spec-review-3-reviewer), `changes` on `4b43ac4`; retained
+(applied by the orchestrator): AC-02 makes hostile only the `ConsentView`
+string values listed in BR-399, not the server-generated `consentId` or the
+boolean `cimd.loopback`.
