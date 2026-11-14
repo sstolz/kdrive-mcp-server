@@ -67,48 +67,49 @@ export const TEXTS: Record<PageLanguage, PageTexts> = {
   },
   fr: {
     productTagline:
-      "Serveur MCP non officiel pour kDrive, non affilié à Infomaniak.",
+      "Serveur MCP non officiel pour kDrive, non affili\u00e9 \u00e0 Infomaniak.",
     sourceLink: "Code source sur GitHub",
     languageNav: "Langue",
-    consentTitle: "Autoriser l'accès",
+    consentTitle: "Autoriser l'acc\u00e8s",
     consentIntro:
-      "Une application demande à se connecter à ce kdrive-mcp-server. Ce serveur donne à des clients MCP, tels que des assistants d'IA, accès à des fichiers dans kDrive, dans la limite des dossiers et du mode configurés par son opérateur. N'approuvez que si vous avez vous-même lancé cette connexion et reconnaissez le client ci-dessous.",
-    requestDetails: "Détails de la demande",
-    clientIdLabel: "Identifiant du client :",
-    clientHostLabel: "Hôte du client :",
-    clientNameLabel: "Nom du client :",
+      "Une application demande \u00e0 se connecter \u00e0 ce kdrive-mcp-server. Ce serveur donne \u00e0 des clients MCP, tels que des assistants d'IA, acc\u00e8s \u00e0 des fichiers dans kDrive, dans la limite des dossiers et du mode configur\u00e9s par son op\u00e9rateur. N'approuvez que si vous avez vous-m\u00eame lanc\u00e9 cette connexion et reconnaissez le client ci-dessous.",
+    requestDetails: "D\u00e9tails de la demande",
+    clientIdLabel: "Identifiant du client\u00a0:",
+    clientHostLabel: "H\u00f4te du client\u00a0:",
+    clientNameLabel: "Nom du client\u00a0:",
     unnamedClient: "client sans nom",
-    selfDeclaredSuffix: "(déclaré par le client, non vérifié)",
+    selfDeclaredSuffix:
+      "(d\u00e9clar\u00e9 par le client, non v\u00e9rifi\u00e9)",
     metadataNotice:
-      "Ce nom provient du document de métadonnées du client et n'est pas vérifié.",
+      "Ce nom provient du document de m\u00e9tadonn\u00e9es du client et n'est pas v\u00e9rifi\u00e9.",
     loopbackLine:
       "Ce client redirige uniquement vers cet ordinateur (boucle locale).",
     selfDeclaredNotice:
-      "Le nom du client est déclaré par le client lui-même et n'est pas vérifié.",
-    redirectUriLabel: "URI de redirection :",
-    resourceLabel: "Ressource protégée :",
+      "Le nom du client est d\u00e9clar\u00e9 par le client lui-m\u00eame et n'est pas v\u00e9rifi\u00e9.",
+    redirectUriLabel: "URI de redirection\u00a0:",
+    resourceLabel: "Ressource prot\u00e9g\u00e9e\u00a0:",
     approve: "Approuver",
     deny: "Refuser",
     consentNote:
-      "Approuver vous amène à vous connecter avec votre compte. Le client n'obtient l'accès qu'après cette connexion. Refuser vous ramène au client sans lui donner accès. Saisissez votre mot de passe uniquement sur la page de connexion de votre fournisseur d'identité, jamais sur cette page.",
+      "Approuver vous am\u00e8ne \u00e0 vous connecter avec votre compte. Le client n'obtient l'acc\u00e8s qu'apr\u00e8s cette connexion. Refuser vous ram\u00e8ne au client sans lui donner acc\u00e8s. Saisissez votre mot de passe uniquement sur la page de connexion de votre fournisseur d'identit\u00e9, jamais sur cette page.",
     errorTitle: "Erreur d'autorisation",
     error: {
       invalid_request: "La demande d'autorisation n'est pas valide.",
       consent:
-        "Cette demande de consentement est inconnue, a expiré ou a déjà été utilisée.",
+        "Cette demande de consentement est inconnue, a expir\u00e9 ou a d\u00e9j\u00e0 \u00e9t\u00e9 utilis\u00e9e.",
       callback:
-        "Cette réponse de connexion est inconnue, a expiré ou a déjà été utilisée.",
-      busy: "Trop de demandes d'autorisation sont en attente. Réessayez plus tard.",
+        "Cette r\u00e9ponse de connexion est inconnue, a expir\u00e9 ou a d\u00e9j\u00e0 \u00e9t\u00e9 utilis\u00e9e.",
+      busy: "Trop de demandes d'autorisation sont en attente. R\u00e9essayez plus tard.",
     },
     errorNote:
-      "Cette demande n'a pas abouti. Si votre application n'est pas connectée, revenez-y et relancez la connexion.",
+      "Cette demande n'a pas abouti. Si votre application n'est pas connect\u00e9e, revenez-y et relancez la connexion.",
   },
 };
 
 /** The language names of the switcher, each in its own language (BR-408). */
 export const NAMES: Record<PageLanguage, string> = {
   en: "English",
-  fr: "Français",
+  fr: "Fran\u00e7ais",
 };
 
 export const OTHER: Record<PageLanguage, PageLanguage> = { en: "fr", fr: "en" };
