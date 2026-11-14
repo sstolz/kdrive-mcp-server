@@ -207,9 +207,10 @@ Tests use the deterministic clock, random source and fake upstream of
   by: `BR-411 AC-07 a repeat passes the HTTP checks` in
   `tests/http/host-origin.test.ts`.
 - **AC-08** (BR-411) — Given a replay, Then no logger call, response header
-  or body other than the replayed `Location` contains the consent
-  identifier, the cookie value or the upstream `state`, `nonce` or
-  challenge. Verified by: `BR-411 AC-08` in `tests/http/secrecy.test.ts`.
+  or body other than the replayed `Location` and, for approve, the BR-130
+  `Set-Cookie` contains the consent identifier, the cookie value or the
+  upstream `state`, `nonce` or challenge; the `Set-Cookie` carries only the
+  cookie value. Verified by: `BR-411 AC-08` in `tests/http/secrecy.test.ts`.
 - **AC-09** (BR-411) — Given an approval replayed at `t0 + 1` s, Then the
   pending flow's `created` value in the snapshot equals that of the first
   POST and the flow expires at the same time as without a repeat. Verified
@@ -321,3 +322,8 @@ Review 1 (33-spec-review-1-reviewer):
    back today's 400.
 6. [minor] AC-10 precondition. **Retained.** The second equal consent comes
    from an authorize request without `lang`.
+
+Review 2 (33-spec-review-2-reviewer), `changes` on `24a5685`; retained
+(applied by the orchestrator): AC-08 now excepts the approve replay's BR-130
+`Set-Cookie`, which carries the cookie value by design (AC-01), so AC-01 and
+AC-08 no longer contradict.
