@@ -12,7 +12,7 @@ Review 1 fixes applied on `35eb1e9`.
 IDs: F-028; BR-291 and BR-305–BR-311 v1 (reserved for this work by F-019 and
 `docs/spec-index.md`; the archive ticket that reserved them was archive issue
 109, now this repository's `#3`); BR-393–BR-395 v1; BR-023 v3, BR-024 v4,
-BR-125 v2, BR-128 v3, BR-129 v2, BR-136 v2, BR-143 v3, BR-295 v2, BR-298 v2,
+BR-125 v2, BR-128 v3, BR-129 v2, BR-136 v2, BR-143 v3, BR-169 v3, BR-295 v2, BR-298 v2,
 BR-299 v2, BR-302 v2; ADR-011 (proposed). Next free IDs re-checked on main
 `75c9f48` after review 1: F-028, BR-393, ADR-011. The design starts from the reviewed CIMD section of an
 earlier F-019 draft (archive, parent of the commit that split it off) and
@@ -231,7 +231,7 @@ unchanged.
   moment. A
   transient failure with no usable stale entry gives the 503 HTML error page;
   a terminal failure gives the 400 HTML error page; neither redirects. When
-  the HTTP server's `close()` closes the handler (BR-169 v2 step (2)), the
+  the HTTP server's `close()` closes the handler (BR-169 v3 step (2)), the
   proxy cancels every in-flight fetch in the same way (resolver `cancel()`,
   request and socket destroyed, slot freed), and every authorization request
   waiting on one gets the 503 HTML error page without redirect, settled in
@@ -355,6 +355,8 @@ unchanged.
 - **BR-136 v2** — a CIMD client ID is authenticated under BR-310; registered
   clients are unchanged.
 - **BR-143 v3** — the events and the `reason` field of BR-394.
+- **BR-169 v3** — step (2) also cancels in-flight CIMD fetches and settles
+  their authorization requests with the 503 page (BR-309).
 - **BR-295 v2** — step (5) refuses a `user_version` above 2 with
   `OAUTH_STATE_VERSION`; step (9) applies the row rules of the file's own
   version (a CIMD family in a version 1 file is `OAUTH_STATE_CORRUPT`); step
@@ -566,7 +568,7 @@ cached).
   succeeds, Then the 503 page and no pending consent is created (BR-128 v3);
   When the HTTP server's `close()` runs while a fetch is pending, Then the
   resolver's `cancel()` is called, the fetch socket is destroyed, the request
-  gets the 503 page and no pending consent is created (BR-169 v2).
+  gets the 503 page and no pending consent is created (BR-169 v3).
   Verified by: `tests/auth/proxy-cimd.test.ts`.
 - **AC-07** (BR-310, BR-136 v2) — Given a CIMD client that completed
   authorization, When it redeems its code with `client_id` in the body and no
@@ -630,7 +632,8 @@ cached).
   temporary state file, a local TLS CIMD client double (test CA and loopback
   allowed only through the rehearsal seam), the real c-ares `Resolver`
   pointed through the DNS server list seam at a stub UDP DNS server that
-  answers an A record `127.0.0.1` for the double's host (so only the CA and
+  answers an A record `127.0.0.1` for the double's host and an empty NOERROR
+  (ENODATA) to its AAAA query (so only the CA and
   the loopback allowance are substituted, and the real resolution feeds the
   pinned `lookup`) and a listed origin, When a scripted
   client follows the discovery procedure (placeholder origin first, then the
@@ -902,7 +905,16 @@ findings; all retained:
 6. AC-12 resolves the double's host through the real c-ares `Resolver` and
    the DNS server list seam (stub UDP server answering an A record), so only
    the CA and the loopback allowance are substituted.
-7. BR-309: the HTTP server's `close()` (BR-169 v2 step (2)) cancels in-flight
+7. BR-309: the HTTP server's `close()` (BR-169 v3 step (2)) cancels in-flight
    fetches and their requests get the 503 page; AC-06 case.
 8. BR-395 and AC-11: access tokens already issued stay valid until expiry
    (one hour) after an origin removal, unless the signing key is replaced.
+
+Review 3 (3-spec-review-3-reviewer), `changes` on `d82f25f` with two minor
+findings; both retained:
+
+1. BR-309's cancellation at `close()` adds a case to BR-169: BR-169 v3 is
+   listed in the header IDs and Existing rules changed, and BR-309 and AC-06
+   cite it.
+2. AC-12's stub DNS server also answers the AAAA query with an empty NOERROR
+   (ENODATA), so the parallel `resolve6` does not time out.
