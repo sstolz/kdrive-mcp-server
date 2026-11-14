@@ -22,6 +22,16 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
 
 ### Changed
 
+- #4 / F-034 v1 (pending acceptance): `kdrive_read` with `format:"pdf"`
+  extracts text from files written by common generators: cross-reference and
+  object streams (PDF 1.5+), incremental updates, linearized files, FlateDecode
+  with PNG predictors, metadata, annotations and structure (left out),
+  inherited page attributes, content arrays, graphics around text, and
+  Type 1, TrueType and Type0 fonts with a standard encoding or `ToUnicode`.
+  Font programs are never parsed. Encrypted files, text inside Form XObjects,
+  Type3 fonts and other filters on text streams still return
+  `UNSUPPORTED_FORMAT`; `kdrive_download` returns their bytes. A
+  cross-reference stream no longer refuses as `CONTENT_UNAVAILABLE`.
 - #3 / F-028 v2 (accepted 2026-11-14): the OAuth state file is at format
   version 2 while it holds a CIMD refresh family (ADR-011); earlier releases
   refuse such a file with `OAUTH_STATE_VERSION`. Removing the origins and

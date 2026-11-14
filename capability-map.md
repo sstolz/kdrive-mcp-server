@@ -1,5 +1,16 @@
 # Capability map
 
+## Provisional — PDF text extraction for common generator output
+
+[F-034 v1](features/F-034-pdf-extraction-profile.md) (#4), BR-412–BR-418 v1
+with BR-114 v2 and ADR-012 (proposed), ready for freeze and pending
+acceptance: `kdrive_read` with `format:"pdf"` reads cross-reference and object
+streams, incremental updates, FlateDecode with PNG predictors, inherited page
+attributes, content arrays, and simple or Type0 fonts with a standard encoding
+or `ToUnicode`, from a canonical projection that holds only the selected pages'
+text inputs; encrypted files, text in Forms, Type3 fonts and other filters on
+text streams still refuse, and `kdrive_download` stays the fallback.
+
 ## Accepted — CIMD document handling hardened
 
 [F-033 v1](features/F-033-cimd-hardening.md) (#26), BR-129 v6 with BR-306 v2,
