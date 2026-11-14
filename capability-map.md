@@ -16,8 +16,8 @@ tokens to the client with method `none` and keeps its refresh families in the
 state file (format version 2 while one exists). Origins are found with the
 discovery procedure of the [operator notes](docs/oauth-proxy.md). Accepted on
 actual main `aa540d4` on 2026-11-14 (#3 comment
-`3-acceptance-1-orchestrator`); the owner-run claude.ai check is not done and
-is blocked until #25 (D-13).
+`3-acceptance-1-orchestrator`); the owner-run claude.ai check is not done; it
+is unblocked since F-029 (#25) was accepted and follows its procedure (D-13).
 
 ## Accepted — direct image codecs
 
