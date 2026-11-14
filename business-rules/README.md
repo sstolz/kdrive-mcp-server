@@ -872,10 +872,10 @@ v1 stays the accepted rule until then.
 | [BR-114](BR-114.md) | v2      | Profile of BR-412–BR-420; PDF.js sees only the canonical projection; refusal order.         | [F-034 v1](../features/F-034-pdf-extraction-profile.md) | Pending acceptance |
 | [BR-412](BR-412.md) | v1      | Cross-reference tables and streams through a bounded, cycle-checked `/Prev` chain.          | [F-034 v1](../features/F-034-pdf-extraction-profile.md) | Pending acceptance |
 | [BR-413](BR-413.md) | v1      | Objects by offset or object stream; indirect `/Length`; 4,096 resolved objects.             | [F-034 v1](../features/F-034-pdf-extraction-profile.md) | Pending acceptance |
-| [BR-414](BR-414.md) | v1      | Only needed streams are decoded: FlateDecode with PNG predictors under B.                   | [F-034 v1](../features/F-034-pdf-extraction-profile.md) | Pending acceptance |
+| [BR-414](BR-414.md) | v1      | Only needed streams are decoded (Flate, PNG predictors, ASCII filters); each use counts.    | [F-034 v1](../features/F-034-pdf-extraction-profile.md) | Pending acceptance |
 | [BR-415](BR-415.md) | v1      | The canonical document keeps the page tree and the selected pages' text inputs only.        | [F-034 v1](../features/F-034-pdf-extraction-profile.md) | Pending acceptance |
 | [BR-416](BR-416.md) | v1      | Content keeps text operators, drops graphics and inline images of known length.             | [F-034 v1](../features/F-034-pdf-extraction-profile.md) | Pending acceptance |
-| [BR-417](BR-417.md) | v1      | Simple and Type0 fonts with a full mapping; no font program; bounded `ToUnicode`.           | [F-034 v1](../features/F-034-pdf-extraction-profile.md) | Pending acceptance |
+| [BR-417](BR-417.md) | v1      | Simple, Type0 and Type3 fonts with a full mapping, canonical names, no program.             | [F-034 v1](../features/F-034-pdf-extraction-profile.md) | Pending acceptance |
 | [BR-418](BR-418.md) | v1      | Text-production bound weighted by each font's largest mapping, per execution.               | [F-034 v1](../features/F-034-pdf-extraction-profile.md) | Pending acceptance |
 | [BR-419](BR-419.md) | v1      | Form XObjects are inlined and every execution counted; nesting 8, executions 4,096.         | [F-034 v1](../features/F-034-pdf-extraction-profile.md) | Pending acceptance |
 | [BR-420](BR-420.md) | v1      | Simple-font codes resolve to explicit glyph names; Type 1 built-in encoding from cleartext. | [F-034 v1](../features/F-034-pdf-extraction-profile.md) | Pending acceptance |

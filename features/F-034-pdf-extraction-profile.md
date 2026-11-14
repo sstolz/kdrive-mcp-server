@@ -9,8 +9,8 @@ version: 1
 # F-034 — PDF text extraction for common generator output
 
 Author: Claude Opus 5.5 (effort unknown), spec phase, 2026-11-14; revised
-after spec reviews 1, 2 and 3 by fresh authors, Claude Opus 5.5 (effort
-unknown), 2026-11-14.
+after spec reviews 1, 2 and 3 and the spec decision pass by fresh authors,
+Claude Opus 5.5 (effort unknown), 2026-11-14.
 Base: branch `feat/4-pdf-profile` (main `3151786`).
 IDs: F-034; BR-114 v2; BR-412–BR-420 v1; AC-01–AC-13; ADR-012 (proposed,
 supersedes the PDF admission profile of ADR-004 and nothing else).
@@ -101,9 +101,9 @@ fonts with no usable mapping refuse).
 | Sample | Shape | Raw PDF.js on the source | Before: F-009 | Before: F-034 v1 | After: projection |
 | --- | --- | --- | --- | --- | --- |
 | S21 | OCRmyPDF: image page, invisible (`3 Tr`) Type0 text layer grafted as a Form | `Hello modern PDF` | `UNSUPPORTED_FORMAT` | `UNSUPPORTED_FORMAT` (text Form) | same as source |
-| S22 | qpdf/pdftk overlay: `Contents` array, stamp page as a Form whose `/F1` is another font than the page's `/F1` | `Hello modern PDF` + `Overlay stamp` | `UNSUPPORTED_FORMAT` | `UNSUPPORTED_FORMAT` (text Form) | same as source |
-| S23 | pdfjam/pdfpages 2-up: two page Forms, one with a rotating `/Matrix`, no page Font resource | `Hello modern PDF` + `Second page` | `UNSUPPORTED_FORMAT` | `UNSUPPORTED_FORMAT` (text Form) | same as source |
-| S24 | pdfTeX page including a PDF figure Form (`PTEX.*`, `/Group`, `gs`) whose labels sit in a nested Form | `Hello modern PDF` + `Figure label` | `UNSUPPORTED_FORMAT` | `UNSUPPORTED_FORMAT` (text Form) | same as source |
+| S22 | qpdf/pdftk overlay: `Contents` array, stamp page as a Form whose `/F1` is another font than the page's `/F1` | `Hello modern PDF` + `Overlay stamp` | `UNSUPPORTED_FORMAT` | `UNSUPPORTED_FORMAT` (text Form) | `Hello modern PDF\nOverlay stamp` (Measurement 3) |
+| S23 | pdfjam/pdfpages 2-up: two page Forms, one with a rotating `/Matrix`, no page Font resource | `Hello modern PDF` + `Second page` | `UNSUPPORTED_FORMAT` | `UNSUPPORTED_FORMAT` (text Form) | `Hello modern PDF\nSecond page` (Measurement 3) |
+| S24 | pdfTeX page including a PDF figure Form (`PTEX.*`, `/Group`, `gs`) whose labels sit in a nested Form | `Hello modern PDF` + `Figure label` | `UNSUPPORTED_FORMAT` | `UNSUPPORTED_FORMAT` (text Form) | `Hello modern PDF\nFigure label` (Measurement 3) |
 | S25 | Skia (Chrome): text inside a transparency-group Form drawn after `gs`, Type0 font, flipped CTM | `Hello modern PDF` | `UNSUPPORTED_FORMAT` | `UNSUPPORTED_FORMAT` (text Form) | same as source |
 | S26 | pdfLaTeX Computer Modern Type 1 subset: `Flags 4`, no `/Encoding`, no `ToUnicode`, OT1 built-in encoding in the program | `Hello ﬁnal “modern” – PDF` | `UNSUPPORTED_FORMAT` | `UNSUPPORTED_FORMAT` (no mapping) | same as source |
 | S27 | ReportLab: inline image `/F [/A85 /Fl]` before the text | `Hello modern PDF` | `UNSUPPORTED_FORMAT` | `UNSUPPORTED_FORMAT` (`BI`) | same as source |
@@ -127,17 +127,68 @@ exactly. Two further findings follow:
    every mapping explicitly and refuse when a shown code's mapping can only
    come from the dropped program.
 
+### Measurement 3 (spec decision pass, 2026-11-14)
+
+The decision pass found gaps that Measurement 2 missed, because it joined the
+items PDF.js returns without their line ends. Method: PDF.js 6.5.438 with the
+production options of `extractPdf`, each item read as `extractPdf` joins it
+(`str`, then a line feed when `hasEOL`), on synthetic files and on hand-built
+projections that follow the rules below (canonical font names, base encoding
+kept, Type3 projected), in the dev container. Three local generator samples
+(LibreOffice 24.2, cairo 1.18 and ReportLab, all with synthetic text) were
+surveyed structurally; they are not committed, and S30–S33 are their
+synthetic equivalents, built by the test helper.
+
+| Probe | Result |
+| --- | --- |
+| S21, S25–S29 projected | the source text; S22, S23 and S24 projected give `Hello modern PDF\nOverlay stamp`, `Hello modern PDF\nSecond page` and `Hello modern PDF\nFigure label`, where raw PDF.js on the source gives no line feed between the two parts |
+| Type0 `CIDFontType2` without program, `ToUnicode` mapping three codes to `ffi`, U+1F600 and `A` | `fA` when named `ArialMT`, `Arial`, `TimesNewRomanPSMT`, `Calibri`, `Helvetica`, `CourierNew` or `Symbol`; `ffi😀A` when named `Foo`, `Verdana`, `ABCDEF+ArialMT` or `K1`, and for every `CIDFontType0` |
+| Simple `Type1` or `TrueType` font with the same kind of `ToUnicode`, named after any of the 12 standard Latin fonts, `Symbol`, `ZapfDingbats`, `ArialMT`, `Arial` or `K1` | the full mapping (`ffi😀C`) in every case |
+| Nonembedded `TrueType` `Symbol`, `WinAnsiEncoding`, `Widths`, showing `Hello world` | Greek letters (`Ηελλο ωορλδ…`); named `K1`, `Wingdings` or `Helvetica`: `Hello world…` |
+| Nonembedded `Courier` without `Widths`, same text renamed `K1` | same text, split into 3 items under `Courier` and 2 under `K1` (standard metrics) |
+| GBK name `/#CB#CE#CC#E5`, `WinAnsiEncoding`; the same font named `K1` | no text; `Hi` |
+| `/Differences` `/G80 /c129 /uni0082 /g0083` at their own codes 0x80–0x83 | U+0080–U+0083 with no `/BaseEncoding`, `€•‚ƒ` with `/BaseEncoding /WinAnsiEncoding`, `ÄÅÇÉ` with `MacRomanEncoding` |
+| A shown code named `/g17`, `/Foo` or `/G00`; named `/cAB` | the raw code as text; `«` (PDF.js then reads every `c` name of the font as hexadecimal) |
+| WinAnsi Helvetica showing 0x01, 0x7F, 0x81, 0x8D, 0x8F, 0x90, 0x9D | a space for 0x01 (no glyph in the table); a bullet U+2022 for each of the others |
+| Type3 (LibreOffice shape): `FontMatrix [0.001 0 0 0.001 0 0]`, glyph `/gid883`, `ToUnicode` to U+1F600, between Helvetica text (S32) | `Smile 😀 done` raw, and the same projected as a `Type1` font `/K2` with the same `Widths`, no program |
+| Type3 (cairo shape): `FontMatrix [1 0 0 -1 0 0]`, `Widths [1.0]`, glyph `/0`, `ToUnicode` (S33) | `Smile 😀done` raw, and the same projected with `Widths [1000]`; with glyph `/H` and no `ToUnicode`, `Smile Hdone` both ways |
+| Content `[/ASCII85Decode /FlateDecode]` (ReportLab default, S30) or `/ASCIIHexDecode` (S31) | `Hello modern PDF` |
+| `Tf` size 12, 1, 0.5, −12; 0; 1,000,000 | `Hello\nworld\nend`; `Helloworldend`; `Hwend` (as on the source: the size changes PDF.js's item geometry, not the bounds) |
+| Node 26.13.0 inflate of a 64 MiB bomb | `inflateSync` with `maxOutputLength` 65,536 throws `ERR_BUFFER_TOO_LARGE` and returns no output; `createInflate` (`chunkSize` 16,384) destroyed once 65,536 bytes were produced stopped after 4 chunks in about 2 ms |
+
+The survey found, in the LibreOffice sample, a Type3 emoji font with
+`ToUnicode`; in the cairo sample, a Type3 font with a flipped `FontMatrix` and
+a Type0 font showing a code whose `ToUnicode` destination has two code
+points; and in the ReportLab sample, `[/ASCII85Decode /FlateDecode]` on every
+stream. Each was refused by the earlier draft on that feature alone. Four
+findings follow:
+
+6. Inlining a Form changes where PDF.js reports a line end, so the expected
+   text of a projected file is its own measured string, not raw PDF.js on
+   the source.
+7. PDF.js reads font names as hints (system-font fallback for Type0, symbol
+   and GBK encodings for simple fonts). Canonical names remove those hints;
+   only the 12 standard Latin names carry metrics worth keeping.
+8. PDF.js reads glyph names of the forms `Gxx`, `cNN`, `uniXXXX` and `g00xx`
+   at their own code through the base encoding, and returns the raw code for
+   a name it cannot map; the projection keeps the source base encoding name
+   and refuses such names.
+9. Type3 fonts and the ASCII filters are common generator output (emoji in
+   LibreOffice and cairo, every ReportLab stream) and admit a program-less
+   projection or a small decoder.
+
 ## Scope
 
 - **Container.** Cross-reference streams, hybrid files (`/XRefStm`),
   incremental updates and linearized files through a bounded `/Prev` chain;
   object streams; indirect `/Length`; `%PDF-2.0` headers (BR-412, BR-413).
-- **Decoding.** Only the streams the projection needs are decoded: page and
-  Form content, `ToUnicode` CMaps, object streams, cross-reference streams,
-  the cleartext part of a Type 1 font program whose built-in encoding is
-  needed, and FlateDecode inline images whose end must be found. Admitted
-  filters: none, or FlateDecode (alone or as a one-element array) with PNG
-  predictors 10–15 (BR-414).
+- **Decoding.** Only the streams the projection needs are decoded: page and Form
+  content, `ToUnicode` CMaps, object streams, cross-reference streams, the
+  cleartext part of a Type 1 font program whose built-in encoding is needed, and
+  FlateDecode inline images whose end must be found. Admitted filters: none,
+  FlateDecode with PNG predictors 10–15, ASCII85Decode or ASCIIHexDecode, alone
+  or with the ASCII filter before FlateDecode (BR-414); a Type 1 program takes
+  FlateDecode or no filter only.
 - **Projection.** PDF.js receives a canonical document built only from what
   text extraction needs: the page tree with each page's resolved `MediaBox`,
   and, for the selected pages only, the fonts their content selects under
@@ -151,12 +202,14 @@ exactly. Two further findings follow:
   every execution counts toward the text-production bound (BR-419, BR-418).
 - **Inline images.** Skipped when their data length is given or computable;
   refused otherwise (BR-416).
-- **Fonts.** Type 1, MMType1 and TrueType simple fonts whose shown codes all
-  map through an explicit or determinable encoding or a `ToUnicode` CMap,
-  including Type 1 fonts whose only mapping is the built-in encoding of their
-  program (read from its cleartext part only); Type0 fonts with Identity-H or
-  Identity-V and a `ToUnicode` CMap that maps every shown code (BR-417,
-  BR-420).
+- **Fonts.** Type 1, MMType1 and TrueType simple fonts whose shown codes all map
+  through an explicit or determinable encoding or a `ToUnicode` CMap, including
+  Type 1 fonts whose only mapping is the built-in encoding of their program
+  (read from its cleartext part only); Type0 fonts with Identity-H or Identity-V
+  and a `ToUnicode` CMap that maps every shown code; Type3 fonts, projected as
+  program-less simple fonts whose glyph procedures are never read. Every font is
+  emitted under a canonical name, except simple fonts named after one of the 12
+  standard Latin fonts (BR-417, BR-420).
 - **Producer bound.** The F-009 static text-production bound extended to
   mapped fonts and inlined Forms (BR-418).
 - **Errors.** Well-formed files outside the profile refuse as
@@ -166,23 +219,23 @@ exactly. Two further findings follow:
 - **Docs.** README "Limits" bullet and the `docs/development.md` PDF section:
   what is extracted, what refuses and why, and `kdrive_download` as the
   fallback for a refused file; ADR-012.
-- **Tests.** A synthetic corpus helper (`tests/helpers/pdf-corpus.ts`)
-  that rebuilds S01–S29 and the hostile samples of the ACs, plus named BR
-  tests.
+- **Tests.** A synthetic corpus helper (`tests/helpers/pdf-corpus.ts`) that
+  rebuilds S01–S33 and the hostile samples of the ACs, plus named BR tests.
 
 ### Out of scope
 
 - Encryption of any kind, including an empty user password (refuses as
   `UNSUPPORTED_FORMAT`).
-- Type3 fonts; predefined or embedded CMaps other than Identity-H/V; Type 1
-  fonts in `FontFile3` (CFF) or TrueType fonts whose shown codes have no mapping
-  outside the program; `Symbol` and `ZapfDingbats` without `/Differences` or
-  `ToUnicode` for their shown codes; simple fonts named with one of the ten GBK
-  names PDF.js reads as a composite font; `LZWDecode`, `ASCIIHexDecode`,
-  `ASCII85Decode`, `RunLengthDecode` and TIFF predictor 2 on a stream the
-  projection needs; inline images whose length is neither given nor computable
-  (DCT, CCITT, JBIG2, LZW or run-length data without `/L`) (D-3, D-5, D-10,
-  D-11).
+- Predefined or embedded CMaps other than Identity-H/V; Type 1 fonts in
+  `FontFile3` (CFF) or TrueType fonts whose shown codes have no mapping outside
+  the program; `Symbol` and `ZapfDingbats` without `/Differences` or `ToUnicode`
+  for their shown codes; shown codes whose glyph name PDF.js cannot map;
+  `LZWDecode`, `RunLengthDecode`, other filter orders and TIFF predictor 2 on a
+  stream the projection needs, and any filter but FlateDecode on a Type 1
+  program; `q`, `Q` or `cm` inside a text object, nested `BT` and text operators
+  outside `BT`/`ET` (refused as in F-009); inline images whose length is neither
+  given nor computable (DCT, CCITT, JBIG2, LZW or run-length data without `/L`)
+  (D-3, D-5, D-10, D-11, D-13).
 - Text from annotations, form fields, attachments or optional-content
   metadata; optional-content visibility (text in a hidden optional-content
   Form or marked-content section is returned, as PDF.js returns it from the
@@ -209,26 +262,28 @@ exactly. Two further findings follow:
   header; the cross-reference chain from the last `startxref`, newest section
   first (BR-412); the trailer, including `/Encrypt`; the Catalog and the page
   tree in tree order; then each selected page in ascending page number, its
-  content tokens in order, where a `Do` of a Form runs that Form's checks at
-  that token (BR-419), the first `Tf` that selects a font runs that font's
-  checks at that token (BR-417, BR-420), the first shown code that needs a Type
-  1 built-in encoding reads it at that token (BR-420), and each emitted
-  canonical token runs the running checks of BR-418 at that token; then the
-  final weighted U of BR-418. An object, stream or CMap is checked when the step
-  that needs it first resolves it. A failing check refuses with `LIMIT_EXCEEDED`
-  when it is a declared or computed ceiling of F-009 or F-034, every bound of
-  the table "Ceilings added by F-034" included, whatever the wording of the BR
-  that states it (the count or size that passes the ceiling fails); the
-  computed size of a Flate inline image is a consistency check, not a ceiling,
-  and Flate output over it refuses as `CONTENT_UNAVAILABLE` (BR-416); with
-  `UNSUPPORTED_FORMAT` when the file is well-formed but uses a feature outside
-  the profile (encryption, an unadmitted filter, font, encoding or operator, an
-  inline image of unknown length) or fails an F-009 operand check (arity, type,
-  the 1,000,000 numeric bound, the 32-level `q` nesting of BR-416), which keeps
-  its F-009 code and is not a ceiling; and with `CONTENT_UNAVAILABLE` when the
-  file contradicts its own structure (an offset that does not hold the object it
-  names, a cycle, a length that overruns its data, a missing required object or
-  resource). Verified by: AC-01, AC-09, AC-10.
+  `Contents` references with the decoded length each one uses (BR-416), then its
+  content tokens in order, where a `Do` of a Form runs that Form's checks, its
+  use of decoded bytes included, at that token (BR-419), the first `Tf` that
+  selects a font runs that font's checks at that token (BR-417, BR-420), the
+  first shown code that needs a Type 1 built-in encoding reads it at that token
+  (BR-420), and each emitted canonical token runs the running checks of BR-418
+  at that token; then the final weighted U of BR-418. An object, stream or CMap
+  is checked when the step that needs it first resolves it. A failing check
+  refuses with `LIMIT_EXCEEDED` when it is a declared or computed ceiling of
+  F-009 or F-034, every bound of the table "Ceilings added by F-034" included,
+  whatever the wording of the BR that states it (the count or size that passes
+  the ceiling fails); the computed size of a Flate inline image is a consistency
+  check, not a ceiling, and Flate output over it refuses as
+  `CONTENT_UNAVAILABLE` (BR-416); with `UNSUPPORTED_FORMAT` when the file is
+  well-formed but uses a feature outside the profile (encryption, an unadmitted
+  filter, font, encoding, glyph name or operator, an inline image of unknown
+  length) or fails an F-009 operand check (arity, type, the 1,000,000 numeric
+  bound, the 32-level `q` nesting of BR-416), which keeps its F-009 code and is
+  not a ceiling; and with `CONTENT_UNAVAILABLE` when the file contradicts its
+  own structure (an offset that does not hold the object it names, a cycle, a
+  length that overruns its data, a missing required object or resource).
+  Verified by: AC-01, AC-09, AC-10.
 - **BR-412** — Cross-reference data is read only from the last `startxref`
   offset and the chain it starts, with no scan for objects and no repair.
   Each section is either a classic `xref` table with a trailer, or a stream
@@ -252,75 +307,113 @@ exactly. Two further findings follow:
   and generation, type 2 gives an object stream number and index, and any
   other type is free. Verified by: AC-02.
 - **BR-413** — An object is resolved only through the merged cross-reference
-  table. A type 1 object is parsed at its offset as
-  `<number> <generation> obj`, one value, an optional stream framed by its
-  `/Length`, and `endobj`; its number and generation equal the entry's. A
-  type 2 object is read from the object stream named by the entry, which
-  is itself a type 1 object with `/Type /ObjStm`, a direct `/N` of 1–4,096
-  and a direct `/First`. The header of an object stream is parsed once per
-  invocation: `/N` pairs of object number and offset, offsets strictly
-  increasing from 0 and each below the decoded length minus `/First`. The
-  pair at the entry's index names the same object number; the object is
-  the one value between its offset and the next (or the end), has
-  generation 0 and is not a stream; `/Extends` is ignored. An indirect
-  `/Length` resolves to a nonnegative integer object; resolving it never
-  requires framing the stream it measures and opens at most one object
-  stream, whose own `/Length` is direct or a type 1 integer object; an
-  indirect `/Length` that needs more than one object stream, or an object
-  stream whose own `/Length` is neither (a type 2 object, one living inside
-  that object stream itself included), refuses as `CONTENT_UNAVAILABLE`. A
-  reference to a free, absent or mismatched object in a role the projection
-  needs refuses. At most 4,096 distinct objects are resolved per invocation
-  (the F-009 indirect-object ceiling); an object resolved again is served
-  from the cache and not counted again. Verified by: AC-03.
+  table. A type 1 object is parsed at its offset as `<number> <generation> obj`,
+  one value, an optional stream framed by its `/Length`, and `endobj`; its
+  number and generation equal the entry's. A type 2 object is read from the
+  object stream named by the entry, which is itself a type 1 object with `/Type
+  /ObjStm`, a direct `/N` of 1–4,096 and a direct `/First`. The header of an
+  object stream is parsed once per invocation: `/N` pairs of object number and
+  offset, offsets strictly increasing from 0 and each below the decoded length
+  minus `/First`. The pair at the entry's index names the same object number;
+  the object is the one value between its offset and the next (or the end), has
+  generation 0 and is not a stream; `/Extends` is ignored. An indirect `/Length`
+  resolves to a nonnegative integer object; resolving it never requires framing
+  the stream it measures and opens at most one object stream, whose own
+  `/Length` is direct or a type 1 integer object; an indirect `/Length` that
+  needs more than one object stream, or an object stream whose own `/Length` is
+  neither (a type 2 object, one living inside that object stream itself
+  included), refuses as `CONTENT_UNAVAILABLE`. A reference `n g R` names the
+  entry of object `n` and requires its generation to be `g`: a type 1 entry with
+  generation `g`, any `g` the entry and the object header agree on, or a type 2
+  entry when `g` is 0; a reference whose generation differs, and a reference to
+  a free, absent or mismatched object, in a role the projection needs, refuses
+  as `CONTENT_UNAVAILABLE`. The canonical document renumbers what it emits, with
+  generation 0 (BR-415). At most 4,096 distinct objects are resolved per
+  invocation (the F-009 indirect-object ceiling); an object resolved again is
+  served from the cache and not counted again. Verified by: AC-03.
 - **BR-414** — Only the streams BR-412, BR-413, BR-416, BR-417, BR-419 and
   BR-420 need are decoded; any other stream is framed by its `/Length` and never
-  decoded, whatever its filter. A needed stream has no filter, or `/FlateDecode`
-  given as a name or a one-element array, with optional `/DecodeParms` (a
-  dictionary, or a one-element array holding one) whose `/Predictor` is 1 or
+  decoded, whatever its filter. A needed stream has no filter, or a `/Filter`
+  that is a name or an array of one or two names: `/FlateDecode`,
+  `/ASCII85Decode` or `/ASCIIHexDecode` alone, or `/ASCII85Decode` or
+  `/ASCIIHexDecode` followed by `/FlateDecode`; any other filter, order or count
+  refuses as `UNSUPPORTED_FORMAT`. `/DecodeParms` is absent, `null`, a
+  dictionary (with one filter) or an array as long as the filter array whose
+  entries are dictionaries or `null`; only the entry of `/FlateDecode` may be a
+  dictionary, and a dictionary for an ASCII filter refuses as
+  `UNSUPPORTED_FORMAT`. The `/FlateDecode` parameters have `/Predictor` 1 or
   10–15, `/Colors` 1–4, `/BitsPerComponent` 8 and `/Columns` 1–65,536; PNG rows
   are undone with each row's own tag and the predicted data is a whole number of
-  rows. Each needed stream is decoded once per invocation and its decoded length
-  counts once against B with the F-009 inflate rules (`maxOutputLength` set to
-  the remaining B, `rejectGarbageAfterEnd`), with two exceptions. A Flate inline
-  image (BR-416) is inflated from the rest of its content stream with
+  rows. `/ASCIIHexDecode` reads pairs of hexadecimal digits, skipping white
+  space, up to `>` (a final single digit is followed by 0); `/ASCII85Decode`
+  reads groups of five characters `!`–`u`, `z` for four zero bytes at the start
+  of a group, skipping white space, up to `~>`, a final group of 2–4 characters
+  giving 1–3 bytes; another byte, a group above 2^32 − 1, a final group of one
+  character or a missing end marker refuses as `CONTENT_UNAVAILABLE`, and bytes
+  after the end marker are ignored. Each needed stream is decoded once per
+  invocation, and the output of each filter of its chain, the ASCII stage before
+  `/FlateDecode` included, counts against B with the F-009 inflate rules
+  (`maxOutputLength` set to the remaining B, `rejectGarbageAfterEnd`); an ASCII
+  stage whose output passes the remaining B refuses as `LIMIT_EXCEEDED` at that
+  byte. Content and Form streams also count their decoded length again at each
+  further use (BR-416, BR-419). Two exceptions apply. A Flate inline image
+  (BR-416) is inflated from the rest of its content stream with
   `maxOutputLength` set to the smaller of its computed size and the remaining B
   and without `rejectGarbageAfterEnd`, since the content after its data is not
   garbage; its data length is the number of input bytes the inflate consumed up
-  to the end of the zlib stream. A Type 1 program (BR-420) with `/DecodeParms`
-  refuses as `UNSUPPORTED_FORMAT`; one without is inflated by a streaming
-  inflate that stops as soon as it has produced `/Length1` bytes and reads no
-  further input; a `/Length1` over the remaining B refuses as `LIMIT_EXCEEDED`
-  before inflating, a program whose output (or unfiltered data) ends before
-  `/Length1` bytes refuses as `CONTENT_UNAVAILABLE`, and the `/Length1` bytes
-  count against B. Verified by: AC-04.
-- **BR-415** — The canonical document holds exactly: a Catalog with `Type`
-  and `Pages`; every Pages node with `Type`, `Kids`, `Count` and `Parent`
-  except at the root; every page with `Type`, `Parent`, its `MediaBox`
-  (its own, or the nearest inherited one) and `Resources` and `Contents`;
-  a trailer with `Size` and `Root`. A selected page's `Resources` holds only
-  `Font`, with the fonts BR-417 admits under canonical names `/K1`, `/K2`,
-  … numbered in the order of first selection in the invocation (one name
-  per indirect font object, or per direct font dictionary at its place,
-  whatever resource name or Form selected it), and its
-  `Contents` is the one stream BR-416 builds, with no filter. A selected
-  page with no `/Contents` gets an empty content stream. A page that is not
-  selected gets empty `Resources` and an empty content stream, and its
-  content and resources are not read. Every other key, object and stream of
-  the source, XObjects included, is left out. The page tree keeps its
-  source order and count, so `total_pages` is unchanged. Verified by: AC-05.
+  to the end of the zlib stream. A Type 1 program (BR-420) has no filter or
+  `/FlateDecode` alone, without `/DecodeParms`; another filter or any
+  `/DecodeParms` refuses as `UNSUPPORTED_FORMAT`, and a `/Length1` over the
+  remaining B refuses as `LIMIT_EXCEEDED` before inflating. Node offers no
+  synchronous inflate that stops early (`inflateSync` with `maxOutputLength`
+  throws and returns no output), so a Flate program is inflated with the
+  asynchronous `zlib.createInflate` with `chunkSize` 16,384: output chunks are
+  kept until `/Length1` bytes are held, then the stream is destroyed and reads
+  no further input. Every byte it produced, at most `/Length1` + 16,383, counts
+  against B, and output passing the remaining B refuses as `LIMIT_EXCEEDED`; a
+  program whose output (or unfiltered data) ends before `/Length1` bytes refuses
+  as `CONTENT_UNAVAILABLE`. Verified by: AC-04, AC-12.
+- **BR-415** — The canonical document holds exactly: a Catalog with `Type` and
+  `Pages`; every Pages node with `Type`, `Kids`, `Count` and `Parent` except at
+  the root; every page with `Type`, `Parent`, its `MediaBox` (its own, or the
+  nearest inherited one) and `Resources` and `Contents`; a trailer with `Size`
+  and `Root`. A selected page's `Resources` holds only `Font`, with the fonts
+  BR-417 admits under canonical names `/K1`, `/K2`, … numbered in the order of
+  first selection in the invocation (one name per indirect font object, or per
+  direct font dictionary at its place, whatever resource name or Form selected
+  it; the same names serve as `BaseFont` under BR-417), and its `Contents` is
+  the one stream BR-416 builds, with no filter. A selected page with no
+  `/Contents` gets an empty content stream. A page that is not selected gets
+  empty `Resources` and an empty content stream, and its content and resources
+  are not read. Every other key, object and stream of the source, XObjects
+  included, is left out. The page tree keeps its source order and count, so
+  `total_pages` is unchanged. Every emitted object is numbered by the projection
+  with generation 0. Verified by: AC-05.
 - **BR-416** — A selected page's content is its `Contents` stream, or the
   streams of a `Contents` array of at most 1,024 references joined with one line
   feed, tokenized once in order, with the page's `Resources` (own or inherited)
-  as resource scope. Kept, with the F-009 operand checks: `q`, `Q`, `cm`, `BT`,
-  `ET`, the text state operators `Tf`, `Tc`, `Tw`, `Tz`, `TL`, `Ts` and `Tr`
-  (integer 0–7), and inside `BT`/`ET` only `Td`, `TD`, `Tm`, `T*`, `Tj`, `TJ`,
-  `'` and `"`. The F-009 limit of 32 nested `q` levels is counted on the
-  canonical stream of the page, the `q` that wraps each inlined Form and the
-  Forms' own `q`s included (BR-419); the `q` that opens a 33rd level refuses as
-  `UNSUPPORTED_FORMAT`. String bytes are not restricted to 0x20–0xFF and `Tf`
-  takes a font name of the resource scope and a size of 1–512, the F-009 `Tf`
-  size check (another size refuses as `UNSUPPORTED_FORMAT`). Text state is part
+  as resource scope. Each stream is decoded and tokenized once per invocation
+  (BR-414), but every use counts its decoded length against B: each reference of
+  a selected page's `Contents` beyond the stream's first use, on the same page
+  or another selected page, adds the stream's decoded length again, as the
+  references are read and before the page's content is joined or tokenized, and
+  the reference that passes the remaining B refuses as `LIMIT_EXCEEDED`; dropped
+  operators, which emit no token, are thus paid for at every use. Kept, with the
+  F-009 operand checks: `q`, `Q`, `cm`, `BT`, `ET`, the text state operators
+  `Tf`, `Tc`, `Tw`, `Tz`, `TL`, `Ts` and `Tr` (integer 0–7), and inside
+  `BT`/`ET` only `Td`, `TD`, `Tm`, `T*`, `Tj`, `TJ`, `'` and `"`. As in F-009
+  and ISO 32000-1 §8.2, `BT` inside a text object, `ET` outside one, `Td`, `TD`,
+  `Tm`, `T*` or a text-show operator outside `BT`/`ET`, and `q`, `Q` or `cm`
+  inside `BT`/`ET` refuse as `UNSUPPORTED_FORMAT` (PDF.js runs them with state
+  rules of its own, which the preflight does not model). The F-009 limit of 32
+  nested `q` levels is counted on the canonical stream of the page, the `q` that
+  wraps each inlined Form and the Forms' own `q`s included (BR-419); the `q`
+  that opens a 33rd level refuses as `UNSUPPORTED_FORMAT`. String bytes are not
+  restricted to 0x20–0xFF, and `Tf` takes a font name of the resource scope and
+  a size that passes the F-009 numeric operand check (finite, absolute value at
+  most 1,000,000; otherwise `UNSUPPORTED_FORMAT`). The F-009 size range 1–512 is
+  dropped: no bound of F-009 or F-034 depends on the size, which only changes
+  the geometry of PDF.js's items, as it does on the source. Text state is part
   of the graphics state: it persists across `BT`/`ET`, is saved and restored by
   `q`/`Q`, `BT` resets only the text matrices, and text state operators are kept
   inside or outside `BT`/`ET`. A text-show operator with no font set refuses as
@@ -349,69 +442,92 @@ exactly. Two further findings follow:
   remaining B refuses as `LIMIT_EXCEEDED`; one whose output passes the computed
   size first, a consistency check and not a ceiling, refuses as
   `CONTENT_UNAVAILABLE`, as does a zlib stream that does not end within the
-  content; inflated inline bytes count against B. `Do` of a Form
-  XObject is inlined by BR-419. `Do` inside `BT`/`ET`, `d0`, `d1` and any other
-  operator refuse as `UNSUPPORTED_FORMAT`. A `Q` with no open `q` of the same
-  content stream or Form is dropped, and `Q`s are appended for the `q`s left
-  open at its end. The kept tokens are rebuilt by the canonical serializer
-  (numbers in the F-009 form, strings as hexadecimal strings, names with `#xx`
-  escapes for bytes outside 0x21–0x7E, delimiters and `#`, `Tf` operands renamed
-  to the canonical font names), never copied as source bytes; that stream counts
-  against the canonical bound. Verified by: AC-06.
+  content; inflated inline bytes count against B. `Do` of a Form XObject is
+  inlined by BR-419. `Do` inside `BT`/`ET`, `d0`, `d1` and any other operator
+  refuse as `UNSUPPORTED_FORMAT`. A `Q` with no open `q` of the same content
+  stream or Form is dropped, and `Q`s are appended for the `q`s left open at its
+  end. The kept tokens are rebuilt by the canonical serializer (numbers in the
+  F-009 form, strings as hexadecimal strings, names with `#xx` escapes for bytes
+  outside 0x21–0x7E, delimiters and `#`, `Tf` operands renamed to the canonical
+  font names), never copied as source bytes; that stream counts against the
+  canonical bound. Verified by: AC-06.
 - **BR-417** — Only fonts selected by a kept `Tf` are read, at most 128 distinct
   fonts per invocation; a `Tf` naming no font of its resource scope refuses as
-  `CONTENT_UNAVAILABLE`. Every key the projection keeps is type-checked, and a
-  wrong type refuses as `CONTENT_UNAVAILABLE`. Admitted: (a) `Type1`, `MMType1`
-  or `TrueType` simple fonts whose encoding BR-420 resolves; (b) `Type0` with
-  `/Encoding` the name `Identity-H` or `Identity-V`, one `CIDFontType0` or
-  `CIDFontType2` descendant with a `FontDescriptor`, and a `ToUnicode` stream
-  that maps every code the font's kept strings show (a shown code it does not
-  map refuses as `UNSUPPORTED_FORMAT`; a string of odd length shown with it
-  refuses as `CONTENT_UNAVAILABLE`). A `ToUnicode` given as a name, such as
-  `/Identity-H`, refuses as `UNSUPPORTED_FORMAT`. The projected simple font
-  keeps `Type`, `Subtype`, `BaseFont` (a name of at most 127 bytes),
-  `FirstChar`, `LastChar` (integers 0–255), `Widths` (at most 256 finite
-  numbers), `ToUnicode` and the `Encoding` of BR-420; the projected Type0 font
-  keeps `Type`, `Subtype`, `BaseFont`, `Encoding`, `ToUnicode` and one
-  descendant with `Type`, `Subtype`, `BaseFont`, `DW` (a finite number), `W` (an
-  array of at most 65,536 numbers in total, in the `c [w …]` and `c1 c2 w`
-  forms, codes 0–65,535), its `FontDescriptor`, and a `CIDSystemInfo` emitted as
-  `<< /Registry (Adobe) /Ordering (Identity) /Supplement 0 >>` after the source
+  `CONTENT_UNAVAILABLE`. Every key the projection keeps or reads is
+  type-checked, and a wrong type or a missing required key refuses as
+  `CONTENT_UNAVAILABLE`. Admitted: (a) `Type1`, `MMType1` or `TrueType` simple
+  fonts whose encoding BR-420 resolves; (b) `Type0` with `/Encoding` the name
+  `Identity-H` or `Identity-V`, one `CIDFontType0` or `CIDFontType2` descendant
+  with a `FontDescriptor`, and a `ToUnicode` stream that maps every code the
+  font's kept strings show (a shown code it does not map refuses as
+  `UNSUPPORTED_FORMAT`; a string of odd length shown with it refuses as
+  `CONTENT_UNAVAILABLE`); (c) `Type3` fonts whose encoding BR-420 resolves,
+  projected as a simple font without a program: `FontMatrix` is an array of six
+  numbers that pass the F-009 numeric operand check, the first above 0, the
+  second and third 0 and the fourth not 0 (any other refuses as
+  `UNSUPPORTED_FORMAT`), `FirstChar`, `LastChar`, `Widths` and `Encoding` are
+  required, and `CharProcs`, `Resources`, `FontBBox` and `FontDescriptor` are
+  never resolved or read. A `ToUnicode` given as a name, such as `/Identity-H`,
+  refuses as `UNSUPPORTED_FORMAT`. The projected simple font keeps `Type`,
+  `Subtype` (`Type1` for a `Type3` source), `BaseFont`, `FirstChar`, `LastChar`
+  (integers 0–255), `Widths` (at most 256 finite numbers; for a `Type3` source
+  each width times the first `FontMatrix` number times 1,000, a product over
+  1,000,000 in absolute value refusing as `UNSUPPORTED_FORMAT`), `ToUnicode` and
+  the `Encoding` of BR-420; the projected Type0 font keeps `Type`, `Subtype`,
+  `BaseFont`, `Encoding`, `ToUnicode` and one descendant with `Type`, `Subtype`,
+  `BaseFont` (the same name), `DW` (a finite number), `W` (an array of at most
+  65,536 numbers in total, in the `c [w …]` and `c1 c2 w` forms, codes
+  0–65,535), its `FontDescriptor`, and a `CIDSystemInfo` emitted as `<<
+  /Registry (Adobe) /Ordering (Identity) /Supplement 0 >>` after the source
   value is checked (a dictionary with `Registry` and `Ordering` strings of at
-  most 64 bytes and an integer `Supplement`). A kept `FontDescriptor` holds
-  `Type`, `FontName` (emitted equal to the projected `BaseFont` of the font that
-  holds it, whatever its source value, since PDF.js 6.5.438 uses `FontName` when
-  it differs from `BaseFont`), `FontBBox` (four finite numbers), `ItalicAngle`,
-  `Ascent`, `Descent`, `CapHeight`, `StemV` and `MissingWidth` (finite numbers,
-  each optional except `FontName`), and `Flags` set to the source `Flags` with
-  the Symbolic flag (value 4) cleared and the Nonsymbolic flag (value 32) set; a
-  simple font without a source `FontDescriptor` gets none. `FontFile`,
-  `FontFile2`, `FontFile3` and a stream `CIDToGIDMap` are never emitted. A
-  `ToUnicode` CMap is parsed with the bounded tokenizer: only code space ranges,
-  `bfchar` and `bfrange` entries count; codes are 1 or 2 bytes and keyed by
-  their numeric value; a `bfrange` has a low and high code of the same length
-  that differ only in the last byte, low not above high, and either one
-  destination string, incremented over the range as PDF.js 6.5.438 does, or an
-  array whose length equals the range size; destinations are UTF-16BE strings of
-  2–64 bytes; when a code is mapped twice the last entry wins; `usecmap` refuses
-  as `UNSUPPORTED_FORMAT`; a CMap has at most 65,536 entries and all admitted
-  CMaps together map at most 262,144 codes. Each admitted CMap is re-emitted
-  canonically as one `bfchar` entry per mapped code in ascending order. Passing
-  a bound of this rule (128 fonts, a 127-byte `BaseFont`, 256 `Widths` numbers,
-  65,536 `W` numbers, 64-byte `CIDSystemInfo` strings, 64-byte destinations, the
-  CMap entry and code counts) refuses as `LIMIT_EXCEEDED`. Every other font
-  refuses as `UNSUPPORTED_FORMAT`. Verified by: AC-07.
+  most 64 bytes and an integer `Supplement`). The emitted `BaseFont` of every
+  font is its canonical name of BR-415, except for a `Type1`, `MMType1` or
+  `TrueType` font whose source `BaseFont` is exactly one of the 12 standard
+  Latin names (`Times-Roman`, `Times-Bold`, `Times-Italic`, `Times-BoldItalic`,
+  `Helvetica`, `Helvetica-Bold`, `Helvetica-Oblique`, `Helvetica-BoldOblique`,
+  `Courier`, `Courier-Bold`, `Courier-Oblique`, `Courier-BoldOblique`), which
+  keeps it so that PDF.js uses that font's standard metrics; the source
+  `BaseFont`, a name of at most 127 bytes (optional for `Type3`), is checked and
+  otherwise never emitted, since PDF.js 6.5.438 reads font names as hints (a
+  system-font fallback that keeps one code point per `ToUnicode` destination for
+  some Type0 names, the symbol and GBK encodings for simple fonts). A kept
+  `FontDescriptor` holds `Type`, `FontName` (emitted equal to the projected
+  `BaseFont` of the font that holds it, whatever its source value, since PDF.js
+  6.5.438 uses `FontName` when it differs from `BaseFont`), `FontBBox` (four
+  finite numbers), `ItalicAngle`, `Ascent`, `Descent`, `CapHeight`, `StemV` and
+  `MissingWidth` (finite numbers, each optional except `FontName`), and `Flags`
+  set to the source `Flags` with the Symbolic flag (value 4) cleared and the
+  Nonsymbolic flag (value 32) set; a simple font without a source
+  `FontDescriptor`, and every projected `Type3` font, get none. `FontFile`,
+  `FontFile2`, `FontFile3`, a stream `CIDToGIDMap`, `CharProcs` and `FontMatrix`
+  are never emitted. A `ToUnicode` CMap is parsed with the bounded tokenizer:
+  only code space ranges, `bfchar` and `bfrange` entries count; codes are 1 or 2
+  bytes and keyed by their numeric value; a `bfrange` has a low and high code of
+  the same length that differ only in the last byte, low not above high, and
+  either one destination string, incremented over the range as PDF.js 6.5.438
+  does, or an array whose length equals the range size; destinations are
+  UTF-16BE strings of 2–64 bytes; when a code is mapped twice the last entry
+  wins; `usecmap` refuses as `UNSUPPORTED_FORMAT`; a CMap has at most 65,536
+  entries and all admitted CMaps together map at most 262,144 codes. Each
+  admitted CMap is re-emitted canonically as one `bfchar` entry per mapped code
+  in ascending order. Passing a bound of this rule (128 fonts, a 127-byte
+  `BaseFont`, 256 `Widths` numbers, 65,536 `W` numbers, 64-byte `CIDSystemInfo`
+  strings, 64-byte destinations, the CMap entry and code counts) refuses as
+  `LIMIT_EXCEEDED`. Every other font refuses as `UNSUPPORTED_FORMAT`. Verified
+  by: AC-07.
 - **BR-418** — The F-009 text-production admission holds with weighted string
   bytes, counted on the canonical content stream of each selected page, so every
   Form execution counts its strings and operators again: N is the sum over
   text-show strings of the string's bytes times `m` of the font in effect at
   that point of the canonical stream (for a Form that shows text before its own
   `Tf`, the font its caller set, at each execution), where `m = max(1, ceil(D /
-  3))`; S is the unweighted string bytes; O is the number of operators in the
-  canonical content stream. D of a font is the largest of: the UTF-8 length of
-  each canonical `ToUnicode` destination (an unpaired surrogate counts 3 bytes);
-  for each glyph name in the font's canonical `/Differences`, 4 when the name
-  starts with `u` and has 6 characters, or 7 characters without the prefix
+  3))`; S is the number of shown codes: string bytes for a simple font, string
+  bytes divided by two for a Type0 font (whose codes are two bytes, BR-417), so
+  a two-byte code counts as one possible item; O is the number of operators in
+  the canonical content stream. D of a font is the largest of: the UTF-8 length
+  of each canonical `ToUnicode` destination (an unpaired surrogate counts 3
+  bytes); for each glyph name in the font's canonical `/Differences`, 4 when the
+  name starts with `u` and has 6 characters, or 7 characters without the prefix
   `uni`, else 3; and 1. `U = 8 * (N + O + 1)`, `I = 2 * (S + O + 1)`, the sum of
   U plus 3 per separator is at most B, the sum of I at most 65,536, and a string
   over 4,096 bytes refuses. These checks run while the canonical content is
@@ -432,65 +548,78 @@ exactly. Two further findings follow:
   F-009 `cm` operand check (each finite, with absolute value at most 1,000,000)
   refuses as `UNSUPPORTED_FORMAT`, as a failing `cm` does. The Form's content is
   its decoded stream, decoded and tokenized once per invocation and checked with
-  BR-416, starting outside `BT` with the caller's graphics state and font;
-  content that ends inside `BT`/`ET` refuses as `CONTENT_UNAVAILABLE`. Its
-  resource scope is its own `/Resources`, or, when it has none, the resource
-  scope of the content that invoked it; its `Tf`, `gs` and `Do` names resolve in
-  that scope, and fonts it selects take the canonical names of BR-415. The
-  projection of a Form is built once per pair of Form and resource scope and
-  reused for later executions with that scope, its nested executions counted
-  again each time; at each execution, its text-show strings are counted (BR-418)
-  and their codes collected (BR-417, BR-420) with the font in effect at that
-  point of the canonical stream, so a Form that shows text with its caller's
-  font adds its codes to that font, once for each font it is drawn with. An
-  inlined Form whose projected tokens, nested Forms included, hold no text-show
-  operator (`Tj`, `TJ`, `'`, `"`) emits nothing; one that shows text before its
-  own first `Tf` needs a font set by its caller (BR-416). Bounds per invocation:
-  at most 256 distinct Forms, nesting at most 8 Forms deep, and at most 4,096
-  Form executions in total (every `Do` of a Form counts, with or without text);
-  a Form reached again on its own `Do` path is a cycle and refuses as
-  `CONTENT_UNAVAILABLE`; an XObject of another subtype than `Form`, `Image` or
-  `PS` refuses as `UNSUPPORTED_FORMAT`. Verified by: AC-11.
+  BR-416; every execution after the stream's first use adds its decoded length
+  to the bytes counted against B (BR-414), at the `Do` and before any of its
+  tokens is emitted, and the execution that passes the remaining B refuses as
+  `LIMIT_EXCEEDED`, so dropped operators in a Form are paid for at every
+  execution. The content is checked starting outside `BT` with the caller's
+  graphics state and font; content that ends inside `BT`/`ET` refuses as
+  `CONTENT_UNAVAILABLE`. Its resource scope is its own `/Resources`, or, when it
+  has none, the resource scope of the content that invoked it; its `Tf`, `gs`
+  and `Do` names resolve in that scope, and fonts it selects take the canonical
+  names of BR-415. The projection of a Form is built once per pair of Form and
+  resource scope and reused for later executions with that scope, its nested
+  executions counted again each time; at each execution, its text-show strings
+  are counted (BR-418) and their codes collected (BR-417, BR-420) with the font
+  in effect at that point of the canonical stream, so a Form that shows text
+  with its caller's font adds its codes to that font, once for each font it is
+  drawn with. An inlined Form whose projected tokens, nested Forms included,
+  hold no text-show operator (`Tj`, `TJ`, `'`, `"`) emits nothing; one that
+  shows text before its own first `Tf` needs a font set by its caller (BR-416).
+  Bounds per invocation: at most 256 distinct Forms, nesting at most 8 Forms
+  deep, and at most 4,096 Form executions in total (every `Do` of a Form counts,
+  with or without text); a Form reached again on its own `Do` path is a cycle
+  and refuses as `CONTENT_UNAVAILABLE`; an XObject of another subtype than
+  `Form`, `Image` or `PS` refuses as `UNSUPPORTED_FORMAT`. Verified by: AC-11.
 - **BR-420** — A simple font's encoding is resolved per shown code, and the
-  projection emits it as `/Encoding << /Type /Encoding /BaseEncoding
-  /WinAnsiEncoding /Differences [...] >>` listing every code the font's kept
-  strings show that the `ToUnicode` CMap does not map, with its resolved glyph
-  name; codes are collected at every execution with the font in effect (BR-419).
-  A source `/Encoding` is checked in every case, even when a `ToUnicode` CMap
-  exists: a name `StandardEncoding`, `WinAnsiEncoding`, `MacRomanEncoding` or
-  `MacExpertEncoding`, or a dictionary with optional `/Type /Encoding`, one of
-  those names as optional `/BaseEncoding` and optional `/Differences` of codes
-  (integers 0–255) and glyph names; any other value refuses as
-  `UNSUPPORTED_FORMAT`, and more than 256 codes or a glyph name over 31 bytes
-  refuses as `LIMIT_EXCEEDED`. The base table is the named one, else (no
-  `/Encoding`, or no `/BaseEncoding`): StandardEncoding for a font with no font
-  program whose `BaseFont`, without a subset prefix, is one of the 12 standard
-  Latin fonts (Times, Helvetica and Courier families) or whose `Flags` have
-  Nonsymbolic set and Symbolic clear; StandardEncoding for a `TrueType` font
-  with a `FontFile2` and Nonsymbolic set; for a `Type1` or `MMType1` font with a
-  `FontFile`, the built-in encoding of its program; otherwise no base table.
-  `/Differences` entries override the base table. The built-in encoding is read
-  only at the first shown code that the `ToUnicode` CMap does not map and that
-  has no `/Differences` entry, so the program of a font whose `/Differences` and
-  `ToUnicode` cover every shown code is never read. It is read from the
-  program's cleartext part only: a direct integer `/Length1` of 1–65,536 bytes
-  (over 65,536 refuses as `LIMIT_EXCEEDED`), decoded by the streaming inflate of
-  BR-414 up to that length, tokenized with the bounded tokenizer up to its first
-  `/Encoding` name, which is followed either by `StandardEncoding def` or by
-  `<n> array` with `n` 1–256, optionally `0 1 255 {1 index exch /.notdef put}
-  for`, `dup <code> /<name> put` groups with each code below `n`, and `readonly
-  def` or `def`; when a code is put twice, the last group wins; more than 256
-  groups or a name over 31 bytes refuses as `LIMIT_EXCEEDED`; anything else, or
-  no `/Encoding` in that part, refuses as `UNSUPPORTED_FORMAT`, and the
-  encrypted part is never read. The tables are those of PDF.js 6.5.438. A shown
-  code that the `ToUnicode` CMap does not map and that resolves to no glyph name
-  or to `.notdef` refuses as `UNSUPPORTED_FORMAT`. A simple font whose
-  projected `BaseFont`, which the kept `FontName` equals (BR-417), is one of
-  the ten GBK font names that PDF.js 6.5.438 turns into a
-  composite `GBK-EUC-H` font when it has no program and a `WinAnsiEncoding` base
-  (its `chineseFontNames` list, such as `/#CB#CE#CC#E5`) refuses as
-  `UNSUPPORTED_FORMAT`, since PDF.js would return none of its text. Verified by:
-  AC-12.
+  projection emits it as `/Encoding << /Type /Encoding /BaseEncoding <name>
+  /Differences [...] >>`. `/BaseEncoding` is the source base encoding name when
+  it is `WinAnsiEncoding`, `MacRomanEncoding` or `MacExpertEncoding` (the
+  `/Encoding` name or its `/BaseEncoding`), the three names PDF.js 6.5.438
+  honours, and is left out otherwise (a `StandardEncoding` name, which PDF.js
+  ignores, or a base table taken from the font name, `Flags` or the program),
+  because PDF.js reads a glyph name of the `G`, `g`, `C`, `c` or `u` forms below
+  whose value equals its own code through that base. `/Differences` lists every
+  code the font's kept strings show that the `ToUnicode` CMap does not map, with
+  its resolved glyph name; codes are collected at every execution with the font
+  in effect (BR-419). A source `/Encoding` is checked in every case, even when a
+  `ToUnicode` CMap exists: a name `StandardEncoding`, `WinAnsiEncoding`,
+  `MacRomanEncoding` or `MacExpertEncoding`, or a dictionary with optional
+  `/Type /Encoding`, one of those names as optional `/BaseEncoding` and optional
+  `/Differences` of codes (integers 0–255) and glyph names; any other value
+  refuses as `UNSUPPORTED_FORMAT`, and more than 256 codes or a glyph name over
+  31 bytes refuses as `LIMIT_EXCEEDED`. The base table is the named one, else
+  (no `/Encoding`, or no `/BaseEncoding`): no base table for a `Type3` font;
+  StandardEncoding for a font with no font program whose `BaseFont`, without a
+  subset prefix, is one of the 12 standard Latin fonts (Times, Helvetica and
+  Courier families) or whose `Flags` have Nonsymbolic set and Symbolic clear;
+  StandardEncoding for a `TrueType` font with a `FontFile2` and Nonsymbolic set;
+  for a `Type1` or `MMType1` font with a `FontFile`, the built-in encoding of
+  its program; otherwise no base table. `/Differences` entries override the base
+  table. The built-in encoding is read only at the first shown code that the
+  `ToUnicode` CMap does not map and that has no `/Differences` entry, so the
+  program of a font whose `/Differences` and `ToUnicode` cover every shown code
+  is never read. It is read from the program's cleartext part only: a direct
+  integer `/Length1` of 1–65,536 bytes (over 65,536 refuses as
+  `LIMIT_EXCEEDED`), decoded by the streaming inflate of BR-414 up to that
+  length, tokenized with the bounded tokenizer up to its first `/Encoding` name,
+  which is followed either by `StandardEncoding def` or by `<n> array` with `n`
+  1–256, optionally `0 1 255 {1 index exch /.notdef put} for`, `dup <code>
+  /<name> put` groups with each code below `n`, and `readonly def` or `def`;
+  when a code is put twice, the last group wins; more than 256 groups or a name
+  over 31 bytes refuses as `LIMIT_EXCEEDED`; anything else, or no `/Encoding` in
+  that part, refuses as `UNSUPPORTED_FORMAT`, and the encrypted part is never
+  read. The tables are those of PDF.js 6.5.438. A shown code that the
+  `ToUnicode` CMap does not map and that resolves to no glyph name, to
+  `.notdef`, or to a name PDF.js 6.5.438 maps to no character refuses as
+  `UNSUPPORTED_FORMAT`, as a Type0 code without a mapping does, since PDF.js
+  would return the raw code. PDF.js maps a name of its glyph list; `uni` and
+  four uppercase hexadecimal digits, or `u` and four to six; `G` and two
+  hexadecimal digits; `g` and four; `C` or `c` and two or three decimal digits;
+  and `f_h`, `f_t` and `T_h`; each numeric form giving a value 1–0x10FFFF. Any
+  other name, a `C` or `c` name with hexadecimal digits included (PDF.js then
+  rereads every such name of the font as hexadecimal), refuses. Verified by:
+  AC-07, AC-12.
 
 ## Contract details
 
@@ -518,6 +647,9 @@ AC-02–AC-12.
 | Distinct Forms; Form nesting; Form executions | 256; 8; 4,096 |
 | Inline image dictionary pairs; `W`, `H` | 32; 65,536 each |
 | Flate inline image output | remaining B |
+| ASCII filter output (each stage) | remaining B |
+| Decoded bytes used by `Contents` references and Form executions, counted per use | remaining B |
+| Type 1 program inflate output | remaining B (at most `/Length1` + 16,383 bytes) |
 | Distinct fonts read | 128 |
 | `Widths` numbers; `Differences` codes; glyph name | 256; 256; 31 bytes |
 | CIDFont `W` numbers | 65,536 |
@@ -527,19 +659,25 @@ AC-02–AC-12.
 | `ToUnicode` destination | 64 bytes UTF-16BE |
 | Text-show string (F-009) | 4,096 bytes |
 
-Decoded bytes of cross-reference streams, object streams, content streams,
-Form streams, `ToUnicode` streams, Type 1 cleartext parts and inflated
-inline images all count against B once each; the canonical document, with
-its re-serialized content and CMaps, stays at most B, checked at each
-emitted token (BR-418). Streams that are never decoded add nothing.
+Decoded bytes of cross-reference streams, object streams, content streams, Form
+streams, `ToUnicode` streams, Type 1 cleartext parts (with the inflate's
+overshoot of at most 16,383 bytes) and inflated inline images count against B,
+the output of each ASCII filter stage included; content and Form streams count
+their decoded length again at every further use, per `Contents` reference,
+selected page and Form execution (BR-416, BR-419); the canonical document, with
+its re-serialized content and CMaps, stays at most B, checked at each emitted
+token (BR-418). Streams that are never decoded add nothing.
 
 ### Hostile input
 
 - Decompression bombs: every inflate runs under the remaining B (F-009); object
   and cross-reference streams share that budget; a Flate inline image inflates
   under the smaller of its computed size and the remaining B, so a computed size
-  of up to 2^35 bytes never raises the cap; a Type 1 program is inflated by a
-  streaming inflate that stops at `/Length1`; nothing is decoded speculatively.
+  of up to 2^35 bytes never raises the cap; a Type 1 program is inflated by an
+  asynchronous inflate destroyed once `/Length1` bytes are held, so at most one
+  16 KiB chunk more is produced, and that overshoot counts against B; an
+  `/ASCII85Decode` stage, whose `z` turns one byte into four, counts its output
+  against B; nothing is decoded speculatively.
 - Cross-reference loops and floods: a repeated section offset is a cycle;
   32 sections, `/Size` 65,536 and 4,096 `/Index` pairs bound the table.
 - Object-stream recursion: an object stream is reached only through a
@@ -553,17 +691,21 @@ emitted token (BR-418). Streams that are never decoded add nothing.
   only the cleartext part of a Type 1 program is tokenized, under a 64 KiB
   bound, and only when a shown code needs it; CMaps are bounded and re-emitted
   canonically, so PDF.js never parses a source CMap; every shown code that
-  `ToUnicode` does not map is listed in `/Differences`, so the base table PDF.js
-  picks (from `Flags` or the font name, as when it drops the `WinAnsiEncoding`
-  base of a nonembedded `Symbol`, `ZapfDingbats`, `Dingbats`, `Wingdings`,
-  `Wingdings-Bold` or `Wingdings-Regular` font) never decides a shown code; the
-  GBK font names PDF.js turns into a composite font refuse.
+  `ToUnicode` does not map is listed in `/Differences` under a glyph name PDF.js
+  maps, so the default table PDF.js picks from `Flags` never decides a shown
+  code; fonts are emitted under canonical names (the 12 standard Latin names
+  excepted), so no source name reaches PDF.js's system-font, symbol-encoding or
+  GBK heuristics; a Type3 font's glyph procedures and resources are never read.
 - Repeated execution: every Form execution is inlined and counted, so a Form
   drawn many times or nested many ways costs its full output against B, the item
   ceiling and the 4,096-execution ceiling before PDF.js starts; the running
   checks of BR-418 stop the projection at the token that passes a ceiling, so
   the canonical stream is never built beyond the bounds; each Form is decoded
-  and tokenized once.
+  and tokenized once, but its decoded length counts against B at every
+  execution, as a content stream does at every `Contents` reference and selected
+  page, so a stream of dropped operators reused 1,024 times on each of 10 pages,
+  which emits no token, still costs 10,240 times its length against B before it
+  is tokenized.
 - Inline-image smuggling: inline data is skipped by a length that never
   depends on searching for `EI`, so bytes inside the data (S29) are never
   read as operators.
@@ -577,14 +719,18 @@ every other part of the file is valid, so the expected code is the one the
 named check gives. AC-09 (g) and (h) hold two defects on purpose, to test
 the processing order.
 
-- **AC-01** (BR-114 v2, BR-412–BR-420) — Given S01–S29 of the
-  measurements,
-  When page 1 is read, Then each returns the text raw PDF.js reads from its
-  source file (the "Raw PDF.js" column; `Hello modern PDF` for S01–S20)
-  with `total_pages` 1, and the bytes PDF.js receives contain no `/Filter`,
-  `/XRef`, `/ObjStm`, `/FontFile`, `/Metadata`, `/Info`, `/ExtGState`,
-  `/XObject` or `BI`. Verified by: `BR-114 v2 AC-01 synthetic producer
-  corpus extracts`.
+- **AC-01** (BR-114 v2, BR-412–BR-420) — Given S01–S33 of the measurements
+  (S30–S33 are the synthetic equivalents of Measurement 3: `[/ASCII85Decode
+  /FlateDecode]` and `/ASCIIHexDecode` content, the LibreOffice-shaped and
+  cairo-shaped Type3 fonts), When page 1 is read, Then each returns exactly its
+  golden string, measured on its projection (Measurement 3, `\n` a line feed),
+  with `total_pages` 1: `Hello modern PDF` for S01–S21, S25 and S27–S31; `Hello
+  modern PDF\nOverlay stamp` for S22; `Hello modern PDF\nSecond page` for S23;
+  `Hello modern PDF\nFigure label` for S24; `Hello ﬁnal “modern” – PDF` for S26;
+  `Smile 😀 done` for S32; and `Smile 😀done` for S33; and the bytes PDF.js
+  receives contain no `/Filter`, `/XRef`, `/ObjStm`, `/FontFile`, `/Metadata`,
+  `/Info`, `/ExtGState`, `/XObject`, `/Type3`, `/CharProcs` or `BI`. Verified
+  by: `BR-114 v2 AC-01 synthetic producer corpus extracts`.
 - **AC-02** (BR-412) — Given (a) a file whose second revision replaces page
   1's content, (b) a hybrid file whose table marks the content object free
   and whose `/XRefStm` lists it in use, (b2) the same file whose table lists
@@ -604,44 +750,50 @@ the processing order.
   `LIMIT_EXCEEDED`, (i), (j), (l), (m) and (n) are `CONTENT_UNAVAILABLE`,
   each refusal before PDF.js. Verified by: `BR-412 AC-02 cross-reference
   chain`.
-- **AC-03** (BR-413) — Given (a) all non-stream objects in one object
-  stream, (b) a type 2 entry naming an object stream that is itself a
-  type 2 object, (c) a header pair naming another object number, (d) a
-  stream object inside an object stream, (e) indirect `/Length` objects,
-  one of them inside an object stream, (f) an object stream whose `/Length`
-  lives inside itself, (g) a generation mismatch on the page object, (h) a
-  page tree that needs 4,096 and 4,097 distinct resolved objects, (i) a page
-  tree that resolves the same 4,000 objects twice, (j) header offsets
-  `0 10 10`, (k) `/N` 4,096 and 4,097, (l) an object stream whose `/Length`
-  is a type 2 object of another object stream, When page 1 is read, Then (a),
-  (e) and (i) give the text, (b), (c), (d), (f), (g), (j) and (l) are
-  `CONTENT_UNAVAILABLE`, and (h) and (k) give the text then
-  `LIMIT_EXCEEDED`, each refusal before PDF.js. Verified by: `BR-413 AC-03
-  object resolution`.
+- **AC-03** (BR-413) — Given (a) all non-stream objects in one object stream,
+  (b) a type 2 entry naming an object stream that is itself a type 2 object, (c)
+  a header pair naming another object number, (d) a stream object inside an
+  object stream, (e) indirect `/Length` objects, one of them inside an object
+  stream, (f) an object stream whose `/Length` lives inside itself, (g) a
+  generation mismatch on the page object, (h) a page tree that needs 4,096 and
+  4,097 distinct resolved objects, (i) a page tree that resolves the same 4,000
+  objects twice, (j) header offsets `0 10 10`, (k) `/N` 4,096 and 4,097, (l) an
+  object stream whose `/Length` is a type 2 object of another object stream, (m)
+  a content stream referenced as `4 1 R` whose entry and object have generation
+  1, (n) a reference `5 1 R` to a type 2 object, When page 1 is read, Then (a),
+  (e), (i) and (m) give the text, (b), (c), (d), (f), (g), (j), (l) and (n) are
+  `CONTENT_UNAVAILABLE`, and (h) and (k) give the text then `LIMIT_EXCEEDED`,
+  each refusal before PDF.js. Verified by: `BR-413 AC-03 object resolution`.
 - **AC-04** (BR-414, BR-117) — Given budget B and (a) Flate content with
-  predictor 12 whose inflated bytes, counted against B with everything
-  else the file decodes, reach exactly B and B + 1, (b) an object stream
-  and (c) a cross-reference stream that each inflate one byte over the
-  remaining B, (d) `/Columns` 65,536 with `/Colors` 4 and `/Columns`
-  65,537, (e) predictor 2, (f) predicted data that is not a whole number of
-  rows, (g) `LZWDecode` content, (h) a page that also draws a `DCTDecode`
-  image whose data is not a JPEG, (i) a `/Length` past the end of the
-  file, When page 1 is read, Then (a) gives the text at B and
-  `LIMIT_EXCEEDED` at B + 1, (b) and (c) are `LIMIT_EXCEEDED`, (d) gives the
-  text at 65,536 and `LIMIT_EXCEEDED` at 65,537, (e) and (g) are
-  `UNSUPPORTED_FORMAT`, (f) and (i) are `CONTENT_UNAVAILABLE`, and (h)
-  gives the text with the image never decoded. Verified by: `BR-414 AC-04
-  stream decoding`.
-- **AC-05** (BR-415) — Given a three-page file with `/OpenAction`
-  JavaScript, a link annotation with a URI action, `/AcroForm`,
-  `/Names /EmbeddedFiles`, `/Outlines`, `/StructTreeRoot`, `/Metadata`, a
-  `MediaBox` and `Resources` inherited from the root Pages node, a page 2
-  with no `/Contents`, and a Type3 font on page 3, When pages `[1, 2]` are
-  read, Then page 1's text returns with `total_pages` 3, the canonical
-  bytes contain none of those keys nor `/S /JavaScript`, page 1's font is
-  `/K1`, page 2 has an empty content stream, page 3 has empty `Resources`
-  and content, and reading page `[3]` is `UNSUPPORTED_FORMAT`. Verified by:
-  `BR-415 AC-05 canonical projection`.
+  predictor 12 whose inflated bytes, counted against B with everything else the
+  file decodes, reach exactly B and B + 1, (b) an object stream and (c) a
+  cross-reference stream that each inflate one byte over the remaining B, (d)
+  `/Columns` 65,536 with `/Colors` 4 and `/Columns` 65,537, (e) predictor 2, (f)
+  predicted data that is not a whole number of rows, (g) `LZWDecode` content,
+  (h) a page that also draws a `DCTDecode` image whose data is not a JPEG, (i) a
+  `/Length` past the end of the file, (j) content with `/Filter [/ASCII85Decode
+  /FlateDecode]` and `/DecodeParms [null << /Predictor 12 /Columns 4 >>]`, a
+  `ToUnicode` with `/ASCIIHexDecode`, and an object stream with
+  `[/ASCIIHexDecode /FlateDecode]`, (k) `/DecodeParms [<< /Predictor 12 >>
+  null]` on that chain, (l) `[/FlateDecode /ASCII85Decode]`, (m)
+  `/ASCII85Decode` data holding the byte `v`, and data without `~>`, (n)
+  `/ASCII85Decode` data of `z` groups whose output passes the remaining B, When
+  page 1 is read, Then (a) gives the text at B and `LIMIT_EXCEEDED` at B + 1,
+  (b) and (c) are `LIMIT_EXCEEDED`, (d) gives the text at 65,536 and
+  `LIMIT_EXCEEDED` at 65,537, (e), (g), (k) and (l) are `UNSUPPORTED_FORMAT`,
+  (f), (i) and (m) are `CONTENT_UNAVAILABLE`, (h) gives the text with the image
+  never decoded, (j) gives the text, and (n) is `LIMIT_EXCEEDED` with no more
+  than the remaining B decoded. Verified by: `BR-414 AC-04 stream decoding`.
+- **AC-05** (BR-415) — Given a three-page file with `/OpenAction` JavaScript, a
+  link annotation with a URI action, `/AcroForm`, `/Names /EmbeddedFiles`,
+  `/Outlines`, `/StructTreeRoot`, `/Metadata`, a `MediaBox` and `Resources`
+  inherited from the root Pages node, a page 2 with no `/Contents`, and a Type0
+  font with `/Encoding /UniJIS-UCS2-H` on page 3, When pages `[1, 2]` are read,
+  Then page 1's text returns with `total_pages` 3, the canonical bytes contain
+  none of those keys nor `/S /JavaScript`, page 1's font is `/K1`, page 2 has an
+  empty content stream, page 3 has empty `Resources` and content, and reading
+  page `[3]` is `UNSUPPORTED_FORMAT`. Verified by: `BR-415 AC-05 canonical
+  projection`.
 - **AC-06** (BR-416) — Given pages with (a) every dropped operator family
   between text objects, (b) `Tf` and `Tc` before `BT` and a second `BT` that
   shows text without `Tf`, (c) a text-show with no font set, (d) `gs` naming an
@@ -659,41 +811,60 @@ the processing order.
   than its computed size, below the remaining B, (s) an unfiltered image mask
   with `/IM true` and no `/BPC`, framed by size, (t) an unfiltered `/G` image
   with `BPC` 1, `H` 1 and `W` 65,536 and 65,537, (u) `/A85` data holding `>`
-  before its `~>`, When the page(s) are read, Then (a), (b), (f), (g), (h), (j),
-  (p), (s) and (u) give the text (h for pages `[1, 2]`) and the canonical
-  content holds only kept operators, hexadecimal strings and `#`-escaped names,
-  (c), (m) and (r) are `CONTENT_UNAVAILABLE`, (q) is `LIMIT_EXCEEDED` with no
-  more than the remaining B inflated, (d), (e), (k), (l) and (o) are
-  `UNSUPPORTED_FORMAT`, (i), (n) and (t) give the text then `LIMIT_EXCEEDED`,
-  each refusal before PDF.js. Verified by: `BR-416 AC-06 content projection`.
+  before its `~>`, (v) a stream of L bytes of dropped operators referenced 1,024
+  times by the `Contents` array of each of 10 selected pages, with 10,240 × L
+  plus the file's other decoded bytes at B and at B + 1, (w) `q` inside `BT`,
+  `BT` inside `BT`, `Td` outside `BT`/`ET` and `ET` outside a text object, each
+  on its own page, (x) `Tf` sizes 0, −12, 0.5 and 1,000,000, and 1,000,001, When
+  the page(s) are read, Then (a), (b), (f), (g), (h), (j), (p), (s) and (u) give
+  the text (h for pages `[1, 2]`) and the canonical content holds only kept
+  operators, hexadecimal strings and `#`-escaped names, (x) at 1,000,000 and
+  below gives the text, (c), (m) and (r) are `CONTENT_UNAVAILABLE`, (q) is
+  `LIMIT_EXCEEDED` with no more than the remaining B inflated, (d), (e), (k),
+  (l), (o), (w) and (x) at 1,000,001 are `UNSUPPORTED_FORMAT`, (i), (n), (t) and
+  (v) give the text then `LIMIT_EXCEEDED`, (v) refusing at the page's `Contents`
+  array before its content is joined or tokenized (the test observes no
+  tokenizer call for that page), each refusal before PDF.js. Verified by:
+  `BR-416 AC-06 content projection`.
 - **AC-07** (BR-417) — Given (a) a TrueType font in WinAnsiEncoding whose
-  `FontFile2` holds random bytes, (b) a Type0 Identity-H font whose
-  `ToUnicode` maps one code to `ffi`, (c) a Type0 font without `ToUnicode`,
-  (d) a Type0 font with `/Encoding /UniJIS-UCS2-H`, (e) a Type3 font
-  selected by `Tf`, (f) a CMap with `usecmap`, (g) CMaps of 65,536 and
-  65,537 entries, (h) destinations of 64 and 66 bytes, (i) 128 and 129
-  distinct fonts, (j) a Type0 font whose `ToUnicode` misses one shown code,
-  (k) `/ToUnicode /Identity-H`, (l) a `bfrange` with an array one element
-  short, (m) a code mapped by two entries, (n) CMaps mapping 262,144 and
-  262,145 codes in total, (o) `Widths` of 256 and 257 numbers, (p) a
-  descendant `W` of 65,536 and 65,537 numbers, (q) a descendant without
-  `FontDescriptor`, (r) a `Flags` value that is a string, When page 1 is
-  read, Then (a), (b) and (m) give their text (the last entry for (m)) and
-  the canonical bytes hold no font program and no source CMap, (c), (d),
-  (e), (f), (j) and (k) are `UNSUPPORTED_FORMAT`, (l), (q) and (r) are
-  `CONTENT_UNAVAILABLE`, and (g), (h), (i), (n), (o) and (p) give the text
-  then `LIMIT_EXCEEDED`. Verified by: `BR-417 AC-07 fonts`.
-- **AC-08** (BR-418) — Given a `ToUnicode` font whose largest destination
-  is 48 UTF-8 bytes (`m` 16) and a page repeating one string so that the
-  sum of U is exactly B and B + 1; a Differences font whose names include
-  `u1F600` (D 4, `m` 2) at the same two sums; a Form holding that string
-  drawn so that the sum of U is B and B + 1; strings of 4,096 and 4,097
-  bytes; and a page whose sum of I is 65,536 and 65,537, When the page is
-  read, Then each first case gives its text and each second case is
-  `LIMIT_EXCEEDED` before PDF.js; and the exact-pin dependency stress of
-  `TestBR114_pdf_producer_admission` passes for Type0/`ToUnicode`,
-  Differences and Form-inlined text with produced bytes and items never
-  above the admitted U and I. Verified by: `BR-418 AC-08 producer
+  `FontFile2` holds random bytes, (b) a Type0 Identity-H font with a
+  `CIDFontType2` descendant, both named `/ArialMT`, whose `ToUnicode` maps three
+  codes to `ffi`, U+1F600 and `A`, (c) a Type0 font without `ToUnicode`, (d) a
+  Type0 font with `/Encoding /UniJIS-UCS2-H`, (e) a Type3 font with `FontMatrix
+  [0.001 0 0 0.001 0 0]`, `/Differences [1 /gid883]` and a `ToUnicode` mapping
+  code 1 to U+1F600, whose `CharProcs` and `Resources` reference absent objects,
+  (e2) Type3 fonts with `FontMatrix [0.001 0.001 0 0.001 0 0]`, with `FontMatrix
+  [-0.001 0 0 0.001 0 0]`, and with a width of 1,000,001 under `FontMatrix
+  [0.001 0 0 0.001 0 0]`, (f) a CMap with `usecmap`, (g) CMaps of 65,536 and
+  65,537 entries, (h) destinations of 64 and 66 bytes, (i) 128 and 129 distinct
+  fonts, (j) a Type0 font whose `ToUnicode` misses one shown code, (k)
+  `/ToUnicode /Identity-H`, (l) a `bfrange` with an array one element short, (m)
+  a code mapped by two entries, (n) CMaps mapping 262,144 and 262,145 codes in
+  total, (o) `Widths` of 256 and 257 numbers, (p) a descendant `W` of 65,536 and
+  65,537 numbers, (q) a descendant without `FontDescriptor`, (r) a `Flags` value
+  that is a string, (s) a nonembedded `TrueType` font named `/Symbol` with
+  `WinAnsiEncoding` and `Widths`, showing `Hello`, (t) a nonembedded `Courier`
+  without `Widths`, (u) a Type3 font without `Widths`, When page 1 is read, Then
+  (a), (b), (e), (m), (s) and (t) give their text (`ffi😀A` for (b), `😀` for (e),
+  the last entry for (m), `Hello` for (s)) and the canonical bytes hold no font
+  program, no source CMap, no `CharProcs`, `/BaseFont /K1` and `/FontName /K1`
+  for (b), `/Subtype /Type1 /BaseFont /K1` for (e), `/BaseFont /K1` for (s) and
+  `/BaseFont /Courier` for (t), (c), (d), (e2), (f), (j) and (k) are
+  `UNSUPPORTED_FORMAT`, (l), (q), (r) and (u) are `CONTENT_UNAVAILABLE`, and
+  (g), (h), (i), (n), (o) and (p) give the text then `LIMIT_EXCEEDED`. Verified
+  by: `BR-417 AC-07 fonts`.
+- **AC-08** (BR-418) — Given a `ToUnicode` font whose largest destination is 48
+  UTF-8 bytes (`m` 16) and a page repeating one string so that the sum of U is
+  exactly B and B + 1; a Differences font whose names include `u1F600` (D 4, `m`
+  2 here) at the same two sums; a Form holding that string drawn so that the sum
+  of U is B and B + 1; strings of 4,096 and 4,097 bytes; and pages whose sum of
+  I is 65,536 and 65,537, once with a simple font and once with a Type0 font
+  whose two-byte codes each count 1 in S, When the page is read, Then each first
+  case gives its text and each second case is `LIMIT_EXCEEDED` before PDF.js;
+  and the exact-pin dependency stress of `TestBR114_pdf_producer_admission`
+  passes for Type0/`ToUnicode`, Differences, Type3 and Form-inlined text, with
+  `Tf` sizes 0, −12 and 1,000,000 among the cases, with produced bytes and items
+  never above the admitted U and I. Verified by: `BR-418 AC-08 producer
   admission`, `TestBR114_pdf_producer_admission`.
 - **AC-09** (BR-114 v2) — Given (a) a well-formed file with `/Encrypt`,
   (b) a `%PDF-2.0` file, (c) `%PDF-2.1`, (d) a cross-reference offset one
@@ -725,17 +896,21 @@ the processing order.
   (l) a page holding 30 nested `q` that draws a Form with one, and then with
   two, `q` of its own, (m) a Form that shows text before its own `Tf`, drawn
   once under a WinAnsi Type 1 font and once under a Type0 font whose `ToUnicode`
-  maps its codes, When page 1 is read, Then (a), (b) and (c) give the text with
-  the canonical content holding `q`, the `/Matrix` as `cm` and `Q` around each
-  inlined Form and one canonical name per font object, (d) gives the text at 8
-  and `LIMIT_EXCEEDED` at 9 with no output for the text-free Form, (f) and (g)
-  give the text then `LIMIT_EXCEEDED`, (e) and (j) are `CONTENT_UNAVAILABLE`,
-  (h) and (i) are `UNSUPPORTED_FORMAT`, (k) is `LIMIT_EXCEEDED` at the token
-  whose operator makes the sum of I pass 65,536, with no token emitted after it
-  (read through the emitted-token count the test observes), (l) gives the text
-  with one `q` and is `UNSUPPORTED_FORMAT` with two, and (m) gives both texts
-  with the Form's codes in the simple font's canonical `/Differences`, each
-  refusal before PDF.js. Verified by: `BR-419 AC-11 Form inlining`.
+  maps its codes, (n) a Form of L bytes of dropped operators and one `Tj`, drawn
+  through nested `Do`s so that the decoded bytes its executions use, with the
+  file's other decoded bytes, are B and B + 1, When page 1 is read, Then (a)
+  gives the golden strings of AC-01 for S21–S25, (a), (b) and (c) give the text
+  with the canonical content holding `q`, the `/Matrix` as `cm` and `Q` around
+  each inlined Form and one canonical name per font object, (d) gives the text
+  at 8 and `LIMIT_EXCEEDED` at 9 with no output for the text-free Form, (f), (g)
+  and (n) give the text then `LIMIT_EXCEEDED` ((n) at the `Do` that passes B,
+  before that execution's tokens), (e) and (j) are `CONTENT_UNAVAILABLE`, (h)
+  and (i) are `UNSUPPORTED_FORMAT`, (k) is `LIMIT_EXCEEDED` at the token whose
+  operator makes the sum of I pass 65,536, with no token emitted after it (read
+  through the emitted-token count the test observes), (l) gives the text with
+  one `q` and is `UNSUPPORTED_FORMAT` with two, and (m) gives both texts with
+  the Form's codes in the simple font's canonical `/Differences`, each refusal
+  before PDF.js. Verified by: `BR-419 AC-11 Form inlining`.
 - **AC-12** (BR-420) — Given (a) S26, (b) a Type1 font with `/Differences`
   mapping codes below 0x20, (c) nonembedded Helvetica with no `/Encoding`, (d) a
   symbolic TrueType font with a `FontFile2`, no `/Encoding` and no `ToUnicode`,
@@ -743,27 +918,36 @@ the processing order.
   code, (f) `/Differences` of 256 and 257 codes, (g) glyph names of 31 and 32
   bytes, (h) a cleartext `/Length1` of 65,536 and 65,537, (i) a cleartext whose
   `/Encoding` array uses another procedure than the admitted loop, (j) a WinAnsi
-  font showing code 0x81 with no `ToUnicode`, (k) a `Symbol` font with no
-  `/Encoding` and no `ToUnicode`, (l) an equality test of the four base tables
-  against the pinned PDF.js tables, (m) a pdfTeX-style `Type1` font with a
-  `FontFile` whose `/Length1` is 70,000, full `/Differences` for its shown codes
-  and no `/BaseEncoding`, (n) a cleartext that puts code 65 twice, (o) a
-  cleartext `10 array` that puts code 12, (p) a `FontFile` that inflates to
-  fewer than `/Length1` bytes, (q) a nonembedded `Symbol` font with
-  `/Differences` for its shown codes, (r) fonts whose `BaseFont` is
-  `/#CB#CE#CC#E5` and `/#B7#41`, (s) a nonembedded font with `BaseFont /Foo`, a
-  `FontDescriptor` with `FontName /#CB#CE#CC#E5`, a `WinAnsiEncoding` base and
-  `/Differences` for its shown codes, (t) a `Type1` font whose `FontFile` has
-  `/DecodeParms` and a shown code that needs its built-in encoding, When page 1
-  is read, Then (a), (b), (c), (m), (q) and (s) give their text, (s) with
-  `FontName /Foo` in the canonical font, (m) without its program being read, (n)
-  gives the text of the last group, the canonical font carries `/BaseEncoding
-  /WinAnsiEncoding` with every shown code in `/Differences` and `Flags` with
-  Nonsymbolic set and Symbolic clear, (d), (e), (i), (j), (k), (o), (t) and (r)
-  at `/#CB#CE#CC#E5` are `UNSUPPORTED_FORMAT` while (r) at `/#B7#41` gives the
-  text, (p) is `CONTENT_UNAVAILABLE`, (f), (g) and (h) give the text then
-  `LIMIT_EXCEEDED`, and (l) holds. Verified by: `BR-420 AC-12 simple font
-  encoding`.
+  font showing code 0x01, which has no glyph in the table (0x81 is a bullet in
+  PDF.js), with no `ToUnicode`, (k) a `Symbol` font with no `/Encoding` and no
+  `ToUnicode`, (l) an equality test of the four base tables against the pinned
+  PDF.js tables, (m) a pdfTeX-style `Type1` font with a `FontFile` whose
+  `/Length1` is 70,000, full `/Differences` for its shown codes and no
+  `/BaseEncoding`, (n) a cleartext that puts code 65 twice, (o) a cleartext `10
+  array` that puts code 12, (p) a `FontFile` that inflates to fewer than
+  `/Length1` bytes, (q) a nonembedded `Symbol` font with `/Differences` naming
+  `/H`, `/alpha` and `/beta` for its shown codes, (r) a nonembedded `TrueType`
+  font whose `BaseFont` is `/#CB#CE#CC#E5` with `WinAnsiEncoding` and a
+  `FontDescriptor` whose `FontName` is `/#B7#C2#CB#CE`, showing `Hi`, (s)
+  `/Differences` naming `/G80`, `/c129`, `/uni0082` and `/g0083` at codes
+  0x80–0x83 under `/BaseEncoding /WinAnsiEncoding`, and the same with no
+  `/BaseEncoding`, (t) a `Type1` font whose `FontFile` has `/DecodeParms` and a
+  shown code that needs its built-in encoding, (u) shown codes named `/g17`,
+  `/Foo`, `/G00` and `/cAB`, each in its own file, (v) a `Type1` font whose
+  `FontFile` has `/Length1` 1,000 and Flate data that inflates to 2^30 bytes,
+  with a shown code that needs its built-in encoding, (w) a Type3 font with no
+  `/BaseEncoding` and no `ToUnicode` showing a code named `/gid883`, When page 1
+  is read, Then (a), (b), (c), (m), (q), (r), (s) and (v) give their text, (a)
+  with no `/BaseEncoding` in the canonical font, (c) with `/BaseFont
+  /Helvetica`, (m) without its program being read, (q) as `Hαβ` with `/BaseFont
+  /K1`, (r) as `Hi` with `/BaseFont /K1` and `/FontName /K1`, (s) as `€•‚ƒ` with
+  `/BaseEncoding /WinAnsiEncoding` and as U+0080–U+0083 with no `/BaseEncoding`,
+  (v) with at most 1,000 + 16,383 bytes inflated, (n) gives the text of the last
+  group, the canonical font carrying no `/BaseEncoding`, every shown code in
+  `/Differences` and `Flags` with Nonsymbolic set and Symbolic clear, (d), (e),
+  (i), (j), (k), (o), (t), (u) and (w) are `UNSUPPORTED_FORMAT`, (p) is
+  `CONTENT_UNAVAILABLE`, (f), (g) and (h) give the text then `LIMIT_EXCEEDED`,
+  and (l) holds. Verified by: `BR-420 AC-12 simple font encoding`.
 - **AC-13** (BR-412–BR-420) — Given a valid file at each ceiling of the table
   "Ceilings added by F-034" not exercised by AC-02–AC-12 (at least the
   4,096-pair `/Index`, the 4,096-object object stream, the 32 inline dictionary
@@ -798,13 +982,18 @@ the processing order.
   the strict F-009 rule that every byte between objects is whitespace
   (incremental files hold superseded objects); repair (PDF.js's repair
   interprets damaged files in ways the preflight cannot bound).
-- **D-3 — Decode only what is needed (BR-414).** Images and font programs
-  carry DCT, JBIG2, JPX or exotic filters that text never needs; framing
-  them without decoding removes their decoder surface and their budget.
-  FlateDecode with PNG predictors covers the cross-reference streams of
-  every PDF 1.5+ generator and the content streams of almost all.
-  Rejected: other filters (rare on content and CMaps; each adds a decoder);
-  TIFF predictor 2 (not used on these streams by common generators).
+- **D-3 — Decode only what is needed (BR-414).** Images and font programs carry
+  DCT, JBIG2, JPX or exotic filters that text never needs; framing them without
+  decoding removes their decoder surface and their budget. FlateDecode with PNG
+  predictors covers the cross-reference streams of every PDF 1.5+ generator and
+  the content streams of almost all. ReportLab writes `[/ASCII85Decode
+  /FlateDecode]` on every stream by default (Measurement 3), so both ASCII
+  filters are admitted alone or before FlateDecode; each decoder is a few lines
+  with no state beyond one group, and its output counts against B. Rejected: LZW
+  and RunLength (rare on content and CMaps; each adds a decoder); other filter
+  orders (no generator seen); TIFF predictor 2 (not used on these streams by
+  common generators); ASCII filters on a Type 1 program (none seen; keeps the
+  program path to one inflate).
 - **D-4 — Inline Forms (BR-419; replaces v1's "Forms that show text refuse").**
   Spec review 1 showed text Forms in OCR layers, overlays, imposition, LaTeX
   figures and browser output (S21–S25); the owner chose to widen (option A).
@@ -830,19 +1019,28 @@ the processing order.
   surface, from untrusted input. Finding 5 shows that dropping the program
   changes PDF.js's choice of base encoding, so the projection resolves each
   shown code itself by the PDF rules, emits every shown code that `ToUnicode`
-  does not map in `/Differences` over a `WinAnsiEncoding` base (PDF.js ignores a
-  `StandardEncoding` name) with Nonsymbolic `Flags`, and refuses a shown code
-  whose mapping can only come from the program. The base table PDF.js ends up
-  with therefore never decides a shown code: PDF.js 6.5.438 drops the
-  `WinAnsiEncoding` base of a nonembedded font named `Symbol`, `ZapfDingbats`,
-  `Dingbats`, `Wingdings`, `Wingdings-Bold` or `Wingdings-Regular` (measured:
-  such fonts with `/Differences` still give their text), and turns a nonembedded
-  font with a `WinAnsiEncoding` base and one of ten GBK names into a composite
-  `GBK-EUC-H` font (measured: no text), so those names refuse. Type0 needs
+  does not map in `/Differences` under a glyph name PDF.js maps, keeps the
+  source base encoding name only when PDF.js honours it (`WinAnsiEncoding`,
+  `MacRomanEncoding`, `MacExpertEncoding`; it reads `Gxx`-style names at their
+  own code through that base, finding 8), sets Nonsymbolic `Flags`, and refuses
+  a shown code whose mapping can only come from the program or whose name PDF.js
+  cannot map, as for Type0. Fonts are emitted under canonical names (finding 7):
+  PDF.js reads source names as hints, so a Type0 font named `ArialMT` loses all
+  but the first code point of each `ToUnicode` destination, a nonembedded
+  `Symbol` reads Latin codes as Greek, and ten GBK names become composite fonts;
+  a canonical name removes every such hint, and with it the symbol-name and GBK
+  rules of the earlier draft. Only the 12 standard Latin names are kept, because
+  PDF.js uses their standard metrics when `Widths` is absent. Type3 fonts are
+  projected as program-less simple fonts with their widths scaled by
+  `FontMatrix` (finding 9): text never needs their glyph procedures, and the
+  projection gave the raw text on the LibreOffice and cairo shapes. Type0 needs
   `ToUnicode` for every shown code because, without the program, Identity codes
   have no text meaning. Rejected: passing font programs (parser surface,
   memory); predefined CMaps (need external CMap data, refused by BR-122);
-  letting PDF.js fall back on `Flags` (S26 measured wrong text).
+  letting PDF.js fall back on `Flags` (S26 measured wrong text); keeping source
+  names with a list of names PDF.js treats specially (version-dependent and
+  open-ended: the Type0 fallback list was not in the earlier list); reading
+  Type3 `CharProcs` (a content interpreter per glyph for no text).
 - **D-6 — Selected pages only (BR-415).** F-009 read every page's content;
   a feature on page 30 refused a read of page 1. Projecting only the
   selected pages reads less untrusted data and admits more files; other
@@ -886,15 +1084,37 @@ the processing order.
   pdfLaTeX's default Computer Modern fonts carry their only mapping in the
   program (S26). The built-in encoding lives in the program's cleartext part,
   plain PostScript tokens before `eexec`, so the projection reads that part
-  alone, with a streaming inflate that stops at `/Length1`, under a 64 KiB bound
-  with a fixed grammar, and only when a shown code has no other mapping (pdfTeX
-  fonts with a full `/Differences` never need it) and emits the result as
-  `/Differences`; the encrypted part, the charstrings and the program itself
-  never reach the parser or PDF.js. Rejected: keeping the program for that case
-  (puts the Type 1 parser back on untrusted input for every LaTeX file);
-  documenting a residual (LaTeX body text is the most common case in the
-  review's list); CFF (`FontFile3`) built-in encodings (binary parser; refused,
-  residual).
+  alone, with an asynchronous inflate destroyed once `/Length1` bytes are held
+  (Node 26 has no synchronous inflate that stops early; the overshoot is at most
+  one 16 KiB chunk and counts against B), under a 64 KiB bound with a fixed
+  grammar, and only when a shown code has no other mapping (pdfTeX fonts with a
+  full `/Differences` never need it) and emits the result as `/Differences`; the
+  encrypted part, the charstrings and the program itself never reach the parser
+  or PDF.js. Rejected: keeping the program for that case (puts the Type 1 parser
+  back on untrusted input for every LaTeX file); documenting a residual (LaTeX
+  body text is the most common case in the review's list); CFF (`FontFile3`)
+  built-in encodings (binary parser; refused, residual).
+
+- **D-12 — Every use of decoded content is paid (BR-416, BR-419).** The decision
+  pass showed that a `Contents` array naming one decoded stream 1,024 times, on
+  each of 10 selected pages, made the preflight tokenize about 10,240 times that
+  stream within B, since dropped operators emit no canonical token for BR-418 to
+  count (about 160 GiB for a stream near 16 MiB). Each `Contents` reference and
+  each Form execution therefore counts its stream's decoded length against B,
+  before the content is joined or tokenized, while the decode and tokenization
+  stay cached. Rejected: counting tokens instead (dropped operators would still
+  cost nothing); refusing repeated references (overlay tools share streams
+  between pages, AC-06 (h)).
+- **D-13 — Text objects and `Tf` (BR-416).** `BT` inside a text object, text
+  operators outside one and `q`, `Q` or `cm` inside one keep the F-009 refusal:
+  ISO 32000-1 §8.2 forbids them, none of the surveyed generators writes them,
+  and PDF.js runs them with rules of its own (its `q` also saves the text
+  matrix) that the projection would have to model. The F-009 `Tf` size range
+  1–512 is dropped: no bound depends on the size, since U and I count codes,
+  bytes and operators; sizes such as 0.5 and −12 gave the source text; the
+  numeric operand check still bounds the value. Rejected: keeping 1–512 (refuses
+  valid files for no safety gain); following PDF.js for nested text objects
+  (state rules outside ISO, unmeasured).
 
 ## Open questions
 
@@ -1012,3 +1232,54 @@ Spec review 3 (`4-spec-review-3-reviewer`, changes, all minor):
 6. minor (line width, symbol font names) — retained: ADR-012 rewrapped to 80
    columns; `Wingdings-Bold` and `Wingdings-Regular` added to the names whose
    `WinAnsiEncoding` base PDF.js drops (hostile input, D-5).
+
+Spec decision pass (`4-spec-decision-1-fable`, changes):
+
+1. major (content-stream reuse amplification) — retained: each `Contents`
+   reference on each selected page and each Form execution counts its stream's
+   decoded length against B, before joining or tokenizing; the decode and
+   tokenization stay cached (BR-414, BR-416, BR-419, D-12). AC-06 (v), AC-11
+   (n).
+2. major (source font names reach PDF.js) — retained and measured (Measurement
+   3): `BaseFont` and `FontName` are the canonical `K<n>` for every font except
+   simple fonts whose source name is one of the 12 standard Latin names, kept
+   for their metrics; `Symbol` and `ZapfDingbats` are renamed because PDF.js
+   changes their encoding. The GBK and symbol-name rules are dropped as moot,
+   measured: the GBK-named font renamed `K1` gives its WinAnsi text, a `Symbol`
+   font renamed `K1` gives its `/Differences` text. BR-415, BR-417, BR-420, D-5.
+   AC-07 (b), (s), (t); AC-12 (q), (r). Supersedes the GBK and symbol-name
+   outcomes of spec review 2 item 8 and spec review 3 items 1 and 6.
+3. major (coverage) — retained, orchestrator decision in line with owner option
+   A: `/ASCII85Decode` and `/ASCIIHexDecode`, alone or before `/FlateDecode`, on
+   every needed stream except a Type 1 program (BR-414, D-3); Type3 fonts
+   projected as program-less simple fonts, widths scaled by `FontMatrix`,
+   `CharProcs` and `Resources` never read (BR-417 (c), BR-420, D-5), measured
+   equal to raw PDF.js on the LibreOffice and cairo shapes. S30–S33 are
+   synthetic equivalents built by the test helper: the real samples embed
+   third-party font subsets and cannot be regenerated in the dev container, so
+   they are not committed. AC-01, AC-04 (j)–(n), AC-07 (e), (e2), (u), AC-12
+   (w).
+4. major (expected text) — retained: (a) AC-01 and AC-11 (a) pin the golden
+   strings measured on the projections; S22–S24 give a line feed between their
+   two parts where raw PDF.js on the source gives none (Measurement 3;
+   Measurement 2 joined items without `hasEOL`); (b) AC-12 (j) uses code 0x01,
+   which has no WinAnsi glyph in PDF.js, instead of 0x81, which PDF.js maps to a
+   bullet.
+5. minor (forced `WinAnsiEncoding` base) — retained and measured: the source
+   base encoding name is emitted when PDF.js honours it (`WinAnsiEncoding`,
+   `MacRomanEncoding`, `MacExpertEncoding`), none otherwise; a shown code whose
+   name PDF.js cannot map (`/g17` returns the raw code) refuses as
+   `UNSUPPORTED_FORMAT`, consistent with Type0, `c` names with hexadecimal
+   digits included. BR-420. AC-12 (a), (n), (s), (u).
+6. minor (Type 1 inflate) — retained and measured on Node 26.13.0: `inflateSync`
+   cannot stop early, so the program is inflated with `createInflate`
+   (`chunkSize` 16,384) destroyed once `/Length1` bytes are held; the overshoot
+   of at most 16,383 bytes counts against B. BR-414, D-11. AC-12 (v).
+7. minor (text objects, `Tf`, generations, Type0 I) — retained: `q`/`Q`/`cm`
+   inside `BT`, nested `BT` and text operators outside `BT`/`ET` keep the F-009
+   and ISO refusal (D-13); the `Tf` range 1–512 has no safety role under the
+   projection and is dropped, the numeric operand check kept (measured sizes
+   0.5, −12: source text); `n g R` matches the entry's generation and the
+   canonical document uses generation 0 (BR-413, BR-415); S, and so I, counts
+   Type0 codes rather than bytes (BR-418). AC-03 (m), (n); AC-06 (w), (x);
+   AC-08. Supersedes spec review 3 item 4.

@@ -25,14 +25,14 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
 - #4 / F-034 v1 (pending acceptance): `kdrive_read` with `format:"pdf"`
   extracts text from files written by common generators: cross-reference and
   object streams (PDF 1.5+), incremental updates, linearized files, FlateDecode
-  with PNG predictors, metadata, annotations and structure (left out),
+  with PNG predictors, ASCII85Decode and ASCIIHexDecode, metadata, annotations and structure (left out),
   inherited page attributes, content arrays, graphics around text, text inside
   Form XObjects (OCR text layers, overlays, imposed pages, LaTeX figures,
   browser transparency groups), inline images of known length, and Type 1,
-  TrueType and Type0 fonts whose shown codes map through an encoding, a Type 1
-  built-in encoding (pdfLaTeX Computer Modern) or `ToUnicode`. Font programs
-  never reach PDF.js. Encrypted files, Type3 fonts, fonts whose text depends
-  on their program, inline images of unknown length and other filters on text
+  TrueType, Type0 and Type3 fonts whose shown codes map through an encoding, a
+  Type 1 built-in encoding (pdfLaTeX Computer Modern) or `ToUnicode`. Font
+  programs and Type3 glyph procedures never reach PDF.js. Encrypted files,
+  fonts whose text depends on their program, inline images of unknown length and other filters on text
   streams still return `UNSUPPORTED_FORMAT`; `kdrive_download` returns their
   bytes. A cross-reference stream no longer refuses as
   `CONTENT_UNAVAILABLE`.
