@@ -10,8 +10,8 @@ version: 1
 
 Author: Claude Opus 5.5 (effort unknown), spec phase, 2026-11-14.
 Base: branch `claude/beautiful-maxwell-8mdk2w` (main `3ff195b`).
-IDs: F-031; BR-404–BR-410 v1; BR-129 v4; BR-393 v3; BR-399 v2; BR-402 v2;
-BR-403 v2. No ADR: the change is confined to page texts, one query parameter
+IDs: F-031; BR-404–BR-410 v1; BR-129 v4; BR-143 v4; BR-393 v3; BR-399 v2;
+BR-402 v2; BR-403 v2. No ADR: the change is confined to page texts, one query parameter
 that only selects a language and one header read, all cheap to reverse.
 Next free IDs checked on main (`docs/spec-index.md`, `business-rules/`):
 F-031, BR-404, ADR-012.
@@ -95,7 +95,9 @@ response to them (redirects, JSON) changes.
   The language is never read from a cookie, a form field, the client's
   registration or document, or stored state. Verified by: AC-01, AC-02, AC-08.
 - **BR-405** — The `lang` query parameter is valid when the query holds it
-  exactly once and its value is byte-identical to `en` or `fr` (lower case).
+  exactly once (`URLSearchParams.getAll("lang")` has one element) and that
+  decoded value is identical to `en` or `fr` (lower case; `lang=%66r` is
+  valid).
   Any other value (`FR`, `fr-CH`, `de`, empty) is ignored: the page language
   falls to BR-404 (2), and nothing is refused for it. For the OAuth checks
   `lang` is an unknown parameter of BR-128 v3: it never changes which check
@@ -108,19 +110,21 @@ response to them (redirects, JSON) changes.
 - **BR-406** — The `Accept-Language` header (all field lines joined as the
   runtime joins them) is ignored when absent or longer than 256 bytes.
   Otherwise it is split on `,`; each item, trimmed of spaces and tabs, is a
-  language range (`*` or 1–8 letters followed by any number of `-` and 1–8
-  letters or digits) optionally followed by optional whitespace, `;`,
+  language range (`*` or the ASCII grammar `[A-Za-z]{1,8}(-[A-Za-z0-9]{1,8})*`,
+  compared with ASCII case folding) optionally followed by optional whitespace, `;`,
   optional whitespace and a weight `q=` / `Q=` of `0`, `0.` plus up to three
   digits, `1` or `1.` plus up to three `0`. An item that does not match is
   skipped; an item without a weight has weight 1. A range whose primary subtag
   (before the first `-`), compared case-insensitively, is `en` or `fr` stands
-  for that language; `*` stands for `en`; every other range is ignored, as is
-  every item of weight 0. The result is the language of the remaining item
+  for that language; `*` stands for `en` unless an `en` item has weight 0,
+  then for `fr` unless an `fr` item has weight 0, otherwise for nothing; every
+  other range is ignored, as is every item of weight 0. The result is the language of the remaining item
   with the highest weight, the first such item on a tie; with no remaining
   item there is no result. Examples: `fr-CH, fr;q=0.9, en;q=0.8` → `fr`;
   `de-CH,de;q=0.9` → none; `de, *;q=0.1` → `en`; `en;q=0, fr;q=0.1` → `fr`;
   `fr;q=0` → none; `FR-ch` → `fr`; `fr;q=0.5, en;q=0.5` → `fr`;
-  `fr;q=2` → none; `fr_CH` → none; `fr;level=1` → none. Verified by: AC-01.
+  `fr;q=2` → none; `fr_CH` → none; `fr;level=1` → none;
+  `en;q=0, *` → `fr`. Verified by: AC-01.
 - **BR-407** — The fixed texts of the pages come from one catalogue object
   per language, `MESSAGES.en` and `MESSAGES.fr`, both typed by one `Messages`
   type so that a missing or extra key fails `tsc`; the error sentences are a
@@ -152,14 +156,21 @@ response to them (redirects, JSON) changes.
   pending consent, carries a valid `lang` (BR-405) and a well-formed binding
   cookie (BR-130), and a live pending consent exists with the same cookie
   hash and a pending request equal in every field (`clientId`,
-  `redirectUri`, `state`, `codeChallenge`, `resource`, `cimdGrants`), that
-  consent is deleted before the BR-142 store-bound check and the new one is
+  `redirectUri`, `state`, `codeChallenge`, `resource`, `cimdGrants`; strings
+  compare with `===`; `state` and `cimdGrants` are equal when both are absent,
+  or both present with the same values, `cimdGrants` in the same order), the
+  oldest such live consent in insertion order (chosen after the expiry purge)
+  is deleted before the BR-142 store-bound check and the new one is
   created; at most one consent is replaced per request. The number of pending
   consents is therefore unchanged by a language switch and a switch is never
   refused as `store_full` when it replaces one. The replaced identifier is
   then unknown: a form posted from the earlier page gets the `consent` error
   page. Without a valid `lang` or without the cookie, behaviour is today's (a
-  new consent is added). Verified by: AC-05.
+  new consent is added). Residual risk (accepted): the cookie is
+  `SameSite=Lax`, so a cross-site link that copies a victim's full authorize
+  request, including the exact `state` and `code_challenge`, and adds `lang`
+  deletes the victim's pending consent; the victim gets a fresh consent page
+  for the same request, so the effect is a nuisance only. Verified by: AC-05.
 - **BR-410** — Localisation adds no cookie, header or stored data: the
   consent page still carries exactly one `Set-Cookie` (the
   `__Host-kdrive-oauth` cookie of BR-130), error pages carry none, the BR-129
@@ -167,6 +178,12 @@ response to them (redirects, JSON) changes.
   with the hash of the one stylesheet, identical for both languages and every
   page. The page language is not written to any store, log event or the state
   file. Verified by: AC-06.
+- **BR-143 v4** — v3 holds, except that the consent page's language switcher
+  href (BR-408) may echo that authorize request's own query, `state`
+  included, HTML-escaped, back to the browser that sent it; no other response
+  gains a request value, and error pages still carry none. Verified by: AC-04
+  (`BR-143 v4 ...` test: the `state` appears only inside the switcher href of
+  the consent page and in no error page).
 - **BR-399 v2** — v1 holds, except: `<html lang="xx">` carries the page
   language; the `<title>` page title, the header line and the GitHub link text
   are the page language's catalogue texts (`productTagline`, `sourceLink`;
@@ -255,11 +272,13 @@ No language switch submits a form, re-posts a consent or replays a callback.
   without `lang` and `Accept-Language: fr`, and with `lang=fr&lang=en`, Then
   the first and fourth show the French consent page, the second and third the
   English one (no `Accept-Language`), and the fifth the 400 repeated-parameter
-  page with the same `authorization_refused` event as without `lang`; and
+  page with the same `authorization_refused` event as a request repeating
+  `client_id` without `lang`; and
   given requests with a missing `code_challenge`, a wrong `resource`, and a
   deny and an approve submitted from a French page, each with `lang=fr`, Then
   the client redirect or upstream `Location` is byte-identical to the one
-  produced without `lang` and contains no `lang`, and `proxyStateSnapshot`
+  produced without `lang` (both sides run on fresh proxies fed the same
+  deterministic `randomBytes` sequence) and contains no `lang`, and `proxyStateSnapshot`
   contains no `lang`. Verified by: `BR-405 AC-02` in
   `tests/auth/proxy-language.test.ts`.
 - **AC-03** (BR-407) — Given `MESSAGES`, When the test compares them, Then the
@@ -283,7 +302,9 @@ No language switch submits a form, re-posts a consent or replays a callback.
   or unescaped `&`; following that link yields the consent page in the other
   language; a query whose serialization makes the path + query exceed 8,192
   bytes yields no `<nav>`; and no error page (each kind, both languages,
-  each route) contains `<nav` or `lang=`. Verified by: `BR-408 AC-04` in
+  each route) contains `<nav`, `hreflang` or `?lang=`, and its only `<a>` is
+  the GitHub link; the `state` value appears only in the consent page's
+  switcher href. Verified by: `BR-408 AC-04` and `BR-143 v4 ...` in
   `tests/auth/proxy-language.test.ts`.
 - **AC-05** (BR-409) — Given a consent page obtained with cookie C, When the
   switcher link is followed with C, Then the pending-consent count is
@@ -291,7 +312,9 @@ No language switch submits a form, re-posts a consent or replays a callback.
   and the new identifier approves normally; given a store filled to 1000
   including that consent, the switch still shows the consent page; and given
   the same switch without the cookie, or the same request without `lang`, or
-  with a different `state`, Then a consent is added and none deleted.
+  with a different `state`, Then a consent is added and none deleted; and
+  given two live consents equal to the request with C, Then only the older one
+  is replaced.
   Verified by: `BR-409 AC-05` in `tests/auth/proxy-language.test.ts`.
 - **AC-06** (BR-410, BR-401) — Given the consent page and every error page in
   both languages, When the headers are read, Then the consent page has one
@@ -376,4 +399,22 @@ None.
 
 ## Stress-test
 
-(Spec reviews pending.)
+Review 1 (31-spec-review-1-reviewer), `changes` on `6a556db`; all findings
+retained (applied by the orchestrator, economical mode agreed with the owner):
+
+1. [major] The switcher href echoes the client's `state`: BR-143 v4 adds that
+   one exception, tested by `BR-143 v4 ...`.
+2. [major] AC-04's "no `lang=`" could never pass with `<html lang>`: it now
+   checks `<nav`, `hreflang`, `?lang=` and the single GitHub `<a>`.
+3. [minor] BR-409 defines field equality and picks the oldest live match;
+   AC-05 adds two matching consents.
+4. [minor] BR-409 records the `SameSite=Lax` cross-site deletion as an
+   accepted nuisance-level residual risk with its precondition.
+5. [minor] BR-406: ASCII range grammar; `*` respects `en;q=0` / `fr;q=0`;
+   example `en;q=0, *` → `fr`.
+6. [minor] BR-405 compares the decoded value (`%66r` valid).
+7. [minor] AC-02 names its reference request and requires deterministic
+   random values on both sides.
+
+D-2 (no switcher on error pages) departs from the owner's wish for a
+switcher on every page; the owner is told at freeze.
