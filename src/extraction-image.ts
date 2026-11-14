@@ -1,8 +1,6 @@
 import { crc32, inflateSync } from "node:zlib";
-import { createJimp } from "@jimp/core";
-import png from "@jimp/js-png";
-import jpeg from "@jimp/js-jpeg";
-import { methods, ResizeStrategy } from "@jimp/plugin-resize";
+import { PNG } from "pngjs";
+import jpeg from "jpeg-js";
 import { ContentFailure } from "./content.js";
 import {
   extractionFail as fail,
@@ -10,16 +8,47 @@ import {
   resultFits,
   type WorkerRequest,
 } from "./extraction-values.js";
-const Jimp = createJimp({ plugins: [methods], formats: [] });
+export interface Bitmap {
+  width: number;
+  height: number;
+  data: Buffer;
+}
 /**
- * BR-318: `ResizeOptions` of `@jimp/plugin-resize` is `any` under
- * `skipLibCheck` with Zod 4 (ADR-009), so the resize call is checked here.
+ * BR-391: nearest-neighbour resize into a new bitmap; destination pixel
+ * (i, j) copies source pixel (floor(i * h / height), floor(j * w / width)).
  */
-export type ImageResizeOptions = {
-  w: number;
-  h: number;
-  mode: ResizeStrategy;
-};
+export function resizeNearest(
+  src: Bitmap,
+  width: number,
+  height: number,
+): Bitmap {
+  const data = Buffer.alloc(width * height * 4);
+  for (let i = 0; i < height; i++) {
+    const iSrc = Math.floor((i * src.height) / height);
+    for (let j = 0; j < width; j++) {
+      const jSrc = Math.floor((j * src.width) / width);
+      src.data.copy(
+        data,
+        (i * width + j) * 4,
+        (iSrc * src.width + jSrc) * 4,
+        (iSrc * src.width + jSrc) * 4 + 4,
+      );
+    }
+  }
+  return { width, height, data };
+}
+/** BR-390: the PNG encode options of every attempt. */
+function encodePng(bitmap: Bitmap): Buffer {
+  const png = new PNG({ width: bitmap.width, height: bitmap.height });
+  png.data = bitmap.data;
+  return PNG.sync.write(png, {
+    deflateLevel: 9,
+    deflateStrategy: 3,
+    filterType: -1,
+    colorType: 6,
+    inputHasAlpha: true,
+  });
+}
 const pngSignature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
 function dimensions(width: number, height: number, budget: number) {
   if (
@@ -175,10 +204,11 @@ export async function extractImage(request: WorkerRequest) {
       request.bytes.byteOffset,
       request.bytes.byteLength,
     );
+  // BR-390: codec exceptions propagate unchanged (D-10).
   const bitmap =
     plan.format === "png"
-      ? png().decode(bytes, { checkCRC: true })
-      : jpeg().decode(bytes, {
+      ? PNG.sync.read(bytes, { checkCRC: true })
+      : jpeg.decode(bytes, {
           tolerantDecoding: false,
           maxResolutionInMP: 1048576 / 1000000,
           maxMemoryUsageInMB: 32,
@@ -189,24 +219,18 @@ export async function extractImage(request: WorkerRequest) {
     bitmap.data.length !== plan.width * plan.height * 4
   )
     fail("CONTENT_UNAVAILABLE");
-  const image = new Jimp({
+  let image: Bitmap = {
     data: Buffer.from(bitmap.data),
     width: bitmap.width,
     height: bitmap.height,
-  });
+  };
   const scale = Math.min(1, 512 / plan.width, 512 / plan.height);
   let width = Math.max(1, Math.floor(plan.width * scale)),
     height = Math.max(1, Math.floor(plan.height * scale));
   for (let attempt = 0; attempt < 10; attempt++) {
-    if (image.bitmap.width !== width || image.bitmap.height !== height) {
-      const options: ImageResizeOptions = {
-        w: width,
-        h: height,
-        mode: ResizeStrategy.NEAREST_NEIGHBOR,
-      };
-      image.resize(options);
-    }
-    const encoded = png().encode(image.bitmap);
+    if (image.width !== width || image.height !== height)
+      image = resizeNearest(image, width, height);
+    const encoded = encodePng(image);
     if (
       resultFits(
         imageResult(request.metadata, width, height, encoded),

@@ -243,13 +243,14 @@ CI fails on any high or critical `npm audit` finding: the `audit` job runs
 allowlisted; there is no advisory ignore list. Moderate and low findings do not
 fail the job and are triaged as tickets.
 
-The F-020 `overrides` in `package.json` move Jimp's nested Zod 3 to the root
-Zod 4 and pin `minimatch` (see
-[ADR-009](architecture-decisions/ADR-009-dependency-overrides-skiplibcheck.md)).
-npm applies `overrides` only in the root project: the container image, built
-with `npm ci` on this repository's lockfile, is covered, but an install of the
-packed tarball or of the published package (`npm install -g`) resolves its
-dependencies afresh and can resolve Jimp's nested Zod 3 again, with its high
-advisory
-([GHSA-mrhx-c7xc-m3w5](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5)).
-That limit is accepted for the beta, fixed before 1.0 in #12.
+An install of the packed tarball or of the published package (`npm install -g`)
+resolves no `zod` below 4.6.6 from the first release that includes #12
+(F-027): the image route uses the dependency-free codecs `pngjs` and `jpeg-js`
+directly (see
+[ADR-010](architecture-decisions/ADR-010-direct-image-codecs.md)), and the CI
+`audit` job checks such an install of the packed tarball with
+`make install-check`. Earlier published versions (`0.6.0-beta.1` and older)
+still resolve Jimp's nested Zod 3 (`zod` 3.25.76,
+[GHSA-mrhx-c7xc-m3w5](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5)) on
+such an install, so their users upgrade to the first release that includes #12
+or use the container image, whose `npm ci` install is not affected.

@@ -1124,7 +1124,7 @@ it.each(Object.keys(concurrencyMutations))(
   },
 );
 
-it("TestBR320_audit_job BR-320 v2 audit job on hosted runners", () => {
+it("TestBR320_audit_job BR-320 v3 audit job on hosted runners", () => {
   const fixture = workflow();
   expect(fixture.jobs.audit).toEqual(expectedAuditJob);
   expect(expectedAuditJob).toEqual({
@@ -1139,6 +1139,7 @@ it("TestBR320_audit_job BR-320 v2 audit job on hosted runners", () => {
       },
       { run: "make setup" },
       { run: "make audit" },
+      { run: "make install-check" },
     ],
   });
   expect(job(fixture, "ci-result").needs).toContain("audit");
@@ -1186,8 +1187,27 @@ const auditMutations: Record<string, (fixture: Workflow) => void> = {
   },
   "make audit moved to another job": (fixture) => {
     const list = steps(fixture, "audit");
-    list.pop();
+    list.splice(2, 1);
     job(fixture, "image").steps.push({ run: "make audit" });
+  },
+  "make install-check dropped": (fixture) => {
+    steps(fixture, "audit").pop();
+  },
+  "make install-check with a flag": (fixture) => {
+    find(fixture, "audit", "make install-check").run =
+      "make install-check ARGS=--offline";
+  },
+  "make install-check moved to another job": (fixture) => {
+    steps(fixture, "audit").pop();
+    job(fixture, "image").steps.push({ run: "make install-check" });
+  },
+  "make install-check added to a gate job": (fixture) => {
+    steps(fixture, "lint").push({ run: "make install-check" });
+  },
+  "make install-check before make audit": (fixture) => {
+    const list = steps(fixture, "audit");
+    const [audit, install] = list.splice(2, 2);
+    if (audit && install) list.push(install, audit);
   },
   "make audit added to a gate job": (fixture) => {
     steps(fixture, "lint").push({ run: "make audit" });
@@ -1230,7 +1250,7 @@ const auditMutations: Record<string, (fixture: Workflow) => void> = {
       matrix: { platform: ["linux/amd64"] },
     };
   },
-  "fourth step": (fixture) => {
+  "fifth step": (fixture) => {
     steps(fixture, "audit").push({ run: "make lint" });
   },
   "other runner": (fixture) => {
@@ -1238,7 +1258,7 @@ const auditMutations: Record<string, (fixture: Workflow) => void> = {
   },
 };
 it.each(Object.keys(auditMutations))(
-  "TestBR320_audit_job BR-015 v7 BR-320 v2 rejects audit mutation: %s",
+  "TestBR320_audit_job BR-015 v7 BR-320 v3 rejects audit mutation: %s",
   (name) => {
     const fixture = workflow();
     auditMutations[name]?.(fixture);

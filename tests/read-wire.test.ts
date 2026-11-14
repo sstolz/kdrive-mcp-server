@@ -1,9 +1,9 @@
 import { expect, it } from "vitest";
-import png from "@jimp/js-png";
+import { decodePng, encodePng } from "./helpers/image-codecs.js";
 import { contentFixture } from "./helpers/content.js";
 import { createWire, initialize } from "./helpers/navigation-wire.js";
 it("TestBR116_complete_images actual SDK has one valid image block and preserves raw resource", async () => {
-  const bytes = png().encode({
+  const bytes = encodePng({
       width: 2,
       height: 1,
       data: Buffer.alloc(8, 255),
@@ -31,7 +31,7 @@ it("TestBR116_complete_images actual SDK has one valid image block and preserves
     expect(result.content.map((c) => c.type)).toEqual(["text", "image"]);
     const base64 = result.content[1]!.data!;
     expect(Buffer.from(base64, "base64").toString("base64")).toBe(base64);
-    const image = png().decode(Buffer.from(base64, "base64"));
+    const image = decodePng(Buffer.from(base64, "base64"));
     expect([image.width, image.height]).toEqual([2, 1]);
     expect(Buffer.byteLength(JSON.stringify(result))).toBeLessThanOrEqual(
       262144,

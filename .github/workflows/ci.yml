@@ -201,6 +201,9 @@
         },
         {
           "run": "make audit"
+        },
+        {
+          "run": "make install-check"
         }
       ]
     },
