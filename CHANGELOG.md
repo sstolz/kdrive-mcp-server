@@ -22,7 +22,7 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
 
 ### Changed
 
-- #4 / F-034 v1 (pending acceptance): `kdrive_read` with `format:"pdf"` extracts
+- #4 / F-034 v2 (pending acceptance): `kdrive_read` with `format:"pdf"` extracts
   text from files written by common generators: cross-reference and object
   streams (PDF 1.5+), incremental updates, linearized files, FlateDecode with
   PNG predictors, ASCII85Decode and ASCIIHexDecode, metadata, annotations and
