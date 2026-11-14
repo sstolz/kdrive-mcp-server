@@ -130,12 +130,12 @@ page.
   `192.31.196.0/24`, `192.52.193.0/24` and `192.175.48.0/24`, and the
   blocked IPv6 ranges inside `2000::/3` also hold `2620:4f:8000::/48`.
   Verified by: AC-07.
-
 - **BR-394 v2** — v1 holds, except that the reasons with `status` 0 also
   include `size` from the BR-306 v2 header bound: it is decided before any
   status line is parsed, even when the oversized block starts with one (a
   503 or a 302 included). A `size` from the body bound keeps the received
-  status (200). Verified by: AC-05.
+  status (200). A terminal `size` deletes a stale entry and gives the 400
+  page under BR-309. Verified by: AC-05, AC-06.
 
 Existing rules this feature relies on without change:
 
@@ -143,8 +143,6 @@ Existing rules this feature relies on without change:
   accepted; only their display changes (BR-129 v6).
 - **BR-393 v3** and **BR-407 v1**: the CIMD lines and the "unnamed client"
   catalogue texts are reused as they are.
-- `size` is an existing BR-394 `reason`; a terminal `size` deletes a stale
-  entry and gives the 400 page under BR-309.
 - **BR-143 v4**: no new event or field; the header bound adds no logged text.
 
 ## Acceptance criteria
@@ -187,18 +185,18 @@ Proxy tests use the fake fetch port, clock and logger of
   given the same `c5` entry at `T + 300` s after the four fetches have
   settled, Then the `c5` request calls the port. Verified by:
   `BR-309 v2 AC-04 a stale entry is served while four fetches are pending`.
-- **AC-05** (BR-306 v2, BR-394 v2) — Given a server whose 200 JSON response has a
-  header block of exactly 8,192 bytes, also when sent in single-byte writes,
-  Then the fetch succeeds; Given one of 8,193 bytes, one that sends
-  20,000 header bytes without `\r\n\r\n` and then stalls, and a 503 and a
-  302 response each with a header block of 8,193 bytes sent in one write,
-  Then each fails as `size`, terminal, status 0, before the 5,000 ms
-  deadline and without a `connection` or `status` failure. Verified by:
+- **AC-05** (BR-306 v2, BR-394 v2) — Given a server whose 200 JSON response has
+  a header block of exactly 8,192 bytes, also when sent in single-byte writes,
+  Then the fetch succeeds; Given one of 8,193 bytes, one that sends 20,000
+  header bytes without `\r\n\r\n` and then stalls, and a 503 and a 302 response
+  each with a header block of 8,193 bytes sent in one write, Then each fails as
+  `size`, terminal, status 0, before the 5,000 ms deadline and without a
+  `connection` or `status` failure. Verified by:
   `BR-306 v2 AC-05 the header block is bounded at 8,192 bytes`.
-- **AC-06** (BR-306 v2, BR-309 v2) — Given a cached client past its fresh
-  end, When the refetch fails as `size`, terminal, status 0, Then authorize
-  gets the 400 page with `client_metadata_refused` `size` status 0 and the
-  entry is deleted (a later transient failure gives the 503 page). Verified
+- **AC-06** (BR-306 v2, BR-309 v2, BR-394 v2) — Given a cached client past its
+  fresh end, When the refetch fails as `size`, terminal, status 0, Then
+  authorize gets the 400 page with `client_metadata_refused` `size` status 0 and
+  the entry is deleted (a later transient failure gives the 503 page). Verified
   by: `BR-306 v2 AC-06 a header overflow on refetch deletes the stale entry`.
 - **AC-07** (BR-307 v2) — Given the production address policy, Then
   `192.31.196.1`, `192.52.193.1`, `192.175.48.1`, `192.175.48.255` and
@@ -271,11 +269,11 @@ Proxy tests use the fake fetch port, clock and logger of
   status was parsed; BR-394 is versioned (AGENTS.md: a new case) because its
   v1 list of status-0 reasons does not name `size`. Rejected: `connection`
   transient (what Node's limit gives today; it would treat oversized
-  headers unlike an oversized body); checking after
-  the status (the outcome would depend on chunking); one cumulative bound
-  over all blocks (no added protection: a finished interim block is not
-  kept, and the 5,000 ms deadline ends the fetch); a new `reason`
-  value (BR-394 and BR-143 changes for a diagnostic only).
+  headers unlike an oversized body); checking after the status (the outcome
+  would depend on chunking); one cumulative bound over all blocks (no added
+  protection: a finished interim block is not kept, and the 5,000 ms deadline
+  ends the fetch); a new `reason` value (a new BR-394 reason and a BR-143
+  change, for a diagnostic only).
 - **D-5 — Only registry entries.** The three IPv4 blocks are the remaining
   entries of the IANA IPv4 Special-Purpose Address Registry (RFC 7535,
   RFC 7450, RFC 7534 and RFC 6890 as updated); `2620:4f:8000::/48` is the
@@ -326,3 +324,14 @@ Spec review 3 (`26-spec-review-3-reviewer`, approve with minors):
 - (minor) Paragraphs not reflowed. Retained: reflowed.
 - (minor) BR-306 v2 in the spec and in its record differed. Retained: the
   spec's server reference dropped; both now match.
+
+Spec review 4 (`26-spec-review-4-reviewer`, approve once the minors are
+fixed):
+
+- (minor) The BR-394 v2 event is asserted by AC-06, not AC-05. Retained:
+  AC-06 tagged BR-394 v2; verified by AC-05 and AC-06.
+- (minor) D-4's rejected new `reason` wording. Retained: reworded.
+- (minor) A `size` note sat under the unchanged rules. Retained: moved into
+  BR-394 v2.
+- (minor) Lines over 80 columns or not reflowed; a loose list. Retained:
+  reflowed; blank line removed.
