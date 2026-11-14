@@ -24,6 +24,7 @@ import {
   listening,
 } from "../helpers/http.js";
 import { navigationFixture } from "../helpers/navigation.js";
+import { TEXTS } from "../helpers/page-texts.js";
 import {
   CLAUDE,
   Clock,
@@ -809,5 +810,163 @@ describe("BR-310 BR-136 v2 token endpoint (AC-07)", () => {
     } finally {
       second.close();
     }
+  });
+});
+
+// ---- F-033 (#26) -------------------------------------------------------------
+
+describe("BR-129 v6 consent display of CIMD names (F-033)", () => {
+  /** Bidi controls and separators, written as escapes only. */
+  const hidden: Array<[string, string]> = [
+    ["U+061C", "\u061c"],
+    ["U+200E", "\u200e"],
+    ["U+200F", "\u200f"],
+    ["U+202A", "\u202a"],
+    ["U+202B", "\u202b"],
+    ["U+202C", "\u202c"],
+    ["U+202D", "\u202d"],
+    ["U+202E", "\u202e"],
+    ["U+2066", "\u2066"],
+    ["U+2067", "\u2067"],
+    ["U+2068", "\u2068"],
+    ["U+2069", "\u2069"],
+    ["U+2028", "\u2028"],
+    ["U+2029", "\u2029"],
+  ];
+
+  async function named(name: string) {
+    const { h, meta, authorize } = await setup();
+    meta.serve.set(CIMD_URL, {
+      body: cimdDocument(CIMD_URL, { client_name: name }),
+    });
+    return { h, authorize };
+  }
+
+  it.each(hidden)(
+    "BR-129 v6 AC-01 a CIMD client_name with %s is shown as unnamed",
+    async (_label, char) => {
+      const { h, authorize } = await named(`Pay${char}Pal`);
+      for (const lang of ["en", "fr"] as const) {
+        const text = TEXTS[lang];
+        const response = await authorize(cimd(), { lang });
+        expect(response.status).toBe(200);
+        const body = response.body;
+        expect(body).toContain(
+          `<p>${text.clientNameLabel} <strong>${text.unnamedClient}</strong></p>`,
+        );
+        expect(body).not.toContain(text.selfDeclaredSuffix);
+        expect(body).not.toContain("Pal");
+        expect(body).not.toContain(char);
+        expect(body).toContain(`<code>${CIMD_URL}</code>`);
+        expect(body).toContain(`${text.clientHostLabel} ${CIMD_HOST}`);
+        expect(body).toContain(text.metadataNotice);
+      }
+      expect(h.logs).toEqual([
+        { name: "client_metadata_fetched", fields: { status: 200, count: 1 } },
+      ]);
+    },
+  );
+
+  it("BR-129 v6 AC-03 names without a bidi control or separator are unchanged", async () => {
+    const shown = [
+      "Caf\u00e9 \u65e5\u672c",
+      "\u05e2\u05d1\u05e8\u05d9\u05ea",
+      "Claude",
+      ...["\u200b", "\u200c", "\u200d", "\u00ad", "\ufeff"].map(
+        (char) => `Pay${char}Pal`,
+      ),
+    ];
+    for (const name of shown) {
+      const { authorize } = await named(name);
+      const response = await authorize();
+      expect(response.status).toBe(200);
+      expect(response.body).toContain(
+        `<strong>${name} ${TEXTS.en.selfDeclaredSuffix}</strong>`,
+      );
+    }
+    const { h, authorize } = await named("Pay\u0007Pal");
+    expectPage(await authorize(), 400);
+    expect(h.logs).toEqual([
+      {
+        name: "client_metadata_refused",
+        fields: { handler: "authorize", reason: "document", status: 200 },
+      },
+    ]);
+  });
+});
+
+describe("BR-309 v2 BR-306 v2 stale entries and header overflow (F-033)", () => {
+  const C5 = `${CIMD_ORIGIN}/c5.json`;
+  const OTHERS = [1, 2, 3, 4].map((n) => `${CIMD_ORIGIN}/p${String(n)}.json`);
+
+  /** `c5` resolved at `start`, then four other URLs left pending. */
+  async function busyWithStale() {
+    const context = await setup();
+    const { h, meta, authorize } = context;
+    expect((await authorize(cimd(C5))).status).toBe(200);
+    const start = h.clock.ms;
+    for (const url of OTHERS) meta.serve.set(url, "pending");
+    const pending = OTHERS.map((url) => authorize(cimd(url)));
+    await vi.waitFor(() => {
+      expect(meta.held).toHaveLength(4);
+    });
+    const settle = async () => {
+      for (const held of meta.held)
+        held.settle({ body: cimdDocument(held.url) });
+      await Promise.all(pending);
+    };
+    return { ...context, start, settle };
+  }
+
+  it("BR-309 v2 AC-04 a stale entry is served while four fetches are pending", async () => {
+    const { h, meta, authorize, start, settle } = await busyWithStale();
+    const logged = h.logs.length;
+    for (const at of [start + 300 * SECOND, start + 3900 * SECOND - 1]) {
+      h.clock.ms = at;
+      const response = await authorize(cimd(C5));
+      expect(response.status).toBe(200);
+      expect(response.body).toContain("Synthetic CIMD client");
+      expect(response.body).toContain(`<code>${C5}</code>`);
+    }
+    expect(meta.count(C5)).toBe(1);
+    expect(h.logs).toHaveLength(logged);
+    const busy = {
+      name: "client_metadata_refused",
+      fields: { handler: "authorize", reason: "busy", status: 0 },
+    };
+    const unknown = `${CIMD_ORIGIN}/none.json`;
+    expectPage(await authorize(cimd(unknown)), 503);
+    expect(h.logs.at(-1)).toEqual(busy);
+    h.clock.ms = start + 3900 * SECOND;
+    expectPage(await authorize(cimd(C5)), 503);
+    expect(h.logs.at(-1)).toEqual(busy);
+    expect(meta.count(C5)).toBe(1);
+    expect(meta.count(unknown)).toBe(0);
+    await settle();
+
+    const again = await busyWithStale();
+    await again.settle();
+    again.h.clock.ms = again.start + 300 * SECOND;
+    expect((await again.authorize(cimd(C5))).status).toBe(200);
+    expect(again.meta.count(C5)).toBe(2);
+  });
+
+  it("BR-306 v2 AC-06 a header overflow on refetch deletes the stale entry", async () => {
+    const { h, meta, authorize } = await setup();
+    expect((await authorize()).status).toBe(200);
+    h.clock.advance(300 * SECOND);
+    meta.serve.set(CIMD_URL, {
+      failure: { reason: "size", status: 0, transient: false },
+    });
+    expectPage(await authorize(), 400);
+    expect(h.logs.at(-1)).toEqual({
+      name: "client_metadata_refused",
+      fields: { handler: "authorize", reason: "size", status: 0 },
+    });
+    meta.serve.set(CIMD_URL, {
+      failure: { reason: "connection", status: 0, transient: true },
+    });
+    expectPage(await authorize(), 503);
+    expect(meta.calls).toHaveLength(3);
   });
 });

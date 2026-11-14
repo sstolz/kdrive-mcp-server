@@ -292,8 +292,19 @@ export interface ConsentView {
   switchQuery?: string;
 }
 
+/** BR-129 v6: bidirectional controls and the line and paragraph separators. */
+const REORDERING = /[\p{Bidi_Control}\u2028\u2029]/u;
+
 /**
- * BR-129 v4 / BR-393 v3 / BR-402 v2: the consent page in the page language;
+ * BR-129 v6: a name that could reorder or break the consent line is shown as
+ * an absent name; every other name is shown as sent.
+ */
+function displayedName(name: string | undefined): string | undefined {
+  return name === undefined || REORDERING.test(name) ? undefined : name;
+}
+
+/**
+ * BR-129 v6 / BR-393 v3 / BR-402 v2: the consent page in the page language;
  * every view value is HTML-escaped.
  */
 export function consentPage(
@@ -302,10 +313,11 @@ export function consentPage(
   language: Language = "en",
 ): ProxyResponse {
   const text = MESSAGES[language];
+  const shown = displayedName(view.clientName);
   const name =
-    view.clientName === undefined
+    shown === undefined
       ? text.unnamedClient
-      : `${escapeHtml(view.clientName)} ${text.selfDeclaredSuffix}`;
+      : `${escapeHtml(shown)} ${text.selfDeclaredSuffix}`;
   const clientId = `<p>${text.clientIdLabel} <code>${escapeHtml(view.clientId)}</code></p>`;
   const clientName = `<p>${text.clientNameLabel} <strong>${name}</strong></p>`;
   const identity = view.cimd

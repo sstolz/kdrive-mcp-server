@@ -28,8 +28,11 @@ const BLOCKED_V4: Array<[string, string, string[]]> = [
   ["172.16.0.0/12", "172.31.255.255", ["172.15.255.255", "172.32.0.0"]],
   ["192.0.0.0/24", "192.0.0.8", ["191.255.255.255", "192.0.1.0"]],
   ["192.0.2.0/24", "192.0.2.1", ["192.0.1.255", "192.0.3.0"]],
+  ["192.31.196.0/24", "192.31.196.1", ["192.31.195.255", "192.31.197.0"]],
+  ["192.52.193.0/24", "192.52.193.1", ["192.52.192.255", "192.52.194.0"]],
   ["192.88.99.0/24", "192.88.99.1", ["192.88.98.255", "192.88.100.0"]],
   ["192.168.0.0/16", "192.168.1.1", ["192.167.255.255", "192.169.0.0"]],
+  ["192.175.48.0/24", "192.175.48.255", ["192.175.47.255", "192.175.49.0"]],
   ["198.18.0.0/15", "198.19.255.255", ["198.17.255.255", "198.20.0.0"]],
   ["198.51.100.0/24", "198.51.100.7", ["198.51.99.255", "198.51.101.0"]],
   ["203.0.113.0/24", "203.0.113.9", ["203.0.112.255", "203.0.114.0"]],
@@ -42,6 +45,7 @@ const BLOCKED_V6: Array<[string, string]> = [
   ["2001::/32 (Teredo)", "2001:0:4136:e378::1"],
   ["2001:db8::/32", "2001:db8::1"],
   ["2002::/16", "2002:808:808::1"],
+  ["2620:4f:8000::/48", "2620:4f:8000::1"],
   ["3fff::/20", "3fff::1"],
 ];
 
@@ -142,6 +146,33 @@ describe("BR-306 BR-307 the fetch refuses a blocked or empty answer without conn
       reason: "blocked_address",
     });
     expect(result.connections).toBe(0);
+  });
+
+  it("BR-307 v2 AC-07 the added ranges are blocked, their neighbours allowed", async () => {
+    for (const address of [
+      "192.31.196.1",
+      "192.52.193.1",
+      "192.175.48.1",
+      "192.175.48.255",
+      "2620:4f:8000::1",
+    ])
+      expect(productionAddressPolicy.allows(address), address).toBe(false);
+    for (const address of [
+      "192.31.195.255",
+      "192.52.194.0",
+      "192.175.49.0",
+      "2620:4f:8001::1",
+    ])
+      expect(productionAddressPolicy.allows(address), address).toBe(true);
+    const result = await attempt(["192.175.48.6"]);
+    expect(result.outcome).toEqual({
+      ok: false,
+      reason: "blocked_address",
+      status: 0,
+      transient: false,
+    });
+    expect(result.connections).toBe(0);
+    expect(result.requests).toBe(0);
   });
 
   it("BR-306 an empty answer fails as resolution, transient", async () => {
