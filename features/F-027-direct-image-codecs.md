@@ -13,8 +13,8 @@ Version 1 frozen 2026-11-13 (autonomous mode, PROJECT.md D-1) on reviewed
 revision `cf27035` after spec reviews 1 (`changes`), 2 and 3 (`approve`),
 published on #12; kept in `features/history/F-027-v1.md`. Version 2
 (2026-11-14) changes only the BR-321 v4 changelog selection and AC-12, see
-`## Stress-test`, Implementation; it is frozen after an independent review
-published on the pull request.
+`## Stress-test`, Implementation; frozen 2026-11-14 on `070d15e` after
+12-code-review-1-reviewer judged it sound and freezable (PR #21).
 Base: branch `claude/beautiful-maxwell-8mdk2w`, based on `main` at
 `768f1b6`. IDs: F-027, BR-389–BR-392 v1, BR-122 v3, BR-315 v2, BR-318 v2,
 BR-320 v3, BR-321 v4; BR-317 superseded by BR-390; ADR-010 (supersedes

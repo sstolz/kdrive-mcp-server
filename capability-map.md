@@ -2,7 +2,7 @@
 
 ## Provisional — direct image codecs (pending acceptance)
 
-[F-027 v1](features/F-027-direct-image-codecs.md) (#12), BR-389–BR-392 v1
+[F-027 v2](features/F-027-direct-image-codecs.md) (#12), BR-389–BR-392 v1
 with BR-122 v3, BR-315 v2, BR-318 v2, BR-320 v3 and BR-321 v4, BR-317
 superseded by BR-390, and
 [ADR-010](architecture-decisions/ADR-010-direct-image-codecs.md); all pending

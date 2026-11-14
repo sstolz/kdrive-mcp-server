@@ -6,7 +6,7 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
 
 ### Added
 
-- #12 / F-027 v1 (pending acceptance): `make install-check` packs the package,
+- #12 / F-027 v2 (pending acceptance): `make install-check` packs the package,
   installs the packed tarball from the npm registry into a new prefix and fails
   on any `zod` below 4.6.6, any former image-library package or any symbolic
   link; the CI `audit` job runs it as its fourth step.
@@ -18,7 +18,7 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
   failing at once with `SERVER_BUSY`; `SERVER_BUSY` is now documented as
   retryable, and stdio writes queued responses in order instead of closing
   the session.
-- #12 / F-027 v1 (pending acceptance): an install of the packed tarball or of
+- #12 / F-027 v2 (pending acceptance): an install of the packed tarball or of
   the published package no longer resolves Zod 3 (`zod` 3.25.76,
   GHSA-mrhx-c7xc-m3w5): the image route calls `pngjs` 7.0.0 and `jpeg-js` 0.4.4
   directly with a local nearest-neighbour resize instead of Jimp, with

@@ -1,7 +1,7 @@
 # ADR-010 — Direct image codecs instead of Jimp
 
 Status: proposed (2026-11-13), design of
-[F-027 v1](../features/F-027-direct-image-codecs.md), ticket #12. Becomes
+[F-027 v2](../features/F-027-direct-image-codecs.md), ticket #12. Becomes
 accepted with the acceptance of F-027 on `main`. Supersedes
 [ADR-009](ADR-009-dependency-overrides-skiplibcheck.md) and the image-codec
 choice (Jimp modules) of

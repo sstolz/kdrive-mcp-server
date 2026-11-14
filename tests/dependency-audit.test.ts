@@ -322,7 +322,7 @@ it.each([
   }).toThrow();
 });
 
-const prose = (text: string) => text.replace(/\s+/gu, " ");
+const prose = (text: string) => text.replaceAll(/\s+/gu, " ");
 function securitySection(security: string): string {
   return (
     /^## Dependency audit\n([\s\S]*?)(?=^## |(?![\s\S]))/mu.exec(
@@ -715,6 +715,9 @@ it("TestBR392_install_check collector walks every node_modules level without fol
     writeFileSync(join(modules, ".bin/tool"), "");
     writePackage(join(outside, "node_modules/zod"), "zod", "3.25.76");
     symlinkSync(outside, join(modules, "e"));
+    symlinkSync(outside, join(modules, "@t"));
+    mkdirSync(join(modules, "@s"));
+    symlinkSync(outside, join(modules, "@s/l"));
     const list = collectInstalled(prefix);
     const byPath = (items: Installed[]) =>
       [...items].sort((x, y) => x.path.localeCompare(y.path));
@@ -733,6 +736,18 @@ it("TestBR392_install_check collector walks every node_modules level without fol
           "lib/node_modules/a/node_modules/b/node_modules/@s/c/node_modules/zod",
         ),
         { name: "e", version: null, path: "lib/node_modules/e", symlink: true },
+        {
+          name: "@t",
+          version: null,
+          path: "lib/node_modules/@t",
+          symlink: true,
+        },
+        {
+          name: "@s/l",
+          version: null,
+          path: "lib/node_modules/@s/l",
+          symlink: true,
+        },
         pkg("@jimp/types", "1.6.1", "lib/node_modules/@jimp/types"),
         pkg("zod", "3.25.76", NESTED),
         pkg("zod", "4.6.7", ZOD),
@@ -741,7 +756,14 @@ it("TestBR392_install_check collector walks every node_modules level without fol
     const result = installVerdict(list);
     expect(result.ok).toBe(false);
     const text = result.findings.join("\n");
-    for (const part of ["zod", "3.25.76", "@jimp/types", "lib/node_modules/e"])
+    for (const part of [
+      "zod",
+      "3.25.76",
+      "@jimp/types",
+      "lib/node_modules/e",
+      "lib/node_modules/@t",
+      "lib/node_modules/@s/l",
+    ])
       expect(text).toContain(part);
     expect(text).not.toContain("4.6.6 ");
   } finally {

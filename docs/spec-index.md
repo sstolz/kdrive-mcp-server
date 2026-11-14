@@ -72,7 +72,7 @@ override the current Docker-only development contract.
 | F-024 | #2      | `features/F-024-gated-publication.md`          | Done v2, accepted on main 163e701 (2026-11-13; v1 in history); BR-353–375, BR-378, BR-379 and BR-016/178 v3 active; BR-376/377 withdrawn, never reused                                                          |
 | F-025 | #2      | `features/F-025-changelog-release-sections.md` | Done v1, accepted on main e857db3 (2026-11-13); BR-321 v3 active (v2 withdrawn in F-024 v2, never reused)                                                                                                       |
 | F-026 | #16     | `features/F-026-bounded-invocation-queue.md`   | Done v1, accepted on main 2d10e19 (2026-11-13); BR-380–388 v1 and BR-258 v2, BR-070 v3, BR-118 v2 active                                                                                                        |
-| F-027 | #12     | `features/F-027-direct-image-codecs.md`        | Frozen v1 (2026-11-13); implementation pending acceptance; BR-389–392 v1 and BR-122 v3, BR-315 v2, BR-318 v2, BR-320 v3, BR-321 v4 pending; BR-317 superseded by BR-390 on acceptance; ADR-010                  |
+| F-027 | #12     | `features/F-027-direct-image-codecs.md`        | Frozen v2 (2026-11-14; v1 2026-11-13); implementation pending acceptance; BR-389–392 v1 and BR-122 v3, BR-315 v2, BR-318 v2, BR-320 v3, BR-321 v4 pending; BR-317 superseded by BR-390 on acceptance; ADR-010   |
 
 Version history: [v1 immutable snapshot](../features/history/F-001-v1.md),
 [v2 immutable snapshot](../features/history/F-001-v2.md),
