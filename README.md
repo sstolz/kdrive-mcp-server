@@ -192,8 +192,17 @@ Key limits:
 - Names given to `kdrive_upload`, `kdrive_create_folder` and `kdrive_rename`
   must be in Unicode NFC (composed form); other forms are refused with
   `INVALID_ARGUMENTS`.
-- `kdrive_read` handles a conservative PDF profile only, so many valid PDFs
-  return `UNSUPPORTED_FORMAT`; images are returned within 512x512 pixels.
+- `kdrive_read` extracts PDF text from a bounded projection of the file (F-034):
+  cross-reference and object streams, incremental updates, FlateDecode with
+  PNG predictors and the ASCII filters, text inside Form XObjects, inline
+  images of known length, and Type 1, TrueType, Type0 and Type3 fonts whose
+  shown codes map through an encoding, a Type 1 built-in encoding or
+  `ToUnicode`. Encrypted files, other filters on text streams, fonts whose text
+  depends on their program and inline images of unknown length return
+  `UNSUPPORTED_FORMAT`; `kdrive_download` returns the bytes of a refused file.
+  A simple font with a Chinese (GBK) font name is read through its declared
+  encoding, so text a viewer would decode as GBK comes out as Latin
+  characters. Images are returned within 512x512 pixels.
 - Listings return at most 256 items per call and continue with single-use
   cursors that expire after five minutes; downloads continue with
   `offset_bytes` and the previous chunk's `etag`.
