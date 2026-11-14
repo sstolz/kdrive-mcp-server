@@ -51,7 +51,11 @@ package changes.
   `docs/spec-index.md` (F-029 row; F-028 row and #3 line say the owner run is
   unblocked once F-029 is accepted), CHANGELOG Unreleased `Changed`.
 - Once F-029 is accepted, the F-028 owner run (F-028 v2 D-13) is unblocked and
-  follows the procedure below. F-028 is not changed.
+  follows the procedure below. The F-028 file (done) is not edited, but its
+  owner-run wording "with `OAUTH_STATE_FILE` set" is replaced by this
+  procedure, which sets `HTTP_ACCEPTANCE_STATE_DIR` instead (BR-397 (1)
+  refuses `OAUTH_STATE_FILE`); the `docs/spec-index.md` F-028 row and #3 line
+  point to this procedure.
 
 ### Out of scope
 
@@ -92,16 +96,23 @@ package changes.
   (`The acceptance state directory is inside the dev checkout.`);
   (5) its physical path equals, lies under or is an ancestor of the secrets
   directory's physical path
-  (`The acceptance state directory overlaps the secrets directory.`);
-  (6) its mode grants any permission to group or others
+  (`The acceptance state directory overlaps the secrets directory.`); the
+  "lies under" branch is defence in depth that the BR-171 v2 "holds other
+  entries" check of the secrets directory already refuses first, so no test
+  reaches it;
+  (6) its mode grants any permission to group or others, read through POSIX
+  `find -prune -perm` tests on the mode bits (ACLs are not read; see D-3)
   (`The acceptance state directory is not private.`);
   (7) it holds an entry, hidden ones included, other than `oauth-state.sqlite`
   and `oauth-state.sqlite-journal`
   (`The acceptance state directory holds other entries.`);
   (8) either of those two entries exists and is a symlink or not a regular
   file (`An acceptance state file is unavailable.`).
-  On success the single `compose run` adds `--volume <physical path>:/run/oauth-state`
-  (read-write) and `-e OAUTH_STATE_FILE=/run/oauth-state/oauth-state.sqlite`.
+  On success the single `compose run` adds
+  `--volume <physical path>:/run/oauth-state` (read-write) and
+  `-e OAUTH_STATE_FILE=/run/oauth-state/oauth-state.sqlite`. The checks and
+  the mount are not atomic (accepted residual risk, as F-012 D-20 for the
+  secrets mount; see D-3).
   Verified by: AC-02, AC-03, AC-05.
 - **BR-171 v3** — v2 holds, except clause (7): the one `compose run` carries
   the v2 arguments and, only when `HTTP_ACCEPTANCE_STATE_DIR` is set, the two
@@ -110,13 +121,23 @@ package changes.
   files; the state directory is the only other mount; no other Make target or
   Compose service mounts either directory, and no tracked file under
   `Makefile`, `compose.yaml`, `scripts/` or `docs/` names a state path inside
-  the checkout. Verified by: AC-03, AC-04.
+  the checkout (as AC-04 scans it). The BR-171 file gets `version: 3`, its
+  `source:` gains `F-029 v1`, a History line "v3 — <date> — F-029 v1 (#25) —
+  optional state directory mount; pending acceptance", and the existing
+  `BR-171 v2 AC-25` tests in `tests/http/acceptance-entry.test.ts` are renamed
+  `BR-171 v3 AC-25` with unchanged assertions. Verified by: AC-03, AC-04.
 - **BR-398** — `docs/oauth-proxy.md`, section "Owner-run acceptance
   composition", states that `HTTP_ACCEPTANCE_STATE_DIR` is optional, that
   without it a restart loses every client and login, the directory
   requirements of BR-397 (absolute, outside the checkout and the secrets
-  directory, owned by the dev container user `DEV_UID`, mode `0700`, holding
-  nothing but the state file and its journal), that it is a credential store
+  directory, owned by the dev container user, mode `0700`, holding nothing
+  but the state file and its journal), that on Linux the host account that
+  owns the directory must have the uid the dev image was built with
+  (`DEV_UID=… make setup`, `docs/development.md`), otherwise the server stops
+  with `OAUTH_STATE_UNAVAILABLE`, that one tunnel and the same
+  `MCP_PUBLIC_URL` must be kept across restarts (a new URL fails startup with
+  `OAUTH_STATE_MISMATCH`; then delete `oauth-state.sqlite` and its `-journal`
+  while stopped and start over), that it is a credential store
   (delete `oauth-state.sqlite` and its `-journal` while stopped to revoke
   everything), shows the command
   `HTTP_ACCEPTANCE_SECRETS_DIR=/abs/secrets HTTP_ACCEPTANCE_STATE_DIR=/abs/state make http-acceptance`,
@@ -133,9 +154,12 @@ package changes.
   `startAcceptance({ env: acceptanceSettings(process.env) })`. Verified by:
   `BR-396 AC-01` in `tests/http/acceptance-composition.test.ts`.
 - **AC-02** (BR-397) — Given the AC-25 fixture checkout with a valid secrets
-  directory and one variant per BR-397 refusal (1)–(8) (for (6) mode `0750`;
-  for (7) a `.hidden` file; for (8) `oauth-state.sqlite` as a symlink and as a
-  directory), When `make http-acceptance` runs with a fake `docker`, Then it
+  directory and one variant per BR-397 refusal (1)–(8), with these
+  sub-cases: (2) a relative path, a `..` component and a `:`; (3) a missing
+  path and a symlink to a directory; (4) the checkout, a directory under it,
+  an ancestor of it and `/`; (5) the secrets directory itself and an ancestor
+  of it; (6) mode `0750` and mode `0701`; (7) a `.hidden` file; (8)
+  `oauth-state.sqlite` as a symlink and as a directory, When `make http-acceptance` runs with a fake `docker`, Then it
   exits 1, stderr is exactly the fixed line, no Docker command or `build`
   runs, and output contains neither path nor file content. Verified by:
   `BR-397 AC-02` in `tests/http/acceptance-entry.test.ts`.
@@ -152,8 +176,9 @@ package changes.
   `compose.yaml`, `scripts/` and `docs/` are scanned, Then only the entry
   script mounts `/run/oauth-state`, only the `http-acceptance` recipe and help
   line, the entry script and `docs/oauth-proxy.md` name
-  `HTTP_ACCEPTANCE_STATE_DIR`, and no file names a state path inside the
-  checkout. Verified by: `BR-171 v3 AC-04` in
+  `HTTP_ACCEPTANCE_STATE_DIR`, no `OAUTH_STATE_FILE=` value is relative or
+  under `/workspace`, and no `oauth-state.sqlite` path appears other than under
+  `/run/oauth-state` or in the `docs/oauth-proxy.md` examples. Verified by: `BR-171 v3 AC-04` in
   `tests/http/acceptance-entry.test.ts`.
 - **AC-05** (BR-396, BR-397, BR-171 v3) — launcher rehearsal of the owner run.
   Given the AC-25 fixture checkout, a fake `docker` that records each argument
@@ -163,7 +188,9 @@ package changes.
   environment of the procedure below, builds the container environment from
   the recorded run arguments only (`-e NAME=value` as given, `-e NAME` from the
   environment passed to `make`, values under a mounted container path mapped
-  to the host directory, and `MCP_HTTP_HOST=0.0.0.0` replaced by `127.0.0.1`
+  to the host directory, mount targets parsed only from recorded `--volume`
+  arguments, the test failing when any `*_FILE` value is not under a recorded
+  mount target, and `MCP_HTTP_HOST=0.0.0.0` replaced by `127.0.0.1`
   for the loopback publish; no other substitution), passes it through
   `acceptanceSettings` into `startAcceptance` with only the test seams
   (`upstream`, `clientMetadataSeam`, `stderr`), follows the procedure steps
@@ -175,7 +202,7 @@ package changes.
   makes a tool call, the run-1 refresh token is exchanged and its access token
   makes a tool call, no authorize, consent or upstream token request happens
   in run 2, and the state directory holds only `oauth-state.sqlite` and at
-  most `oauth-state.sqlite-journal`. Verified by: `BR-396 BR-397 AC-05` in
+  most `oauth-state.sqlite-journal`. Verified by: `BR-396 BR-397 BR-171 v3 AC-05` in
   `tests/http/launcher-state-rehearsal.test.ts`.
 - **AC-06** (BR-398) — Given `docs/oauth-proxy.md` and `make help`, When they
   are read, Then they hold the BR-398 statements and command, and the help
@@ -187,9 +214,13 @@ package changes.
 
 Rehearsed end to end by AC-05 (AGENTS.md §6). Recorded on #3.
 
-1. After pulling main, run `make setup` (learnings 2026-11-10). Create a state
-   directory outside the checkout, owned by your account, `chmod 700`, empty.
-2. Set `MCP_PUBLIC_URL` (the tunnel URL, learnings 2026-11-04),
+1. After pulling main, run `make setup` (learnings 2026-11-10); on Linux your
+   account's uid must be the `DEV_UID` the image was built with
+   (`docs/development.md`). Create a state directory outside the checkout,
+   owned by that account, `chmod 700`, empty.
+2. Start one quick tunnel and keep it running until step 5; set
+   `MCP_PUBLIC_URL` to its URL (learnings 2026-11-04) and keep it for every
+   start below; set
    `OAUTH_ISSUER`, `OAUTH_ALLOWED_SUBJECTS`, `OAUTH_UPSTREAM_CLIENT_ID`,
    `OAUTH_ALLOWED_REDIRECT_URIS` and a placeholder
    `OAUTH_ALLOWED_CLIENT_ID_ORIGINS`; run
@@ -199,8 +230,11 @@ Rehearsed end to end by AC-05 (AGENTS.md §6). Recorded on #3.
 4. Set `OAUTH_ALLOWED_CLIENT_ID_ORIGINS` to that origin, start again with the
    same state directory, connect claude.ai, check that the consent page shows
    the client host, approve, log in upstream, call a tool.
-5. Stop and start the server again with the same settings and directory; call
-   a tool from the same claude.ai conversation without logging in again.
+5. Stop and start the server again with the same settings, tunnel and
+   directory; call a tool from the same claude.ai conversation without logging
+   in again. If the tunnel URL changed, the start fails with
+   `OAUTH_STATE_MISMATCH`: stop, delete `oauth-state.sqlite` and its
+   `-journal`, and start over from step 2.
 6. Record the origin in the client matrix and the result on #3. To clean up,
    stop the server and delete the state directory.
 
@@ -227,8 +261,15 @@ Rehearsed end to end by AC-05 (AGENTS.md §6). Recorded on #3.
   the container replace the key) and no group or other permission, stricter
   than BR-293's no group or other write, because the file is a credential
   store. The owner and uid check stays with the store at startup
-  (`OAUTH_STATE_UNAVAILABLE`); the entry does not duplicate it. Rejected:
-  reusing BR-293's looser mode rule (lets other accounts list the directory).
+  (`OAUTH_STATE_UNAVAILABLE`); the entry does not duplicate it, because on
+  Docker Desktop for macOS bind-mount ownership is mapped and a host-side uid
+  check against `DEV_UID` would refuse valid setups; the Linux uid requirement
+  is documented instead (BR-398). Residual risks accepted: the checks and the
+  mount are not atomic (as F-012 D-20); `--volume` creates a missing host path
+  as root if it disappears between check and mount (the store then refuses
+  it); ACLs can grant access the mode bits do not show. Rejected: reusing
+  BR-293's looser mode rule (lets other accounts list the directory); a
+  host-side owner check (above).
 - **D-4 — The rehearsal drives the entry and the exported filter; Docker is
   emulated by path mapping.** The test runs the real Make recipe and entry
   script, derives the container environment only from the recorded arguments,
@@ -237,8 +278,11 @@ Rehearsed end to end by AC-05 (AGENTS.md §6). Recorded on #3.
   learnings 2026-11-14); spawning `node scripts/http-acceptance.ts` (the real
   upstream needs a network OIDC double and `main()` has no CIMD seam);
   running real Docker in the gate (no Docker in the dev container). Residual
-  gap, covered by the owner run: the bind mount itself and the `DEV_UID`
-  ownership as seen by the store.
+  gaps, covered only by the owner run: the bind mount itself and the uid as
+  seen by the store; `main()`'s own code (AC-01 checks its source text only);
+  SIGINT and close under `compose run --rm` with a TTY; the `:ro` flag and
+  Compose's handling of `-e NAME`; the real upstream provider and CIMD network
+  path.
 - **D-5 — No ADR.** The launcher is owner tooling, outside the package, and the
   change is reversible by removing the variable.
 
@@ -246,4 +290,26 @@ Rehearsed end to end by AC-05 (AGENTS.md §6). Recorded on #3.
 
 ## Stress-test
 
-Not yet reviewed.
+Review 1 (25-spec-review-1-reviewer), `changes` on `dda646d`; all findings
+retained (applied by the orchestrator, economical mode agreed with the owner):
+
+1. [major] Uid requirement: BR-398, step 1 and D-3/D-4 state that on Linux the
+   directory owner's uid must equal the image's `DEV_UID`; the optional
+   host-side owner refusal is rejected (Docker Desktop for macOS maps
+   ownership), see D-3.
+2. [major] Tunnel: steps 2 and 5 and BR-398 keep one tunnel and one
+   `MCP_PUBLIC_URL` across restarts and give the recovery for
+   `OAUTH_STATE_MISMATCH`.
+3. [minor] Scope states that this procedure replaces F-028's
+   "`OAUTH_STATE_FILE` set" wording; the spec-index F-028 row and #3 line
+   point here.
+4. [minor] D-4 lists every part the rehearsal leaves to the owner run.
+5. [minor] AC-05 parses mount targets only from recorded `--volume` arguments
+   and fails on any `*_FILE` value outside them.
+6. [minor] BR-397 (5) "lies under" is marked defence in depth; AC-02 lists its
+   sub-cases.
+7. [minor] AC-04 gives a concrete scan.
+8. [minor] Check-then-mount race, root-created path and ACLs are recorded as
+   residual risks; (6) is read through POSIX mode tests.
+9. [minor] BR-171 v3 source, History line, renamed v2 tests and the AC-05
+   test name are specified.
