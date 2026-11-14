@@ -85,6 +85,24 @@ function sizeOf(trailer: Map<string, PdfValue>) {
   if (size > 65536) fail("LIMIT_EXCEEDED");
   return size;
 }
+/** BR-412: one classic subsection header and its 20-byte entries. */
+function classicSubsection(
+  p: PdfParser,
+  listed: Set<number>,
+  read: (id: number, entry: XrefEntry) => void,
+) {
+  const first = p.integer();
+  subsectionSeparator(p);
+  const count = p.integer();
+  endLine(p);
+  if (first + count > 65536) fail("LIMIT_EXCEEDED");
+  for (let i = 0; i < count; i++) {
+    const id = first + i;
+    if (listed.has(id)) fail("CONTENT_UNAVAILABLE");
+    listed.add(id);
+    read(id, xrefEntry(p));
+  }
+}
 /**
  * BR-412: a classic section. In-use entries go into the table at once; free
  * entries are returned, since a hybrid section's `/XRefStm` entries rank
@@ -100,20 +118,11 @@ function classicSection(source: Buffer, offset: number, table: MergedTable) {
   for (;;) {
     p.skip();
     if (source.toString("latin1", p.pos, p.pos + 7) === "trailer") break;
-    const first = p.integer();
-    subsectionSeparator(p);
-    const count = p.integer();
-    endLine(p);
-    if (first + count > 65536) fail("LIMIT_EXCEEDED");
-    for (let i = 0; i < count; i++) {
-      const id = first + i;
-      if (listed.has(id)) fail("CONTENT_UNAVAILABLE");
-      listed.add(id);
+    classicSubsection(p, listed, (id, entry) => {
       highest = Math.max(highest, id);
-      const entry = xrefEntry(p);
       if (entry.type === 0) free.push(id);
       else table.put(id, () => entry);
-    }
+    });
   }
   p.expect("trailer");
   const trailer = p.value();
