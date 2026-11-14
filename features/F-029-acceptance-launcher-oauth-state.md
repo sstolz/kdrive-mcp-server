@@ -2,13 +2,16 @@
 id: F-029
 title: Persisted OAuth proxy state in the owner-run HTTP acceptance launcher
 ticket: "#25"
-status: draft
+status: frozen
 version: 1
 ---
 
 # F-029 — Persisted OAuth proxy state in the owner-run HTTP acceptance launcher
 
 Author: Claude Opus 5.5 (effort unknown), spec phase, 2026-11-14.
+Frozen 2026-11-14 (autonomous mode, PROJECT.md D-1) on reviewed revision
+`07ba2c6` after spec reviews 1 and 2 (`changes`) and 3 (`approve`), published
+on #25.
 Base: branch `claude/beautiful-maxwell-8mdk2w` at `01b43ff` (main `7a8c239`).
 IDs: F-029; BR-396–BR-398 v1; BR-171 v3. No ADR: the change is confined to
 an owner-run launcher and is cheap to reverse. Next free IDs checked on main
