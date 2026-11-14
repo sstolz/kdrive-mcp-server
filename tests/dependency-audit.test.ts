@@ -1,8 +1,22 @@
-import { readFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { expect, it } from "vitest";
 import type { ResizeOptions } from "@jimp/plugin-resize";
 import { ResizeStrategy } from "@jimp/plugin-resize";
 import type { ImageResizeOptions } from "../src/extraction-image.js";
+import {
+  collectInstalled,
+  installVerdict,
+  type Installed,
+} from "../scripts/install-check.js";
 
 // F-020 (#104): pinned dependency overrides, lockfile resolution, type-check
 // settings and audit documentation.
@@ -417,4 +431,163 @@ it("TestBR321_audit_docs changelog selects the first release section citing #104
       ),
     ),
   ).toBe("## [0.6.0-beta.1] - 2026-11-13");
+});
+
+// BR-392 (F-027, #12): the install check's verdict, collector and npm calls.
+const ZOD = "lib/node_modules/zod";
+const NESTED = "lib/node_modules/@jimp/types/node_modules/zod";
+const pkg = (
+  name: string,
+  version: string | null,
+  path: string,
+): Installed => ({ name, version, path });
+const VERDICTS: [string, Installed[], boolean, string[]][] = [
+  ["zod 4.6.7", [pkg("zod", "4.6.7", ZOD)], true, []],
+  ["zod 4.6.6", [pkg("zod", "4.6.6", ZOD)], true, []],
+  [
+    "a nested zod 3.25.76 under @jimp/types",
+    [pkg("zod", "4.6.7", ZOD), pkg("zod", "3.25.76", NESTED)],
+    false,
+    ["zod", "3.25.76", NESTED],
+  ],
+  ["zod 4.6.5", [pkg("zod", "4.6.5", ZOD)], false, ["zod", "4.6.5", ZOD]],
+  [
+    "zod 4.6.6-beta.1",
+    [pkg("zod", "4.6.6-beta.1", ZOD)],
+    false,
+    ["zod", "4.6.6-beta.1", ZOD],
+  ],
+  ["an unparseable zod version", [pkg("zod", "x", ZOD)], false, ["zod", ZOD]],
+  ["no zod", [], false, ["zod"]],
+  [
+    "a @jimp/core package",
+    [
+      pkg("zod", "4.6.7", ZOD),
+      pkg("@jimp/core", "1.6.1", "lib/node_modules/@jimp/core"),
+    ],
+    false,
+    ["@jimp/core", "lib/node_modules/@jimp/core"],
+  ],
+  [
+    "a zod without version",
+    [
+      pkg("zod", "4.6.7", ZOD),
+      pkg("zod", null, "lib/node_modules/a/node_modules/zod"),
+    ],
+    false,
+    ["zod", "lib/node_modules/a/node_modules/zod"],
+  ],
+  [
+    "a symbolic link",
+    [
+      pkg("zod", "4.6.7", ZOD),
+      { name: "e", version: null, path: "lib/node_modules/e", symlink: true },
+    ],
+    false,
+    ["e", "lib/node_modules/e"],
+  ],
+];
+it.each(VERDICTS)(
+  "TestBR392_install_check verdict on %s",
+  (_name, list, ok, named) => {
+    const result = installVerdict(list);
+    expect(result.ok).toBe(ok);
+    if (ok) expect(result.findings).toEqual([]);
+    else {
+      expect(result.findings.length).toBeGreaterThan(0);
+      const text = result.findings.join("\n");
+      for (const part of named) expect(text).toContain(part);
+    }
+  },
+);
+
+function writePackage(directory: string, name: string, version: string) {
+  mkdirSync(directory, { recursive: true });
+  writeFileSync(
+    join(directory, "package.json"),
+    JSON.stringify({ name, version }),
+  );
+}
+it("TestBR392_install_check collector walks every node_modules level without following links", () => {
+  const prefix = mkdtempSync(join(tmpdir(), "kdrive-install-tree-"));
+  const outside = mkdtempSync(join(tmpdir(), "kdrive-install-outside-"));
+  try {
+    const modules = join(prefix, "lib/node_modules");
+    writePackage(join(modules, "zod"), "zod", "4.6.7");
+    writePackage(join(modules, "@jimp/types"), "@jimp/types", "1.6.1");
+    writePackage(
+      join(modules, "@jimp/types/node_modules/zod"),
+      "zod",
+      "3.25.76",
+    );
+    writePackage(join(modules, "a"), "a", "1.0.0");
+    writePackage(join(modules, "a/node_modules/b"), "b", "1.0.0");
+    writePackage(
+      join(modules, "a/node_modules/b/node_modules/@s/c"),
+      "@s/c",
+      "1.0.0",
+    );
+    writePackage(
+      join(modules, "a/node_modules/b/node_modules/@s/c/node_modules/zod"),
+      "zod",
+      "4.6.6",
+    );
+    mkdirSync(join(modules, "d"));
+    mkdirSync(join(modules, ".bin"));
+    writeFileSync(join(modules, ".bin/tool"), "");
+    writePackage(join(outside, "node_modules/zod"), "zod", "3.25.76");
+    symlinkSync(outside, join(modules, "e"));
+    const list = collectInstalled(prefix);
+    const byPath = (items: Installed[]) =>
+      [...items].sort((x, y) => x.path.localeCompare(y.path));
+    expect(byPath(list)).toEqual(
+      byPath([
+        pkg("a", "1.0.0", "lib/node_modules/a"),
+        pkg("b", "1.0.0", "lib/node_modules/a/node_modules/b"),
+        pkg(
+          "@s/c",
+          "1.0.0",
+          "lib/node_modules/a/node_modules/b/node_modules/@s/c",
+        ),
+        pkg(
+          "zod",
+          "4.6.6",
+          "lib/node_modules/a/node_modules/b/node_modules/@s/c/node_modules/zod",
+        ),
+        { name: "e", version: null, path: "lib/node_modules/e", symlink: true },
+        pkg("@jimp/types", "1.6.1", "lib/node_modules/@jimp/types"),
+        pkg("zod", "3.25.76", NESTED),
+        pkg("zod", "4.6.7", ZOD),
+      ]),
+    );
+    const result = installVerdict(list);
+    expect(result.ok).toBe(false);
+    const text = result.findings.join("\n");
+    for (const part of ["zod", "3.25.76", "@jimp/types", "lib/node_modules/e"])
+      expect(text).toContain(part);
+    expect(text).not.toContain("4.6.6 ");
+  } finally {
+    rmSync(prefix, { recursive: true, force: true });
+    rmSync(outside, { recursive: true, force: true });
+  }
+});
+
+it("TestBR392_install_check both npm calls prefer online with a numeric timeout", () => {
+  const source = readFileSync("scripts/install-check.ts", "utf8");
+  const calls = [
+    ...source.matchAll(
+      /execFileSync\(\s*(?:\/\/[^\n]*\n\s*)?"npm",\s*\[([^\]]*)\],\s*\{([^}]*)\}/gu,
+    ),
+  ];
+  expect(calls).toHaveLength(2);
+  const [pack, install] = calls;
+  expect(pack?.[1]).toMatch(
+    /"pack",\s*"--json",\s*"--ignore-scripts",\s*"--prefer-online"/u,
+  );
+  expect(pack?.[2]).toMatch(/timeout: 120000\b/u);
+  expect(install?.[1]).toMatch(
+    /"install",\s*"--global",\s*"--prefix",\s*prefix,\s*tarball,\s*"--ignore-scripts",\s*"--no-audit",\s*"--no-fund",\s*"--prefer-online"/u,
+  );
+  expect(install?.[2]).toMatch(/timeout: 600000\b/u);
+  expect(source).not.toMatch(/from "(?!node:)/u);
 });
