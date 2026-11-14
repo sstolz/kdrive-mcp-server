@@ -854,9 +854,9 @@ and BR-306, BR-307 and BR-309 to v2, with no new BR ID. All are pending
 acceptance; BR-129 v5 and BR-306, BR-307 and BR-309 v1 stay the accepted rules
 until then.
 
-| ID                  | Version | Rule                                                                           | Source                                          | Status             |
-| ------------------- | ------- | ------------------------------------------------------------------------------ | ----------------------------------------------- | ------------------ |
-| [BR-129](BR-129.md) | v6      | A client name with a `Cf`, U+2028 or U+2029 code point is shown as unnamed.    | [F-033 v1](../features/F-033-cimd-hardening.md) | Pending acceptance |
-| [BR-306](BR-306.md) | v2      | Response header block at most 8,192 bytes; beyond, `size`, terminal, status 0. | [F-033 v1](../features/F-033-cimd-hardening.md) | Pending acceptance |
-| [BR-307](BR-307.md) | v2      | Adds the AS112, AMT and AS112 direct-delegation blocks (IPv4 and IPv6).        | [F-033 v1](../features/F-033-cimd-hardening.md) | Pending acceptance |
-| [BR-309](BR-309.md) | v2      | A usable stale entry is served before the four-fetch cap answers `busy`.       | [F-033 v1](../features/F-033-cimd-hardening.md) | Pending acceptance |
+| ID                  | Version | Rule                                                                                      | Source                                          | Status             |
+| ------------------- | ------- | ----------------------------------------------------------------------------------------- | ----------------------------------------------- | ------------------ |
+| [BR-129](BR-129.md) | v6      | A name with a Bidi_Control, U+2028 or U+2029 code point is shown as unnamed.              | [F-033 v1](../features/F-033-cimd-hardening.md) | Pending acceptance |
+| [BR-306](BR-306.md) | v2      | Every header block, `1xx` included, at most 8,192 bytes before parsing; `size`, status 0. | [F-033 v1](../features/F-033-cimd-hardening.md) | Pending acceptance |
+| [BR-307](BR-307.md) | v2      | Adds the AS112, AMT and AS112 direct-delegation blocks (IPv4 and IPv6).                   | [F-033 v1](../features/F-033-cimd-hardening.md) | Pending acceptance |
+| [BR-309](BR-309.md) | v2      | A usable stale entry is served before the four-fetch cap answers `busy`.                  | [F-033 v1](../features/F-033-cimd-hardening.md) | Pending acceptance |

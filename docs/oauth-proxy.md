@@ -235,19 +235,29 @@ instead of asking the client to register.
   or credential. No redirect is followed: only status 200 with an
   `application/json` or `application/<name>+json` body of at most 5,120 bytes,
   not compressed, received within 5,000 ms, is accepted.
+- Header bound (F-033, pending acceptance): each response header block,
+  interim `1xx` blocks included, has at most 8,192 bytes. The bound is
+  checked on the received bytes before the status and media type, so an
+  oversized block is refused as `size` with `status` 0 whatever its status;
+  Node's own header limit is set to 16,384 bytes for the fetch, whatever
+  `--max-http-header-size` says.
 - The host is resolved once through c-ares (`resolve4` and `resolve6`, 2,000 ms
   per try, 2 tries, cancelled at the deadline), never through the libuv
   threadpool. Every address must pass the address policy (IPv4 outside the
   private, loopback, link-local, shared, documentation, benchmark, multicast
   and reserved ranges; IPv6 only inside `2000::/3`, without Teredo, 6to4 and
   the documentation ranges), and the connection is pinned to the checked
-  addresses.
+  addresses. F-033, pending acceptance, also refuses the AS112, AMT and
+  AS112 direct-delegation blocks: `192.31.196.0/24`, `192.52.193.0/24`,
+  `192.175.48.0/24` and `2620:4f:8000::/48`.
 - At most four concurrent fetches; a fifth authorization request gets the 503
   page. Valid documents are cached in memory (at most 100 entries) for their
   `max-age` clamped to 60–3,600 s, 60 s with `no-store` or `no-cache`, 300 s
   otherwise; failures are never cached. After expiry a document stays usable
   for 3,600 s when the refetch fails transiently (timeout, connection, DNS,
-  429 or 5xx).
+  429 or 5xx). F-033, pending acceptance: while four fetches are pending, a
+  URL whose cached document is past its `max-age` but still usable is served
+  from the cache instead of the 503 page.
 - The fetch uses a dedicated agent: it ignores proxy variables
   (`NODE_USE_ENV_PROXY`, `HTTPS_PROXY`, `HTTP_PROXY`, `NO_PROXY`), so CIMD is
   unusable where egress must go through a proxy, and it always verifies the
@@ -286,6 +296,13 @@ instead of asking the client to register.
 - A TLS-intercepting proxy in front of the container is outside the threat
   model; a deployment whose egress must go through a proxy cannot use CIMD.
 - The 503 page during a remote outage, when no stale document is cached.
+- Client names (F-033, pending acceptance): a name with a bidirectional
+  control character, U+2028 or U+2029 is shown as an unnamed client; other
+  format characters are shown as sent, so two names that differ only by an
+  invisible character look the same, as look-alike letters already allow. A
+  name of up to 200 combining marks can draw over the client ID and host
+  lines above it; the page does not clip it, since that would change the
+  page's style and its Content-Security-Policy hash.
 
 ## HTTP server (F-012, pending acceptance)
 

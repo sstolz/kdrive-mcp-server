@@ -10,7 +10,7 @@ version: 1
 
 Author: Claude Opus 5.5 (effort unknown), spec phase, 2026-11-14.
 Base: branch `claude/beautiful-maxwell-8mdk2w` (main `2b08013`).
-IDs: F-033; BR-129 v6; BR-306 v2; BR-307 v2; BR-309 v2; AC-01–AC-07. No ADR:
+IDs: F-033; BR-129 v6; BR-306 v2; BR-307 v2; BR-309 v2; AC-01–AC-09. No ADR:
 one display check, one branch in the resolver, one byte bound and four
 address ranges, nothing persisted, cheap to reverse.
 Next free IDs checked on main (`docs/spec-index.md`, `business-rules/`):
@@ -38,7 +38,11 @@ page.
 3. **Header bytes.** `watchBodyBytes` in `client-metadata-fetch.ts`
    concatenates socket chunks until `\r\n\r\n`. Only Node's header limit
    (16 KiB by default, then a `connection` failure) and the 5,000 ms deadline
-   bound that buffer.
+   bound that buffer. The watcher stops counting after the first block, so
+   the final block after an interim `1xx` block is bounded by Node alone, and
+   Node's parser, whose `data` listener is attached before the request emits
+   `socket`, sees each chunk before the watcher: a complete oversized block
+   reaches the status and media-type checks first.
 4. **Address ranges.** The BR-307 IPv4 list omits three entries of the IANA
    IPv4 Special-Purpose Address Registry: `192.31.196.0/24` (AS112-v4),
    `192.52.193.0/24` (AMT) and `192.175.48.0/24` (Direct Delegation AS112
@@ -47,12 +51,19 @@ page.
 
 ## Scope
 
-- BR-129 v6: the consent page shows a client name that holds a format or
-  separator character as an unnamed client, for CIMD and registered clients.
+- BR-129 v6: the consent page shows a client name that holds a
+  bidirectional control (Bidi_Control), U+2028 or U+2029 as an unnamed
+  client, for CIMD and registered clients.
 - BR-309 v2: a usable stale entry is served before the in-flight cap check.
-- BR-306 v2: the response header block is bounded at 8,192 bytes; beyond
-  that the fetch fails as `size`, terminal, status 0.
+- BR-306 v2: each response header block, interim `1xx` blocks included, is
+  bounded at 8,192 bytes, checked before Node's parser and before the
+  status, `Content-Type` and `Content-Encoding` checks; beyond that the fetch
+  fails as `size`, terminal, status 0. The request sets `maxHeaderSize`
+  16,384.
 - BR-307 v2: the four ranges above join the blocked lists.
+- `docs/oauth-proxy.md`: the address-policy list, the in-flight cap
+  sentence, the header bound and the accepted residual risks, each marked as
+  F-033 pending acceptance.
 
 ### Out of scope
 
@@ -61,8 +72,13 @@ page.
   or registration with a format character in its name stays valid (D-1).
 - Bidi isolation markup (`<bdi>`, `unicode-bidi: isolate`) on the consent
   page, and strong right-to-left letters in names (legitimate text).
-- Interim `1xx` responses in the byte watcher, Node's own header limit, and
-  any change to the body bound of BR-306.
+- Names with format characters outside Bidi_Control (for example U+00AD,
+  U+200B, U+200C, U+200D, U+FEFF or tag characters): shown as sent (D-1).
+- CSS clipping of the name line (it would change the BR-401 CSP style
+  hash); the overflow of stacked combining marks is an accepted residual
+  (D-1).
+- Any change to the body bound of BR-306, and to how Node handles an interim
+  `1xx` response other than bounding its header block.
 - IPv4 ranges that are not in the special-purpose registry (for example
   public anycast resolvers) and IPv6 entries already blocked (`2001::/23`
   holds `2001:4:112::/48` and `2001:3::/32`; everything outside `2000::/3`
@@ -71,16 +87,20 @@ page.
 
 ## Business rules
 
-- **BR-129 v6** — v5 holds, except that a client name that contains a code
-  point of general category `Cf` (the runtime's `\p{Cf}`), U+2028 LINE
+- **BR-129 v6** — v5 holds, except that a client name that contains a code point
+  with the Unicode property Bidi_Control (the runtime's `\p{Bidi_Control}`:
+  U+061C, U+200E, U+200F, U+202A–U+202E and U+2066–U+2069), U+2028 LINE
   SEPARATOR or U+2029 PARAGRAPH SEPARATOR is displayed exactly as an absent
   name: the page language's "unnamed client" text (BR-407), without the
   self-declared suffix and without any part of the name. This applies to CIMD
-  clients and to registered clients alike, whether the client was registered
-  in this process or loaded from the state file. Nothing else changes: the
-  name is still accepted, stored, snapshotted and echoed in the registration
-  response as before, no event is logged, and the rest of the page (the
-  BR-393 lines included) is unchanged. Verified by: AC-01–AC-03.
+  clients and to registered clients alike, whether the client was registered in
+  this process or loaded from the state file. Nothing else changes: the name is
+  still accepted, stored, snapshotted and echoed in the registration response as
+  before, no event is logged, and the rest of the page (the BR-393 lines
+  included) is unchanged. A name with any other format character (for example
+  U+200B, U+200C, U+200D, U+00AD, U+FEFF or a tag character) is shown as sent,
+  escaped and with the self-declared suffix, as under v5. Verified by:
+  AC-01–AC-03.
 - **BR-309 v2** — v1 holds, except that when an authorization request finds
   no fresh entry and no fetch in flight for its URL while 4 fetches are in
   flight, it is answered from that URL's stale entry when one exists and its
@@ -89,14 +109,22 @@ page.
   was. Only without such an entry does the request get the
   503 HTML error page with `client_metadata_refused` `busy`. Verified by:
   AC-04.
-- **BR-306 v2** — v1 holds, except that the header block of the response
-  (the bytes from the first response byte through the `\r\n\r\n` that ends
-  the headers, inclusive) has at most 8,192 bytes. As soon as more than
-  8,192 bytes have been received and none of the first 8,192 completes the
-  block, the fetch fails as `size`, terminal, with `status` 0 (no response
-  status was parsed), and no further header byte is buffered. The bound runs
-  before Node's own header limit (16,384 bytes by default) can apply.
-  Verified by: AC-05, AC-06.
+- **BR-306 v2** — v1 holds, except that every header block of the response
+  has at most 8,192 bytes. A header block is the bytes from its status line
+  through the `\r\n\r\n` that ends it, inclusive; each interim `1xx` block
+  and the final block are bounded separately, the count restarting at the
+  byte after an interim block. The bound is checked on each received chunk
+  before Node's HTTP parser receives that chunk (the byte watcher's `data`
+  listener is added with `socket.prependListener`, since Node's client
+  attaches its parser listener before it emits `socket`), and therefore
+  before the status, `Content-Type` and `Content-Encoding` checks. As soon as
+  more than 8,192 bytes of one block have been received and none of its
+  first 8,192 completes it, the fetch fails as `size`, terminal, with
+  `status` 0, whatever status line the block starts with, and no further
+  header byte is buffered. The request sets Node's `maxHeaderSize` to 16,384
+  bytes (as `src/http/server.ts` does for the server), so Node's own limit
+  stays above the bound whatever `--max-http-header-size` says. Verified by:
+  AC-05, AC-06, AC-08, AC-09.
 - **BR-307 v2** — v1 holds, except that the blocked IPv4 ranges also hold
   `192.31.196.0/24`, `192.52.193.0/24` and `192.175.48.0/24`, and the
   blocked IPv6 ranges inside `2000::/3` also hold `2620:4f:8000::/48`.
@@ -108,9 +136,11 @@ Existing rules this feature relies on without change:
   accepted; only their display changes (BR-129 v6).
 - **BR-393 v3** and **BR-407 v1**: the CIMD lines and the "unnamed client"
   catalogue texts are reused as they are.
-- **BR-394 v1**: `size` is an existing `reason`; its `status` is 0 because no
-  response status was received. A terminal `size` deletes a stale entry and
-  gives the 400 page under BR-309.
+- **BR-394 v1**: `size` is an existing `reason`. A header-bound `size`
+  always has `status` 0: BR-306 v2 decides it before any status line is
+  parsed, even when the oversized block starts with one (a 503 or a 302
+  included), so no response status was received in BR-394's sense. A
+  terminal `size` deletes a stale entry and gives the 400 page under BR-309.
 - **BR-143 v4**: no new event or field; the header bound adds no logged text.
 
 ## Acceptance criteria
@@ -119,28 +149,30 @@ Proxy tests use the fake fetch port, clock and logger of
 `tests/auth/proxy-cimd.test.ts`; fetch tests use the local TLS servers of
 `tests/auth/cimd-fetch.test.ts`.
 
-- **AC-01** (BR-129 v6) — Given a CIMD document whose `client_name` is
-  `Pay` followed by each of U+00AD, U+200B, U+200E, U+202E, U+2066, U+FEFF,
-  U+2028 or U+2029 and then `Pal`, When authorize resolves it with `lang=en`
-  and with `lang=fr`, Then the consent page is 200, its name line holds
+- **AC-01** (BR-129 v6) — Given a CIMD document whose `client_name` is `Pay`
+  followed by each of U+061C, U+200E, U+200F, U+202A, U+202E, U+2066, U+2069,
+  U+2028 or U+2029 and then `Pal`, When authorize resolves it with `lang=en` and
+  with `lang=fr`, Then the consent page is 200, its name line holds
   `unnamed client` (`client sans nom`) and no self-declared suffix, the page
   contains neither `Pal` nor the character, the client ID, host and notice
   lines are present, and no event is logged. Verified by:
   `BR-129 v6 AC-01 a CIMD client_name with %s is shown as unnamed`.
-- **AC-02** (BR-129 v6) — Given a registration with `client_name`
-  `Pay‮laPyaP`, Then it gets 201 and the response echoes that name
-  unchanged; When that client's authorization request is shown, Then the
-  name line holds `unnamed client` and the page contains neither U+202E nor
-  `laPyaP`; and
-  given `oauthStateFile` set, When a proxy reopened from the file shows the
-  same client's consent page, Then it is the same. Verified by:
+- **AC-02** (BR-129 v6) — Given a registration with `client_name` `Pay`
+  U+202E `laPyaP` (written with an escape in the test, never as a literal
+  character), Then it gets 201 and the response echoes that name unchanged;
+  When that client's authorization request is shown, Then the name line
+  holds `unnamed client` and the page contains neither U+202E nor `laPyaP`;
+  and given `oauthStateFile` set, When a proxy reopened from the file shows
+  the same client's consent page, Then it is the same. Verified by:
   `BR-129 v6 AC-02 a registered client_name with a format character is shown
   as unnamed` in `tests/auth/proxy-consent.test.ts`.
-- **AC-03** (BR-129 v6, BR-308 v1) — Given CIMD names `Café 日本`, `עברית`
-  and `Claude`, Then each is shown escaped with the self-declared suffix as
-  today; and given a CIMD name holding U+0007, Then authorize gets the 400
-  page with `client_metadata_refused` `document`, as today. Verified by:
-  `BR-129 v6 AC-03 names without format characters are unchanged`.
+- **AC-03** (BR-129 v6, BR-308 v1) — Given CIMD names `Café 日本`, `עברית`,
+  `Claude`, and `Pay` followed by each of U+200B, U+200C, U+200D, U+00AD or
+  U+FEFF and then `Pal`, Then each is shown escaped with the self-declared
+  suffix as today, the format character included unchanged; and given a CIMD
+  name holding U+0007, Then authorize gets the 400 page with
+  `client_metadata_refused` `document`, as today. Verified by: `BR-129 v6 AC-03
+  names without a bidi control or separator are unchanged`.
 - **AC-04** (BR-309 v2) — Given URL `c5` resolved at `T` (fresh 300 s) and
   four other URLs with pending fetches, When `c5` is requested at
   `T + 300` s and at `T + 3,900` s − 1 ms, Then each gets the consent page of
@@ -152,10 +184,11 @@ Proxy tests use the fake fetch port, clock and logger of
   `BR-309 v2 AC-04 a stale entry is served while four fetches are pending`.
 - **AC-05** (BR-306 v2) — Given a server whose 200 JSON response has a
   header block of exactly 8,192 bytes, also when sent in single-byte writes,
-  Then the fetch succeeds; Given one of 8,193 bytes, and one that sends
-  20,000 header bytes without `\r\n\r\n` and then stalls, Then each fails as
-  `size`, terminal, status 0, before the 5,000 ms deadline and without a
-  `connection` failure. Verified by:
+  Then the fetch succeeds; Given one of 8,193 bytes, one that sends
+  20,000 header bytes without `\r\n\r\n` and then stalls, and a 503 and a
+  302 response each with a header block of 8,193 bytes sent in one write,
+  Then each fails as `size`, terminal, status 0, before the 5,000 ms
+  deadline and without a `connection` or `status` failure. Verified by:
   `BR-306 v2 AC-05 the header block is bounded at 8,192 bytes`.
 - **AC-06** (BR-306 v2, BR-309 v2) — Given a cached client past its fresh
   end, When the refetch fails as `size`, terminal, status 0, Then authorize
@@ -170,22 +203,45 @@ Proxy tests use the fake fetch port, clock and logger of
   connecting. Verified by: `BR-307 blocks a sample inside %s` (rows added)
   and `BR-307 v2 AC-07 the added ranges are blocked, their neighbours
   allowed` in `tests/auth/cimd-address.test.ts`.
+- **AC-08** (BR-306 v2) — Given a child process started with
+  `NODE_OPTIONS=--max-http-header-size=4096` (spawned with
+  `process.execPath` and a helper `tests/helpers/cimd-header-child.mjs`, as
+  the proxy-variable child test of `tests/auth/cimd-fetch.test.ts` does),
+  When its production port fetches a 200 JSON response with a header block of
+  8,192 bytes and then one of 8,193 bytes, Then the first succeeds and the
+  second fails as `size`, terminal, status 0, not as `connection`. Verified
+  by: `BR-306 v2 AC-08 the 8,192-byte header bound decides with
+  --max-http-header-size=4096 in a child process` in
+  `tests/auth/cimd-fetch.test.ts`.
+- **AC-09** (BR-306 v2) — Given a server that sends an interim
+  `103 Early Hints` block and then a 200 JSON response whose final header
+  block has 8,193 bytes, Then the fetch fails as `size`, terminal, status 0;
+  given an interim block of 8,193 bytes, Then the same; and given an interim
+  block of 8,192 bytes followed by a final 200 JSON block of 8,192 bytes,
+  Then the fetch succeeds (each block is bounded on its own). Verified by:
+  `BR-306 v2 AC-09 each interim and final header block is bounded at 8,192
+  bytes` in `tests/auth/cimd-fetch.test.ts`.
 
 ## Decisions
 
-- **D-1 — Display the name as absent, not refuse the document.** Format
-  characters are legitimate in real names (U+200C in Persian, U+200D in
-  emoji sequences), the name is self-declared and secondary to the client
-  ID and host (BR-393), and the consent page already has an "unnamed client"
-  line. Rejected: refusing the document or registration (locks out a
-  working client over a display detail and makes `\p{Cc}` and `\p{Cf}`
-  behave alike only by making both fatal); stripping the characters (shows a
-  name the client did not send and still lets invisible characters merge
-  two names); checking at intake under BR-308 and BR-127 (misses registered
-  clients already in the state file, and needs two rule changes instead of
-  one). U+2028 and U+2029 are added because they are bidi paragraph
-  separators that can break the line; other `Z` and `C` categories are not
-  needed by the threat.
+- **D-1 — Bidi controls and separators shown as absent, not refused.**
+  Bidirectional controls and U+2028/U+2029 are what lets a name reorder or
+  break the consent line; the name is self-declared and secondary to the
+  client ID and host (BR-393), and the consent page already has an "unnamed
+  client" line. Other format characters change no order outside the name
+  and are legitimate in real names (U+200C in Persian, U+200D in emoji
+  sequences, tag characters in flag emoji), so they are shown as sent.
+  Rejected: all of `\p{Cf}` (shows working names such as emoji sequences as
+  unnamed for no reordering threat); refusing the document or registration
+  (locks out a working client over a display detail); stripping the
+  characters (shows a name the client did not send); checking at intake
+  under BR-308 and BR-127 (misses registered clients already in the state
+  file, and needs two rule changes instead of one); clipping the name line
+  in CSS (changes the BR-401 CSP style hash for a display detail). Accepted
+  residuals, listed in `docs/oauth-proxy.md`: a name of up to 200 combining
+  marks can draw over the client ID and host lines, and two names that differ
+  only by invisible characters look the same, as look-alike letters already
+  allow.
 - **D-2 — Registered clients included.** The same name line shows a
   registered client's `client_name`, and open registration (BR-127) lets any
   caller with an allowlisted redirect URI choose it, so the risk is the same.
@@ -193,14 +249,23 @@ Proxy tests use the fake fetch port, clock and logger of
   use takes none and already answers a transient failure, so `busy` is
   treated as one more transient condition. Rejected: queueing for a slot
   (holds a request open on an unauthenticated route).
-- **D-4 — 8,192 header bytes, `size` terminal.** 8,192 is below Node's
-  16,384 default, so the outcome is decided by this rule and never by a race
-  with the parser, and far above the headers a static document host sends.
-  `size` is the existing reason for an oversized response and is terminal
-  like the body bound; `status` 0 follows BR-394 since no status was parsed.
-  Rejected: `connection` transient (what Node's limit gives today; it would
-  keep serving a stale entry from a host that misbehaves on purpose); a new
-  `reason` value (BR-394 and BR-143 changes for a diagnostic only).
+- **D-4 — 8,192 bytes per header block, checked first, `size` terminal.**
+  `size` is terminal for consistency with the body bound of BR-306: an
+  oversized response fails the same way whether its headers or its body
+  pass the bound. The count runs on raw bytes before Node's parser sees a
+  chunk, so an oversized block gives `size`, status 0, whatever its status
+  line and however its bytes are split, never `status` or `content_type`
+  depending on the chunking. 8,192 is far above the headers a static
+  document host sends, and `maxHeaderSize` 16,384 on the request keeps
+  Node's limit above it whatever `--max-http-header-size` says. Each
+  interim `1xx` block is bounded too, so no block escapes the bound by
+  following an interim one. `status` 0 follows BR-394 since no status was
+  parsed. Rejected: `connection` transient (what Node's limit gives today;
+  it would treat oversized headers unlike an oversized body); checking after
+  the status (the outcome would depend on chunking); one cumulative bound
+  over all blocks (no added protection: a finished interim block is not
+  kept, and the 5,000 ms deadline ends the fetch); a new `reason`
+  value (BR-394 and BR-143 changes for a diagnostic only).
 - **D-5 — Only registry entries.** The three IPv4 blocks are the remaining
   entries of the IANA IPv4 Special-Purpose Address Registry (RFC 7535,
   RFC 7450, RFC 7534 and RFC 6890 as updated); `2620:4f:8000::/48` is the
@@ -216,4 +281,22 @@ None.
 
 ## Stress-test
 
-Pending spec review.
+Spec review 1 (`26-spec-review-1-reviewer`, changes); all findings
+retained:
+
+- (major) The header bound ran after Node's parser, so an oversized 503 or
+  302 sent in one write was answered as `status`. Retained: BR-306 v2 checks
+  every block before the parser and the status, `Content-Type` and
+  `Content-Encoding` checks, always `size` status 0; AC-05 rows added;
+  BR-394 wording reworded.
+- (minor) Node's limit follows `--max-http-header-size`. Retained:
+  `maxHeaderSize` 16,384 on the request; AC-08 runs in a child process.
+- (minor) D-4 gave no sound reason for terminal, and `1xx` blocks escaped
+  the bound. Retained: consistency with the body bound; every block bounded;
+  AC-09.
+- (minor) AC-02 held a literal U+202E. Retained: written as `Pay` U+202E
+  `laPyaP`; the diff holds no literal bidi or format character.
+- (minor) `\p{Cf}` hid legitimate names. Retained: Bidi_Control plus U+2028
+  and U+2029 (D-1, AC-01, AC-03); no CSS clipping, combining marks recorded
+  as a residual.
+- (minor) `docs/oauth-proxy.md` was stale. Retained: added to the scope.
