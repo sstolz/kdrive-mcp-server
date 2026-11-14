@@ -12,8 +12,8 @@ Author: Claude Opus 5.5 (effort unknown), spec phase, 2026-11-14.
 Version 1 frozen 2026-11-14 (autonomous mode, PROJECT.md D-1) on reviewed
 revision `07ba2c6` after spec reviews 1 and 2 (`changes`) and 3 (`approve`),
 published on #25; kept in `features/history/F-029-v1.md`. Version 2
-(2026-11-14) changes only AC-04 and the BR-171 v3 reference to it: the scan
-also allows the existing F-013 production path `/audit/oauth-state.sqlite` in
+(2026-11-14) changes only AC-04 (and the F-029 version cited in the BR-171
+v3 records): the scan also allows the existing F-013 production path `/audit/oauth-state.sqlite` in
 `docs/deployment.md`. It becomes frozen only after an independent review
 approves it on the pull request.
 Base: branch `claude/beautiful-maxwell-8mdk2w` at `01b43ff` (main `7a8c239`).
@@ -130,7 +130,7 @@ package changes.
   Compose service mounts either directory, and no tracked file under
   `Makefile`, `compose.yaml`, `scripts/` or `docs/` names a state path inside
   the checkout (as AC-04 scans it). The BR-171 file gets `version: 3`, its
-  `source:` gains `F-029 v1`, a History line "v3 — <date> — F-029 v1 (#25) —
+  `source:` gains `F-029 v2`, a History line "v3 — <date> — F-029 v2 (#25) —
   optional state directory mount; pending acceptance", and the existing
   `BR-171 v2 AC-25` tests in `tests/http/acceptance-entry.test.ts` are renamed
   `BR-171 v3 AC-25` with unchanged assertions. Verified by: AC-03, AC-04.
@@ -342,3 +342,7 @@ Code review 1 (25-code-review-1-reviewer, PR #28), version 2 (2026-11-14):
    refuse; the implementation allowed it outside the frozen text. Retained:
    v2 adds it to AC-04 (BR-171 v3 refers to AC-04's scan); code and test
    assertions are unchanged.
+
+Code review 2 (25-code-review-2-reviewer, PR #28), version 2: the BR-171 v3
+records cite `F-029 v2`, so the BR-171 v3 clause now names `F-029 v2` for the
+`source:` and History line, and the header says so.
