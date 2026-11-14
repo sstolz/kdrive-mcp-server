@@ -33,7 +33,7 @@ help:
 		'  make sonar-pr      CI-only same-repository PR analysis (PR Quality Gate)' \
 		'  make quality       Run check, then guarded remote analysis' \
 		'  make oidc-qualify  Interactive OIDC provider qualification (ARGS="...")' \
-		'  make http-acceptance  Owner-run HTTP acceptance composition (synthetic drive, HTTP_ACCEPTANCE_SECRETS_DIR)' \
+		'  make http-acceptance  Owner-run HTTP acceptance composition (synthetic drive, HTTP_ACCEPTANCE_SECRETS_DIR, optional HTTP_ACCEPTANCE_STATE_DIR)' \
 		'  make kdrive-record  Owner-run sanitized kDrive recordings (KDRIVE_ACCEPTANCE_DIR)' \
 		'  make kdrive-acceptance  Owner-run kDrive acceptance on actual main (KDRIVE_ACCEPTANCE_DIR)' \
 		'  make kdrive-write-acceptance  Owner-run kDrive write acceptance on actual main (KDRIVE_WRITE_FOLDER, KDRIVE_ACCEPTANCE_DIR)' \

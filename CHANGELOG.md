@@ -26,6 +26,11 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
   version 2 while it holds a CIMD refresh family (ADR-011); earlier releases
   refuse such a file with `OAUTH_STATE_VERSION`. Removing the origins and
   starting this release once returns it to version 1.
+- #25 / F-029 v2 (pending acceptance): the owner-run `make http-acceptance`
+  can keep the OAuth proxy state across restarts in an optional private
+  directory outside the checkout, `HTTP_ACCEPTANCE_STATE_DIR`, mounted
+  read-write at `/run/oauth-state` for that run only; a caller-set
+  `OAUTH_STATE_FILE` is refused. Without the directory the run is unchanged.
 
 ### Fixed
 

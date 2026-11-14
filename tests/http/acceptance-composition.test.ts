@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { loadSigningKey, signAccessToken } from "../../src/auth/proxy/keys.js";
 import {
   INLINE_SECRET_REFUSED,
+  acceptanceSettings,
   startAcceptance,
 } from "../../scripts/http-acceptance.ts";
 import {
@@ -189,5 +190,52 @@ describe("BR-171 acceptance composition", () => {
     expect(build.include).toEqual(["src/**/*.ts"]);
     const script = readFileSync("scripts/http-acceptance.ts", "utf8");
     expect(script).not.toMatch(/KDRIVE_TOKEN_FILE|process\.env\.KDRIVE_TOKEN/u);
+  });
+
+  it("BR-396 AC-01 forwards exactly the BR-171 settings and OAUTH_STATE_FILE", () => {
+    const names = [
+      "MCP_PUBLIC_URL",
+      "MCP_HTTP_HOST",
+      "MCP_HTTP_PORT",
+      "OAUTH_ISSUER",
+      "OAUTH_ALLOWED_SUBJECTS",
+      "OAUTH_ALLOWED_EMAILS",
+      "OAUTH_UPSTREAM_CLIENT_ID",
+      "OAUTH_UPSTREAM_CLIENT_SECRET",
+      "OAUTH_UPSTREAM_CLIENT_SECRET_FILE",
+      "OAUTH_SIGNING_KEY_FILE",
+      "OAUTH_ALLOWED_REDIRECT_URIS",
+      "OAUTH_ALLOWED_CLIENT_ID_ORIGINS",
+    ];
+    const settings = Object.fromEntries(
+      names.map((name) => [name, `value-of-${name}`]),
+    );
+    const others = {
+      KDRIVE_TOKEN: "SYNTHETIC-TOKEN",
+      OAUTH_MODE: "proxy",
+      HOME: "/home/synthetic",
+    };
+    expect(
+      acceptanceSettings({ ...settings, OAUTH_STATE_FILE: "", ...others }),
+    ).toStrictEqual(settings);
+    expect(
+      acceptanceSettings({
+        ...settings,
+        OAUTH_STATE_FILE: "/run/oauth-state/oauth-state.sqlite",
+        ...others,
+      }),
+    ).toStrictEqual({
+      ...settings,
+      OAUTH_STATE_FILE: "/run/oauth-state/oauth-state.sqlite",
+    });
+    expect(acceptanceSettings({ ...others, MCP_PUBLIC_URL: "" })).toStrictEqual(
+      {},
+    );
+    const source = readFileSync("scripts/http-acceptance.ts", "utf8");
+    const main = source.slice(source.indexOf("async function main("));
+    expect(main).toContain(
+      "startAcceptance({ env: acceptanceSettings(process.env) })",
+    );
+    expect(main.match(/startAcceptance\(/gu)).toHaveLength(1);
   });
 });
