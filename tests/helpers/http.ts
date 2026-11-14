@@ -598,6 +598,54 @@ export async function oauthLogin(
   };
 }
 
+/** F-032: a consent page opened through the handler for a new client. */
+export async function openConsent(
+  f: Fixture,
+): Promise<{ consent: string; value: string; cookie: string }> {
+  const registration = await f.send("POST", "/mcp/oauth/register", {
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      redirect_uris: [CLAUDE],
+      token_endpoint_auth_method: "none",
+    }),
+  });
+  const client = (await bodyJson(registration)).client_id as string;
+  const authorize = await f.send(
+    "GET",
+    `/mcp/oauth/authorize?${new URLSearchParams({
+      response_type: "code",
+      client_id: client,
+      redirect_uri: CLAUDE,
+      state: "client-state",
+      code_challenge: s256(`synthetic-verifier-${"v".repeat(40)}`),
+      code_challenge_method: "S256",
+      resource: P,
+    }).toString()}`,
+  );
+  const page = await authorize.text();
+  const consent = /name="consent" value="([^"]+)"/u.exec(page)?.[1] ?? "";
+  const value =
+    /__Host-kdrive-oauth=([^;]+)/u.exec(
+      authorize.headers.get("set-cookie") ?? "",
+    )?.[1] ?? "";
+  return { consent, value, cookie: `${COOKIE}=${value}` };
+}
+
+/** F-032: one consent POST through the handler. */
+export async function postConsent(
+  f: Fixture,
+  form: Record<string, string>,
+  headers: Record<string, string>,
+): Promise<Response> {
+  return await f.send("POST", "/mcp/oauth/consent", {
+    headers: {
+      "content-type": "application/x-www-form-urlencoded",
+      ...headers,
+    },
+    body: new URLSearchParams(form).toString(),
+  });
+}
+
 export { b64url };
 
 /** A currently free loopback port (bound and released). */

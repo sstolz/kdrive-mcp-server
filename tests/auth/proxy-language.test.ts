@@ -26,6 +26,7 @@ import {
 import {
   COOKIE,
   PUBLIC_URL,
+  SECOND,
   harness,
   header,
   headers,
@@ -619,6 +620,114 @@ describe("BR-409 a language switch replaces the pending consent", () => {
     expect(await approves(h, first, cookie)).toBe(400);
     expect(await approves(h, second, cookie)).toBe(302);
     expect(await approves(h, switched, cookie)).toBe(302);
+  });
+});
+
+// F-032 AC-10 / AC-11 (#33): test-only additions for BR-409 v1.
+describe("BR-409 consent replacement after a purge and on every field", () => {
+  const consentWith = async (
+    h: Harness,
+    page: ProxyResponse,
+    cookie: string,
+  ): Promise<number> =>
+    (
+      await h.proxy.consent({
+        form: new URLSearchParams({
+          consent: h.consentId(page),
+          decision: "approve",
+        }),
+        cookie,
+      })
+    ).status;
+
+  it("BR-409 AC-05 the oldest live equal consent after the purge is replaced", async () => {
+    const { h, client } = await registered();
+    const first = await h.proxy.authorize({
+      query: h.authorizeQuery(client, challenge),
+    });
+    const cookie = `${COOKIE}=${h.cookieOf(first)}`;
+    const link = new URLSearchParams(switchHref(first.body) ?? "");
+    h.clock.advance(300 * SECOND);
+    const second = await h.proxy.authorize({
+      query: h.authorizeQuery(client, challenge),
+      cookie,
+    });
+    expect(pendingConsents(h)).toBe(2);
+    h.clock.advance(300 * SECOND);
+    const switched = await h.proxy.authorize({ query: link, cookie });
+    expect(switched.status).toBe(200);
+    expect(pendingConsents(h)).toBe(1);
+    expect(await consentWith(h, second, cookie)).toBe(400);
+    expect(await consentWith(h, switched, cookie)).toBe(302);
+  });
+
+  const URL_ID = "https://client.example.com/c.json";
+
+  async function cimdStart() {
+    const meta = new FakeMetadata();
+    const serve = (extra: Record<string, unknown>) => {
+      meta.serve.set(URL_ID, {
+        body: cimdDocument(URL_ID, extra),
+        cacheControl: ["no-store"],
+      });
+    };
+    serve({});
+    const h = await harness({
+      origins: ["https://client.example.com"],
+      clientMetadata: meta,
+    });
+    const client: Registered = {
+      clientId: URL_ID,
+      method: "none",
+      redirect: "https://claude.ai/api/mcp/auth_callback",
+    };
+    const first = await h.proxy.authorize({
+      query: h.authorizeQuery(client, challenge),
+    });
+    expect(first.status).toBe(200);
+    const cookie = `${COOKIE}=${h.cookieOf(first)}`;
+    const link = new URLSearchParams(switchHref(first.body) ?? "");
+    // BR-309: a no-store document is fresh for 60 s, then fetched again.
+    h.clock.advance(61 * SECOND);
+    return { h, meta, serve, first, cookie, link };
+  }
+
+  it("BR-409 AC-05 cimdGrants and codeChallenge are compared", async () => {
+    const changed = await cimdStart();
+    changed.serve({ grant_types: ["authorization_code"] });
+    const added = await changed.h.proxy.authorize({
+      query: changed.link,
+      cookie: changed.cookie,
+    });
+    expect(added.status).toBe(200);
+    expect(changed.meta.count(URL_ID)).toBe(2);
+    expect(pendingConsents(changed.h)).toBe(2);
+    expect(await consentWith(changed.h, changed.first, changed.cookie)).toBe(
+      302,
+    );
+
+    const same = await cimdStart();
+    const replaced = await same.h.proxy.authorize({
+      query: same.link,
+      cookie: same.cookie,
+    });
+    expect(replaced.status).toBe(200);
+    expect(same.meta.count(URL_ID)).toBe(2);
+    expect(pendingConsents(same.h)).toBe(1);
+    expect(await consentWith(same.h, same.first, same.cookie)).toBe(400);
+
+    const { h, client } = await registered();
+    const first = await h.proxy.authorize({
+      query: h.authorizeQuery(client, challenge),
+    });
+    const cookie = `${COOKIE}=${h.cookieOf(first)}`;
+    const other = await h.proxy.authorize({
+      query: h.authorizeQuery(client, s256("w".repeat(43)), { lang: "fr" }),
+      cookie,
+    });
+    expect(other.status).toBe(200);
+    expect(pendingConsents(h)).toBe(2);
+    expect(await consentWith(h, first, cookie)).toBe(302);
   });
 });
 

@@ -9,6 +9,8 @@ import {
   httpFixture,
   jsonRpc,
   listening,
+  openConsent,
+  postConsent,
   wrapProxy,
   type Fixture,
 } from "../helpers/http.js";
@@ -319,6 +321,21 @@ describe("BR-157 Origin check", () => {
     },
   );
 
+  it("BR-157 AC-05 consent with lang and a foreign Origin is refused", async () => {
+    const f = await httpFixture();
+    const response = await f.send("POST", "/mcp/oauth/consent?lang=fr", {
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+        origin: "https://evil.test",
+      },
+      body: "consent=x&decision=approve",
+    });
+    expect(response.status).toBe(403);
+    expect(await response.text()).toBe('{"error":"invalid_origin"}');
+    expect(spies.consent).not.toHaveBeenCalled();
+    await f.handler.close();
+  });
+
   it("BR-157 AC-05 other routes ignore Origin", async () => {
     const f = await httpFixture();
     const response = await f.send("POST", "/mcp/oauth/token", {
@@ -338,5 +355,34 @@ describe("BR-157 Origin check", () => {
     expect(prm.status).toBe(200);
     await f.handler.close();
     expect(P).toBe("https://mcp.test/mcp");
+  });
+});
+
+// F-032 (#33): a repeated consent POST still passes the HTTP checks
+// (BR-411, BR-157 v1, BR-162 v2).
+describe("BR-411 repeated consent POST over HTTP", () => {
+  it("BR-411 AC-07 a repeat passes the HTTP checks", async () => {
+    const f = await httpFixture();
+    const { consent, cookie } = await openConsent(f);
+    const form = { consent, decision: "approve" };
+    const first = await postConsent(f, form, { origin: "null", cookie });
+    expect(first.status).toBe(302);
+    const target = first.headers.get("location");
+    const foreign = await postConsent(f, form, {
+      origin: "https://evil.test",
+      cookie,
+    });
+    await expectError(foreign, 403, "invalid_origin");
+    expect(spies.consent).toHaveBeenCalledTimes(1);
+    for (let index = 1; index < 30; index += 1) {
+      const repeat = await postConsent(f, form, { origin: "null", cookie });
+      expect(repeat.status).toBe(302);
+      expect(repeat.headers.get("location")).toBe(target);
+    }
+    expect(spies.consent).toHaveBeenCalledTimes(30);
+    const limited = await postConsent(f, form, { origin: "null", cookie });
+    await expectError(limited, 429, "rate_limited");
+    expect(spies.consent).toHaveBeenCalledTimes(30);
+    await f.handler.close();
   });
 });
