@@ -135,11 +135,11 @@ describe("BR-404 page-language resolution", () => {
   it("BR-404 AC-01 reads lang only when it is present exactly once", () => {
     expect(langParameter(new URLSearchParams("a=1&lang=fr"))).toBe("fr");
     expect(langParameter(new URLSearchParams("lang=en"))).toBe("en");
-    expect(langParameter(new URLSearchParams("lang=fr&lang=en"))).toBe(
-      undefined,
-    );
-    expect(langParameter(new URLSearchParams("lang=%20fr"))).toBe(undefined);
-    expect(langParameter(new URLSearchParams())).toBe(undefined);
+    expect(
+      langParameter(new URLSearchParams("lang=fr&lang=en")),
+    ).toBeUndefined();
+    expect(langParameter(new URLSearchParams("lang=%20fr"))).toBeUndefined();
+    expect(langParameter(new URLSearchParams())).toBeUndefined();
     expect(pageLanguage(undefined, undefined)).toBe("en");
   });
 });
@@ -444,8 +444,9 @@ describe("BR-408 language switcher", () => {
     };
     const sized = (total: number) => {
       const query = switchQuery(ids[0] ?? "");
-      query.set("extra", "");
-      query.set("extra", "x".repeat(total - linkLength(query)));
+      query.delete("extra");
+      const padding = total - linkLength(query) - "&extra=".length;
+      query.append("extra", "x".repeat(padding));
       expect(linkLength(query)).toBe(total);
       return query;
     };
