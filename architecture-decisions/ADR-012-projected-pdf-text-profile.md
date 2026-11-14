@@ -43,7 +43,10 @@ selected pages the fonts their content selects under canonical names
 (without font programs, every shown code mapped explicitly, `ToUnicode`
 re-emitted canonically) and one re-serialized content stream holding only
 text operators, with every Form execution inlined and counted and inline
-images skipped by a computed length. Everything else is left out. Type3
+images skipped by a computed length (a Flate inline image inflated under the
+smaller of that length and the remaining budget). Every bound is checked at
+the canonical token that crosses it, before the projection goes further.
+Everything else is left out. Type3
 fonts, fonts whose shown codes have no mapping outside their program,
 encryption, inline images of unknown length and other filters on needed
 streams refuse.
@@ -74,7 +77,7 @@ incremental updates, metadata, structure, embedded subset fonts with
 known length, graphics around the text) become readable within the unchanged
 F-009 ceilings plus the F-034 ceilings. Encrypted files, Type3 fonts,
 predefined CMaps, CFF or symbolic TrueType fonts without a mapping outside
-their program, inline images of unknown length, damaged offsets and non-Flate
+their program, simple fonts with a GBK name that PDF.js reads as composite, inline images of unknown length, damaged offsets and non-Flate
 filters on text streams still refuse; the documentation points to
 `kdrive_download`. The preflight grows (cross-reference streams, object
 streams, a CMap reader, a Type 1 cleartext reader, encoding tables copied
