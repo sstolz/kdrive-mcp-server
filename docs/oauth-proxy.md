@@ -333,9 +333,9 @@ with the other `lang` and replaces its pending consent; the form posts to
 have no switcher. `lang` never changes an OAuth outcome or a client redirect,
 and the language is not stored: no cookie, no state-file field, no log field.
 
-Repeated consent POST (F-032, pending acceptance): a double click on Approve or
-Deny posts the consent form twice; a repeat from the same browser (same
-binding cookie and `decision`) within 10 seconds of the first POST gets the
+Repeated consent POST (F-032, accepted on main `89be2ba`): a double click on
+Approve or Deny posts the consent form twice; a repeat from the same browser
+(same binding cookie and `decision`) within 10 seconds of the first POST gets the
 same 302 as the first (the upstream redirect, or the client redirect with
 `error=access_denied`) instead of the "already used" page. It logs no event,
 creates no second flow and is kept in memory only.
