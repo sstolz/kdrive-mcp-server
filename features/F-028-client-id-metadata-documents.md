@@ -2,7 +2,7 @@
 id: F-028
 title: Client ID Metadata Documents in the OAuth proxy
 ticket: "#3"
-status: frozen
+status: ready-for-freeze
 version: 2
 ---
 
@@ -12,8 +12,8 @@ pass 1 (Fable, `approve`), review 3 (`changes`) and review 4 (`approve`),
 published on #3; kept in `features/history/F-028-v1.md`. Version 2
 (2026-11-14) changes only the owner-run acceptance paragraph and D-13: the
 owner run is blocked until #25 makes the launcher persist the OAuth state;
-see `## Stress-test`, Code review 1. It is frozen after an independent review
-published on the pull request.
+see `## Stress-test`, Code review 1. It becomes frozen only after an
+independent review approves it on the pull request.
 
 Author: Claude Opus 5.5 (effort unknown), spec phase, 2026-11-14.
 Base: branch `claude/beautiful-maxwell-8mdk2w` at `254d5da` (main `75c9f48`).
@@ -676,7 +676,8 @@ Owner-run acceptance (after merge, not a merge condition, recorded on the
 ticket separately, as for F-019; D-13). Blocked until #25: `make
 http-acceptance` does not yet read or persist `OAUTH_STATE_FILE`, and AC-12
 injects the state file without exercising the launcher, so no owner run is
-requested before #25 lands and its rehearsal passes. Once unblocked: run `make http-acceptance` behind the quick tunnel (learnings
+requested before #25 lands and its rehearsal passes. Once unblocked: run
+`make http-acceptance` behind the quick tunnel (learnings
 2026-11-04) with `OAUTH_STATE_FILE` set, follow the discovery procedure with
 claude.ai, list the origin found, connect claude.ai, check that the consent
 page shows the client host, call a tool, restart, and check that the
@@ -778,8 +779,11 @@ client matrix.
   vendor origins in the documentation or example (unverified; see D-2).
 - **D-13 — Owner-run claude.ai check recorded separately (owner
   decision).** As for F-019, the owner-run check is recorded on the ticket
-  after acceptance and is not an acceptance condition; AC-12 is its
-  rehearsal. Rejected: making the real claude.ai run an acceptance condition
+  after acceptance and is not an acceptance condition. v2: the owner run is
+  blocked until #25 lands; #25's run through the real launcher (settings
+  filtering and a restart on the same state file) is its rehearsal (AGENTS.md
+  §6). AC-12 stays a test with the state file injected, which does not
+  rehearse the launcher. Rejected: making the real claude.ai run an acceptance condition
   (depends on a third-party service and a tunnel outside the gate).
 
 ### Deviations from the MCP specification and the IETF draft
@@ -812,9 +816,6 @@ keep valid cached metadata, client host and redirect URI shown on consent,
 loopback-only redirect warning, client ID equal to the issuer refused, `iss`
 in the authorization response (already BR-132), persisted state scoped to
 client ID and `resource` (families already carry `resource`).
-  F-028 v2: the owner run is blocked until #25 (launcher state file and its
-  rehearsal); AGENTS.md §6 requires the rehearsal through the real launcher
-  before a real run is requested.
 
 ## Open questions
 
@@ -942,3 +943,6 @@ Code review 1 (3-code-review-1-reviewer, PR #24), version 2 (2026-11-14):
    contract (its mount rule), CIMD ships off with an empty origin list, and
    the owner run is not a merge condition; F-028 v2 blocks the owner run
    until #25 adds the state file and its rehearsal.
+2. Code review 2 (3-code-review-2-reviewer): D-13 now carries the v2 change
+   (the stray paragraph under Deviations is removed) and v2 stays
+   `ready-for-freeze` until an approving review.
