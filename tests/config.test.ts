@@ -1460,7 +1460,10 @@ describe("BR-291 BR-023 v3 BR-024 v4 CIMD origin list (F-028 AC-01)", () => {
       "17 entries",
       Array.from({ length: 17 }, (_, n) => `https://c${String(n)}.example.com`),
     ],
-    ["a duplicate", ["https://client.example.com", "https://client.example.com"]],
+    [
+      "a duplicate",
+      ["https://client.example.com", "https://client.example.com"],
+    ],
     ["a 1,025-character entry", [`https://${"a".repeat(1009)}.example`]],
     ["http://", ["http://client.example.com"]],
     ["an uppercase host", ["https://Client.example.com"]],
@@ -1487,7 +1490,7 @@ describe("BR-291 BR-023 v3 BR-024 v4 CIMD origin list (F-028 AC-01)", () => {
   ];
 
   it("BR-291 the 253-character host is valid", async () => {
-    expect(host253.length).toBe(253);
+    expect(host253).toHaveLength(253);
     expect(await viaEach([`https://${host253}`])).toEqual([
       [`https://${host253}`],
       [`https://${host253}`],
@@ -1522,16 +1525,19 @@ describe("BR-291 BR-023 v3 BR-024 v4 CIMD origin list (F-028 AC-01)", () => {
       "authentication off",
       { KDRIVE_MCP_TRANSPORT: "http", KDRIVE_MCP_INSECURE_NO_AUTH: "1" },
     ],
-  ])("BR-291 refuses the list with %s as CONFLICTING_SETTINGS", async (_case, env) => {
-    await expect(
-      load({
-        ...env,
-        OAUTH_ALLOWED_CLIENT_ID_ORIGINS: "https://client.example.com",
-      }),
-    ).rejects.toMatchObject(
-      error("CONFLICTING_SETTINGS", "oauthAllowedClientIdOrigins"),
-    );
-  });
+  ])(
+    "BR-291 refuses the list with %s as CONFLICTING_SETTINGS",
+    async (_case, env) => {
+      await expect(
+        load({
+          ...env,
+          OAUTH_ALLOWED_CLIENT_ID_ORIGINS: "https://client.example.com",
+        }),
+      ).rejects.toMatchObject(
+        error("CONFLICTING_SETTINGS", "oauthAllowedClientIdOrigins"),
+      );
+    },
+  );
 
   it("BR-291 refuses an entry equal to the publicUrl or oauthIssuer origin", async () => {
     for (const origin of ["https://service.example", "https://issuer.example"])

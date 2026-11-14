@@ -6,6 +6,7 @@ import type {
   UpstreamOidcPort,
 } from "../auth/proxy/index.js";
 import type { MutationGate } from "../mutation-gate.js";
+import type { ClientMetadataFetchOptions } from "../auth/proxy/client-metadata-fetch.js";
 
 /** BR-167: the events this feature adds to the proxy's own. */
 export type HttpEvent = "request_refused" | "session_opened" | "session_closed";
@@ -31,6 +32,11 @@ export interface HttpHandlerOptions {
   gate?: MutationGate;
   /** F-019 test seam: the OAuth state store's I/O port (BR-293–BR-299). */
   oauthStatePort?: Partial<OAuthStateStorePort>;
+  /**
+   * F-028 test and rehearsal seam: the CIMD fetch port's resolver, DNS
+   * server list, address policy and CA list. Production passes none (AC-13).
+   */
+  clientMetadataSeam?: ClientMetadataFetchOptions;
 }
 
 export interface HttpHandler {

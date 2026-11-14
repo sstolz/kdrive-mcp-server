@@ -41,6 +41,22 @@ search excerpt.
 | ChatGPT        | 2026-11-02 | [OpenAI authentication (owner-supplied)](https://developers.openai.com/plugins/build/auth), [Apps SDK authentication (search excerpt)](https://developers.openai.com/apps-sdk/build/auth), [Codex MCP (owner-supplied)](https://developers.openai.com/codex/mcp) | supported            | supported  | supported        | supported                                  | `https://chatgpt.com/connector_platform_oauth_redirect`         | `https://chatgpt.com/connector/oauth/{callback_id}`             | 2025-11-25                | no               | not tested | Owner-supplied pages. CIMD is preferred (client ID `https://chatgpt.com/oauth/client.json` or a per-callback document) with token authentication `none` or `private_key_jwt` only; dynamic registration happens once per connection; predefined OAuth clients are supported. PKCE S256 is mandatory and `resource` is sent on both requests. The rejection of a mismatched or missing advertised `iss` is stated on the Codex MCP page for the flow shared by the ChatGPT desktop app, the Codex CLI and the IDE extension. The authentication page also cites 2026-07-28 for response validation. |
 | Codex          | 2026-11-02 | [Codex MCP (owner-supplied)](https://developers.openai.com/codex/mcp), [OpenAI authentication (owner-supplied)](https://developers.openai.com/plugins/build/auth)                                                                                                | supported            | supported  | supported        | supported                                  | `http://127.0.0.1/callback`                                     | `http://127.0.0.1:<port>/callback/<callback_id>`                | 2025-11-25                | no               | not tested | Owner-supplied pages. CIMD is chosen only when `client_id_metadata_document_supported` is `true`, `none` is listed and a loopback callback is supported (document `https://chatgpt.com/oauth/codex/client.json`, or a per-callback document). Manual entry: `codex mcp add --oauth-client-id` and `[mcp_servers.<name>.oauth]` `client_id`. The authorization server must accept a variable loopback port (RFC 8252 §7.3). The Codex page states no authorization version; the version comes from the authentication page, which covers ChatGPT and Codex.                                         |
 
+## CIMD with the OAuth proxy (F-028, pending acceptance)
+
+The CIMD column records what each client documents. The proxy advertises CIMD
+only with a nonempty `OAUTH_ALLOWED_CLIENT_ID_ORIGINS`; with the default empty
+list every client above uses dynamic registration. The document URLs in the
+ChatGPT and Codex rows come from owner-supplied pages and are unverified; no
+document origin is listed by default.
+
+Origins are found with the origin discovery procedure of
+[the OAuth proxy notes](oauth-proxy.md#origin-discovery-procedure) and recorded
+here, with the check date, before they are listed.
+
+| Client    | Document origin found | Checked |
+| --------- | --------------------- | ------- |
+| claude.ai | none recorded yet     | n/a     |
+
 ## Parallel tool calls
 
 Some clients, claude.ai among them, send several tool calls of one session in

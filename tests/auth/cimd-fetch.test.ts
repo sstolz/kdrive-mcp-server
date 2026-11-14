@@ -211,13 +211,18 @@ describe("BR-306 production fetch port (AC-03)", () => {
         "Content-Type": "application/json",
         "Content-Length": "100",
       });
-      // The socket carries more than announced; Node rejects the excess or
-      // the reader stops at its byte limit: both must refuse.
+      response.flushHeaders();
+      // The socket carries more than announced: the byte count after the
+      // header block stops at the 5,121st byte whatever Content-Length says.
       request.socket.write(body(5121));
       request.socket.end();
     });
-    const outcome = await port().fetch.fetch(urlFor(lying), signal());
-    expect(outcome.ok).toBe(false);
+    expect(await port().fetch.fetch(urlFor(lying), signal())).toEqual({
+      ok: false,
+      reason: "size",
+      status: 200,
+      transient: false,
+    });
   });
 
   it("BR-306 a chunked body over 5,120 bytes fails as size", async () => {
@@ -387,7 +392,12 @@ describe("BR-306 c-ares resolution outside the threadpool (AC-14)", () => {
       "utf8",
     );
     expect(source).not.toMatch(/\blookup\s*\(\s*(?:hostname|host|url)/u);
-    expect(source).not.toMatch(/dns\s*\.\s*lookup|\{[^}]*\blookup\b[^}]*\}\s*from\s*"node:dns/u);
+    expect(source).not.toContain("dns.lookup");
+    const dnsImports = source
+      .split("\n")
+      .filter((line) => line.includes('from "node:dns"'));
+    expect(dnsImports).toHaveLength(1);
+    expect(dnsImports[0]).not.toContain("lookup");
     expect(source).toMatch(
       /new\s+(?:dns\.)?Resolver\(\{\s*timeout:\s*2_?000,\s*tries:\s*2\s*\}\)/u,
     );
@@ -425,9 +435,12 @@ describe("BR-306 c-ares resolution outside the threadpool (AC-14)", () => {
 
   it("BR-306 an ESERVFAIL resolve4 fails as resolution, transient", async () => {
     const { fetch } = port({ v4: dnsError("ESERVFAIL"), v6: [] });
-    expect(
-      await fetch.fetch(`https://${CIMD_HOST}/c.json`, signal()),
-    ).toEqual({ ok: false, reason: "resolution", status: 0, transient: true });
+    expect(await fetch.fetch(`https://${CIMD_HOST}/c.json`, signal())).toEqual({
+      ok: false,
+      reason: "resolution",
+      status: 0,
+      transient: true,
+    });
   });
 
   it("BR-306 with UV_THREADPOOL_SIZE=1 four pending fetches leave the pool free and stop querying at the deadline", async () => {

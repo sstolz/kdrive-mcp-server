@@ -1,5 +1,6 @@
 import { pathToFileURL } from "node:url";
 import type { UpstreamOidcPort } from "../src/auth/proxy/index.ts";
+import type { ClientMetadataFetchOptions } from "../src/auth/proxy/client-metadata-fetch.ts";
 import type { CollectionRequest, Ref } from "../src/policy/index.ts";
 
 // BR-171: the owner-run acceptance composition. It serves authenticated proxy
@@ -24,6 +25,11 @@ export interface AcceptanceOptions {
   upstream?: UpstreamOidcPort;
   /** Receives one JSON line per logger event. Defaults to stderr. */
   stderr?: (line: string) => void;
+  /**
+   * F-028 AC-12 rehearsal seam: the CIMD test CA, loopback allowance and DNS
+   * server list. The owner run (`main`) passes none.
+   */
+  clientMetadataSeam?: ClientMetadataFetchOptions;
 }
 
 interface Node {
@@ -152,6 +158,9 @@ export async function startAcceptance(options: AcceptanceOptions) {
       proxy.createFetchUpstream({ fetch: globalThis.fetch }),
     clock: ports.clock,
     randomBytes: ports.randomBytes,
+    ...(options.clientMetadataSeam === undefined
+      ? {}
+      : { clientMetadataSeam: options.clientMetadataSeam }),
     logger: {
       event: (name, fields) => {
         write(`${JSON.stringify({ event: name, ...fields })}\n`);
@@ -172,6 +181,7 @@ const SETTINGS = [
   "OAUTH_UPSTREAM_CLIENT_SECRET_FILE",
   "OAUTH_SIGNING_KEY_FILE",
   "OAUTH_ALLOWED_REDIRECT_URIS",
+  "OAUTH_ALLOWED_CLIENT_ID_ORIGINS",
 ];
 
 async function main(): Promise<void> {

@@ -235,6 +235,33 @@ checked against the deny patterns.
   path this server did not check: reported `uncertain` for upload and folder
   creation, but `succeeded` for rename, which reads no name back.
 
+## Client ID Metadata Documents (F-028)
+
+Pending acceptance. In OAuth `proxy` mode, a client ID that is an `https` URL
+makes the server fetch that URL: an unauthenticated request can trigger it, so
+it is a server-side request forgery (SSRF) primitive. The limits are:
+
+- CIMD is off by default: `OAUTH_ALLOWED_CLIENT_ID_ORIGINS` is empty, and only
+  client IDs under listed origins are ever fetched. The operator lists only
+  origins whose vendor controls every path.
+- One HTTPS `GET`, no credential sent, no redirect followed, status 200 only,
+  at most 5,120 bytes, 5,000 ms in all, at most four concurrent fetches, no
+  failure cache (repeats stay bounded by the authorize rate limit).
+- One c-ares resolution outside the libuv threadpool; every resolved address
+  must pass the address policy (no private, loopback, link-local, shared,
+  multicast, reserved or documentation IPv4 range; IPv6 only in `2000::/3`,
+  without embedded-IPv4 forms), and the connection is pinned to the checked
+  addresses, so DNS rebinding cannot reach another host.
+- A dedicated agent ignores proxy variables and always verifies the
+  certificate (`NODE_EXTRA_CA_CERTS` extends the trusted CAs).
+- Document redirect URIs stay within `OAUTH_ALLOWED_REDIRECT_URIS`, so CIMD
+  never widens where authorization codes can go; URLs inside a document are
+  never fetched. Logs and error pages never contain a CIMD URL, host, address
+  or TLS message.
+
+The accepted residual risks are listed in
+[the OAuth proxy notes](docs/oauth-proxy.md#accepted-residual-risks).
+
 ## Dependency audit
 
 CI fails on any high or critical `npm audit` finding: the `audit` job runs

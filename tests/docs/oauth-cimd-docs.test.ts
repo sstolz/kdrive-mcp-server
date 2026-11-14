@@ -20,7 +20,8 @@ function expectText(text: string, phrase: string): void {
   expect(text.toLowerCase(), phrase).toContain(phrase.toLowerCase());
 }
 
-const TITLE = "Client ID Metadata Documents (`OAUTH_ALLOWED_CLIENT_ID_ORIGINS`)";
+const TITLE =
+  "Client ID Metadata Documents (`OAUTH_ALLOWED_CLIENT_ID_ORIGINS`)";
 
 describe("BR-395 docs/oauth-proxy.md CIMD section (F-028 AC-11)", () => {
   const doc = section("docs/oauth-proxy.md", TITLE);
@@ -107,7 +108,10 @@ describe("BR-395 docs/oauth-proxy.md CIMD section (F-028 AC-11)", () => {
 
 describe("BR-395 deployment, example, security and matrix (F-028 AC-11)", () => {
   it("BR-395 docs/deployment.md lists the variable", () => {
-    expectText(collapsed("docs/deployment.md"), "OAUTH_ALLOWED_CLIENT_ID_ORIGINS");
+    expectText(
+      collapsed("docs/deployment.md"),
+      "OAUTH_ALLOWED_CLIENT_ID_ORIGINS",
+    );
   });
 
   it("BR-395 .env.example has the variable empty", () => {
@@ -117,7 +121,10 @@ describe("BR-395 deployment, example, security and matrix (F-028 AC-11)", () => 
   });
 
   it("BR-395 SECURITY.md names the SSRF limits", () => {
-    const security = section("SECURITY.md", "Client ID Metadata Documents (F-028)");
+    const security = section(
+      "SECURITY.md",
+      "Client ID Metadata Documents (F-028)",
+    );
     for (const phrase of [
       "server-side request forgery",
       "off by default",
@@ -149,7 +156,9 @@ describe("BR-395 deployment, example, security and matrix (F-028 AC-11)", () => 
       "SECURITY.md",
     ]) {
       const text = readFileSync(path, "utf8");
-      expect(text, path).not.toMatch(/ALLOWED_CLIENT_ID_ORIGINS[=:]\s*\S*chatgpt/iu);
+      expect(text, path).not.toMatch(
+        /ALLOWED_CLIENT_ID_ORIGINS[=:]\s*\S*chatgpt/iu,
+      );
       expect(text, path).not.toContain("https://chatgpt.com/oauth");
     }
   });

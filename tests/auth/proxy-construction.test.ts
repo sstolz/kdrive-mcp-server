@@ -128,7 +128,7 @@ describe("F-028 AC-13 production composition has no CIMD seam", () => {
     const handler = readFileSync("src/http/handler.ts", "utf8");
     const calls = [
       ...handler.matchAll(/createClientMetadataFetch\(([^)]*)\)/gu),
-    ].map((match) => match[1]);
+    ].map((match) => (match[1] ?? "").replaceAll(/[\s,]/gu, ""));
     expect(calls).toEqual(["options.clientMetadataSeam"]);
     const acceptance = readFileSync("scripts/http-acceptance.ts", "utf8");
     const main = acceptance.slice(acceptance.indexOf("async function main"));

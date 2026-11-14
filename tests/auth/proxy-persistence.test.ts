@@ -772,12 +772,17 @@ describe("BR-298 BR-295 reopening files written by the proxy (AC-23)", () => {
 describe("BR-311 CIMD families persist without a client row (F-028 AC-08)", () => {
   const CIMD_URL = "https://client.example.com/c.json";
   const ORIGINS = ["https://client.example.com"];
-  const cimd: Registered = { clientId: CIMD_URL, method: "none", redirect: CLAUDE };
+  const cimd: Registered = {
+    clientId: CIMD_URL,
+    method: "none",
+    redirect: CLAUDE,
+  };
   const userVersion = (path: string) => {
     const db = new DatabaseSync(path, { readOnly: true });
     try {
-      return (db.prepare("PRAGMA user_version").get() as { user_version: number })
-        .user_version;
+      return (
+        db.prepare("PRAGMA user_version").get() as { user_version: number }
+      ).user_version;
     } finally {
       db.close();
     }
@@ -835,10 +840,7 @@ describe("BR-311 CIMD families persist without a client row (F-028 AC-08)", () =
 
     // Redirect URI removed, origin still listed: the family is kept.
     const c = await cimdOnFile(path, clock, { redirects: [LOOPBACK] });
-    const second = await c.h.refresh(
-      cimd,
-      json(first).refresh_token as string,
-    );
+    const second = await c.h.refresh(cimd, json(first).refresh_token as string);
     expect(second.status).toBe(200);
     expect(c.meta.calls).toEqual([]);
     c.store.close();
@@ -848,7 +850,10 @@ describe("BR-311 CIMD families persist without a client row (F-028 AC-08)", () =
     expect(events(d.h, "store_loaded")).toEqual([
       { name: "store_loaded", fields: { clients: 0, families: 0 } },
     ]);
-    const refused = await d.h.refresh(cimd, json(second).refresh_token as string);
+    const refused = await d.h.refresh(
+      cimd,
+      json(second).refresh_token as string,
+    );
     expect(refused.status).toBe(401);
     d.store.close();
     expect(userVersion(path)).toBe(1);
@@ -865,9 +870,9 @@ describe("BR-311 CIMD families persist without a client row (F-028 AC-08)", () =
     expect((await a.h.refresh(cimd, token)).status).toBe(200);
     // Replaying the rotated token revokes the family (BR-140 v2).
     expect((await a.h.refresh(cimd, token)).status).toBe(400);
+    a.store.close();
     expect(readState(path).families).toEqual([]);
     expect(userVersion(path)).toBe(2);
-    a.store.close();
     openState(path, { clock, origins: ORIGINS }).close();
     expect(userVersion(path)).toBe(1);
   });
@@ -887,7 +892,11 @@ describe("BR-311 CIMD families persist without a client row (F-028 AC-08)", () =
       lastUse: clock.ms,
     };
     writes.push({ op: "insertClient", client: registered });
-    const row = (n: number, clientId: string, created: number): StoredFamily => ({
+    const row = (
+      n: number,
+      clientId: string,
+      created: number,
+    ): StoredFamily => ({
       id: String(n).padStart(22, "f"),
       clientId,
       sub: "user-1",

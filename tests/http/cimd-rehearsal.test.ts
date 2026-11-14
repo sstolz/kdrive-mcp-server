@@ -233,7 +233,10 @@ describe("F-028 AC-12 CIMD rehearsal through the acceptance composition", () => 
         "POST",
         "/mcp/oauth/consent",
         [FORM, ["Cookie", cookie]],
-        new URLSearchParams({ consent: consentId, decision: "approve" }).toString(),
+        new URLSearchParams({
+          consent: consentId,
+          decision: "approve",
+        }).toString(),
       );
       expect(approved.status).toBe(302);
       const login = new URL(rawHeader(approved, "location") ?? "");

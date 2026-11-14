@@ -299,6 +299,11 @@ SIGNING_KEY_FILE=./secrets/signing-key.pem
 - `OAUTH_ALLOWED_REDIRECT_URIS` lists the callback URLs of your AI clients,
   compared byte for byte; the
   [client compatibility matrix](mcp-client-compatibility.md) gives them.
+- `OAUTH_ALLOWED_CLIENT_ID_ORIGINS` (optional, `proxy` mode only, empty by
+  default) enables Client ID Metadata Documents for the listed origins. Leave
+  it empty unless you follow the origin discovery procedure of the
+  [OAuth proxy notes](oauth-proxy.md#origin-discovery-procedure): a nonempty
+  list makes every CIMD-capable client use CIMD.
 - To limit the server to some folders, add `KDRIVE_MCP_ROOTS` (for example
   `123456:/Documents`) and, if needed, `KDRIVE_MCP_DENY` to the `environment`
   of the service; the [README](../README.md#configure) lists the settings.

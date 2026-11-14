@@ -25,6 +25,7 @@ import {
   removeStateFiles,
   sha256Bytes,
   stateFile,
+  s256,
   type Harness,
   type HarnessOptions,
 } from "../helpers/proxy.js";
@@ -527,6 +528,8 @@ describe("BR-394 BR-143 v3 CIMD refusal events and secrecy (F-028 AC-10)", () =>
     event: string;
     reason?: string;
     status: number;
+    /** A valid document was fetched (BR-394 `client_metadata_fetched`). */
+    fetched?: boolean;
   }
 
   const cases: Case[] = [
@@ -573,15 +576,13 @@ describe("BR-394 BR-143 v3 CIMD refusal events and secrecy (F-028 AC-10)", () =>
         ["content_type", 200, false, 400],
         ["size", 200, false, 400],
       ] as const
-    ).map(
-      ([reason, status, transient, page]): Case => ({
-        name: `a ${reason} failure (${String(status)})`,
-        served: { failure: { reason, status, transient } },
-        event: "client_metadata_refused",
-        reason,
-        status: page,
-      }),
-    ),
+    ).map(([reason, status, transient, page]): Case => ({
+      name: `a ${reason} failure (${String(status)})`,
+      served: { failure: { reason, status, transient } },
+      event: "client_metadata_refused",
+      reason,
+      status: page,
+    })),
     {
       name: "an invalid document",
       served: { body: cimdDocument(CIMD_URL, { client_secret: MARKER }) },
@@ -596,6 +597,7 @@ describe("BR-394 BR-143 v3 CIMD refusal events and secrecy (F-028 AC-10)", () =>
       event: "client_metadata_refused",
       reason: "document",
       status: 400,
+      fetched: true,
     },
     {
       name: "a later check after resolution",
@@ -603,6 +605,7 @@ describe("BR-394 BR-143 v3 CIMD refusal events and secrecy (F-028 AC-10)", () =>
       served: { body: documentWithMarker },
       event: "authorization_refused",
       status: 302,
+      fetched: true,
     },
   ];
 
@@ -649,9 +652,7 @@ describe("BR-394 BR-143 v3 CIMD refusal events and secrecy (F-028 AC-10)", () =>
       const fetched = h.logs.filter(
         (entry) => entry.name === "client_metadata_fetched",
       );
-      expect(fetched).toHaveLength(
-        row.served && !row.served.failure ? 1 : 0,
-      );
+      expect(fetched).toHaveLength(row.fetched ? 1 : 0);
       for (const entry of fetched)
         expect(entry.fields).toEqual({ status: 200, count: 1 });
       const text = [
@@ -673,7 +674,11 @@ describe("BR-394 BR-143 v3 CIMD refusal events and secrecy (F-028 AC-10)", () =>
         (
           await h.proxy.authorize({
             query: h.authorizeQuery(
-              { clientId: `${CIMD_ORIGIN}${path}`, method: "none", redirect: CLAUDE },
+              {
+                clientId: `${CIMD_ORIGIN}${path}`,
+                method: "none",
+                redirect: CLAUDE,
+              },
               s256(VERIFIER),
             ),
           })

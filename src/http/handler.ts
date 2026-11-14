@@ -10,6 +10,7 @@ import {
   type OAuthStateStore,
 } from "../auth/proxy/index.js";
 import { stateBinding } from "../auth/proxy/proxy.js";
+import { createClientMetadataFetch } from "../auth/proxy/client-metadata-fetch.js";
 import { isRecord } from "../auth/access-token.js";
 import {
   isResolvedConfiguration,
@@ -101,6 +102,7 @@ function proxyConfiguration(
     oauthUpstreamClientSecret,
     oauthSigningKey,
     oauthAllowedRedirectUris,
+    oauthAllowedClientIdOrigins: configuration.oauthAllowedClientIdOrigins,
   };
 }
 
@@ -176,6 +178,7 @@ export function createHttpHandler(options: HttpHandlerOptions): HttpHandler {
         path: configuration.oauthStateFile,
         binding: stateBinding(config),
         allowedRedirectUris: config.oauthAllowedRedirectUris,
+        allowedClientIdOrigins: configuration.oauthAllowedClientIdOrigins,
         clock,
         ...(options.oauthStatePort === undefined
           ? {}
@@ -189,6 +192,14 @@ export function createHttpHandler(options: HttpHandlerOptions): HttpHandler {
         upstream,
         ...(logger === undefined ? {} : { logger }),
         ...(store === undefined ? {} : { store }),
+        // F-028: the rehearsal seam only; production passes none (AC-13).
+        ...(options.clientMetadataSeam === undefined
+          ? {}
+          : {
+              clientMetadataFetch: createClientMetadataFetch(
+                options.clientMetadataSeam,
+              ),
+            }),
       });
     } catch (error) {
       // BR-304: a construction failure releases the store before it leaves.
@@ -649,6 +660,8 @@ export function createHttpHandler(options: HttpHandlerOptions): HttpHandler {
     routeOf,
     async close() {
       closing = true;
+      // BR-169 v3 step (2): pending CIMD fetches end with the 503 page.
+      proxy?.cancelFetches();
       await registry.closeAll("shutdown");
     },
     closeStore,

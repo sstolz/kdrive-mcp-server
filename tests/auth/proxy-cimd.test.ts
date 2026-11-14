@@ -1,10 +1,7 @@
 // F-028 AC-02, AC-05, AC-06 and AC-07: Client ID Metadata Documents in the
 // proxy, with a counting fake fetch port and the fake clock.
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type {
-  OAuthProxy,
-  ProxyResponse,
-} from "../../src/auth/proxy/index.js";
+import type { OAuthProxy, ProxyResponse } from "../../src/auth/proxy/index.js";
 import { proxyStateSnapshot } from "../../src/auth/proxy/proxy.js";
 import type { OAuthStateStore } from "../../src/auth/proxy/store.js";
 import {
@@ -20,7 +17,12 @@ import {
   type DocumentServer,
   type Served,
 } from "../helpers/cimd.js";
-import { configurationFor, exchange, HOST, listening } from "../helpers/http.js";
+import {
+  configurationFor,
+  exchange,
+  HOST,
+  listening,
+} from "../helpers/http.js";
 import { navigationFixture } from "../helpers/navigation.js";
 import {
   CLAUDE,
@@ -115,7 +117,10 @@ describe("BR-305 BR-128 v3 acceptable CIMD client IDs (AC-02)", () => {
     ["an IP host", "https://192.0.2.1/c.json"],
     ["an IPv6 host", "https://[2001:db8::1]/c.json"],
     ["an unlisted origin", "https://other.example.com/c.json"],
-    ["port 8443 on a port-less origin", "https://client.example.com:8443/c.json"],
+    [
+      "port 8443 on a port-less origin",
+      "https://client.example.com:8443/c.json",
+    ],
     [":443 spelled out", "https://client.example.com:443/c.json"],
     [
       "1,025 bytes",
@@ -185,7 +190,8 @@ describe("BR-305 BR-128 v3 acceptable CIMD client IDs (AC-02)", () => {
         redirect_uri: "https://evil.example/cb",
       }),
     ];
-    for (const query of cases) expectPage(await h.proxy.authorize({ query }), 400);
+    for (const query of cases)
+      expectPage(await h.proxy.authorize({ query }), 400);
     expect(meta.calls).toEqual([]);
     expect(h.logs.map((entry) => entry.name)).toEqual([
       "authorization_refused",
@@ -220,7 +226,10 @@ describe("BR-305 BR-128 v3 acceptable CIMD client IDs (AC-02)", () => {
 describe("BR-308 document validation (AC-05)", () => {
   const invalid: Array<[string, Served]> = [
     ["a different client_id", { body: cimdDocument(SECOND_URL) }],
-    ["a client_secret", { body: cimdDocument(CIMD_URL, { client_secret: "s" }) }],
+    [
+      "a client_secret",
+      { body: cimdDocument(CIMD_URL, { client_secret: "s" }) },
+    ],
     [
       "client_secret_expires_at",
       { body: cimdDocument(CIMD_URL, { client_secret_expires_at: 0 }) },
@@ -344,6 +353,7 @@ describe("BR-308 document validation (AC-05)", () => {
     const { h, authorize } = await setup();
     expectPage(await authorize(cimd(CIMD_URL, LOCALHOST)), 400);
     expect(h.logs).toEqual([
+      { name: "client_metadata_fetched", fields: { status: 200, count: 1 } },
       {
         name: "client_metadata_refused",
         fields: { handler: "authorize", reason: "document", status: 200 },
@@ -391,10 +401,10 @@ describe("BR-309 cache, concurrency and cancellation (AC-06)", () => {
     const start = h.clock.ms;
     h.clock.ms = start + seconds * SECOND - 1;
     expect((await authorize()).status).toBe(200);
-    if (meta.calls.length !== 1) return false;
+    const before = meta.calls.length;
     h.clock.ms = start + seconds * SECOND;
     expect((await authorize()).status).toBe(200);
-    return meta.calls.length === 2;
+    return before === 1 && meta.calls.length === 2;
   }
 
   it.each([
@@ -465,13 +475,11 @@ describe("BR-309 cache, concurrency and cancellation (AC-06)", () => {
     meta.serve.set(CIMD_URL, {
       failure: { reason: "status", status: 404, transient: false },
     });
-    for (let index = 0; index < 5; index++)
-      expectPage(await authorize(), 400);
+    for (let index = 0; index < 5; index++) expectPage(await authorize(), 400);
     meta.serve.set(CIMD_URL, {
       failure: { reason: "connection", status: 0, transient: true },
     });
-    for (let index = 0; index < 5; index++)
-      expectPage(await authorize(), 503);
+    for (let index = 0; index < 5; index++) expectPage(await authorize(), 503);
     expect(meta.calls).toHaveLength(10);
   });
 
@@ -525,7 +533,9 @@ describe("BR-309 cache, concurrency and cancellation (AC-06)", () => {
 
   it("BR-309 four pending URLs make a fifth get the 503 page without a call", async () => {
     const { h, meta, authorize } = await setup();
-    const urls = [1, 2, 3, 4, 5].map((n) => `${CIMD_ORIGIN}/c${String(n)}.json`);
+    const urls = [1, 2, 3, 4, 5].map(
+      (n) => `${CIMD_ORIGIN}/c${String(n)}.json`,
+    );
     for (const url of urls) meta.serve.set(url, "pending");
     const pending = urls.slice(0, 4).map((url) => authorize(cimd(url)));
     await vi.waitFor(() => {
@@ -544,7 +554,9 @@ describe("BR-309 cache, concurrency and cancellation (AC-06)", () => {
   it("BR-309 right after one of four pending fetches times out, a fifth URL is fetched", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     const { h, meta, authorize } = await setup();
-    const urls = [1, 2, 3, 4, 5].map((n) => `${CIMD_ORIGIN}/c${String(n)}.json`);
+    const urls = [1, 2, 3, 4, 5].map(
+      (n) => `${CIMD_ORIGIN}/c${String(n)}.json`,
+    );
     for (const url of urls.slice(0, 4)) meta.serve.set(url, "pending");
     const first = authorize(cimd(urls[0]));
     await vi.advanceTimersByTimeAsync(1000);
@@ -673,7 +685,9 @@ describe("BR-309 BR-169 v3 the HTTP server's close() cancels pending fetches (AC
     });
     const proxy = created.proxies.at(-1) as OAuthProxy;
     expect(consents(proxy)).toEqual([]);
-    expect(logs.filter((entry) => entry.name === "authorization_refused")).toEqual([
+    expect(
+      logs.filter((entry) => entry.name === "authorization_refused"),
+    ).toEqual([
       {
         name: "authorization_refused",
         fields: { handler: "authorize", status: 503 },
@@ -700,18 +714,26 @@ describe("BR-310 BR-136 v2 token endpoint (AC-07)", () => {
   it("BR-310 Basic or a body secret gives 401 invalid_client", async () => {
     const { h } = await setup();
     const done = await h.login(cimd());
-    const basic = await h.redeem(done, {}, {
-      ...cimd(),
-      method: "client_secret_basic",
-      clientSecret: "x",
-    });
+    const basic = await h.redeem(
+      done,
+      {},
+      {
+        ...cimd(),
+        method: "client_secret_basic",
+        clientSecret: "x",
+      },
+    );
     expect(basic.status).toBe(401);
     expect(json(basic)).toEqual({ error: "invalid_client" });
-    const post = await h.redeem(done, {}, {
-      ...cimd(),
-      method: "client_secret_post",
-      clientSecret: "x",
-    });
+    const post = await h.redeem(
+      done,
+      {},
+      {
+        ...cimd(),
+        method: "client_secret_post",
+        clientSecret: "x",
+      },
+    );
     expect(post.status).toBe(401);
     expect((await h.redeem(done)).status).toBe(200);
   });

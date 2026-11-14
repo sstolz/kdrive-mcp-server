@@ -128,13 +128,19 @@ describe("BR-306 BR-307 the fetch refuses a blocked or empty answer without conn
 
   it("BR-307 an allowed and a blocked address together fail as blocked_address", async () => {
     const result = await attempt(["8.8.8.8", "127.0.0.1"]);
-    expect(result.outcome).toMatchObject({ ok: false, reason: "blocked_address" });
+    expect(result.outcome).toMatchObject({
+      ok: false,
+      reason: "blocked_address",
+    });
     expect(result.connections).toBe(0);
   });
 
   it("BR-307 a blocked IPv6 answer beside an allowed IPv4 fails as blocked_address", async () => {
     const result = await attempt(["8.8.8.8"], ["::1"]);
-    expect(result.outcome).toMatchObject({ ok: false, reason: "blocked_address" });
+    expect(result.outcome).toMatchObject({
+      ok: false,
+      reason: "blocked_address",
+    });
     expect(result.connections).toBe(0);
   });
 

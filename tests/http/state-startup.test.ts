@@ -78,7 +78,8 @@ async function refusal(code: Code): Promise<string> {
     case "OAUTH_STATE_VERSION": {
       created(path);
       const db = new DatabaseSync(path);
-      db.exec(`PRAGMA user_version=2; UPDATE meta SET value='${SEEDED}'`);
+      // BR-295 v2: version 2 is read since F-028; 3 is the first newer one.
+      db.exec(`PRAGMA user_version=3; UPDATE meta SET value='${SEEDED}'`);
       db.close();
       return path;
     }

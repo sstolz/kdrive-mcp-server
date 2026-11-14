@@ -223,9 +223,7 @@ describe("BR-393 BR-129 v2 consent page of a CIMD client", () => {
         "This client redirects to this computer only (loopback).",
       );
       expect(body.indexOf(URL_ID)).toBeLessThan(body.indexOf("Claude"));
-      expect(body.indexOf("Client host:")).toBeLessThan(
-        body.indexOf("Claude"),
-      );
+      expect(body.indexOf("Client host:")).toBeLessThan(body.indexOf("Claude"));
     },
   );
 

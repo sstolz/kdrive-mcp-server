@@ -65,9 +65,11 @@ export interface ConsentView {
   resource: string;
   action: string;
   consentId: string;
+  /** F-028 BR-393: set for a CIMD client only. */
+  cimd?: { host: string; loopback: boolean };
 }
 
-/** BR-129: the consent page; every value is HTML-escaped. */
+/** BR-129 v2 / BR-393: the consent page; every value is HTML-escaped. */
 export function consentPage(
   view: ConsentView,
   setCookie: string,
@@ -76,11 +78,24 @@ export function consentPage(
     view.clientName === undefined
       ? "unnamed client"
       : `${escapeHtml(view.clientName)} (self-declared, unverified)`;
+  const identity = view.cimd
+    ? [
+        `<p>Client ID: <code>${escapeHtml(view.clientId)}</code></p>`,
+        `<p>Client host: ${escapeHtml(view.cimd.host)}</p>`,
+        `<p>Client name: <strong>${name}</strong></p>`,
+        "<p>This name comes from the client's metadata document and is unverified.</p>",
+        ...(view.cimd.loopback
+          ? ["<p>This client redirects to this computer only (loopback).</p>"]
+          : []),
+      ]
+    : [
+        `<p>Client name: <strong>${name}</strong></p>`,
+        `<p>The client name is self-declared and unverified.</p>`,
+        `<p>Client ID: <code>${escapeHtml(view.clientId)}</code></p>`,
+      ];
   const body = [
     "<h1>Authorize access</h1>",
-    `<p>Client name: <strong>${name}</strong></p>`,
-    `<p>The client name is self-declared and unverified.</p>`,
-    `<p>Client ID: <code>${escapeHtml(view.clientId)}</code></p>`,
+    ...identity,
     `<p>Redirect URI: <code>${escapeHtml(view.redirectUri)}</code></p>`,
     `<p>Protected resource: <code>${escapeHtml(view.resource)}</code></p>`,
     `<form method="post" action="${escapeHtml(view.action)}">`,

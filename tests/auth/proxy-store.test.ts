@@ -1384,28 +1384,26 @@ describe("BR-311 store format version 2 (F-028 AC-08)", () => {
     seed(path);
     expect(version(path)).toBe(1);
     const store = open(path, { allowedClientIdOrigins: ORIGINS });
-    try {
-      expect(store.commit([insertFamily(family(2, CIMD))])).toBe("committed");
-      expect(version(path)).toBe(2);
-      expect(query(path, "SELECT id, client_id FROM families ORDER BY id")).toEqual(
-        [
-          { id: family(1, client(1).id).id, client_id: client(1).id },
-          { id: family(2, CIMD).id, client_id: CIMD },
-        ],
-      );
-      expect(
-        query(path, `SELECT COUNT(*) AS n FROM clients WHERE id = '${CIMD}'`),
-      ).toEqual([{ n: 0 }]);
-      // Deleting the last CIMD family does not lower the version (BR-311).
-      expect(
-        store.commit([{ op: "deleteFamily", id: family(2, CIMD).id }]),
-      ).toBe("committed");
-      expect(version(path)).toBe(2);
-      expect(store.commit([insertClient(client(3))])).toBe("committed");
-      expect(version(path)).toBe(2);
-    } finally {
-      store.close();
-    }
+    expect(store.commit([insertFamily(family(2, CIMD))])).toBe("committed");
+    store.close();
+    expect(version(path)).toBe(2);
+    expect(
+      query(path, "SELECT id, client_id FROM families ORDER BY id"),
+    ).toEqual([
+      { id: family(1, client(1).id).id, client_id: client(1).id },
+      { id: family(2, CIMD).id, client_id: CIMD },
+    ]);
+    expect(
+      query(path, `SELECT COUNT(*) AS n FROM clients WHERE id = '${CIMD}'`),
+    ).toEqual([{ n: 0 }]);
+    // Deleting the last CIMD family does not lower the version (BR-311).
+    const second = open(path, { allowedClientIdOrigins: ORIGINS });
+    expect(
+      second.commit([{ op: "deleteFamily", id: family(2, CIMD).id }]),
+    ).toBe("committed");
+    expect(second.commit([insertClient(client(3))])).toBe("committed");
+    second.close();
+    expect(version(path)).toBe(2);
     // The next startup transaction writes version 1: no CIMD family remains.
     open(path, { allowedClientIdOrigins: ORIGINS }).close();
     expect(version(path)).toBe(1);
@@ -1507,9 +1505,9 @@ describe("BR-311 store format version 2 (F-028 AC-08)", () => {
     const path = statePath();
     seed(path, [], []);
     const first = open(path, { allowedClientIdOrigins: ORIGINS });
-    expect(
-      first.commit([insertFamily(family(2, binding.issuer))]),
-    ).toBe("committed");
+    expect(first.commit([insertFamily(family(2, binding.issuer))])).toBe(
+      "committed",
+    );
     first.close();
     const second = open(path, {
       allowedClientIdOrigins: [new URL(binding.issuer).origin],
