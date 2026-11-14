@@ -31,6 +31,11 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
   directory outside the checkout, `HTTP_ACCEPTANCE_STATE_DIR`, mounted
   read-write at `/run/oauth-state` for that run only; a caller-set
   `OAUTH_STATE_FILE` is refused. Without the directory the run is unchanged.
+- #23 / F-030 v1 (pending acceptance): the OAuth proxy consent and error pages
+  have a designed look in light and dark themes (product name, unofficial
+  notice, a short explanation, primary Approve and secondary Deny buttons, a
+  link to the source code), with one inline stylesheet allowed by its SHA-256
+  hash in the `Content-Security-Policy`; no script and no external resource.
 
 ### Fixed
 
