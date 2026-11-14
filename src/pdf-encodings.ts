@@ -88,13 +88,16 @@ class Cleartext {
     this.p.refs = false;
   }
   /** Any parser failure is `UNSUPPORTED_FORMAT`, except a glyph name over the
-   * tokenizer's name limit, which passes the 31-byte ceiling (BR-420). */
+   * tokenizer's name limit, which passes the 31-byte ceiling (BR-420): only a
+   * token starting with `/` at the glyph position keeps `LIMIT_EXCEEDED`. */
   next(glyph = false): PdfToken | undefined {
     let token: PdfToken | undefined;
+    this.p.skip();
+    const name = glyph && this.p.at() === 47;
     try {
       token = this.p.token();
     } catch (error) {
-      if (glyph && contentFailure(error) === "LIMIT_EXCEEDED") throw error;
+      if (name && contentFailure(error) === "LIMIT_EXCEEDED") throw error;
       fail("UNSUPPORTED_FORMAT");
     }
     return token;

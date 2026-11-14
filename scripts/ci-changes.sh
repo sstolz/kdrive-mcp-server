@@ -20,9 +20,10 @@ while IFS= read -r path || test -n "$path"; do
   esac
   case "$path" in
     Dockerfile | .dockerignore | package.json | package-lock.json | \
-      tsconfig.json | tsconfig.build.json | LICENSE | NOTICE | README.md | \
-      Makefile | scripts/image-smoke.sh | scripts/http-acceptance.ts | \
-      scripts/ci-changes.sh | .github/workflows/ci.yml | src/*)
+      tsconfig.json | tsconfig.build.json | LICENSE | LICENSES/* | NOTICE | \
+      README.md | Makefile | scripts/image-smoke.sh | \
+      scripts/http-acceptance.ts | scripts/ci-changes.sh | \
+      .github/workflows/ci.yml | src/*)
       image=true
       ;;
   esac

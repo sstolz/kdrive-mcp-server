@@ -2,12 +2,12 @@
 // names each, "" for no glyph. tests/read-pdf-encodings.test.ts checks them
 // against the pinned PDF.js tables (F-034 AC-12 (l)).
 //
-// Derived from PDF.js, Copyright Mozilla Foundation and contributors, licensed
-// under the Apache License, Version 2.0
-// (http://www.apache.org/licenses/LICENSE-2.0); changed here to space-separated
-// rows. The glyph names follow the Adobe Glyph List, Copyright Adobe, licensed
-// under the BSD 3-Clause License. See NOTICE for both notices and the Adobe
-// Glyph List conditions.
+// Derived from PDF.js, Copyright 2024 Mozilla Foundation, licensed under the
+// Apache License, Version 2.0 (LICENSES/Apache-2.0.txt); changed here to
+// space-separated rows. The glyph names follow the Adobe Glyph List:
+// Copyright 2002-2019 Adobe (http://www.adobe.com/).
+// It is licensed under the BSD 3-Clause License. See NOTICE for both notices
+// and the Adobe Glyph List conditions.
 const table = (rows: string[]) => rows.join(" ").split(" ");
 export const macExpertEncoding = table([
   "               ",

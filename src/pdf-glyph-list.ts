@@ -3,12 +3,12 @@
 // Glyph List), with .notdef and controlNULL left out because they map to U+0000.
 // tests/read-pdf-encodings.test.ts checks this set against the pinned PDF.js.
 //
-// Derived from PDF.js, Copyright Mozilla Foundation and contributors, licensed
-// under the Apache License, Version 2.0
-// (http://www.apache.org/licenses/LICENSE-2.0); changed here to a list of
-// names only. The names come from the Adobe Glyph List, Copyright Adobe,
-// licensed under the BSD 3-Clause License. See NOTICE for both notices and the
-// Adobe Glyph List conditions.
+// Derived from PDF.js, Copyright 2024 Mozilla Foundation, licensed under the
+// Apache License, Version 2.0 (LICENSES/Apache-2.0.txt); changed here to a list
+// of names only. The names come from the Adobe Glyph List:
+// Copyright 2002-2019 Adobe (http://www.adobe.com/).
+// It is licensed under the BSD 3-Clause License. See NOTICE for both notices
+// and the Adobe Glyph List conditions.
 const names = [
   "A AE AEacute AEmacron AEsmall Aacute Aacutesmall Abreve Abreveacute",
   "Abrevecyrillic Abrevedotbelow Abrevegrave Abrevehookabove Abrevetilde",

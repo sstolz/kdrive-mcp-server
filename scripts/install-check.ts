@@ -130,7 +130,14 @@ export function installVerdict(list: Installed[]): {
 }
 
 function run(work: string, prefix: string): number {
-  for (const file of ["dist", "LICENSE", "NOTICE", "README.md", "package.json"])
+  for (const file of [
+    "dist",
+    "LICENSE",
+    "LICENSES",
+    "NOTICE",
+    "README.md",
+    "package.json",
+  ])
     cpSync(file, join(work, file), { recursive: true });
   let tarball: string;
   try {
