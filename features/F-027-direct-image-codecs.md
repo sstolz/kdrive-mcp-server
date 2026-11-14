@@ -3,15 +3,18 @@ id: F-027
 title: Direct image codecs without Jimp
 ticket: "#12"
 status: frozen
-version: 1
+version: 2
 ---
 
 # F-027 — Direct image codecs without Jimp
 
 Author: Claude Opus 5.5 (effort unknown), spec phase, 2026-11-13.
-Frozen 2026-11-13 (autonomous mode, PROJECT.md D-1) on reviewed revision
-`cf27035` after spec reviews 1 (`changes`), 2 and 3 (`approve`), published
-on #12.
+Version 1 frozen 2026-11-13 (autonomous mode, PROJECT.md D-1) on reviewed
+revision `cf27035` after spec reviews 1 (`changes`), 2 and 3 (`approve`),
+published on #12; kept in `features/history/F-027-v1.md`. Version 2
+(2026-11-14) changes only the BR-321 v4 changelog selection and AC-12, see
+`## Stress-test`, Implementation; it is frozen after an independent review
+published on the pull request.
 Base: branch `claude/beautiful-maxwell-8mdk2w`, based on `main` at
 `768f1b6`. IDs: F-027, BR-389–BR-392 v1, BR-122 v3, BR-315 v2, BR-318 v2,
 BR-320 v3, BR-321 v4; BR-317 superseded by BR-390; ADR-010 (supersedes
@@ -354,7 +357,10 @@ scripts/install-check.ts` and exits with its status; `make help` lists
   #12 (the `make install-check` target and its CI step), both matching
   `#12\b`, both in the first release section citing #12 in file order or,
   when no release section cites #12, under `## [Unreleased]` (release
-  section as defined in v3). Verified by: AC-12.
+  section as defined in v3). Only the text before the `## [0.6.0-beta.1]`
+  heading is searched for this selection: that section and older ones cite
+  tickets of the archived repository, whose `#12` is another ticket.
+  Verified by: AC-12.
 - **BR-317 v1** — superseded by BR-390; its tests are removed except the
   600 × 400 route test (Scope item 6).
 
@@ -494,7 +500,8 @@ target and check never runs it`).
   changelog has the #12 `### Fixed` and `### Added` lines; the #104
   changelog checks of v3 still pass; a synthetic changelog with a #12 line
   only in an older release section, with only one of the two #12 lines, or
-  with `#120` instead of `#12`, fails.
+  with `#120` instead of `#12`, fails; a synthetic changelog whose only #12
+  lines are in `## [0.6.0-beta.1]` fails.
   Verified by: `tests/dependency-audit.test.ts` (`TestBR321_audit_docs ...`).
 - **AC-14** (BR-390) — Error-path characterization. Given three inputs
   built in the test that pass `preflightImage`: (a) a 4 × 2 PNG, colour type
@@ -660,3 +667,12 @@ findings; both retained:
 2. [minor] BR-321 v4 (b) could be met without the literal `Zod 3`, so a
    compliant section could fail AC-12. Retained: sentence (b) now names
    Zod 3 literally.
+
+Implementation (2026-11-14), version 2:
+
+1. The released `## [0.6.0-beta.1]` section of `CHANGELOG.md` already cites
+   `#12` for archive-era entries (F-012), so the v1 selection ("the first
+   release section citing #12") picked that section instead of the #12 lines
+   of this ticket. Retained: BR-321 v4 searches only the text before the
+   `## [0.6.0-beta.1]` heading, the same rule for the real file and the
+   synthetic fixtures, and AC-12 adds the matching negative case.

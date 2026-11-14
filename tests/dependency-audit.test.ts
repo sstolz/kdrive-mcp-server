@@ -397,7 +397,7 @@ it("TestBR321_audit_docs development, security and changelog state the audit con
   expect(changelogAuditSection(changelog)).toBe(
     "## [0.6.0-beta.1] - 2026-11-13",
   );
-  expect(changelogTicket12Unreleased(changelog)).toBe("## [Unreleased]");
+  expect(changelogTicket12Section(changelog)).toBe("## [Unreleased]");
 });
 
 it("TestBR321_audit_docs a development guide naming Jimp or lacking the install-check row fails", () => {
@@ -491,25 +491,18 @@ function changelogAuditSection(changelog: string): string {
 }
 
 // BR-321 v4: the #12 lines (Fixed: the tarball install no longer resolves
-// Zod 3; Added: make install-check and its CI step).
+// Zod 3; Added: make install-check and its CI step). F-027 v2: only the
+// text before the `## [0.6.0-beta.1]` heading is searched, because that
+// section and older ones cite tickets of the archived repository.
 const FIXED_12_MARKER = "no longer resolves Zod 3";
 const ADDED_12_MARKER = "make install-check";
 function changelogTicket12Section(changelog: string): string {
+  const archived = changelog.search(/^## \[0\.6\.0-beta\.1\]/mu);
   return changelogTicketSection(
-    changelog,
+    archived < 0 ? changelog : changelog.slice(0, archived),
     "#12",
     FIXED_12_MARKER,
     ADDED_12_MARKER,
-  );
-}
-// Deviation (reported on the PR): the released [0.6.0-beta.1] section cites
-// archive-era "#12" entries (F-012), so on the real changelog the BR-321 v4
-// selection is applied to the sections from [Unreleased] up to the first
-// release section only.
-function changelogTicket12Unreleased(changelog: string): string {
-  const first = changelog.search(/^## \[\d/mu);
-  return changelogTicket12Section(
-    first < 0 ? changelog : changelog.slice(0, first),
   );
 }
 
@@ -828,6 +821,14 @@ it("TestBR321_audit_docs changelog #12 lines misplaced, incomplete or citing #12
         FIXED_12.replace("#12", "#120"),
         ADDED_12.replace("#12", "#120"),
       ]),
+    ),
+  ).toThrow("missing #12 Fixed line");
+  expect(() =>
+    changelogTicket12Section(
+      changelogFixture(
+        ["## [Unreleased]", "", ""],
+        ["## [0.6.0-beta.1] - 2026-11-13", FIXED_12, ADDED_12],
+      ),
     ),
   ).toThrow("missing #12 Fixed line");
 });

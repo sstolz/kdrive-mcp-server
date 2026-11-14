@@ -30,6 +30,7 @@ canonical-file context; use the live spec/index for current navigable references
 | F-018 v1 | [Accepted v1 text](F-018-v1.md) | Frozen 2026-11-10 at `0c9a542` (#19), accepted on main `0f1852c`; [v2](../F-018-upload.md) (#91) requires NFC names after D-18-11; snapshot SHA-256 `2e04ce42670aa0a862d8aff2eada16bbae38288862f9994a9f0e5a3641cb0b48` |
 | F-018 v2 | [Accepted v2 text](F-018-v2.md) | Frozen at `99f1ce9` (#91), accepted on main `b6b7fbb`; [v3](../F-018-upload.md) (#100) requires well-formed UTF-16 names for create and rename (BR-260 v3) and aligns the version literals with `PACKAGE_VERSION`; no acceptance of v3 claimed; snapshot SHA-256 `e0276e6399e5795482cafafc541ce37d0cbf450687193459da03374ddc142e50` |
 | F-024 v1 | [Original frozen text](F-024-v1.md) | Frozen 2026-11-12 at `0624a1b` (#2); [draft v2](../F-024-gated-publication.md) withdraws BR-376, BR-377, BR-321 v2 and AC-17–AC-20 after the D-14 stop condition and adds residual risk (f) (owner decision 2026-11-12); no acceptance claimed; snapshot SHA-256 `bdb653f6c6323bad4502071baeb867e2c2c2cc4ea0fc366c03f3e6c29864319f` |
+| F-027 v1 | [Original frozen text](F-027-v1.md) | Frozen 2026-11-13 at `cf27035` (#12); [v2](../F-027-direct-image-codecs.md) limits the BR-321 v4 changelog selection to the text before `## [0.6.0-beta.1]`; snapshot SHA-256 `65d6566541d955cc9356af3d0861bbb0c4f31a661d6698456398b9839f91d0c1` |
 
 F-001 v2 retains BR-001–BR-004, supersedes BR-005 with BR-007 and BR-006 with BR-008,
 and adds BR-009. The v1 snapshot is a byte-for-byte copy made before v2 editing.
