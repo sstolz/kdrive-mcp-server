@@ -1,6 +1,6 @@
 # Business-rule index
 
-All **382 allocated rules** (BR-218–BR-233 belong to F-015, BR-234–BR-259 to F-016, BR-260–BR-278 to F-017, BR-279–BR-289 to F-018, BR-290 and BR-292–BR-314 to F-019, BR-315–BR-321 to F-020, BR-322–BR-327 to F-021, BR-328–BR-340 to F-022, BR-341–BR-352 to F-023, BR-353–BR-375, BR-378 and BR-379 to F-024, BR-380–BR-388 to F-026, BR-389–BR-392 to F-027; BR-291 and BR-305–BR-311 are reserved for #109 and have no record; BR-376 and BR-377 were withdrawn in F-024 v2, were never accepted, have no record and are never reused) now have a canonical record with YAML metadata, Rule,
+All **393 allocated rules** (BR-218–BR-233 belong to F-015, BR-234–BR-259 to F-016, BR-260–BR-278 to F-017, BR-279–BR-289 to F-018, BR-290 and BR-292–BR-314 to F-019, BR-315–BR-321 to F-020, BR-322–BR-327 to F-021, BR-328–BR-340 to F-022, BR-341–BR-352 to F-023, BR-353–BR-375, BR-378 and BR-379 to F-024, BR-380–BR-388 to F-026, BR-389–BR-392 to F-027, BR-291, BR-305–BR-311 and BR-393–BR-395 to F-028 (#3; reserved for this work by F-019 as archive #109); BR-376 and BR-377 were withdrawn in F-024 v2, were never accepted, have no record and are never reused) now have a canonical record with YAML metadata, Rule,
 Rationale, concrete Given / When / Then Examples, Verification and History. Every
 new record begins its initial BR version1; BR-042 is now version2 under F-003 v2; BR-024 and BR-100
 version 2 were accepted with F-010 (#21) on main `3fc14c3`. BR-010, BR-012 and BR-014 v2 and BR-015 v3
@@ -17,7 +17,7 @@ F-002 acceptance (archived evidence `runs/33-acceptance-1.md`) on
 #4 (archive issue 4),
 #31 (archive issue 31) and
 #33 (archive issue 33).
-There are **374 active, 8 superseded and 0 pending-acceptance** rules (F-027 v2, with BR-389–BR-392 v1 and BR-122 v3, BR-315 v2, BR-318 v2, BR-320 v3 and BR-321 v4, and BR-317 superseded by BR-390, was accepted on actual main `75bd9bb` on 2026-11-14; F-026 v1, with BR-380–BR-388 v1 and BR-070 v3, BR-118 v2 and BR-258 v2, was accepted on actual main `2d10e19` on 2026-11-13; F-025 v1, with BR-321 v3, was accepted on actual main `e857db3` on 2026-11-13; F-024 v2, with BR-353–BR-375, BR-378 and BR-379 v1 and BR-016 v3 and BR-178 v3, was accepted on actual main `163e701` on 2026-11-13; BR-376, BR-377 and the BR-321 v2 of F-024 v1 were withdrawn in F-024 v2, and BR-321 v2 is never reused; F-023 v1, with BR-341–BR-352 v1 and BR-015 v7, BR-149 v3, BR-183 v3, BR-225 v3, BR-227 v3, BR-229 v2 and BR-320 v2, was accepted on actual main `ad25fa2` on 2026-11-12; F-022 v2, with BR-328–BR-340 (BR-335 v2, the others v1) and BR-146 v2, was accepted on actual main `e7d6367` on 2026-11-12; F-021 v1, with BR-322–BR-327 v1 and BR-154 v2, BR-156 v2, BR-162 v2, BR-167 v2, BR-168 v2, BR-180 v2, BR-181 v2, BR-184 v2 and BR-187 v3, was accepted on actual main `e208996` on 2026-11-11; F-020 v1, with BR-315–BR-321 v1 and BR-015 v6, BR-122 v2, BR-225 v2 and BR-227 v2, was accepted on actual main `b6acf86` on 2026-11-11; F-019 v1, with BR-290, BR-292–BR-304 and BR-312–BR-314 v1 and BR-023 v2, BR-024 v3, BR-124 v2, BR-128 v2, BR-139 v2, BR-140 v2, BR-142 v2, BR-143 v2, BR-152 v2 and BR-169 v2, was accepted on actual main `68209fe` on 2026-11-11; F-018 v1, with BR-279–BR-289 and BR-035 v2, BR-060 v6, BR-190 v3, BR-266 v2 and BR-274 v2, was accepted on actual main `0f1852c` on 2026-11-10; F-017 v1, with BR-260–BR-278 and BR-039 v2, BR-060 v5, BR-190 v2 and BR-200 v2, was accepted on actual main `4b59c52` on 2026-11-10; F-016 v1, with BR-234–BR-259 and BR-069/BR-070 v2, was accepted on actual main `005b9ba` on 2026-11-10; F-003 v2 and F-004 v1, with BR-029–BR-058, were accepted on 2026-11-09 through the F-014 production acceptance; F-014 v7, with BR-190–BR-217 and BR-016, BR-028, BR-071, BR-123 and BR-175 v2, was accepted on actual main `2a9c1e3` on 2026-11-09). Acceptance covers local
+There are **374 active, 8 superseded and 11 pending-acceptance** rules (F-028 v1 (#3) allocates BR-291, BR-305–BR-311 and BR-393–BR-395 v1, pending acceptance, and versions BR-023 to v3, BR-024 to v4, BR-125 to v2, BR-128 to v3, BR-129 to v2, BR-136 to v2, BR-143 to v3, BR-169 to v3, BR-295 to v2, BR-298 to v2, BR-299 to v2 and BR-302 to v2, each pending acceptance while its previous version stays active; F-027 v2, with BR-389–BR-392 v1 and BR-122 v3, BR-315 v2, BR-318 v2, BR-320 v3 and BR-321 v4, and BR-317 superseded by BR-390, was accepted on actual main `75bd9bb` on 2026-11-14; F-026 v1, with BR-380–BR-388 v1 and BR-070 v3, BR-118 v2 and BR-258 v2, was accepted on actual main `2d10e19` on 2026-11-13; F-025 v1, with BR-321 v3, was accepted on actual main `e857db3` on 2026-11-13; F-024 v2, with BR-353–BR-375, BR-378 and BR-379 v1 and BR-016 v3 and BR-178 v3, was accepted on actual main `163e701` on 2026-11-13; BR-376, BR-377 and the BR-321 v2 of F-024 v1 were withdrawn in F-024 v2, and BR-321 v2 is never reused; F-023 v1, with BR-341–BR-352 v1 and BR-015 v7, BR-149 v3, BR-183 v3, BR-225 v3, BR-227 v3, BR-229 v2 and BR-320 v2, was accepted on actual main `ad25fa2` on 2026-11-12; F-022 v2, with BR-328–BR-340 (BR-335 v2, the others v1) and BR-146 v2, was accepted on actual main `e7d6367` on 2026-11-12; F-021 v1, with BR-322–BR-327 v1 and BR-154 v2, BR-156 v2, BR-162 v2, BR-167 v2, BR-168 v2, BR-180 v2, BR-181 v2, BR-184 v2 and BR-187 v3, was accepted on actual main `e208996` on 2026-11-11; F-020 v1, with BR-315–BR-321 v1 and BR-015 v6, BR-122 v2, BR-225 v2 and BR-227 v2, was accepted on actual main `b6acf86` on 2026-11-11; F-019 v1, with BR-290, BR-292–BR-304 and BR-312–BR-314 v1 and BR-023 v2, BR-024 v3, BR-124 v2, BR-128 v2, BR-139 v2, BR-140 v2, BR-142 v2, BR-143 v2, BR-152 v2 and BR-169 v2, was accepted on actual main `68209fe` on 2026-11-11; F-018 v1, with BR-279–BR-289 and BR-035 v2, BR-060 v6, BR-190 v3, BR-266 v2 and BR-274 v2, was accepted on actual main `0f1852c` on 2026-11-10; F-017 v1, with BR-260–BR-278 and BR-039 v2, BR-060 v5, BR-190 v2 and BR-200 v2, was accepted on actual main `4b59c52` on 2026-11-10; F-016 v1, with BR-234–BR-259 and BR-069/BR-070 v2, was accepted on actual main `005b9ba` on 2026-11-10; F-003 v2 and F-004 v1, with BR-029–BR-058, were accepted on 2026-11-09 through the F-014 production acceptance; F-014 v7, with BR-190–BR-217 and BR-016, BR-028, BR-071, BR-123 and BR-175 v2, was accepted on actual main `2a9c1e3` on 2026-11-09). Acceptance covers local
 configuration, synthetic injected preflight, accepted #8/#9/#10 injected scopes and the accepted #11 OIDC qualification tooling and validator, and the accepted #14 injected bounded extraction (F-009); F-008 qualified Infomaniak and Gitea as `proxy-only`. The #12 authenticated HTTP
 listener in proxy mode is accepted with one real claude.ai connection over a synthetic drive. The production read-only
 kDrive adapter and the stdio and HTTP runtime of the packaged CLI are accepted with F-014.
@@ -142,7 +142,7 @@ Keep navigation aligned with the [allocation ledger](../docs/spec-index.md),
 canonical records, examples and actual-main acceptance evidence in the same
 appropriately scoped, reviewed PR. Pending precedes acceptance; accepted markers
 are synchronized according to the existing workflow before release. The next
-unused BR ID is BR-393 (BR-291 and BR-305–BR-311 are reserved for #109; BR-376 and BR-377 are withdrawn and never reused). No new delivery step, product contract or release
+unused BR ID is BR-396 (BR-376 and BR-377 are withdrawn and never reused). No new delivery step, product contract or release
 authorization is introduced. The [capability map](../capability-map.md) describes
 accepted user-facing scope and explicitly provisional entries.
 
@@ -526,8 +526,8 @@ v2. All were accepted on actual main `0f1852c` on 2026-11-10
 
 F-019 v1 (#103) allocates BR-290 and BR-292–BR-314 v1 and
 versions BR-023 to v2, BR-024 to v3, BR-124, BR-128, BR-139, BR-140, BR-142,
-BR-143, BR-152 and BR-169 to v2. BR-291 and BR-305–BR-311 are reserved for #109
-(client ID metadata documents) and have no record here; they are never reused.
+BR-143, BR-152 and BR-169 to v2. BR-291 and BR-305–BR-311 were reserved for #109
+(client ID metadata documents); F-028 (#3) now allocates them (see below).
 All were accepted on actual main `68209fe` on 2026-11-11
 (evidence (archive issue 103));
 for the versioned rules the new version is the active rule. The owner-run
@@ -743,3 +743,39 @@ actual main `75bd9bb` on 2026-11-14 (#12 comment `12-acceptance-1-orchestrator`)
 | [BR-320](BR-320.md) | v3      | CI `audit` job adds a fourth step `make install-check`.                         | [F-027 v2](../features/F-027-direct-image-codecs.md) | Active                    |
 | [BR-321](BR-321.md) | v4      | Audit docs without Jimp; `SECURITY.md` #12 limit; #12 changelog lines.          | [F-027 v2](../features/F-027-direct-image-codecs.md) | Active                    |
 | [BR-317](BR-317.md) | v1      | Superseded by BR-390 on the acceptance of F-027.                                | [F-020 v1](../features/F-020-dependency-audit.md)    | Superseded by BR-390      |
+
+## Pending acceptance — Client ID Metadata Documents
+
+[F-028 v1](../features/F-028-client-id-metadata-documents.md) (#3) allocates
+BR-291, BR-305–BR-311 and BR-393–BR-395 v1 and versions BR-023 to v3, BR-024 to
+v4, BR-125 to v2, BR-128 to v3, BR-129 to v2, BR-136 to v2, BR-143 to v3,
+BR-169 to v3, BR-295 to v2, BR-298 to v2, BR-299 to v2 and BR-302 to v2, with
+[ADR-011](../architecture-decisions/ADR-011-oauth-state-format-v2-cimd.md)
+(proposed). All are pending acceptance on actual main; until then the previous
+versions stay active.
+
+| ID                  | Version | Rule                                                                            | Source                                                        | Status                           |
+| ------------------- | ------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------- | -------------------------------- |
+| [BR-291](BR-291.md) | v1      | `oauthAllowedClientIdOrigins`: at most 16 `https` origins, proxy mode only.     | [F-028 v1](../features/F-028-client-id-metadata-documents.md) | Pending acceptance               |
+| [BR-305](BR-305.md) | v1      | Acceptable CIMD client ID: syntax, not a proxy identity, listed origin.         | [F-028 v1](../features/F-028-client-id-metadata-documents.md) | Pending acceptance               |
+| [BR-306](BR-306.md) | v1      | One pinned HTTPS GET after one c-ares resolution; 5,120 bytes, 5,000 ms.        | [F-028 v1](../features/F-028-client-id-metadata-documents.md) | Pending acceptance               |
+| [BR-307](BR-307.md) | v1      | Address policy: blocked IPv4 ranges; IPv6 only inside `2000::/3`.               | [F-028 v1](../features/F-028-client-id-metadata-documents.md) | Pending acceptance               |
+| [BR-308](BR-308.md) | v1      | Document validation, lenient filtering and the resolution snapshot.             | [F-028 v1](../features/F-028-client-id-metadata-documents.md) | Pending acceptance               |
+| [BR-309](BR-309.md) | v1      | Cache of 100 entries, 60–3,600 s, stale use, four fetches, cancellation.        | [F-028 v1](../features/F-028-client-id-metadata-documents.md) | Pending acceptance               |
+| [BR-310](BR-310.md) | v1      | Token endpoint: method `none` only, decided before any lookup, no fetch.        | [F-028 v1](../features/F-028-client-id-metadata-documents.md) | Pending acceptance               |
+| [BR-311](BR-311.md) | v1      | CIMD families without a client row; content-dependent store version 2.          | [F-028 v1](../features/F-028-client-id-metadata-documents.md) | Pending acceptance               |
+| [BR-393](BR-393.md) | v1      | Consent page shows the client ID, its host and the loopback line.               | [F-028 v1](../features/F-028-client-id-metadata-documents.md) | Pending acceptance               |
+| [BR-394](BR-394.md) | v1      | `client_metadata_refused` and `client_metadata_fetched`; one event per refusal. | [F-028 v1](../features/F-028-client-id-metadata-documents.md) | Pending acceptance               |
+| [BR-395](BR-395.md) | v1      | Operator documentation and discovery procedure.                                 | [F-028 v1](../features/F-028-client-id-metadata-documents.md) | Pending acceptance               |
+| [BR-023](BR-023.md) | v3      | Adds the bounds of BR-291.                                                      | [F-028 v1](../features/F-028-client-id-metadata-documents.md) | v3 pending acceptance; v2 active |
+| [BR-024](BR-024.md) | v4      | `oauthAllowedClientIdOrigins` is proxy-only; origin conflicts.                  | [F-028 v1](../features/F-028-client-id-metadata-documents.md) | v4 pending acceptance; v3 active |
+| [BR-125](BR-125.md) | v2      | `client_id_metadata_document_supported` only with a nonempty list.              | [F-028 v1](../features/F-028-client-id-metadata-documents.md) | v2 pending acceptance; v1 active |
+| [BR-128](BR-128.md) | v3      | CIMD checks before any fetch; asynchronous handler; latch re-check.             | [F-028 v1](../features/F-028-client-id-metadata-documents.md) | v3 pending acceptance; v2 active |
+| [BR-129](BR-129.md) | v2      | Consent page content of BR-393 for CIMD clients.                                | [F-028 v1](../features/F-028-client-id-metadata-documents.md) | v2 pending acceptance; v1 active |
+| [BR-136](BR-136.md) | v2      | A CIMD client ID is authenticated under BR-310.                                 | [F-028 v1](../features/F-028-client-id-metadata-documents.md) | v2 pending acceptance; v1 active |
+| [BR-143](BR-143.md) | v3      | Adds the BR-394 events and the `reason` field.                                  | [F-028 v1](../features/F-028-client-id-metadata-documents.md) | v3 pending acceptance; v2 active |
+| [BR-169](BR-169.md) | v3      | `close()` step (2) cancels in-flight CIMD fetches.                              | [F-028 v1](../features/F-028-client-id-metadata-documents.md) | v3 pending acceptance; v2 active |
+| [BR-295](BR-295.md) | v2      | Reads versions 1 and 2; row rules of the file's own version.                    | [F-028 v1](../features/F-028-client-id-metadata-documents.md) | v2 pending acceptance; v1 active |
+| [BR-298](BR-298.md) | v2      | Rows pass the rules of the version their transaction writes.                    | [F-028 v1](../features/F-028-client-id-metadata-documents.md) | v2 pending acceptance; v1 active |
+| [BR-299](BR-299.md) | v2      | A failed write breaks a rule of the version its transaction writes.             | [F-028 v1](../features/F-028-client-id-metadata-documents.md) | v2 pending acceptance; v1 active |
+| [BR-302](BR-302.md) | v2      | Startup purge of CIMD families not acceptable under BR-305.                     | [F-028 v1](../features/F-028-client-id-metadata-documents.md) | v2 pending acceptance; v1 active |
