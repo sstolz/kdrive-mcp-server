@@ -2,7 +2,7 @@
 id: F-032
 title: Repeated consent POST answered idempotently
 ticket: "#33"
-status: frozen
+status: done
 version: 1
 ---
 

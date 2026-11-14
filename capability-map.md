@@ -1,12 +1,14 @@
 # Capability map
 
-## Provisional — repeated consent POST answered idempotently
+## Accepted — repeated consent POST answered idempotently
 
 [F-032 v1](features/F-032-repeated-consent-post.md) (#33), BR-411 v1 with
-BR-129 v5 and BR-142 v3, pending acceptance: in `proxy` mode a double click on
+BR-129 v5 and BR-142 v3: in `proxy` mode a double click on
 Approve or Deny no longer ends on the "already used" page; a repeat of the
 consent form from the same browser within 10 seconds gets the same redirect as
-the first POST. No JavaScript, CSP change or stored data is added.
+the first POST. No JavaScript, CSP change or stored data is added. Accepted on
+actual main `89be2ba` on 2026-11-14 (#33 comment
+`33-acceptance-1-orchestrator`).
 
 ## Accepted — OAuth proxy pages in English and French
 
