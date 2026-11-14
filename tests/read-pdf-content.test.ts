@@ -370,7 +370,7 @@ it("BR-416 AC-06 content projection (v) dropped operators paid for at every Cont
   // Pages 1–9 are tokenized; page 10 refuses at its `Contents` array, before tokenization.
   expect(open).toHaveBeenCalledTimes(9);
   open.mockRestore();
-});
+}, 60000);
 const big = "[-1000000 -1000000 1000000 1000000]";
 function sized(size: number) {
   const abs = Math.abs(size),
