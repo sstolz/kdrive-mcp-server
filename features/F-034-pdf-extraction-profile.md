@@ -684,8 +684,9 @@ findings follow (10 from the spec review 4 rows):
   image input. Verified by: the ci-changes test.
 - **BR-392 v2** — v1 holds, except that `scripts/install-check.ts` also copies
   `LICENSES/` into the temporary directory: it copies `dist/`, `LICENSE`,
-  `LICENSES/`, `NOTICE`, `README.md` and `package.json`. Verified by: no test
-  (the CI `audit` job runs `make install-check`).
+  `LICENSES/`, `NOTICE`, `README.md` and `package.json`. Verified by:
+  `TestBR392_install_check copies every package.json files entry, LICENSES
+  included` in `tests/dependency-audit.test.ts`.
 
 ## Contract details
 
