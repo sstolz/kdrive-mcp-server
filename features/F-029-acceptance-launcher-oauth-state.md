@@ -2,7 +2,7 @@
 id: F-029
 title: Persisted OAuth proxy state in the owner-run HTTP acceptance launcher
 ticket: "#25"
-status: frozen
+status: done
 version: 2
 ---
 
