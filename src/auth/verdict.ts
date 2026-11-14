@@ -47,13 +47,12 @@ export function providerVerdict(input: VerdictInput): {
   if (!input.discoveryUsable) failing.push("discovery not usable");
   if (input.pkceS256 !== "yes") failing.push("PKCE S256 is not yes");
   if (input.jwks !== "yes") failing.push("JWKS is not yes");
-  if (!token) failing.push("token step refused");
-  else {
+  if (token) {
     if (!token.accessTokenAuthenticated)
       failing.push("access token not authenticated");
     if (token.idToken && !token.idToken.rejectedWith401)
       failing.push("ID token accepted by the validator");
-  }
+  } else failing.push("token step refused");
   if (!failing.length) {
     const registration =
       input.dynamicRegistration === "yes" || input.cimd === "yes";

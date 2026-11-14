@@ -15,12 +15,12 @@ export const ALLOWED_ALGORITHMS: readonly string[] = [
 ];
 
 /** BR-099: header `typ` values that an access token may carry. */
-const ACCESS_TOKEN_TYPES = [
+const ACCESS_TOKEN_TYPES = new Set([
   "jwt",
   "at+jwt",
   "application/jwt",
   "application/at+jwt",
-];
+]);
 const PRIVATE_MEMBERS = ["d", "p", "q", "dp", "dq", "qi", "k"];
 
 export type RejectionReason =
@@ -171,7 +171,7 @@ function idTokenShaped(
   if (header.typ === undefined) return false;
   return (
     typeof header.typ !== "string" ||
-    !ACCESS_TOKEN_TYPES.includes(header.typ.toLowerCase())
+    !ACCESS_TOKEN_TYPES.has(header.typ.toLowerCase())
   );
 }
 
@@ -218,7 +218,7 @@ export function createAccessTokenValidator(
   const identityIssuer = upstreamIssuer ?? issuer;
   const keys = usableKeys(options.jwks);
   const subjects = [...options.allowedSubjects];
-  const emails = [...options.allowedEmails];
+  const emails = new Set(options.allowedEmails);
   const reject = (
     reason: RejectionReason,
     status: 401 | 403 = 401,
@@ -256,7 +256,7 @@ export function createAccessTokenValidator(
     );
     const byEmail =
       typeof payload.email === "string" &&
-      emails.includes(payload.email) &&
+      emails.has(payload.email) &&
       payload.email_verified === true;
     if (!bySubject && !byEmail) return reject("identity", 403);
     return { ok: true, identity: { iss: identityIssuer, sub } };

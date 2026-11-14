@@ -464,10 +464,12 @@ function validateAuthenticatedHttp(values: Source, selected: Selected): void {
 function validateClientIdOrigins(values: Source): void {
   const origins =
     (values.oauthAllowedClientIdOrigins as readonly string[] | undefined) ?? [];
-  const own = [values.publicUrl, values.oauthIssuer].map(
-    (value) => new URL(value as string).origin,
+  const own = new Set(
+    [values.publicUrl, values.oauthIssuer].map(
+      (value) => new URL(value as string).origin,
+    ),
   );
-  if (origins.some((origin) => own.includes(origin)))
+  if (origins.some((origin) => own.has(origin)))
     fail("CONFLICTING_SETTINGS", "oauthAllowedClientIdOrigins");
 }
 /** BR-290: the state file and its journal never coincide with the audit log. */

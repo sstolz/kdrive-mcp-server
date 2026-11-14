@@ -386,7 +386,7 @@ export function createClientMetadataResolver(
         release({
           kind: "failed",
           reason: "timeout",
-          status: outcome !== undefined && !outcome.ok ? outcome.status : 0,
+          status: outcome === undefined || outcome.ok ? 0 : outcome.status,
           transient: true,
         });
       });
@@ -443,7 +443,7 @@ export function createClientMetadataResolver(
     },
     close() {
       closed = true;
-      for (const flight of [...inflight.values()]) {
+      for (const flight of inflight.values()) {
         flight.controller.abort(CLOSED);
         flight.settle({ kind: "closed" });
       }

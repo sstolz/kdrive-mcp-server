@@ -68,7 +68,7 @@ export class SessionRegistry {
   /** Closes expired sessions before a lookup or a creation. */
   async sweep(now: number): Promise<void> {
     const closing: Array<Promise<void>> = [];
-    for (const session of [...this.sessions.values()]) {
+    for (const session of this.sessions.values()) {
       const idleAt = session.lastUsed + IDLE_MS;
       const lifeAt = session.createdAt + LIFETIME_MS;
       if (now >= Math.min(idleAt, lifeAt))

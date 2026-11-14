@@ -226,11 +226,7 @@ export function createContentReader(
     };
     if (completeLimit !== undefined) {
       count = size;
-    } else if (uri !== undefined) {
-      if (size > config.maxReadBytes || !plannedFits(size))
-        fail("LIMIT_EXCEEDED");
-      count = size;
-    } else {
+    } else if (uri === undefined) {
       let low = 0,
         high = count;
       // Near EOF the next-offset field disappears; check that endpoint separately.
@@ -245,6 +241,10 @@ export function createContentReader(
       }
       if (!plannedFits(count) || (remaining > 0 && count === 0))
         fail("LIMIT_EXCEEDED");
+    } else {
+      if (size > config.maxReadBytes || !plannedFits(size))
+        fail("LIMIT_EXCEEDED");
+      count = size;
     }
     let bytes = Buffer.alloc(0);
     if (count > 0) {
