@@ -2,7 +2,7 @@
 id: F-034
 title: PDF text extraction for common generator output
 ticket: "#4"
-status: ready-for-freeze
+status: frozen
 version: 2
 ---
 
@@ -1528,3 +1528,10 @@ Code review 2 (4-code-review-2-reviewer, changes):
 4. (commit split) — not retained here: the deviation (tests and fix in one
    commit in code review 1) is recorded on the pull request; code review 2
    keeps its tests and its fix in separate commits.
+
+Code review 3 (`4-code-review-3-reviewer`, changes; F-034 v2 ready to freeze
+once fixed):
+
+- (minor) BR-392 v2 had no test. Retained: `scripts/install-check.ts`
+  exports its pack list, pinned by `TestBR392_install_check copies every
+  package.json files entry, LICENSES included`.
