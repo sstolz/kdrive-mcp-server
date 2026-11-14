@@ -2,6 +2,13 @@
 // (getGlyphsUnicode in pdfjs-dist/build/pdf.worker.mjs, derived from the Adobe
 // Glyph List), with .notdef and controlNULL left out because they map to U+0000.
 // tests/read-pdf-encodings.test.ts checks this set against the pinned PDF.js.
+//
+// Derived from PDF.js, Copyright Mozilla Foundation and contributors, licensed
+// under the Apache License, Version 2.0
+// (http://www.apache.org/licenses/LICENSE-2.0); changed here to a list of
+// names only. The names come from the Adobe Glyph List, Copyright Adobe,
+// licensed under the BSD 3-Clause License. See NOTICE for both notices and the
+// Adobe Glyph List conditions.
 const names = [
   "A AE AEacute AEmacron AEsmall Aacute Aacutesmall Abreve Abreveacute",
   "Abrevecyrillic Abrevedotbelow Abrevegrave Abrevehookabove Abrevetilde",

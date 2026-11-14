@@ -1,6 +1,13 @@
 // Base encodings of PDF.js 6.5.438 (pdfjs-dist/build/pdf.worker.mjs), 256 glyph
 // names each, "" for no glyph. tests/read-pdf-encodings.test.ts checks them
 // against the pinned PDF.js tables (F-034 AC-12 (l)).
+//
+// Derived from PDF.js, Copyright Mozilla Foundation and contributors, licensed
+// under the Apache License, Version 2.0
+// (http://www.apache.org/licenses/LICENSE-2.0); changed here to space-separated
+// rows. The glyph names follow the Adobe Glyph List, Copyright Adobe, licensed
+// under the BSD 3-Clause License. See NOTICE for both notices and the Adobe
+// Glyph List conditions.
 const table = (rows: string[]) => rows.join(" ").split(" ");
 export const macExpertEncoding = table([
   "               ",

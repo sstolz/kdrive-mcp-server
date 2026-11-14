@@ -153,6 +153,9 @@ it("BR-004 records original MIT licensing and accurate deferred upstream provena
   expect(notice).toContain("857272d7fd42c0940ae389b9092b1c4cd2351337");
   expect(notice).toContain("No upstream source code is copied");
   expect(notice).toContain("Apache-2.0");
+  expect(notice).toContain("Copyright Mozilla Foundation and contributors");
+  expect(notice).toContain("Adobe Glyph List");
+  expect(notice).toContain("Neither the name of Adobe");
 });
 it("BR-105 the package holds the built auth modules and the pinned jose, never the qualification command or reports", () => {
   const manifest = JSON.parse(readFileSync("package.json", "utf8")) as {
