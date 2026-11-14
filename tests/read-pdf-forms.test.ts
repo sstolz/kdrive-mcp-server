@@ -259,6 +259,23 @@ it("BR-419 AC-11 Form inlining (k) the token that makes the sum of I pass 65,536
     emit.mockRestore();
   }
 });
+it.each([32766, 40000])(
+  "BR-419 AC-11 Form inlining (p) a Form of %i 0 Tc before BT (a) Tj ET",
+  async (n) => {
+    const bytes = withForms(
+      "/F1 12 Tf /Fm Do",
+      "<< /Font << /F1 4 0 R >> /XObject << /Fm 5 0 R >> >>",
+      [loose(`${"0 Tc ".repeat(n)}BT (a) Tj ET`)],
+    );
+    const emit = vi.spyOn(CanonicalContent.prototype, "emit");
+    try {
+      await refuses(bytes, "LIMIT_EXCEEDED");
+      expect(emit).toHaveBeenCalledTimes(32768);
+    } finally {
+      emit.mockRestore();
+    }
+  },
+);
 it("BR-419 AC-11 Form inlining (m) a Form showing text with its caller's simple and Type0 fonts", async () => {
   const bytes = withForms(
     "/F1 12 Tf /Fm Do /F2 12 Tf /Fm Do",

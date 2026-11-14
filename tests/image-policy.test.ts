@@ -34,6 +34,12 @@ describe("F-013 AC-02 Dockerfile policy", () => {
     }).not.toThrow();
   });
 
+  it("BR-173 the runtime image holds the Apache-2.0 licence text next to NOTICE", () => {
+    expect(dockerfile).toContain(
+      "COPY --chmod=0644 LICENSES/Apache-2.0.txt /app/LICENSES/\n",
+    );
+  });
+
   it("BR-172 pins every external base by digest and runs build stages natively", () => {
     const froms = dockerfile
       .split("\n")

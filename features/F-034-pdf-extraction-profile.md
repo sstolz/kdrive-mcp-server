@@ -984,21 +984,23 @@ the processing order.
   maps its codes, (n) a Form of L bytes of dropped operators and one `Tj`, drawn
   through nested `Do`s so that the decoded bytes its executions use, with the
   file's other decoded bytes, are B and B + 1, (o) a page that draws a text-free
-  Form of `q Q` repeated 2,000,000 times and then shows `A`, When page 1 is
-  read, Then (a) gives the golden strings of AC-01 for S21–S25, (a), (b) and (c)
-  give the text with the canonical content holding `q`, the `/Matrix` as `cm`
-  and `Q` around each inlined Form and one canonical name per font object, (d)
-  gives the text at 8 and `LIMIT_EXCEEDED` at 9 with no output for the text-free
-  Form, (f), (g) and (n) give the text then `LIMIT_EXCEEDED` ((n) at the `Do`
-  that passes B, before that execution's tokens), (e) and (j) are
-  `CONTENT_UNAVAILABLE`, (h) and (i) are `UNSUPPORTED_FORMAT`, (k) is
-  `LIMIT_EXCEEDED` at the token whose operator makes the sum of I pass 65,536,
-  with no token emitted after it (read through the emitted-token count the test
-  observes), (l) gives the text with one `q` and is `UNSUPPORTED_FORMAT` with
-  two, (o) gives `A` with at most 32,769 of the Form's tokens held back and its
-  projection not kept, and (m) gives both texts with the Form's codes in the
-  simple font's canonical `/Differences`, each refusal before PDF.js. Verified
-  by: `BR-419 AC-11 Form inlining`.
+  Form of `q Q` repeated 2,000,000 times and then shows `A`, (p) a page that
+  sets `/F1` and draws a Form of 32,766 `0 Tc` followed by `BT (a) Tj ET`, and
+  the same with 40,000 `0 Tc`, When page 1 is read, Then (a) gives the golden
+  strings of AC-01 for S21–S25, (a), (b) and (c) give the text with the
+  canonical content holding `q`, the `/Matrix` as `cm` and `Q` around each
+  inlined Form and one canonical name per font object, (d) gives the text at 8
+  and `LIMIT_EXCEEDED` at 9 with no output for the text-free Form, (f), (g) and
+  (n) give the text then `LIMIT_EXCEEDED` ((n) at the `Do` that passes B, before
+  that execution's tokens), (e) and (j) are `CONTENT_UNAVAILABLE`, (h) and (i)
+  are `UNSUPPORTED_FORMAT`, (k) is `LIMIT_EXCEEDED` at the token whose operator
+  makes the sum of I pass 65,536, with no token emitted after it (read through
+  the emitted-token count the test observes), (l) gives the text with one `q`
+  and is `UNSUPPORTED_FORMAT` with two, (o) gives `A` with at most 32,769 of the
+  Form's tokens held back and its projection not kept, (m) gives both texts with
+  the Form's codes in the simple font's canonical `/Differences`, and (p) is
+  `LIMIT_EXCEEDED` with the same 32,768 tokens emitted for both counts, each
+  refusal before PDF.js. Verified by: `BR-419 AC-11 Form inlining`.
 - **AC-12** (BR-420) — Given (a) S26, (b) a Type1 font with `/Differences`
   mapping codes below 0x20, (c) nonembedded Helvetica with no `/Encoding`, (d) a
   symbolic TrueType font with a `FontFile2`, no `/Encoding` and no `ToUnicode`,
@@ -1030,8 +1032,9 @@ the processing order.
   (`/Length1` and an overshoot of 15,384 bytes), with a shown code that needs
   its built-in encoding, and (y) the same font with Flate data that inflates to
   exactly 1,000 bytes, each with those produced bytes and everything else the
-  file decodes at exactly B and at B + 1, and (z) a cleartext `dup 72 /<name>
-  put` group whose name has 300 bytes, When page 1 is read, Then (a), (b), (c),
+  file decodes at exactly B and at B + 1, (z) a cleartext `dup 72 /<name> put`
+  group whose name has 300 bytes, and (aa) a cleartext `dup 72 (<string>) put`
+  group whose string has 5,000 bytes, When page 1 is read, Then (a), (b), (c),
   (m), (q), (r), (s) and (v) give their text, (a) with no `/BaseEncoding` in the
   canonical font, (c) with `/BaseFont /Helvetica`, (m) without its program being
   read, (q) as `Hαβ` with `/BaseFont /K1`, (r) as `Hi` with `/BaseFont /K1` and
@@ -1041,7 +1044,7 @@ the processing order.
   (x) counting all 16,384 produced bytes, (n) gives the text of the last group,
   the canonical font carrying no `/BaseEncoding`, every shown code in
   `/Differences` and `Flags` with Nonsymbolic set and Symbolic clear, (d), (e),
-  (i), (j), (k), (o), (t), (u) and (w) are `UNSUPPORTED_FORMAT`, (p) is
+  (i), (j), (k), (o), (t), (u), (w) and (aa) are `UNSUPPORTED_FORMAT`, (p) is
   `CONTENT_UNAVAILABLE`, (f), (g) and (h) give the text then `LIMIT_EXCEEDED`,
   (z) is `LIMIT_EXCEEDED`, and (l) holds. Verified by: `BR-420 AC-12 simple font
   encoding`.
@@ -1476,3 +1479,23 @@ amendment:
 8. minor (Type 1 cleartext glyph name over the tokenizer limit; review 1
    finding 5) — retained, no rule change (BR-420 already makes a name over 31
    bytes `LIMIT_EXCEEDED`): AC-12 (z).
+
+Code review 2 (4-code-review-2-reviewer, changes):
+
+1. major (Apache-2.0 §4(a): no copy of the licence shipped) — retained, no
+   F-034 rule change: `LICENSES/Apache-2.0.txt` holds the Apache License 2.0
+   text, verbatim from `pdfjs-dist/LICENSE`, ships in the npm package and the
+   runtime image, and `NOTICE` refers to it. `NOTICE` and the two table files
+   carry the copyright lines with years: PDF.js "Copyright 2024 Mozilla
+   Foundation" and the Adobe Glyph List "Copyright 2002-2019 Adobe
+   (http://www.adobe.com/).". BR-173, BR-226 and BR-392 list the file.
+2. minor (a tokenizer `LIMIT_EXCEEDED` at the glyph position other than a
+   name's) — retained, no rule change (BR-420 makes a malformed cleartext
+   `UNSUPPORTED_FORMAT`, only a name over 31 bytes `LIMIT_EXCEEDED`): only a
+   token starting with `/` keeps its `LIMIT_EXCEEDED`. AC-12 (aa).
+3. minor (the refusal point of a Form's held-back tokens not pinned) —
+   retained: AC-11 (p), 32,766 and 40,000 `0 Tc` refusing at the same
+   emitted-token count.
+4. (commit split) — not retained here: the deviation (tests and fix in one
+   commit in code review 1) is recorded on the pull request; code review 2
+   keeps its tests and its fix in separate commits.

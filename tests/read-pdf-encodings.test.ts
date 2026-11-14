@@ -319,6 +319,17 @@ it.each([
     "LIMIT_EXCEEDED",
   ],
   [
+    "(aa) a cleartext string of 5,000 bytes where the glyph name goes",
+    () =>
+      embedded({
+        encoding: encodingLines([
+          `dup 72 (${"a".repeat(5000)}) put`,
+          ...hiPuts,
+        ]),
+      }),
+    "UNSUPPORTED_FORMAT",
+  ],
+  [
     "(h) a cleartext /Length1 of 65,537",
     () => {
       const p = paddedProgram(65537);
