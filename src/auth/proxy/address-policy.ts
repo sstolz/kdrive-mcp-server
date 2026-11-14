@@ -16,8 +16,12 @@ const BLOCKED_V4: ReadonlyArray<readonly [string, number]> = [
   ["172.16.0.0", 12],
   ["192.0.0.0", 24],
   ["192.0.2.0", 24],
+  // F-033 BR-307 v2: AS112-v4, AMT and the Direct Delegation AS112 Service.
+  ["192.31.196.0", 24],
+  ["192.52.193.0", 24],
   ["192.88.99.0", 24],
   ["192.168.0.0", 16],
+  ["192.175.48.0", 24],
   ["198.18.0.0", 15],
   ["198.51.100.0", 24],
   ["203.0.113.0", 24],
@@ -31,6 +35,8 @@ const BLOCKED_V6: ReadonlyArray<readonly [string, number]> = [
   ["2001::", 32],
   ["2001:db8::", 32],
   ["2002::", 16],
+  // F-033 BR-307 v2: the Direct Delegation AS112 Service.
+  ["2620:4f:8000::", 48],
   ["3fff::", 20],
 ];
 

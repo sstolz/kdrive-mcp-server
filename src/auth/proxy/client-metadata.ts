@@ -415,6 +415,17 @@ export function createClientMetadataResolver(
     };
   }
 
+  /**
+   * BR-309 v2: with every slot taken, a usable stale entry answers as it
+   * answers a transient failure; only without one is the request busy.
+   */
+  function staleOrBusy(url: string): Resolution {
+    const entry = cache.get(url);
+    if (entry && clock() < entry.staleUntil)
+      return { kind: "resolved", client: entry.client };
+    return { kind: "refused", reason: "busy", status: 0, transient: true };
+  }
+
   return {
     async resolve(url: string): Promise<Resolution> {
       if (closed) return { kind: "closed" };
@@ -425,13 +436,7 @@ export function createClientMetadataResolver(
         return { kind: "resolved", client: entry.client };
       let flight = inflight.get(url);
       if (!flight) {
-        if (inflight.size >= MAX_IN_FLIGHT)
-          return {
-            kind: "refused",
-            reason: "busy",
-            status: 0,
-            transient: true,
-          };
+        if (inflight.size >= MAX_IN_FLIGHT) return staleOrBusy(url);
         flight = start(url);
       }
       return fromStale(url, await flight.settled);
