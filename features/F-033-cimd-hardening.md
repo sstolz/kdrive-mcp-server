@@ -2,7 +2,7 @@
 id: F-033
 title: CIMD document handling hardened
 ticket: "#26"
-status: ready-for-freeze
+status: frozen
 version: 1
 ---
 
@@ -248,7 +248,10 @@ Proxy tests use the fake fetch port, clock and logger of
   starts after the final block); and given an interim `103` block, then
   `\r\n\r\n`, then a final 200 JSON block, the `\r\n\r\n` and the final
   block totalling 8,193 bytes, Then the fetch fails as `size`, terminal,
-  status 0 (the CR/LF bytes are counted in the final block). Verified by:
+  status 0 (the CR/LF bytes are counted in the final block); and given
+  `\r\n\r\n` and then a 200 JSON response with `Content-Length: 10` and
+  5,121 body bytes, Then the fetch fails as `size` (the body count starts
+  after the final block, not after the leading CR/LF). Verified by:
   `BR-306 v2 AC-09 each interim and final header block is bounded at 8,192
   bytes` in `tests/auth/cimd-fetch.test.ts`.
 - **AC-10** (BR-306 v2) — Given a server whose 200 `text/html` response has
@@ -404,3 +407,10 @@ retained:
 - (minor) `busy` can be induced by any unauthenticated requester, which
   lets a third party defer a refetch until the stale end. Retained: D-3
   kept; the residual recorded in D-3 and `docs/oauth-proxy.md`.
+
+Spec review 5 (`26-spec-review-5-reviewer`, approve; ready to freeze):
+
+- (minor) A separate "v2 revised" History line in BR-306. Retained: folded
+  into the v2 line.
+- (minor) No row pinned the body count after a leading `\r\n\r\n`.
+  Retained: AC-09 row.
