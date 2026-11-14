@@ -8,9 +8,11 @@ version: 1
 
 # F-034 — PDF text extraction for common generator output
 
-Author: Claude Opus 5.5 (effort unknown), spec phase, 2026-11-14.
+Author: Claude Opus 5.5 (effort unknown), spec phase, 2026-11-14; revised
+after spec review 1 by a fresh author, Claude Opus 5.5 (effort unknown),
+2026-11-14.
 Base: branch `work/4-pdf` (main `3151786`).
-IDs: F-034; BR-114 v2; BR-412–BR-418 v1; AC-01–AC-10; ADR-012 (proposed,
+IDs: F-034; BR-114 v2; BR-412–BR-420 v1; AC-01–AC-13; ADR-012 (proposed,
 supersedes the PDF admission profile of ADR-004 and nothing else).
 Next free IDs checked on main (`docs/spec-index.md`, `business-rules/`,
 `architecture-decisions/`): F-034, BR-412, ADR-012.
@@ -82,48 +84,108 @@ content operators (`BDC`). Three findings follow:
    program: both extracted the text. Text extraction therefore does not need
    the font programs, which are the largest and riskiest parser input.
 
+### Measurement 2 (spec review 1, 2026-11-14)
+
+Spec review 1 named generator shapes that v1 of this spec still refused,
+and the owner chose to widen the profile to them (option A, 2026-11-14).
+Method: the same scratch approach wrote nine more one-page files (S21–S29),
+each reproducing one shape with synthetic content. For each file, raw PDF.js
+6.5.438 with the production options of `extractPdf` read the source; the
+current `extractPdf` (main `3151786`, dev container) gave the "before"
+result; and the same PDF.js read a hand-built canonical projection that
+follows BR-415–BR-420 below (Forms inlined, canonical font names, no font
+program, explicit encodings, inline images removed) for the "after" result.
+F-034 v1's outcome follows from its rules (text Forms, inline images and
+fonts with no usable mapping refuse).
+
+| Sample | Shape | Raw PDF.js on the source | Before: F-009 | Before: F-034 v1 | After: projection |
+| --- | --- | --- | --- | --- | --- |
+| S21 | OCRmyPDF: image page, invisible (`3 Tr`) Type0 text layer grafted as a Form | `Hello modern PDF` | `UNSUPPORTED_FORMAT` | `UNSUPPORTED_FORMAT` (text Form) | same as source |
+| S22 | qpdf/pdftk overlay: `Contents` array, stamp page as a Form whose `/F1` is another font than the page's `/F1` | `Hello modern PDF` + `Overlay stamp` | `UNSUPPORTED_FORMAT` | `UNSUPPORTED_FORMAT` (text Form) | same as source |
+| S23 | pdfjam/pdfpages 2-up: two page Forms, one with a rotating `/Matrix`, no page Font resource | `Hello modern PDF` + `Second page` | `UNSUPPORTED_FORMAT` | `UNSUPPORTED_FORMAT` (text Form) | same as source |
+| S24 | pdfTeX page including a PDF figure Form (`PTEX.*`, `/Group`, `gs`) whose labels sit in a nested Form | `Hello modern PDF` + `Figure label` | `UNSUPPORTED_FORMAT` | `UNSUPPORTED_FORMAT` (text Form) | same as source |
+| S25 | Skia (Chrome): text inside a transparency-group Form drawn after `gs`, Type0 font, flipped CTM | `Hello modern PDF` | `UNSUPPORTED_FORMAT` | `UNSUPPORTED_FORMAT` (text Form) | same as source |
+| S26 | pdfLaTeX Computer Modern Type 1 subset: `Flags 4`, no `/Encoding`, no `ToUnicode`, OT1 built-in encoding in the program | `Hello ﬁnal “modern” – PDF` | `UNSUPPORTED_FORMAT` | `UNSUPPORTED_FORMAT` (no mapping) | same as source |
+| S27 | ReportLab: inline image `/F [/A85 /Fl]` before the text | `Hello modern PDF` | `UNSUPPORTED_FORMAT` | `UNSUPPORTED_FORMAT` (`BI`) | same as source |
+| S28 | Ghostscript-style: inline image mask, `/F /Fl`, binary data | `Hello modern PDF` | `UNSUPPORTED_FORMAT` | `UNSUPPORTED_FORMAT` (`BI`) | same as source |
+| S29 | unfiltered inline image whose data holds the bytes `EI Q` | `Hello modern PDF` | `UNSUPPORTED_FORMAT` | `UNSUPPORTED_FORMAT` (`BI`) | same as source |
+
+For S26 the same PDF.js was also given the font with its program removed and
+no `/Encoding`: it returned `Hello nal \modern" { PDF` with `Flags 4` and
+with `Flags 32` alike, because without the program PDF.js falls back to
+MacRomanEncoding or StandardEncoding and loses the OT1 codes 12 (`fi`), 34,
+92 and 123. Giving it instead an explicit encoding derived from the built-in
+encoding in the program's cleartext part (BR-420) restored the source text
+exactly. Two further findings follow:
+
+4. Text Forms, inline images and Computer Modern fonts are each common
+   enough (OCR, overlays, imposition, LaTeX figures, browser printing,
+   ReportLab, LaTeX body text) that refusing them leaves whole families of
+   files unreadable; each can be admitted with a static bound.
+5. Dropping a font program changes PDF.js's choice of base encoding (it then
+   follows `Flags` and the font name). The projection must therefore state
+   every mapping explicitly and refuse when a shown code's mapping can only
+   come from the dropped program.
+
 ## Scope
 
 - **Container.** Cross-reference streams, hybrid files (`/XRefStm`),
   incremental updates and linearized files through a bounded `/Prev` chain;
   object streams; indirect `/Length`; `%PDF-2.0` headers (BR-412, BR-413).
 - **Decoding.** Only the streams the projection needs are decoded: page and
-  Form content, `ToUnicode` CMaps, object streams and cross-reference
-  streams. Admitted filters: none, or FlateDecode (alone or as a one-element
-  array) with PNG predictors 10–15 (BR-414).
+  Form content, `ToUnicode` CMaps, object streams, cross-reference streams,
+  the cleartext part of a Type 1 font program whose built-in encoding is
+  needed, and FlateDecode inline images whose end must be found. Admitted
+  filters: none, or FlateDecode (alone or as a one-element array) with PNG
+  predictors 10–15 (BR-414).
 - **Projection.** PDF.js receives a canonical document built only from what
   text extraction needs: the page tree with each page's resolved `MediaBox`,
-  and, for the selected pages only, the fonts their content selects and a
-  re-serialized content stream that keeps the text operators and drops the
-  rest. Metadata, annotations, actions, JavaScript, outlines, structure,
-  forms, images, embedded files and font programs are never emitted
-  (BR-415, BR-416).
-- **Fonts.** Type 1, MMType1 and TrueType simple fonts with a standard
-  encoding, an encoding dictionary or a `ToUnicode` CMap; Type0 fonts with
-  Identity-H or Identity-V and a `ToUnicode` CMap (BR-417).
+  and, for the selected pages only, the fonts their content selects under
+  canonical names and one re-serialized content stream per page that keeps
+  the text operators, with Form XObjects inlined and everything else
+  dropped. Metadata, annotations, actions, JavaScript, outlines, structure,
+  forms, images, embedded files, XObjects and font programs are never
+  emitted (BR-415, BR-416, BR-419).
+- **Forms.** Form XObjects, transparency groups included, are inlined
+  under a bounded nesting depth, distinct-Form count and execution count;
+  every execution counts toward the text-production bound (BR-419, BR-418).
+- **Inline images.** Skipped when their data length is given or computable;
+  refused otherwise (BR-416).
+- **Fonts.** Type 1, MMType1 and TrueType simple fonts whose shown codes all
+  map through an explicit or determinable encoding or a `ToUnicode` CMap,
+  including Type 1 fonts whose only mapping is the built-in encoding of their
+  program (read from its cleartext part only); Type0 fonts with Identity-H or
+  Identity-V and a `ToUnicode` CMap that maps every shown code (BR-417,
+  BR-420).
 - **Producer bound.** The F-009 static text-production bound extended to
-  mapped fonts (BR-418).
+  mapped fonts and inlined Forms (BR-418).
 - **Errors.** Well-formed files outside the profile refuse as
   `UNSUPPORTED_FORMAT`; files inconsistent with their own structure refuse as
-  `CONTENT_UNAVAILABLE` (BR-114 v2).
+  `CONTENT_UNAVAILABLE`; the first failing check in processing order decides
+  (BR-114 v2).
 - **Docs.** README "Limits" bullet and the `docs/development.md` PDF section:
   what is extracted, what refuses and why, and `kdrive_download` as the
   fallback for a refused file; ADR-012.
 - **Tests.** A synthetic corpus helper (`tests/helpers/pdf-corpus.ts`)
-  that rebuilds S01–S20 and the hostile samples of the ACs, plus named BR
+  that rebuilds S01–S29 and the hostile samples of the ACs, plus named BR
   tests.
 
 ### Out of scope
 
 - Encryption of any kind, including an empty user password (refuses as
   `UNSUPPORTED_FORMAT`).
-- Text inside Form XObjects (a selected page that shows text through a Form
-  refuses; Forms without text are dropped), Type3 fonts, predefined or
-  embedded CMaps other than Identity-H/V, inline images, `LZWDecode`,
+- Type3 fonts; predefined or embedded CMaps other than Identity-H/V; Type 1
+  fonts in `FontFile3` (CFF) or TrueType fonts whose shown codes have no
+  mapping outside the program; `Symbol` and `ZapfDingbats` without
+  `/Differences` or `ToUnicode` for their shown codes; `LZWDecode`,
   `ASCIIHexDecode`, `ASCII85Decode`, `RunLengthDecode` and TIFF predictor 2
-  on a stream the projection needs (D-4, D-6).
+  on a stream the projection needs; inline images whose length is neither
+  given nor computable (DCT, CCITT, JBIG2, LZW or run-length data without
+  `/L`) (D-3, D-5, D-10, D-11).
 - Text from annotations, form fields, attachments or optional-content
-  metadata; OCR; reading order or layout beyond PDF.js item order (BR-115
+  metadata; optional-content visibility (text in a hidden optional-content
+  Form or marked-content section is returned, as PDF.js returns it from the
+  source); OCR; reading order or layout beyond PDF.js item order (BR-115
   unchanged).
 - Repair: a wrong cross-reference offset, data after the last `%%EOF` or a
   header not at byte 0 still refuses; PDF.js repair stays disabled.
@@ -138,31 +200,48 @@ content operators (`BDC`). Three findings follow:
 ## Business rules
 
 - **BR-114 v2** — v1 holds with the profile of F-034: PDF extraction accepts
-  only input that passes BR-412–BR-418, never starts PDF.js on unsupported,
-  malformed or over-budget input, and PDF.js only ever receives the canonical
-  projection of BR-415, never source bytes. The header is `%PDF-1.0` to
-  `%PDF-1.7` or `%PDF-2.0` at byte 0 followed by an end of line. A refusal
-  uses `LIMIT_EXCEEDED` when a declared or computed ceiling of F-009 or
-  F-034 is passed; otherwise `UNSUPPORTED_FORMAT` when the file is
-  well-formed but uses a feature outside the profile (encryption, an
-  unadmitted filter, font or operator, text in a Form); otherwise
+  only input that passes BR-412–BR-420, never starts PDF.js on unsupported,
+  malformed or over-budget input, and PDF.js only ever receives the
+  canonical projection of BR-415, never source bytes. The header is
+  `%PDF-1.0` to `%PDF-1.7` or `%PDF-2.0` at byte 0 followed by an end of
+  line. Checks run in this processing order and the first check that fails
+  decides the refusal: the header; the cross-reference chain from the last
+  `startxref`, newest section first (BR-412); the trailer, including
+  `/Encrypt`; the Catalog and the page tree in tree order; then each
+  selected page in ascending page number, its content tokens in order, where
+  a `Do` of a Form runs that Form's checks at that token (BR-419) and the
+  first `Tf` that selects a font runs that font's checks at that token
+  (BR-417, BR-420); then the BR-418 totals. An object, stream or CMap is
+  checked when the step that needs it first resolves it. A failing check
+  refuses with `LIMIT_EXCEEDED` when it is a declared or computed ceiling of
+  F-009 or F-034 (the count that passes the ceiling fails); with
+  `UNSUPPORTED_FORMAT` when the file is well-formed but uses a feature
+  outside the profile (encryption, an unadmitted filter, font, encoding or
+  operator, an inline image of unknown length); and with
   `CONTENT_UNAVAILABLE` when the file contradicts its own structure (an
   offset that does not hold the object it names, a cycle, a length that
-  overruns its data, a missing required object). Verified by: AC-01,
-  AC-09, AC-10.
+  overruns its data, a missing required object or resource). Verified by:
+  AC-01, AC-09, AC-10.
 - **BR-412** — Cross-reference data is read only from the last `startxref`
   offset and the chain it starts, with no scan for objects and no repair.
   Each section is either a classic `xref` table with a trailer, or a stream
-  object whose dictionary has `/Type /XRef`, a direct `/Size`, a `/W` of
-  three integers each 0–8 and an optional `/Index` of start/count pairs.
-  A classic trailer's `/XRefStm` and every section's `/Prev` are followed;
-  at most 32 sections are read and a section offset seen twice is a cycle.
-  For each object number the newest section that lists it wins (a section's
-  `/XRefStm` entries rank below its own table, above its `/Prev`). The
-  newest trailer gives `/Root`; `/Size` of every section is at most 65,536
-  and every listed object number is below its section's `/Size`. A
-  decoded cross-reference stream holds exactly the listed entry count times
-  the sum of `/W` bytes; a type 0 entry is free, type 1 gives a byte offset
+  object whose dictionary has `/Type /XRef`, a `/Size`, a `/W` of three
+  integers each 0–8 with `W[1]` at least 1, and an optional `/Index` of at
+  most 4,096 start/count pairs that are ascending, non-overlapping and whose
+  counts total at most `/Size`; its `/Length`, `/Filter`, `/DecodeParms`,
+  `/Size`, `/W`, `/Index` and `/Prev` are direct objects. A classic
+  trailer's `/XRefStm` and every section's `/Prev` are followed; at most 32
+  sections are read and a section offset seen twice is a cycle. Sections
+  rank newest first, and for each object number the newest section that
+  lists it wins, a free entry included. Within one hybrid section, an
+  in-use table entry wins over the section's `/XRefStm`, while a free table
+  entry, or a number the table does not list, takes the `/XRefStm` entry;
+  the `/XRefStm` entries rank above the section's `/Prev`. The newest
+  trailer gives `/Root`; `/Size` of every section is at most 65,536 and
+  every listed object number is below its section's `/Size`. A decoded
+  cross-reference stream holds exactly the listed entry count times the sum
+  of `/W` bytes. A field of width 0 takes its default: type 1 for the first
+  field, 0 for the third. A type 0 entry is free, type 1 gives a byte offset
   and generation, type 2 gives an object stream number and index, and any
   other type is free. Verified by: AC-02.
 - **BR-413** — An object is resolved only through the merged cross-reference
@@ -170,233 +249,428 @@ content operators (`BDC`). Three findings follow:
   `<number> <generation> obj`, one value, an optional stream framed by its
   `/Length`, and `endobj`; its number and generation equal the entry's. A
   type 2 object is read from the object stream named by the entry, which
-  is itself a type 1 object with `/Type /ObjStm`, a direct `/N` and
-  `/First`; its header pair at the entry's index names the same object
-  number, the object is the one value between its offset and the next, has
+  is itself a type 1 object with `/Type /ObjStm`, a direct `/N` of 1–4,096
+  and a direct `/First`. The header of an object stream is parsed once per
+  invocation: `/N` pairs of object number and offset, offsets strictly
+  increasing from 0 and each below the decoded length minus `/First`. The
+  pair at the entry's index names the same object number; the object is
+  the one value between its offset and the next (or the end), has
   generation 0 and is not a stream; `/Extends` is ignored. An indirect
   `/Length` resolves to a nonnegative integer object; resolving it never
   requires framing the stream it measures and opens at most one object
   stream, whose own `/Length` is direct or a type 1 integer object. A
   reference to a free, absent or mismatched object in a role the projection
-  needs refuses. At most 4,096 objects are resolved per invocation (the
-  F-009 indirect-object ceiling). Verified by: AC-03.
-- **BR-414** — Only the streams BR-412, BR-413, BR-416 and BR-417 need are
-  decoded; any other stream is framed by its `/Length` and never decoded,
-  whatever its filter. A needed stream has no filter, or `/FlateDecode`
-  given as a name or a one-element array, with optional `/DecodeParms` (a
-  dictionary, or a one-element array holding one) whose `/Predictor` is 1 or
-  10–15, `/Colors` 1–4, `/BitsPerComponent` 8 and `/Columns` 1–65,536; PNG
-  rows are undone with each row's own tag and the predicted data is a
-  whole number of rows. Each needed stream is decoded once per invocation
-  and its decoded length counts once against B with the F-009 inflate
-  rules (`maxOutputLength` set to the remaining B, `rejectGarbageAfterEnd`).
-  Verified by: AC-04.
+  needs refuses. At most 4,096 distinct objects are resolved per invocation
+  (the F-009 indirect-object ceiling); an object resolved again is served
+  from the cache and not counted again. Verified by: AC-03.
+- **BR-414** — Only the streams BR-412, BR-413, BR-416, BR-417, BR-419 and
+  BR-420 need are decoded; any other stream is framed by its `/Length` and
+  never decoded, whatever its filter. A needed stream has no filter, or
+  `/FlateDecode` given as a name or a one-element array, with optional
+  `/DecodeParms` (a dictionary, or a one-element array holding one) whose
+  `/Predictor` is 1 or 10–15, `/Colors` 1–4, `/BitsPerComponent` 8 and
+  `/Columns` 1–65,536; PNG rows are undone with each row's own tag and the
+  predicted data is a whole number of rows. Each needed stream is decoded
+  once per invocation and its decoded length counts once against B with
+  the F-009 inflate rules (`maxOutputLength` set to the remaining B,
+  `rejectGarbageAfterEnd`); a Type 1 program (BR-420) is decoded only up to
+  its `/Length1` bytes, which count against B. Verified by: AC-04.
 - **BR-415** — The canonical document holds exactly: a Catalog with `Type`
   and `Pages`; every Pages node with `Type`, `Kids`, `Count` and `Parent`
   except at the root; every page with `Type`, `Parent`, its `MediaBox`
   (its own, or the nearest inherited one) and `Resources` and `Contents`;
   a trailer with `Size` and `Root`. A selected page's `Resources` holds only
-  `Font`, with the fonts BR-417 admits under their source names, and its
-  `Contents` is the one stream BR-416 builds, with no filter. A page that is
-  not selected gets empty `Resources` and an empty content stream, and its
+  `Font`, with the fonts BR-417 admits under canonical names `/K1`, `/K2`,
+  … numbered in the order of first selection in the invocation (one name
+  per indirect font object, or per direct font dictionary at its place,
+  whatever resource name or Form selected it), and its
+  `Contents` is the one stream BR-416 builds, with no filter. A selected
+  page with no `/Contents` gets an empty content stream. A page that is not
+  selected gets empty `Resources` and an empty content stream, and its
   content and resources are not read. Every other key, object and stream of
-  the source is left out. The page tree keeps its source order and count,
-  so `total_pages` is unchanged. Verified by: AC-05.
+  the source, XObjects included, is left out. The page tree keeps its
+  source order and count, so `total_pages` is unchanged. Verified by: AC-05.
 - **BR-416** — A selected page's content is its `Contents` stream, or the
-  streams of a `Contents` array of at most 1,024 references joined with one
-  line feed, tokenized once in order. Kept, with the F-009 operand checks:
-  `q`, `Q`, `cm`, `BT`, `ET`, `Tf`, `Tc`, `Tw`, `Tz`, `TL`, `Ts`, `Tr`
-  (integer 0–7), `Td`, `TD`, `Tm`, `T*`, `Tj`, `TJ`, `'` and `"`, with
-  F-009's state rules except that string bytes are not restricted to
-  0x20–0xFF and `Tf` takes any font name and a finite size. Dropped,
-  operands included: path construction and painting, clipping, colour and
-  colour space, line and rendering state, `sh`, marked content (`BMC`,
-  `BDC`, `EMC`, `MP`, `DP`), `BX`/`EX`, `gs` (refused when the named
-  ExtGState holds `/Font`), and `Do` of an Image XObject or of a Form
-  XObject whose content, checked with these same rules through nested Forms
-  (at most 8 deep, at most 256 distinct Forms, each decoded once, a Form
-  reached again on its own path is a cycle), shows no text. Refused as
-  `UNSUPPORTED_FORMAT`: `Do` of a Form that shows text, inline images
-  (`BI`), `d0`, `d1` and any other operator. A `Q` with no open `q` is
-  dropped, and `Q`s are appended for the `q`s left open at the end. The
-  kept tokens are re-serialized; that stream counts against the canonical
-  bound. Verified by: AC-06.
+  streams of a `Contents` array of at most 1,024 references joined with one line
+  feed, tokenized once in order, with the page's `Resources` (own or inherited)
+  as resource scope. Kept, with the F-009 operand checks: `q`, `Q`, `cm`, `BT`,
+  `ET`, the text state operators `Tf`, `Tc`, `Tw`, `Tz`, `TL`, `Ts` and `Tr`
+  (integer 0–7), and inside `BT`/`ET` only `Td`, `TD`, `Tm`, `T*`, `Tj`, `TJ`,
+  `'` and `"`. String bytes are not restricted to 0x20–0xFF and `Tf` takes a
+  font name of the resource scope and a finite size. Text state is part of the
+  graphics state: it persists across `BT`/`ET`, is saved and restored by
+  `q`/`Q`, `BT` resets only the text matrices, and text state operators are kept
+  inside or outside `BT`/`ET`. A text-show operator with no font set refuses as
+  `CONTENT_UNAVAILABLE`. Dropped, operands included: path construction and
+  painting, clipping, colour and colour space, line and rendering state, `sh`,
+  marked content (`BMC`, `BDC`, `EMC`, `MP`, `DP`), `BX`/`EX`, `gs` (refused
+  when the ExtGState it names in the resource scope holds `/Font`), `Do` of an
+  Image or PostScript XObject, and inline images whose data is framed as
+  follows: after `BI`, at most 32 key/value pairs up to `ID`, with direct values
+  only, and one white-space byte; the data length is `/L` (or `/Length`) when
+  present, else, when the first filter of `/F` (or `/Filter`) is `/AHx` or
+  `/A85` (or their long names), the bytes up to and including the first `>` or
+  `~>`, else, with no filter, `H` × ceil(`W` × `BPC` × components / 8) (`W` and
+  `H` 1–65,536, `BPC` 1, 2, 4, 8 or 16, components 1 for `/G`, `/I`, an indexed
+  space or `/IM true`, 3 for `/RGB`, 4 for `/CMYK`, long names included), else,
+  when the only filter is `/Fl` with no `/DP`, the bytes one inflate consumes
+  with `maxOutputLength` that computed size; after the data, optional white
+  space and `EI` followed by white space, a delimiter or the end. An inline
+  image whose length is none of these refuses as `UNSUPPORTED_FORMAT`; framing
+  that overruns the content or is not followed by `EI` refuses as
+  `CONTENT_UNAVAILABLE`; inflated inline bytes count against B. `Do` of a Form
+  XObject is inlined by BR-419. `Do` inside `BT`/`ET`, `d0`, `d1` and any other
+  operator refuse as `UNSUPPORTED_FORMAT`. A `Q` with no open `q` of the same
+  content stream or Form is dropped, and `Q`s are appended for the `q`s left
+  open at its end. The kept tokens are rebuilt by the canonical serializer
+  (numbers in the F-009 form, strings as hexadecimal strings, names with `#xx`
+  escapes for bytes outside 0x21–0x7E, delimiters and `#`, `Tf` operands renamed
+  to the canonical font names), never copied as source bytes; that stream counts
+  against the canonical bound. Verified by: AC-06.
 - **BR-417** — Only fonts selected by a kept `Tf` are read, at most 128
-  distinct fonts per invocation; a `Tf` naming no font of the page's Font
-  resource refuses. Admitted: (a) `Type1`, `MMType1` or `TrueType` with a
-  `ToUnicode` CMap, or an `/Encoding` of `WinAnsiEncoding`, `MacRomanEncoding`
-  or `StandardEncoding`, or an encoding dictionary with optional `/Type
-  /Encoding`, one of those as optional `/BaseEncoding` and optional
-  `/Differences` of at most 256 codes with glyph names of at most 31 bytes, or
-  no `/Encoding` when `/BaseFont` is one of the 14 standard fonts; (b) `Type0`
-  with `/Encoding` `Identity-H` or `Identity-V`, one `CIDFontType0` or
-  `CIDFontType2` descendant, and a `ToUnicode` CMap. The projected font keeps
-  `Type`, `Subtype`, `BaseFont`, `FirstChar`, `LastChar`, `Widths` (at most
-  256 numbers), `Encoding`, `ToUnicode` and, for Type0, one descendant with
-  `Type`, `Subtype`, `BaseFont`, `CIDSystemInfo`, `DW` and `W`; a
-  `FontDescriptor` keeps `Type`, `FontName`, `Flags`, `FontBBox`,
-  `ItalicAngle`, `Ascent`, `Descent`, `CapHeight`, `StemV` and `MissingWidth`.
-  `FontFile`, `FontFile2`, `FontFile3` and a stream `CIDToGIDMap` are never
-  decoded or emitted. A `ToUnicode` CMap is parsed with the bounded tokenizer:
-  only code space ranges, `bfchar` and `bfrange` entries (the array form
-  included) count, codes are 1 or 2 bytes, destinations are UTF-16BE of at
-  most 64 bytes, `usecmap` refuses, a CMap has at most 65,536 entries and all
-  admitted CMaps together cover at most 262,144 codes; it is re-emitted as a
-  canonical CMap built from the admitted entries. Every other font refuses as
+  distinct fonts per invocation; a `Tf` naming no font of its resource scope
+  refuses as `CONTENT_UNAVAILABLE`. Every key the projection keeps is
+  type-checked, and a wrong type refuses as `CONTENT_UNAVAILABLE`. Admitted:
+  (a) `Type1`, `MMType1` or `TrueType` simple fonts whose encoding BR-420
+  resolves; (b) `Type0` with `/Encoding` the name `Identity-H` or
+  `Identity-V`, one `CIDFontType0` or `CIDFontType2` descendant with a
+  `FontDescriptor`, and a `ToUnicode` stream that maps every code the
+  font's kept strings show (a shown code it does not map refuses as
+  `UNSUPPORTED_FORMAT`; a string of odd length shown with it refuses as
+  `CONTENT_UNAVAILABLE`). A `ToUnicode` given as a name, such as
+  `/Identity-H`, refuses as `UNSUPPORTED_FORMAT`. The projected simple font
+  keeps `Type`, `Subtype`, `BaseFont` (a name of at most 127 bytes),
+  `FirstChar`, `LastChar` (integers 0–255), `Widths` (at most 256 finite
+  numbers), `ToUnicode` and the `Encoding` of BR-420; the projected Type0
+  font keeps `Type`, `Subtype`, `BaseFont`, `Encoding`, `ToUnicode` and one
+  descendant with `Type`, `Subtype`, `BaseFont`, `DW` (a finite number), `W`
+  (an array of at most 65,536 numbers in total, in the `c [w …]` and
+  `c1 c2 w` forms, codes 0–65,535), its `FontDescriptor`, and a
+  `CIDSystemInfo` emitted as `<< /Registry (Adobe) /Ordering (Identity)
+  /Supplement 0 >>` after the source value is checked (a dictionary with
+  `Registry` and `Ordering` strings of at most 64 bytes and an integer
+  `Supplement`). A kept `FontDescriptor` holds `Type`, `FontName`,
+  `FontBBox` (four finite numbers), `ItalicAngle`, `Ascent`, `Descent`,
+  `CapHeight`, `StemV` and `MissingWidth` (finite numbers, each optional
+  except `FontName`), and `Flags` set to the source `Flags` with the
+  Symbolic flag (value 4) cleared and the Nonsymbolic flag (value 32)
+  set; a simple font
+  without a source `FontDescriptor` gets none. `FontFile`, `FontFile2`,
+  `FontFile3` and a stream `CIDToGIDMap` are never emitted. A `ToUnicode`
+  CMap is parsed with the bounded tokenizer: only code space ranges,
+  `bfchar` and `bfrange` entries count; codes are 1 or 2 bytes and keyed by
+  their numeric value; a `bfrange` has a low and high code of the same
+  length that differ only in the last byte, low not above high, and either
+  one destination string, incremented over the range as PDF.js 6.5.438
+  does, or an array whose length equals the range size; destinations are
+  UTF-16BE strings of 2–64 bytes; when a code is mapped twice the last
+  entry wins; `usecmap` refuses as `UNSUPPORTED_FORMAT`; a CMap has at most
+  65,536 entries and all admitted CMaps together map at most 262,144 codes.
+  Each admitted CMap is re-emitted canonically as one `bfchar` entry per
+  mapped code in ascending order. Every other font refuses as
   `UNSUPPORTED_FORMAT`. Verified by: AC-07.
 - **BR-418** — The F-009 text-production admission holds with weighted
-  string bytes: for each selected page, N is the sum over text-show strings
-  of the string's bytes times `m` of its font, where `m = max(1,
-  ceil(D / 3))` and D is the largest UTF-8 byte length PDF.js can give one
-  code of that font (from the canonical CMap for a `ToUnicode` font; for
-  other fonts the maximum established by exact-pin source checks, 3 unless
-  those checks show more). `U = 8 * (N + O + 1)`, `I = 2 * (S + O + 1)` with
-  S the unweighted string bytes, the sum of U plus 3 per separator is at
-  most B, the sum of I at most 65,536, and a string over 4,096 bytes refuses,
-  all before PDF.js starts. Verified by: AC-08.
+  string bytes, counted on the canonical content stream of each selected
+  page, so every Form execution counts its strings and operators again: N
+  is the sum over text-show strings of the string's bytes times `m` of its
+  font, where `m = max(1, ceil(D / 3))`; S is the unweighted string bytes;
+  O is the number of operators in the canonical content stream. D of a
+  font is the largest of: the UTF-8 length of each canonical `ToUnicode`
+  destination (an unpaired surrogate counts 3 bytes); for each glyph name
+  in the font's canonical `/Differences`, 4 when the name starts with `u`
+  and has 6 characters, or 7 characters without the prefix `uni`, else 3;
+  and 1. `U = 8 * (N + O + 1)`, `I = 2 * (S + O + 1)`, the sum of U plus 3
+  per separator is at most B, the sum of I at most 65,536, and a string
+  over 4,096 bytes refuses, all before PDF.js starts. Verified by: AC-08.
+- **BR-419** — A `Do` whose name the resource scope's `/XObject` maps to a
+  stream with `/Subtype /Form` (any `/Group`, `/Ref`, `/OC`, `PTEX.*` or other
+  key ignored) is inlined: the canonical content receives `q`, then `cm` with
+  the Form's `/Matrix` when it is present and not the identity, then the Form's
+  projected tokens, then `Q`; a `/Matrix` that is not six finite numbers refuses
+  as `CONTENT_UNAVAILABLE`. The Form's content is its decoded stream, decoded
+  and tokenized once per invocation and checked with BR-416, starting outside
+  `BT` with the caller's graphics state and font; content that ends inside
+  `BT`/`ET` refuses as `CONTENT_UNAVAILABLE`. Its resource scope is its own
+  `/Resources`, or, when it has none, the resource scope of the content that
+  invoked it; its `Tf`, `gs` and `Do` names resolve in that scope, and fonts it
+  selects take the canonical names of BR-415. The projection of a Form is built
+  once per pair of Form and resource scope and reused for later executions with
+  that scope, its nested executions counted again each time. An inlined Form
+  whose projected tokens, nested Forms included, hold no text-show operator
+  (`Tj`, `TJ`, `'`, `"`) emits nothing; one that shows text before its own first
+  `Tf` needs a font set by its caller (BR-416). Bounds per invocation: at most
+  256 distinct Forms, nesting at most 8 Forms deep, and at most 4,096 Form
+  executions in total (every `Do` of a Form counts, with or without text); a
+  Form reached again on its own `Do` path is a cycle and refuses as
+  `CONTENT_UNAVAILABLE`; an XObject of another subtype than `Form`, `Image` or
+  `PS` refuses as `UNSUPPORTED_FORMAT`. Verified by: AC-11.
+- **BR-420** — A simple font's encoding is resolved per shown code, and the
+  projection emits it as `/Encoding << /Type /Encoding /BaseEncoding
+  /WinAnsiEncoding /Differences [...] >>` listing every code the font's
+  kept strings show that the `ToUnicode` CMap does not map, with its
+  resolved glyph name. A source `/Encoding` is checked in every case, even
+  when a `ToUnicode` CMap exists: a name `StandardEncoding`,
+  `WinAnsiEncoding`, `MacRomanEncoding` or `MacExpertEncoding`, or a
+  dictionary with optional `/Type /Encoding`, one of those names as
+  optional `/BaseEncoding` and optional `/Differences` of at most 256 codes
+  (integers 0–255) with glyph names of at most 31 bytes; any other value
+  refuses as `UNSUPPORTED_FORMAT`. The base table is the named one, else
+  (no `/Encoding`, or no `/BaseEncoding`): StandardEncoding for a font with
+  no font program whose `BaseFont`, without a subset prefix, is one of the
+  12 standard Latin fonts (Times, Helvetica and Courier families) or whose
+  `Flags` have Nonsymbolic set and Symbolic clear; StandardEncoding for a
+  `TrueType` font with a `FontFile2` and Nonsymbolic set; for a `Type1` or
+  `MMType1` font with a `FontFile`, the built-in encoding of its program;
+  otherwise no base table. `/Differences` entries override the base table.
+  The built-in encoding is read only from the program's cleartext part: a
+  direct integer `/Length1` of 1–65,536 bytes, decoded by BR-414 up to that
+  length, tokenized with the bounded tokenizer up to its first `/Encoding`
+  name, which is followed either by `StandardEncoding def` or by
+  `<n> array`, optionally `0 1 255 {1 index exch /.notdef put} for`, at
+  most 256 `dup <code> /<name> put` groups (code 0–255, name at most 31
+  bytes) and `readonly def` or `def`; anything else, or no `/Encoding` in
+  that part, refuses as `UNSUPPORTED_FORMAT`, and the encrypted part is
+  never read. The tables are those of PDF.js 6.5.438. A shown code that the
+  `ToUnicode` CMap does not map and that resolves to no glyph name or to
+  `.notdef` refuses as `UNSUPPORTED_FORMAT`. Verified by: AC-12.
 
 ## Contract details
 
 ### Ceilings added by F-034
 
 All are per invocation, cumulative under BR-117 (equality permitted), and
-refuse as `LIMIT_EXCEEDED`. F-009 ceilings are unchanged.
+refuse as `LIMIT_EXCEEDED`. F-009 ceilings are unchanged. AC-13 covers one
+example on each side of every ceiling not covered by AC-02–AC-12.
 
 | Work | Ceiling |
 | --- | --- |
 | Cross-reference sections read (`/Prev`, `/XRefStm`) | 32 |
 | `/Size` of a section; listed object numbers | 65,536; below `/Size` |
-| `/W` field width | 0–8 bytes each |
-| Objects resolved | 4,096 (F-009 ceiling, now counted on resolution) |
+| `/W` field width; `/Index` pairs | 8 bytes each (`W[1]` ≥ 1); 4,096 |
+| Distinct objects resolved | 4,096 (F-009 ceiling, now counted on first resolution) |
+| Objects in one object stream (`/N`) | 4,096 |
 | Object streams opened to resolve one indirect `/Length` | 1 |
-| PNG predictor `/Columns` × `/Colors` | 65,536 × 4 |
+| PNG predictor `/Columns` (with `/Colors` up to 4) | 65,536 |
 | `Contents` array references | 1,024 |
-| Form XObjects checked; Form nesting | 256; 8 |
+| Distinct Forms; Form nesting; Form executions | 256; 8; 4,096 |
+| Inline image dictionary pairs; `W`, `H` | 32; 65,536 each |
 | Distinct fonts read | 128 |
-| `Widths`, `Differences` codes; glyph name | 256, 256; 31 bytes |
-| `ToUnicode` entries per CMap; codes covered in all CMaps | 65,536; 262,144 |
+| `Widths` numbers; `Differences` codes; glyph name | 256; 256; 31 bytes |
+| CIDFont `W` numbers | 65,536 |
+| Type 1 cleartext `/Length1`; built-in encoding groups | 65,536 bytes; 256 |
+| `ToUnicode` entries per CMap; codes mapped in all CMaps | 65,536; 262,144 |
 | `ToUnicode` destination | 64 bytes UTF-16BE |
+| Text-show string (F-009) | 4,096 bytes |
 
 Decoded bytes of cross-reference streams, object streams, content streams,
-Form streams and `ToUnicode` streams all count against B once each; the
-canonical document, with its re-serialized content and CMaps, stays at most
-B. Streams that are never decoded add nothing.
+Form streams, `ToUnicode` streams, Type 1 cleartext parts and inflated
+inline images all count against B once each; the canonical document, with
+its re-serialized content and CMaps, stays at most B. Streams that are
+never decoded add nothing.
 
 ### Hostile input
 
 - Decompression bombs: every inflate runs under the remaining B (F-009);
-  object and cross-reference streams share that budget; nothing is decoded
-  speculatively.
+  object and cross-reference streams share that budget; a Type 1 program
+  inflates only up to `/Length1`; nothing is decoded speculatively.
 - Cross-reference loops and floods: a repeated section offset is a cycle;
-  32 sections and `/Size` 65,536 bound the table.
+  32 sections, `/Size` 65,536 and 4,096 `/Index` pairs bound the table.
 - Object-stream recursion: an object stream is reached only through a
   type 1 entry and never holds a stream, so it cannot contain another; the
-  `/Length` rule of BR-413 stops length chains.
+  `/Length` rule of BR-413 stops length chains; each header is parsed once.
 - Huge `/Length`: a stream that overruns the file refuses; the F-009
   8 MiB stream ceiling stays.
 - Predictor abuse: the row width is bounded, the data is a whole number of
   rows, and undoing a predictor never grows the data.
-- Font and CMap abuse: font programs are never parsed; CMaps are bounded
-  and re-emitted canonically, so PDF.js never parses a source CMap.
-- Repeated execution: Forms that show text refuse and the others are
-  dropped, so PDF.js executes each kept operator once.
+- Font and CMap abuse: font programs are never parsed and never reach
+  PDF.js; only the cleartext part of a Type 1 program is tokenized, under a
+  64 KiB bound; CMaps are bounded and re-emitted canonically, so PDF.js
+  never parses a source CMap; every mapping is explicit, so PDF.js never
+  picks an encoding from `Flags` or the font name.
+- Repeated execution: every Form execution is inlined and counted, so a
+  Form drawn many times or nested many ways costs its full output against
+  B, the item ceiling and the 4,096-execution ceiling before PDF.js starts;
+  each Form is decoded and tokenized once.
+- Inline-image smuggling: inline data is skipped by a length that never
+  depends on searching for `EI`, so bytes inside the data (S29) are never
+  read as operators.
 
 ## Acceptance criteria
 
 All ACs run against the actual pinned PDF.js through `extractPdf` (or the
 worker) with a spy on the PDF.js start, using synthetic files built by
-`tests/helpers/pdf-corpus.ts`.
+`tests/helpers/pdf-corpus.ts`. Each refusing sample holds exactly one defect;
+every other part of the file is valid, so the expected code is the one the
+named check gives. AC-09 (g) and (h) hold two defects on purpose, to test
+the processing order.
 
-- **AC-01** (BR-114 v2, BR-412–BR-418) — Given S01–S20 of the measurement,
-  When page 1 is read, Then each returns `Hello modern PDF` with
-  `total_pages` 1, and the bytes PDF.js receives contain no `/Filter`,
-  `/XRef`, `/ObjStm`, `/FontFile`, `/Metadata`, `/Info` or `/ExtGState`.
-  Verified by: `TestBR114_v2 AC-01 synthetic producer corpus extracts`.
+- **AC-01** (BR-114 v2, BR-412–BR-420) — Given S01–S29 of the
+  measurements,
+  When page 1 is read, Then each returns the text raw PDF.js reads from its
+  source file (the "Raw PDF.js" column; `Hello modern PDF` for S01–S20)
+  with `total_pages` 1, and the bytes PDF.js receives contain no `/Filter`,
+  `/XRef`, `/ObjStm`, `/FontFile`, `/Metadata`, `/Info`, `/ExtGState`,
+  `/XObject` or `BI`. Verified by: `BR-114 v2 AC-01 synthetic producer
+  corpus extracts`.
 - **AC-02** (BR-412) — Given (a) a file whose second revision replaces page
-  1's content, (b) a hybrid file whose `/XRefStm` lists the content object,
-  (c) a linearized-style file whose last `startxref` points at a first-page
-  section with `/Prev` to the main section, (d) a `/Prev` chain A→B→A,
-  (e) 32 and 33 sections, (f) `/Size` 65,536 and 65,537, (g) `/W [1 9 2]`,
-  (h) a cross-reference stream one byte short of its entry count, When page
-  1 is read, Then (a) gives the second revision's text, (b) and (c) give
-  the text, (d) is `CONTENT_UNAVAILABLE`, (e) gives the text at 32 and
-  `LIMIT_EXCEEDED` at 33, (f) text then `LIMIT_EXCEEDED`, (g)
-  `LIMIT_EXCEEDED`, (h) `CONTENT_UNAVAILABLE`, each refusal before PDF.js.
-  Verified by: `TestBR412_xref_chain`.
+  1's content, (b) a hybrid file whose table marks the content object free
+  and whose `/XRefStm` lists it in use, (b2) the same file whose table lists
+  the content object in use at the right offset and whose `/XRefStm` lists
+  it in an object stream with other text, (c) a linearized-style file whose
+  last `startxref` points at a first-page section with `/Prev` to the main
+  section, (d) a `/Prev` chain A→B→A, (e) 32 and 33 sections, (f) `/Size`
+  65,536 and 65,537, (g) `/W [1 8 2]` and `/W [1 9 2]`, (h) a
+  cross-reference stream one byte short of its entry count, (i) an indirect
+  `/W`, (j) `/W [1 0 2]`, (k) `/W [0 4 0]` listing every object, (l)
+  `/Index [0 5 3 4]`, (m) `/Index [5 4 0 5]`, (n) `/Index` counts totalling
+  `/Size` + 1, (o) 4,096 and 4,097 `/Index` pairs, When page 1 is read,
+  Then (a) gives the second revision's text, (b), (c), (g) at 8 and (k)
+  give the text, (b2) gives the table's text, (d) and (h) are
+  `CONTENT_UNAVAILABLE`, (e) gives the text at 32 and `LIMIT_EXCEEDED` at
+  33, (f) and (o) give the text then `LIMIT_EXCEEDED`, (g) at 9 is
+  `LIMIT_EXCEEDED`, (i), (j), (l), (m) and (n) are `CONTENT_UNAVAILABLE`,
+  each refusal before PDF.js. Verified by: `BR-412 AC-02 cross-reference
+  chain`.
 - **AC-03** (BR-413) — Given (a) all non-stream objects in one object
   stream, (b) a type 2 entry naming an object stream that is itself a
   type 2 object, (c) a header pair naming another object number, (d) a
   stream object inside an object stream, (e) indirect `/Length` objects,
   one of them inside an object stream, (f) an object stream whose `/Length`
   lives inside itself, (g) a generation mismatch on the page object, (h) a
-  page tree that needs 4,096 and 4,097 resolved objects, When page 1 is
-  read, Then (a) and (e) give the text, (b), (c), (d), (f) and (g) are
-  `CONTENT_UNAVAILABLE`, and (h) gives the text then `LIMIT_EXCEEDED`, each
-  refusal before PDF.js. Verified by: `TestBR413_object_resolution`.
+  page tree that needs 4,096 and 4,097 distinct resolved objects, (i) a page
+  tree that resolves the same 4,000 objects twice, (j) header offsets
+  `0 10 10`, (k) `/N` 4,096 and 4,097, When page 1 is read, Then (a), (e)
+  and (i) give the text, (b), (c), (d), (f), (g) and (j) are
+  `CONTENT_UNAVAILABLE`, and (h) and (k) give the text then
+  `LIMIT_EXCEEDED`, each refusal before PDF.js. Verified by: `BR-413 AC-03
+  object resolution`.
 - **AC-04** (BR-414, BR-117) — Given budget B and (a) Flate content with
-  predictor 12 decoding to exactly B and to B + 1 bytes, (b) an object
-  stream and (c) a cross-reference stream that each inflate one byte over
-  the remaining B, (d) `/Columns` 65,537, (e) predictor 2, (f) predicted data
-  that is not a whole number of rows, (g) `LZWDecode` content, (h) a page
-  that also draws a `DCTDecode` image whose data is not a JPEG, (i) a
-  `/Length` past the end of the file, When page 1 is read, Then (a) gives
-  the text at B and `LIMIT_EXCEEDED` at B + 1, (b), (c) and (d) are
-  `LIMIT_EXCEEDED`, (e) and (g) are `UNSUPPORTED_FORMAT`, (f) and (i) are
-  `CONTENT_UNAVAILABLE`, and (h) gives the text with the image never
-  decoded. Verified by: `TestBR414_stream_decoding`.
+  predictor 12 whose inflated bytes, counted against B with everything
+  else the file decodes, reach exactly B and B + 1, (b) an object stream
+  and (c) a cross-reference stream that each inflate one byte over the
+  remaining B, (d) `/Columns` 65,536 with `/Colors` 4 and `/Columns`
+  65,537, (e) predictor 2, (f) predicted data that is not a whole number of
+  rows, (g) `LZWDecode` content, (h) a page that also draws a `DCTDecode`
+  image whose data is not a JPEG, (i) a `/Length` past the end of the
+  file, When page 1 is read, Then (a) gives the text at B and
+  `LIMIT_EXCEEDED` at B + 1, (b) and (c) are `LIMIT_EXCEEDED`, (d) gives the
+  text at 65,536 and `LIMIT_EXCEEDED` at 65,537, (e) and (g) are
+  `UNSUPPORTED_FORMAT`, (f) and (i) are `CONTENT_UNAVAILABLE`, and (h)
+  gives the text with the image never decoded. Verified by: `BR-414 AC-04
+  stream decoding`.
 - **AC-05** (BR-415) — Given a three-page file with `/OpenAction`
   JavaScript, a link annotation with a URI action, `/AcroForm`,
   `/Names /EmbeddedFiles`, `/Outlines`, `/StructTreeRoot`, `/Metadata`, a
-  `MediaBox` and `Resources` inherited from the root Pages node, and a
-  Type3 font with an inline image on page 3, When pages `[1, 2]` are read,
-  Then the text of both pages returns with `total_pages` 3, the canonical
-  bytes contain none of those keys nor `/S /JavaScript`, page 3 has empty
-  `Resources` and content there, and reading page `[3]` is
-  `UNSUPPORTED_FORMAT`. Verified by: `TestBR415_projection`.
+  `MediaBox` and `Resources` inherited from the root Pages node, a page 2
+  with no `/Contents`, and a Type3 font on page 3, When pages `[1, 2]` are
+  read, Then page 1's text returns with `total_pages` 3, the canonical
+  bytes contain none of those keys nor `/S /JavaScript`, page 1's font is
+  `/K1`, page 2 has an empty content stream, page 3 has empty `Resources`
+  and content, and reading page `[3]` is `UNSUPPORTED_FORMAT`. Verified by:
+  `BR-415 AC-05 canonical projection`.
 - **AC-06** (BR-416) — Given pages with (a) every dropped operator family
-  between text objects, (b) a text-free Form (nested 8 deep) drawn with
-  `Do`, (c) a Form that shows text, (d) Forms nested 9 deep, (e) a Form
-  cycle, (f) `gs` naming an ExtGState with `/Font`, (g) an inline image,
-  (h) an unknown operator, (i) a stray `Q` and two unclosed `q`, (j) a
-  `Contents` array splitting `BT ... ET` across two streams, (k) one
-  content stream shared by pages 1 and 2, When the page(s) are read, Then
-  (a), (b), (i), (j) and (k) give the text (k for pages `[1, 2]`) and the
-  canonical content holds only kept operators, (c), (f), (g) and (h) are
-  `UNSUPPORTED_FORMAT`, (d) is `LIMIT_EXCEEDED` and (e) is
-  `CONTENT_UNAVAILABLE`. Verified by: `TestBR416_content_projection`.
-- **AC-07** (BR-417) — Given (a) a Type1 font with `/Differences` mapping
-  codes below 0x20, (b) a TrueType font in WinAnsiEncoding whose
-  `FontFile2` holds random bytes, (c) a Type0 Identity-H font whose
-  `ToUnicode` maps one code to `ffi`, (d) a Type0 font without `ToUnicode`,
-  (e) a Type0 font with `/Encoding /UniJIS-UCS2-H`, (f) a Type3 font
-  selected by `Tf`, (g) a CMap with `usecmap`, (h) a CMap of 65,537 entries,
-  (i) a destination of 66 bytes, (j) 129 distinct fonts, (k) a symbolic
-  TrueType font with no `/Encoding` and no `ToUnicode`, When page 1 is read,
-  Then (a), (b) and (c) give their text and the canonical bytes hold no
-  font program and no source CMap, (d), (e), (f), (g) and (k) are
-  `UNSUPPORTED_FORMAT`, and (h), (i) and (j) are `LIMIT_EXCEEDED`.
-  Verified by: `TestBR417_fonts`.
+  between text objects, (b) `Tf` and `Tc` before `BT` and a second `BT`
+  that shows text without `Tf`, (c) a text-show with no font set, (d) `gs`
+  naming an ExtGState with `/Font`, (e) an unknown operator, (f) a stray
+  `Q` and two unclosed `q`, (g) a `Contents` array splitting `BT ... ET`
+  across two streams, (h) one content stream shared by pages 1 and 2, (i)
+  1,024 and 1,025 `Contents` references, (j) inline images framed by `/L`,
+  by `/A85`, by `/AHx`, by size with no filter (S29), and by one `/Fl`
+  inflate, (k) an inline image with `/F /DCT` and no `/L`, (l) an inline
+  image with `/F /Fl` and `/DP`, (m) an inline image whose computed size
+  overruns the content, (n) 32 and 33 inline dictionary pairs, (o) `Do`
+  inside `BT`, (p) a font name with bytes outside 0x21–0x7E, When the
+  page(s) are read, Then (a), (b), (f), (g), (h), (j) and (p) give the text
+  (h for pages `[1, 2]`) and the canonical content holds only kept
+  operators, hexadecimal strings and `#`-escaped names, (c) and (m) are
+  `CONTENT_UNAVAILABLE`, (d), (e), (k), (l) and (o) are
+  `UNSUPPORTED_FORMAT`, (i) and (n) give the text then `LIMIT_EXCEEDED`.
+  Verified by: `BR-416 AC-06 content projection`.
+- **AC-07** (BR-417) — Given (a) a TrueType font in WinAnsiEncoding whose
+  `FontFile2` holds random bytes, (b) a Type0 Identity-H font whose
+  `ToUnicode` maps one code to `ffi`, (c) a Type0 font without `ToUnicode`,
+  (d) a Type0 font with `/Encoding /UniJIS-UCS2-H`, (e) a Type3 font
+  selected by `Tf`, (f) a CMap with `usecmap`, (g) CMaps of 65,536 and
+  65,537 entries, (h) destinations of 64 and 66 bytes, (i) 128 and 129
+  distinct fonts, (j) a Type0 font whose `ToUnicode` misses one shown code,
+  (k) `/ToUnicode /Identity-H`, (l) a `bfrange` with an array one element
+  short, (m) a code mapped by two entries, (n) CMaps mapping 262,144 and
+  262,145 codes in total, (o) `Widths` of 256 and 257 numbers, (p) a
+  descendant `W` of 65,536 and 65,537 numbers, (q) a descendant without
+  `FontDescriptor`, (r) a `Flags` value that is a string, When page 1 is
+  read, Then (a), (b) and (m) give their text (the last entry for (m)) and
+  the canonical bytes hold no font program and no source CMap, (c), (d),
+  (e), (f), (j) and (k) are `UNSUPPORTED_FORMAT`, (l), (q) and (r) are
+  `CONTENT_UNAVAILABLE`, and (g), (h), (i), (n), (o) and (p) give the text
+  then `LIMIT_EXCEEDED`. Verified by: `BR-417 AC-07 fonts`.
 - **AC-08** (BR-418) — Given a `ToUnicode` font whose largest destination
   is 48 UTF-8 bytes (`m` 16) and a page repeating one string so that the
-  sum of U is exactly B and B + 1, When the page is read, Then the first
-  gives its text and the second is `LIMIT_EXCEEDED` before PDF.js; and the
-  exact-pin dependency stress of `TestBR114_pdf_producer_admission` passes
-  for Type0/`ToUnicode` and Differences fonts with produced bytes and items
-  never above the admitted U and I. Verified by:
-  `TestBR418_producer_admission`, `TestBR114_pdf_producer_admission`.
+  sum of U is exactly B and B + 1; a Differences font whose names include
+  `u1F600` (D 4, `m` 2) at the same two sums; a Form holding that string
+  drawn so that the sum of U is B and B + 1; strings of 4,096 and 4,097
+  bytes; and a page whose sum of I is 65,536 and 65,537, When the page is
+  read, Then each first case gives its text and each second case is
+  `LIMIT_EXCEEDED` before PDF.js; and the exact-pin dependency stress of
+  `TestBR114_pdf_producer_admission` passes for Type0/`ToUnicode`,
+  Differences and Form-inlined text with produced bytes and items never
+  above the admitted U and I. Verified by: `BR-418 AC-08 producer
+  admission`, `TestBR114_pdf_producer_admission`.
 - **AC-09** (BR-114 v2) — Given (a) a well-formed file with `/Encrypt`,
   (b) a `%PDF-2.0` file, (c) `%PDF-2.1`, (d) a cross-reference offset one
-  byte off, (e) bytes after the last `%%EOF`, When page 1 is read, Then (a)
-  and (c) are `UNSUPPORTED_FORMAT`, (b) gives the text, (d) and (e) are
-  `CONTENT_UNAVAILABLE`, each refusal before PDF.js. Verified by:
-  `TestBR114_v2 AC-09 error classification`.
+  byte off, (e) bytes after the last `%%EOF`, (f) `%PDF-1.7` followed by a
+  space instead of an end of line, (g) a file with an unknown operator on
+  page 1 and a `/Prev` cycle, (h) a file whose first selected page uses
+  an `LZWDecode` content stream and whose second selected page needs 129
+  fonts, When the page(s) are read, Then (a), (c) and (f) are
+  `UNSUPPORTED_FORMAT`, (b) gives the text, (d) and (e) are
+  `CONTENT_UNAVAILABLE`, (g) is `CONTENT_UNAVAILABLE` (the chain is checked
+  first) and (h), read as pages `[1, 2]`, is `UNSUPPORTED_FORMAT` (page 1
+  first), each refusal before PDF.js. Verified by: `BR-114 v2 AC-09 error
+  classification`.
 - **AC-10** (BR-114 v2, BR-115, BR-117, BR-118, BR-122) — Given the
   existing extraction suites (`tests/read-*.test.ts`), When `make check`
   runs, Then every test passes; a test that asserted a refusal of a feature
   F-034 admits (object or cross-reference streams, content arrays and reuse,
-  extra keys, other fonts or operators) is rewritten to assert the BR-114 v2
-  outcome and names BR-114 v2, and no test is removed. Verified by:
-  `make check`.
+  extra keys, other fonts or operators, Forms, inline images) is rewritten
+  to assert the BR-114 v2 outcome and names BR-114 v2, and no test is
+  removed. Verified by: `make check`.
+- **AC-11** (BR-419, BR-418) — Given (a) S21–S25, (b) a Form without
+  `/Resources` whose caller is a Form with a Font `/F1`, (c) a Form whose
+  own `/F1` differs from the page's `/F1` (S22), (d) a text-free Form
+  nested 8 deep and Forms with text nested 8 and 9 deep, (e) a Form cycle
+  A→B→A, (f) 256 and 257 distinct Forms, (g) a Form drawn 4,096 and 4,097
+  times through nested `Do`s, (h) a Form with a `/Matrix` of five numbers,
+  (i) an XObject with `/Subtype /Foo`, (j) a Form ending inside `BT`,
+  When page 1 is read, Then (a), (b) and (c) give the text with the
+  canonical content holding `q`, the `/Matrix` as `cm` and `Q` around each
+  inlined Form and one canonical name per font object, (d) gives the text
+  at 8 and `LIMIT_EXCEEDED` at 9 with no output for the text-free Form,
+  (f) and (g) give the text then `LIMIT_EXCEEDED`, (e), (h) and (j) are
+  `CONTENT_UNAVAILABLE`, and (i) is `UNSUPPORTED_FORMAT`, each refusal
+  before PDF.js. Verified by: `BR-419 AC-11 Form inlining`.
+- **AC-12** (BR-420) — Given (a) S26, (b) a Type1 font with `/Differences`
+  mapping codes below 0x20, (c) nonembedded Helvetica with no `/Encoding`,
+  (d) a symbolic TrueType font with a `FontFile2`, no `/Encoding` and no
+  `ToUnicode`, (e) a font whose `/Encoding` is `/Foo` while a `ToUnicode`
+  maps every shown code, (f) `/Differences` of 256 and 257 codes, (g)
+  glyph names of 31 and 32 bytes, (h) a cleartext `/Length1` of 65,536 and
+  65,537, (i) a cleartext whose `/Encoding` array uses another procedure
+  than the admitted loop, (j) a WinAnsi font showing code 0x81 with no
+  `ToUnicode`, (k) a `Symbol` font with no `/Encoding` and no
+  `ToUnicode`, (l) an equality test of the four base tables against the
+  pinned PDF.js tables, When page 1 is read, Then (a), (b) and (c) give
+  their text, the canonical font carries `/BaseEncoding /WinAnsiEncoding`
+  with every shown code in `/Differences` and `Flags` with Nonsymbolic set
+  and Symbolic clear, (d), (e), (i), (j) and (k) are `UNSUPPORTED_FORMAT`,
+  (f), (g) and (h) give the text then `LIMIT_EXCEEDED`, and (l) holds.
+  Verified by: `BR-420 AC-12 simple font encoding`.
+- **AC-13** (BR-412–BR-420) — Given a valid file at each ceiling of the
+  table "Ceilings added by F-034" not exercised by AC-02–AC-12 (at least
+  the 4,096-pair `/Index`, the 4,096-object object stream, the 32 inline
+  dictionary pairs and the 256 built-in encoding groups), and the same
+  file one unit over, When page 1 is read, Then the first gives the text
+  and the second is `LIMIT_EXCEEDED` before PDF.js. Verified by: `BR-412
+  AC-13 ceilings at and over`.
 
 ## Decisions
 
@@ -414,10 +688,16 @@ worker) with a spy on the PDF.js start, using synthetic files built by
   incremental updates come from any "save" after annotation or signing
   (S07); linearized files reuse the same `/Prev` chain; indirect `/Length`
   is common in TeX output (S08). All are offset-driven with no scanning, so
-  the reading stays deterministic. Rejected: requiring the strict F-009
-  rule that every byte between objects is whitespace (incremental files
-  hold superseded objects); repair (PDF.js's repair interprets damaged
-  files in ways the preflight cannot bound).
+  the reading stays deterministic. Hybrid sections follow ISO 32000-1
+  §7.5.8.4: a hybrid file's table may list objects stored in object streams
+  as free so that older readers skip them, and the `/XRefStm` gives them;
+  a free table entry therefore never hides an in-use `/XRefStm` entry of
+  the same section. Microsoft Word's "Save as PDF" output is publicly
+  described as hybrid in this way; this was not checked on a Word file
+  here, and the rule follows the standard either way. Rejected: requiring
+  the strict F-009 rule that every byte between objects is whitespace
+  (incremental files hold superseded objects); repair (PDF.js's repair
+  interprets damaged files in ways the preflight cannot bound).
 - **D-3 — Decode only what is needed (BR-414).** Images and font programs
   carry DCT, JBIG2, JPX or exotic filters that text never needs; framing
   them without decoding removes their decoder surface and their budget.
@@ -425,21 +705,33 @@ worker) with a spy on the PDF.js start, using synthetic files built by
   every PDF 1.5+ generator and the content streams of almost all.
   Rejected: other filters (rare on content and CMaps; each adds a decoder);
   TIFF predictor 2 (not used on these streams by common generators).
-- **D-4 — Forms that show text refuse (BR-416).** Text-free Forms
-  (backgrounds, logos, transparency groups) are common and are dropped.
-  Executing text Forms needs per-invocation accounting of repeated
-  execution and resource scoping, which can follow in its own ticket.
-  Rejected: dropping text Forms silently (a page could return
-  `NO_EXTRACTABLE_TEXT` or miss text with no sign); inlining Forms into the
-  page content (resource renaming and repeated-execution bounds).
-- **D-5 — Fonts without programs (BR-417).** Measurement finding 3 shows
-  PDF.js extracts text from the encoding and `ToUnicode` without the
+- **D-4 — Inline Forms (BR-419; replaces v1's "Forms that show text
+  refuse").** Spec review 1 showed text Forms in OCR layers, overlays,
+  imposition, LaTeX figures and browser output (S21–S25); the owner chose
+  to widen (option A). Inlining keeps PDF.js on one flat content stream per
+  page, so every execution is visible to the static bound: the canonical
+  stream holds each execution's tokens, BR-418 counts them, and the
+  4,096-execution ceiling stops exponential nesting before any output is
+  built. Canonical font names solve the name clash of S22 and the
+  inherited-font case of a Form that uses its caller's font. Rejected:
+  emitting Forms as XObjects for PDF.js (PDF.js would execute them again
+  per `Do` outside the preflight's count, and their resources would need a
+  second projection); dropping text Forms silently (a page could return
+  `NO_EXTRACTABLE_TEXT` or miss text with no sign); refusing them (v1;
+  leaves the S21–S25 families unreadable).
+- **D-5 — Fonts without programs (BR-417, BR-420).** Measurement finding 3
+  shows PDF.js extracts text from the encoding and `ToUnicode` without the
   program. Not parsing programs removes the TrueType/CFF parser, the
-  largest attack surface, from untrusted input. Type0 needs `ToUnicode`
-  because, without the program, Identity codes have no text meaning; a
-  simple font whose only mapping is its program refuses for the same
-  reason. Rejected: passing font programs (parser surface, memory);
-  predefined CMaps (need external CMap data, refused by BR-122).
+  largest attack surface, from untrusted input. Finding 5 shows that
+  dropping the program changes PDF.js's choice of base encoding, so the
+  projection resolves each shown code itself by the PDF rules, emits it
+  explicitly with a base PDF.js always honours (`WinAnsiEncoding`; PDF.js
+  ignores a `StandardEncoding` name) and Nonsymbolic `Flags`, and refuses a
+  shown code whose mapping can only come from the program. Type0 needs
+  `ToUnicode` for every shown code because, without the program, Identity
+  codes have no text meaning. Rejected: passing font programs (parser
+  surface, memory); predefined CMaps (need external CMap data, refused by
+  BR-122); letting PDF.js fall back on `Flags` (S26 measured wrong text).
 - **D-6 — Selected pages only (BR-415).** F-009 read every page's content;
   a feature on page 30 refused a read of page 1. Projecting only the
   selected pages reads less untrusted data and admits more files; other
@@ -451,15 +743,39 @@ worker) with a spy on the PDF.js start, using synthetic files built by
   general PDF library or a second parser (ADR-004 reasons hold); native
   tools (Docker-only and pure-JavaScript stance).
 - **D-8 — Error classes (BR-114 v2).** A cross-reference stream refused as
-  `CONTENT_UNAVAILABLE` misled users (finding 2). Bounds first, then
-  well-formed-but-unsupported, then inconsistent, matching F-009's
-  "Errors" paragraph. No new code or text: the fallback to
-  `kdrive_download` is documented instead (D-9).
+  `CONTENT_UNAVAILABLE` misled users (finding 2). Each failing check has one
+  class (ceiling, unsupported, inconsistent), and the first failing check
+  in a fixed processing order decides, so a file with several defects has
+  one deterministic code and the work done before a refusal is bounded by
+  the checks already passed. No new code or text: the fallback to
+  `kdrive_download` is documented instead (D-9). Rejected: a global ranking
+  of classes (v1; forces every check to run before refusing, including on
+  pages and fonts a ceiling has already ruled out).
 - **D-9 — Document the rest.** README and `docs/development.md` list the
   admitted container, filters, fonts and operators, the refusals of
   "Out of scope", and say that a refused PDF can be fetched with
   `kdrive_download`. Rejected: a hint in the error text (changes fixed
   error strings, BR-120) or in the tool description (BR-060).
+- **D-10 — Inline images skipped by a computed length (BR-416).** ReportLab
+  and Ghostscript draw small images inline (S27, S28). The image is never
+  needed, but its data must be skipped without reading it as operators.
+  The length is taken from `/L`, from the ASCII filter's end marker, from
+  the raw size of unfiltered data, or from the one inflate a lone Flate
+  filter needs under the computed raw size; otherwise the page refuses.
+  Rejected: PDF.js's heuristic search for `EI` (S29 holds `EI Q` inside the
+  data; a search-based end differs between readers and is a smuggling
+  path); refusing all inline images (v1).
+- **D-11 — Built-in Type 1 encodings from the cleartext only (BR-420).**
+  pdfLaTeX's default Computer Modern fonts carry their only mapping in the
+  program (S26). The built-in encoding lives in the program's cleartext
+  part, plain PostScript tokens before `eexec`, so the projection reads that
+  part alone under a 64 KiB bound with a fixed grammar and emits the result
+  as `/Differences`; the encrypted part, the charstrings and the program
+  itself never reach the parser or PDF.js. Rejected: keeping the program
+  for that case (puts the Type 1 parser back on untrusted input for every
+  LaTeX file); documenting a residual (LaTeX body text is the most common
+  case in the review's list); CFF (`FontFile3`) built-in encodings (binary
+  parser; refused, residual).
 
 ## Open questions
 
@@ -467,4 +783,45 @@ None.
 
 ## Stress-test
 
-Pending spec review.
+Spec review 1 (`4-spec-review-1-reviewer`, changes):
+
+1. major (scope: Forms, inline images, Computer Modern) — retained; owner
+   option A (2026-11-14). Measurement 2 adds S21–S29 with before and after
+   results; BR-419 inlines Forms with the bounds and resource scope asked
+   (D-4); BR-416 skips inline images of computable length and refuses the
+   rest (D-10); BR-420 resolves simple-font encodings, reading Computer
+   Modern's built-in encoding from the cleartext part only, measured to
+   restore S26's text exactly (D-11). Residuals: CFF built-in encodings,
+   symbolic TrueType without mapping, `Symbol`/`ZapfDingbats` without
+   mapping, inline images of unknown length.
+2. major (BR-412 xref stream keys) — retained: direct keys, `W[1]` ≥ 1,
+   `/Index` ascending, non-overlapping, at most 4,096 pairs and total count
+   at most `/Size`, zero-width defaults; AC-02 (g)–(o).
+3. major (hybrid free entries) — retained: a free table entry never hides
+   an in-use `/XRefStm` entry of the same section (ISO 32000-1 §7.5.8.4,
+   D-2; Word not verified here); AC-02 (b), (b2).
+4. major (BR-417/418 encodings) — retained: BR-420 resolves every shown
+   code, emits `/BaseEncoding /WinAnsiEncoding` and explicit
+   `/Differences`, rewrites `Flags`, refuses codes whose mapping depends on
+   the program, validates `/Encoding` always; BR-417 bounds and type-checks
+   `W`, `DW`, `CIDSystemInfo` and `FontDescriptor` and keeps the
+   descendant's `FontDescriptor`; BR-418 pins D from the canonical CMap and
+   the glyph-name forms PDF.js 6.5.438 reads (`u` + 5 or 6 hex digits is
+   the only form above U+FFFF).
+5. major (ceiling ACs) — retained: AC-02–AC-12 give at and over rows for
+   their ceilings, AC-13 covers the rest; `/W` 8 accepted, Columns 65,536
+   with Colors 4 accepted, strings of 4,096 and 4,097 bytes.
+6. minor (error order, one defect per sample, header) — retained:
+   processing order in BR-114 v2 and AC-09 (g), (h); AC preamble; "at byte
+   0 followed by an end of line" kept and synchronized into BR-114.md.
+7. minor (BR-416 state and scope) — retained: text state persists across
+   `BT`/`ET` and is kept outside them, no `/Contents` gives an empty stream,
+   resource scope for `Do`, `gs` and `Tf` in Forms (BR-419), "shows text"
+   defined by the four text-show operators, O counted on the canonical
+   stream, kept tokens rebuilt by the canonical serializer.
+8. minor (object streams, CMaps, AC-04) — retained: header parsed once,
+   offsets strictly increasing, `/N` 1–4,096, distinct-object count;
+   `bfrange` array length, last duplicate wins, `/ToUnicode` as a name
+   refuses; AC-04 (a) counts inflated bytes against B.
+9. minor (test names) — retained: ACs use `BR-NNN [vN] AC-NN ...` names as
+   in F-033; the existing `TestBR114_pdf_producer_admission` keeps its name.
