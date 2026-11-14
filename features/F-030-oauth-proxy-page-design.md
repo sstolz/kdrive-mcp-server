@@ -84,23 +84,33 @@ codes, events and limits do not change.
   has no button class. The document contains no `<script>`, `<link>`, `<img>`,
   `<iframe>`, `<object>`, `<embed>`, `<base>`, `<meta http-equiv>`, `on*`
   attribute and `style` attribute, and no absolute URL other than the GitHub
-  link and the HTML-escaped request values of BR-402. Verified by: AC-01,
-  AC-02.
+  link and the HTML-escaped `ConsentView` values of BR-402 (`clientId`,
+  `cimd.host`, `redirectUri`, `resource`, `action`, which come from the
+  request or the configuration). The `<svg>` carries no `xmlns` attribute
+  (not needed in HTML). Verified by: AC-01, AC-02.
 - **BR-400** — The stylesheet is one fixed string (identical in every
-  response) that: (1) declares its colours as CSS custom properties in `:root`
-  (light) and redeclares every one of them inside
-  `@media (prefers-color-scheme: dark)`, and sets `color-scheme: light dark`;
+  response) that: (1) declares exactly these colour tokens as CSS custom properties in
+  `:root` (light): `--bg --surface --fg --muted --link --code-fg --code-bg
+  --primary-fg --primary-bg --secondary-fg --secondary-bg --border --focus`,
+  each a `#rrggbb` value, redeclares every one of them inside
+  `@media (prefers-color-scheme: dark)`, contains no other colour literal
+  (every other colour use is `var(--…)`), and sets `color-scheme: light dark`;
+  the page uses `--bg` behind the header, footer and page, `--surface` behind
+  the main card, `--code-bg` behind `code`, and the primary/secondary tokens
+  for the Approve/Deny buttons;
   (2) uses a system font stack only and contains no `@import`, `@font-face`,
   `url(` or `image-set(`; (3) contains no `transition`, `animation` or
   `@keyframes` (nothing moves, so reduced motion holds without a query);
   (4) gives `:focus-visible` on buttons and links an `outline` of at least
   2px solid in a declared colour; (5) wraps long values
-  (`overflow-wrap: anywhere` on `code`) and limits the content width so that a
-  320 px-wide viewport needs no horizontal scrolling; (6) reaches, in both
-  themes, a WCAG 2.x contrast ratio of at least 4.5:1 for body text, muted
-  text, link text, code text and each button's label against its background,
-  and at least 3:1 for the focus outline and the button borders against the
-  page background. Verified by: AC-03.
+  (`overflow-wrap: anywhere` on `code`), limits the content width with a
+  `max-width` in `rem` or `%`, and sets no `width` or `min-width` above
+  `320px`; (6) reaches, in both themes, a WCAG 2.x contrast ratio of at least
+  4.5:1 for each of these pairs: `--fg`/`--bg`, `--fg`/`--surface`,
+  `--muted`/`--bg`, `--muted`/`--surface`, `--link`/`--bg`,
+  `--code-fg`/`--code-bg`, `--primary-fg`/`--primary-bg`,
+  `--secondary-fg`/`--secondary-bg`; and at least 3:1 for `--focus`/`--bg`,
+  `--focus`/`--surface` and `--border`/`--surface`. Verified by: AC-03.
 - **BR-401** — The `Content-Security-Policy` of every proxy HTML page is
   `default-src 'none'; frame-ancestors 'none'; base-uri 'none'; style-src 'sha256-<b64>'`,
   where `<b64>` is the base64 SHA-256 of the exact UTF-8 text between `<style>`
@@ -109,7 +119,7 @@ codes, events and limits do not change.
   are unchanged. Verified by: AC-04.
 - **BR-402** — The consent page title is `Authorize access`. Below the `<h1>`
   it shows, in this order: (1) the fixed paragraph
-  `An application is asking to connect to this kdrive-mcp-server. The server gives MCP clients, such as AI assistants, access to files in a kDrive, limited to the folders and mode its operator configured. Approve only if you started this connection yourself and recognise the client below.`;
+  `An application is asking to connect to this kdrive-mcp-server. The server gives MCP clients, such as AI assistants, access to files in kDrive, limited to the folders and mode its operator configured. Approve only if you started this connection yourself and recognise the client below.`;
   (2) an `<h2>Request details</h2>` followed by the BR-129 and BR-393 lines,
   each the text of its own `<p>`, with the same wording, `<code>`/`<strong>`
   markup, escaping and order as BR-129 v2/BR-393 v1 (CIMD: client ID, client
@@ -117,14 +127,15 @@ codes, events and limits do not change.
   registered: client name, self-declared notice, client ID; then redirect URI
   and protected resource); (3) the unchanged form (method, action, hidden
   `consent` input, `Approve` then `Deny` buttons with `name="decision"`), the
-  Approve button styled as primary and Deny as secondary, both the same size;
+  Approve button with `class="button primary"` and Deny with
+  `class="button secondary"`, both sized by the shared `.button` rule;
   (4) the fixed paragraph
-  `Approve takes you to sign in with your account; the client gets access only after that sign-in. Deny returns to the client without access. This page never asks for a password.`
+  `Approve takes you to sign in with your account; the client gets access only after that sign-in. Deny returns to the client without access. Enter your password only on your identity provider's sign-in page, never on this page.`
   Verified by: AC-05.
 - **BR-403** — An error page has the title and `<h1>` `Authorization error`,
   then the unchanged `ERROR_TEXT` sentence of its kind in its own `<p>`, then
   the fixed paragraph
-  `Nothing was authorized. Return to your application and start the connection again.`;
+  `This request was not completed. If your application is not connected, return to it and start the connection again.`;
   it contains no request value (BR-143) and keeps its status (400 or 503).
   Verified by: AC-06.
 - **BR-129 v3** — v2 holds, except that the `Content-Security-Policy` value
@@ -137,7 +148,10 @@ codes, events and limits do not change.
   acceptance". Verified by: AC-04, AC-05.
 - **BR-393 v2** — v1 holds, except its last sentence becomes "The page of a
   registered client carries none of these lines." (it was "is unchanged",
-  tested as byte-identical to the F-010 page). Verified by: AC-05.
+  tested as byte-identical to the F-010 page); its Example 3 reads "carries
+  none of these lines" instead of "byte-identical to the F-010 page", and its
+  Verification names the `BR-393 v2` and `BR-129 v3` tests of AC-05.
+  Verified by: AC-05.
 
 ## Acceptance criteria
 
@@ -151,15 +165,19 @@ codes, events and limits do not change.
   `tests/auth/proxy-pages.test.ts`.
 - **AC-02** (BR-399) — Given the same pages with request values chosen to
   contain `<script>`, `" onload="`, `style=`, `http://evil.example` and
-  `javascript:`, When the body is scanned after removing the escaped request
-  values, Then it holds none of the forbidden elements or attributes and no
+  `javascript:`, rendered through direct `consentPage` and `errorPage` calls,
+  When the body is scanned after removing the escaped `ConsentView` values of
+  BR-399, Then it holds none of the forbidden elements or attributes and no
   `http:`/`https:` URL other than the GitHub link. Verified by:
   `BR-399 AC-02` in `tests/auth/proxy-pages.test.ts`.
 - **AC-03** (BR-400) — Given the stylesheet constant, When the test parses
   its custom properties for light and dark, Then every light property is
-  redeclared in dark, items (2)–(5) hold as string checks, and the contrast
-  ratios of item (6), computed with the WCAG relative-luminance formula from
-  a named pair list in the test, meet their thresholds in both themes.
+  redeclared in dark, the token set is exactly BR-400 (1)'s and every value is
+  `#rrggbb`, the stylesheet has no colour literal outside the two token
+  blocks, items (2)–(5) hold as string checks (including the `max-width` unit
+  and no `width`/`min-width` above `320px`), and the contrast ratios of item
+  (6), computed with the WCAG relative-luminance formula for exactly the pairs
+  listed there, meet their thresholds in both themes.
   Verified by: `BR-400 AC-03` in `tests/auth/proxy-pages.test.ts`.
 - **AC-04** (BR-401, BR-129 v3) — Given every page of AC-01, When the
   headers are read, Then the CSP equals the BR-401 value with the hash
@@ -175,7 +193,8 @@ codes, events and limits do not change.
   lines (as text of their own `<p>`), the form and the after-note appear in
   BR-402 order; the existing `BR-393` substring and order assertions pass
   unchanged; the registered page has no `Client host:`, metadata notice or
-  loopback line; and a direct `consentPage` call with `"<>&'` in every
+  loopback line; Approve carries `class="button primary"` and Deny
+  `class="button secondary"`; and a direct `consentPage` call with `"<>&'` in every
   `ConsentView` field shows each only escaped. Verified by: `BR-402 AC-05` in
   `tests/auth/proxy-pages.test.ts`, `BR-129 v3 ...` and `BR-393 v2 ...` in
   `tests/auth/proxy-consent.test.ts`.
@@ -192,8 +211,8 @@ codes, events and limits do not change.
 - **AC-08** (BR-399, BR-400, BR-402, BR-403; owner-visible, outside the
   gate) — Given the four pages of AC-01 rendered from synthetic values by a
   throwaway script, When the orchestrator screenshots them in a headless
-  browser in light and dark at 375 px and 1280 px wide, Then the PR shows the
-  screenshots, no horizontal scrollbar at 375 px, and the owner can judge the
+  browser in light and dark at 320 px and 1280 px wide, Then the PR shows the
+  screenshots, no horizontal scrollbar at 320 px, and the owner can judge the
   design. Not part of `make check`; if no browser is available the PR says so
   and attaches the rendered HTML instead.
 
@@ -237,4 +256,21 @@ None.
 
 ## Stress-test
 
-Not yet reviewed.
+Review 1 (23-spec-review-1-reviewer), `changes` on `b465bc6`; all findings
+retained (applied by the orchestrator, economical mode agreed with the owner):
+
+1. [major] BR-403's sentence is now true for every error kind, including a
+   replayed callback or a double-submitted Approve.
+2. [major] BR-400 names the colour tokens, requires `#rrggbb` values and no
+   colour literal outside the token blocks, ties tokens to elements, and lists
+   the exact contrast pairs and thresholds; AC-03 checks them.
+3. [major] BR-399 lists the excluded `ConsentView` values (request and
+   configuration) and forbids `xmlns` on the `<svg>`; AC-02 renders through
+   direct calls.
+4. [minor] The 320 px rule is checked by string (`max-width` unit, no wide
+   `width`/`min-width`); AC-08 screenshots at 320 px.
+5. [minor] Button classes `button primary` / `button secondary` are named and
+   checked in AC-05.
+6. [minor] BR-393 v2 also rewords Example 3 and Verification.
+7. [minor] "files in kDrive"; the password sentence now tells the user where
+   a password belongs.
