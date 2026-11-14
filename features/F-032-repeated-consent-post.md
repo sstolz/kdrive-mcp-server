@@ -2,13 +2,17 @@
 id: F-032
 title: Repeated consent POST answered idempotently
 ticket: "#33"
-status: draft
+status: frozen
 version: 1
 ---
 
 # F-032 — Repeated consent POST answered idempotently
 
 Author: Claude Opus 5.5 (effort unknown), spec phase, 2026-11-14.
+Frozen 2026-11-14 (autonomous mode, PROJECT.md D-1) after spec reviews 1
+and 2 (`changes`) and 3 (`approve`) and decision pass 1 (Fable, `approve`)
+on reviewed revision `4d1a29d`, with the decision pass's three wording
+minors applied at freeze as it allowed; published on #33.
 Base: branch `claude/beautiful-maxwell-8mdk2w` (main `489883b`).
 IDs: F-032; BR-411 v1; BR-129 v5; BR-142 v3; AC-01–AC-13. No ADR: one bounded in-memory
 map and one branch in the consent handler, nothing persisted, cheap to reverse.
@@ -86,7 +90,9 @@ callback, so nothing can be authorized twice.
   settled record is replayed at once. An eligible repeat of a pending record
   waits on the completion captured from the record on arrival (not on a later
   lookup of the record), with no second `discover()` call; the completion is
-  released whatever the first POST's end, an exception included. After the
+  released whatever the first POST's end, an exception included, always
+  resolves (never rejects) and itself carries the outcome (the `Location` or
+  a failure). After the
   wait the repeat re-reads the BR-299 latch and answers the 503 `busy` page if
   it is set; otherwise it is replayed if the first POST answered the
   decision's 302, and gets the 400 `consent` page in every other case (failure
@@ -125,8 +131,9 @@ callback, so nothing can be authorized twice.
   record is answered under BR-411 (2) instead of the 400 page; the identifier
   stays one-use for every other purpose. Verified by: AC-01, AC-03, AC-05.
 - **BR-142 v3** — v2 holds, except that the stores add the BR-411 consent
-  replay records: memory only in every mode, at most 1,000, purged at
-  `t0 + 10` s, and a full set evicts its oldest record instead of refusing.
+  replay records: memory only in every mode, at most 1,000; settled records
+  are purged at `t0 + 10` s, and a full set evicts its oldest settled record
+  instead of refusing (pending records are exempt, BR-411 (5)).
   Verified by: AC-06.
 
 Existing rules this feature relies on without change:
@@ -191,8 +198,10 @@ Tests use the deterministic clock, random source and fake upstream of
   random source), Then a repeat with the right
   cookie gets the 400 `consent` page (latched: 503 `busy`). Verified by:
   `BR-411 AC-05 %s is not replayed`.
-- **AC-06** (BR-411, BR-142 v3) — Given 1,000 records inside the window, When
-  a 1,001st approval is recorded, Then the oldest record's repeat gets the
+- **AC-06** (BR-411, BR-142 v3) — Given 1,000 settled records inside the
+  window, created by denials (consents created and consumed in turn so the
+  consent and flow stores stay under their limits), When a 1,001st denial is
+  recorded, Then the oldest record's repeat gets the
   400 page and the newest is replayed; given records older than 10 s, When
   any write purges, Then the test snapshot (Scope) holds none of the settled
   ones and still holds a pending one; and given
@@ -327,3 +336,10 @@ Review 2 (33-spec-review-2-reviewer), `changes` on `24a5685`; retained
 (applied by the orchestrator): AC-08 now excepts the approve replay's BR-130
 `Set-Cookie`, which carries the cookie value by design (AC-01), so AC-01 and
 AC-08 no longer contradict.
+
+Decision pass 1 (33-spec-decision-1-fable), `approve` on `4d1a29d` with three
+wording minors; all retained and applied at freeze (the pass allowed it
+without another round): AC-06's 1,000 records come from denials so the flow
+store limit cannot interfere; BR-142 v3 purges and evicts settled records
+only, matching BR-411 (5); the BR-411 completion always resolves and carries
+the outcome.
