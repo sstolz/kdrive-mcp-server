@@ -207,10 +207,10 @@ unchanged.
   has a `no-store` or `no-cache` directive; otherwise for its `max-age`
   clamped to 60–3,600 s; otherwise for 300 s. Parsing: the `Cache-Control`
   field lines are joined with commas and split into comma-separated
-  directives, names compared case-insensitively; `max-age` is the value of the
+  directives, each trimmed of spaces and tabs, the name (before any `=`)
+  compared case-insensitively and the value taken after the first `=`; `max-age` is the value of the
   first `max-age` directive whose value is 1–10 ASCII digits (no quotes, sign
-  or other character); a field with no such directive, or that cannot be
-  parsed, has no `max-age`; every other directive (`public`, `private`,
+  or other character); a field with no such directive has no `max-age`; every other directive (`public`, `private`,
   `s-maxage`, `must-revalidate`, `immutable`, unknown ones) and `Expires` are
   ignored. A failure
   is never cached. While fresh, an entry is used without fetching. After it
@@ -220,7 +220,10 @@ unchanged.
   for stale entries, freshness end plus 3,600 s otherwise) is evicted. At most
   one fetch per URL is in flight (concurrent authorization requests for that
   URL share it) and at most 4 fetches in total; an authorization request that
-  would start a fifth gets the 503 HTML error page without fetching. A
+  would start a fifth gets the 503 HTML error page without fetching. At the
+  5,000 ms deadline or at any failure, the proxy calls the resolver's
+  `cancel()`, destroys the request and its socket, and frees the slot at that
+  moment. A
   transient failure with no usable stale entry gives the 503 HTML error page;
   a terminal failure gives the 400 HTML error page; neither redirects.
   Verified by: AC-06.
@@ -411,8 +414,9 @@ unchanged.
   1,025-character entry, `http://`, an uppercase host, an IP host,
   `localhost`, a one-label host, a trailing dot, an all-digit last label
   (`https://a.123`), an underscore, a label starting or ending with a hyphen,
-  a 64-character label, a Unicode host (accepted as its A-label
-  `https://xn--bcher-kva.example`), port `443`, port `0`, `08080`, a path,
+  a 64-character label, a 254-character host, the Unicode host
+  `https://bücher.example` (its A-label `https://xn--bcher-kva.example` is a
+  valid case that loads), port `443`, port `0`, `08080`, a path,
   `/`, userinfo, a query or a fragment, Then valid lists load and each other
   case is `INVALID_VALUE`; Given stdio, `delegate`, or authentication
   off, or an entry equal to the `publicUrl` or `oauthIssuer` origin, Then
@@ -492,7 +496,8 @@ unchanged.
   document is used until 3,600 s past expiry and then the 503 page; When it
   fails terminally, Then the 400 page and the entry is gone; ten concurrent
   requests for one URL make one call; four distinct URLs pending make a fifth
-  get 503 without a call; the 101st URL evicts the entry discarded first.
+  get 503 without a call; right after one of four pending fetches times out,
+  a fifth URL is fetched; the 101st URL evicts the entry discarded first.
   Verified by: `tests/auth/proxy-cimd.test.ts`.
 - **AC-07** (BR-310, BR-136 v2) — Given a CIMD client that completed
   authorization, When it redeems its code with `client_id` in the body and no
@@ -554,7 +559,8 @@ unchanged.
   window, and the refresh needs no fetch. Verified by:
   `tests/http/cimd-rehearsal.test.ts` (`make check`).
 - **AC-13** (all) — `make check` passes with the new tests, and the
-  production composition passes no resolver, address policy or CA override
+  production composition passes no resolver, address policy, CA override or
+  DNS server list
   (asserted by a source test on the composition). Verified by: `make check`,
   `tests/auth/proxy-construction.test.ts`.
 - **AC-14** (BR-306, D-8) — Given a source test on the fetch module, Then it
@@ -567,8 +573,9 @@ unchanged.
   child process with `UV_THREADPOOL_SIZE=1` whose real `Resolver` points at a
   local UDP DNS server that never answers, When four fetches are pending,
   Then a concurrent `fs.promises.readFile` and `crypto.pbkdf2` both complete
-  before the fetches time out, and after the timeouts no DNS query is still
-  outstanding. Verified by: `tests/auth/cimd-fetch.test.ts`.
+  before the fetches time out, the stub UDP server receives no query more
+  than 100 ms after the 5,000 ms deadline, and the child exits without open
+  handles. Verified by: `tests/auth/cimd-fetch.test.ts`.
 
 Owner-run acceptance (after merge, not a merge condition, recorded on the
 ticket separately, as for F-019; D-13): run `make http-acceptance` behind the quick tunnel (learnings
@@ -769,3 +776,17 @@ Spec at `35eb1e9`; 3 major and 12 minor findings, all retained.
 15. Minor, retained: AC-12 rehearses the consent host line and tool calls
     before and after the restart; the owner decisions moved to D-12 and D-13
     and Open questions is empty.
+
+Review 2 (3-spec-review-2-reviewer), `approve` on `c3dc6dc` with five minor
+findings; all retained:
+
+1. AC-01 separates the refused Unicode host from its valid A-label and adds
+   a 254-character host.
+2. BR-309 trims directives, matches names case-insensitively and takes the
+   value after `=`; the undefined "cannot be parsed" clause is dropped.
+3. BR-309 frees a fetch slot at the deadline or at any failure, after
+   `cancel()` and destroying the request and socket; AC-06 adds the fifth
+   fetch after a timeout.
+4. AC-13 also excludes an injected DNS server list from production.
+5. AC-14 measures the outstanding-query check with the stub UDP server and
+   the child's open handles.
