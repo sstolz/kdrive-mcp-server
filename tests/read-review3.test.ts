@@ -94,7 +94,7 @@ it.each(invalid)(
   async ({ frame }) => {
     const bytes = terminalPdf(frame);
     vi.mocked(pdfjs.getDocument).mockClear();
-    expect(() => preflightPdf(bytes, 16777216, [1])).toThrow();
+    await expect(preflightPdf(bytes, 16777216, [1])).rejects.toThrow();
     await expect(extractPdf(request(bytes))).rejects.toThrow();
     expect(pdfjs.getDocument).not.toHaveBeenCalled();
   },
@@ -112,7 +112,7 @@ it.each(valid)(
     const bytes = terminalPdf(
       (n) => `${eol}startxref${eol}${n}${eol}%%EOF${tail}`,
     );
-    expect(preflightPdf(bytes, 16777216, [1]).total_pages).toBe(1);
+    expect((await preflightPdf(bytes, 16777216, [1])).total_pages).toBe(1);
     expect((await extractPdf(request(bytes))).text).toBe("Hello bounded PDF");
   },
 );
