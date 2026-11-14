@@ -609,8 +609,10 @@ it("BR-171 v3 AC-04 only the entry script mounts the state directory", () => {
       expect(value.startsWith("/"), `${file}: ${value}`).toBe(true);
       expect(value.startsWith("/workspace"), `${file}: ${value}`).toBe(false);
     }
-    for (const match of text.matchAll(/(\S*)\/oauth-state\.sqlite/gu)) {
-      const path = match[0];
+    const paths = text
+      .split(/[\s`"']+/u)
+      .filter((token) => token.includes(`/${STATE_FILE}`));
+    for (const path of paths) {
       const allowed =
         path.includes(`${STATE_TARGET}/${STATE_FILE}`) ||
         file === "docs/oauth-proxy.md" ||

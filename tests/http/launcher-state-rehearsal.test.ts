@@ -122,13 +122,14 @@ function entryRun(fixture: ReturnType<typeof checkout>, env: Env): string[] {
   return runs[0] ?? [];
 }
 
-/**
- * The container environment, derived only from the recorded arguments:
- * `-e NAME=value` as given, `-e NAME` from the environment passed to `make`,
- * values under a recorded `--volume` target mapped to its host directory.
- */
-function containerEnvironment(args: string[], makeEnv: Env): Env {
-  const mounts: Array<{ source: string; target: string }> = [];
+interface Mount {
+  source: string;
+  target: string;
+}
+
+/** `--volume` mounts and `-e` settings, as recorded. */
+function parseRun(args: string[], makeEnv: Env) {
+  const mounts: Mount[] = [];
   const env: Env = {};
   for (let index = 0; index < args.length; index += 1) {
     const flag = args[index];
@@ -139,13 +140,22 @@ function containerEnvironment(args: string[], makeEnv: Env): Env {
       index += 1;
     } else if (flag === "-e") {
       const equals = value.indexOf("=");
-      if (equals === -1) {
-        const inherited = makeEnv[value];
-        if (inherited !== undefined) env[value] = inherited;
-      } else env[value.slice(0, equals)] = value.slice(equals + 1);
+      const inherited = makeEnv[value];
+      if (equals !== -1) env[value.slice(0, equals)] = value.slice(equals + 1);
+      else if (inherited !== undefined) env[value] = inherited;
       index += 1;
     }
   }
+  return { mounts, env };
+}
+
+/**
+ * The container environment, derived only from the recorded arguments:
+ * `-e NAME=value` as given, `-e NAME` from the environment passed to `make`,
+ * values under a recorded `--volume` target mapped to its host directory.
+ */
+function containerEnvironment(args: string[], makeEnv: Env): Env {
+  const { mounts, env } = parseRun(args, makeEnv);
   for (const [name, value] of Object.entries(env)) {
     const mount = mounts.find((entry) => value.startsWith(`${entry.target}/`));
     if (mount) env[name] = mount.source + value.slice(mount.target.length);
@@ -285,9 +295,9 @@ describe("F-029 AC-05 launcher rehearsal of the owner run", () => {
     }
     // No upstream token request and no document fetch in run 2; the test
     // issued no authorize or consent request there.
-    expect(upstream.calls.filter((entry) => entry.kind === "post").length).toBe(
-      postsBefore,
-    );
+    expect(
+      upstream.calls.filter((entry) => entry.kind === "post"),
+    ).toHaveLength(postsBefore);
     expect(served).toBe(1);
     expect(recordedStateFiles).toStrictEqual(
       Array.from({ length: 3 }, () => `OAUTH_STATE_FILE=${STATE_FILE}`),

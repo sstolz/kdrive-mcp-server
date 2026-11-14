@@ -374,11 +374,11 @@ only; point your HTTPS reverse proxy or tunnel at it. The upstream client
 secret is refused inline. Events are written to stderr as JSON lines.
 
 Persisted state across restarts (F-029): `HTTP_ACCEPTANCE_STATE_DIR` is
-optional. Without it the proxy keeps its state in memory, so a restart loses every client and login. With it, the launcher
-keeps registered clients and refresh families in `oauth-state.sqlite` in that
-directory, which is mounted read-write at `/run/oauth-state` for this run only
-(`OAUTH_STATE_FILE` is set by the entry script; setting it yourself is
-refused). The directory must be absolute, outside the checkout and the secrets
+optional. Without it the proxy keeps its state in memory, so a restart loses
+every client and login. With it, the launcher keeps registered clients and
+refresh families in `oauth-state.sqlite` in that directory, which is mounted
+read-write into the dev container for this run only (`OAUTH_STATE_FILE` is set
+by the entry script; setting it yourself is refused). The directory must be absolute, outside the checkout and the secrets
 directory, owned by the dev container user, mode `0700`, and hold nothing but
 the state file and its journal (`oauth-state.sqlite` and
 `oauth-state.sqlite-journal`); otherwise the entry script refuses with a fixed
