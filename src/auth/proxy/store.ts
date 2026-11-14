@@ -6,14 +6,23 @@ import {
   type SQLOutputValue,
 } from "node:sqlite";
 import { HttpStartupError, type OAuthStateCode } from "../../http/errors.js";
+import {
+  acceptableCimdClientId,
+  meetsCimdClientIdSyntax,
+} from "./client-metadata.js";
 import { redirectMatches } from "./redirect.js";
 
 // ---- F-019 constants ------------------------------------------------------
 
 /** BR-295: `application_id` of an OAuth state file ("KDOS"). */
 export const OAUTH_STATE_APPLICATION_ID = 0x4b_44_4f_53;
-/** BR-295: the current format version (`user_version`). */
+/** BR-295: the version 1 format (`user_version`) a new file gets. */
 export const OAUTH_STATE_FORMAT_VERSION = 1;
+/**
+ * F-028 BR-311 / BR-295 v2 (ADR-011): format version 2 is version 1 with CIMD
+ * families; it is the highest version this release reads.
+ */
+export const OAUTH_STATE_CIMD_VERSION = 2;
 /** BR-295 step (2), BR-303: the largest accepted file. */
 export const OAUTH_STATE_MAX_BYTES = 67_108_864;
 /** BR-303: rows per table. */
@@ -193,6 +202,8 @@ export interface OAuthStateStoreOptions {
   binding: OAuthStateBinding;
   /** The current `oauthAllowedRedirectUris` (BR-302 startup purge). */
   allowedRedirectUris: readonly string[];
+  /** F-028: the current `oauthAllowedClientIdOrigins` (BR-302 v2 purge). */
+  allowedClientIdOrigins?: readonly string[];
   clock: () => Date;
   port?: Partial<OAuthStateStorePort>;
 }
@@ -512,10 +523,19 @@ function clientRow(row: Record<string, SQLOutputValue>): StoredClient {
   return client;
 }
 
+/** BR-311: a family with no client row whose client ID meets the CIMD syntax. */
+function isCimdFamily(
+  clientId: string,
+  clientIds: ReadonlySet<string>,
+): boolean {
+  return !clientIds.has(clientId) && meetsCimdClientIdSyntax(clientId);
+}
+
 function familyRow(
   row: Record<string, SQLOutputValue>,
   audience: string,
   clientIds: ReadonlySet<string>,
+  version: number,
 ): StoredFamily {
   const family = {
     id: text(row.id),
@@ -528,7 +548,15 @@ function familyRow(
     tokenHash: blob(row.token_hash),
     tokenIssued: row.token_issued,
   } as unknown as StoredFamily;
-  if (!validFamily(family, audience) || !clientIds.has(family.clientId))
+  // BR-295 v2 step (9): the row rules of the file's own version.
+  if (
+    !validFamily(family, audience) ||
+    !(
+      clientIds.has(family.clientId) ||
+      (version === OAUTH_STATE_CIMD_VERSION &&
+        isCimdFamily(family.clientId, clientIds))
+    )
+  )
     refuse("OAUTH_STATE_CORRUPT");
   return family;
 }
@@ -579,14 +607,20 @@ interface Loaded {
   families: StoredFamily[];
 }
 
-function checkHeaderFields(db: OAuthStateDatabase): void {
+interface Opened extends Loaded {
+  /** The `user_version` the startup transaction wrote (BR-311). */
+  version: number;
+}
+
+function checkHeaderFields(db: OAuthStateDatabase): number {
   // Step (4).
   if (count(db, "PRAGMA application_id") !== OAUTH_STATE_APPLICATION_ID)
     refuse("OAUTH_STATE_CORRUPT");
-  // Step (5).
+  // Step (5), BR-295 v2: versions 1 and 2 are read.
   const version = count(db, "PRAGMA user_version");
-  if (version > OAUTH_STATE_FORMAT_VERSION) refuse("OAUTH_STATE_VERSION");
+  if (version > OAUTH_STATE_CIMD_VERSION) refuse("OAUTH_STATE_VERSION");
   if (version < OAUTH_STATE_FORMAT_VERSION) refuse("OAUTH_STATE_CORRUPT");
+  return version;
 }
 
 function checkStructure(db: OAuthStateDatabase): void {
@@ -615,6 +649,7 @@ const OUT_OF_RANGE = `NOT BETWEEN 0 AND ${String(Number.MAX_SAFE_INTEGER)}`;
 
 function readRows(
   db: OAuthStateDatabase,
+  version: number,
 ): Loaded & { meta: Map<string, string> } {
   const meta = new Map<string, string>();
   for (const row of db.prepare("SELECT key, value FROM meta").all()) {
@@ -646,16 +681,23 @@ function readRows(
   const families = db
     .prepare("SELECT * FROM families ORDER BY id")
     .all()
-    .map((row) => familyRow(row, audience, clientIds));
+    .map((row) => familyRow(row, audience, clientIds, version));
   return { meta, clients, families };
 }
 
-/** BR-302 startup purge, decided on the validated rows. */
+/**
+ * BR-302 v2 startup purge, decided on the validated rows: a CIMD family is
+ * kept only while its client ID is acceptable under BR-305; the redirect-URI
+ * purge does not apply to it.
+ */
 function startupPurge(
   loaded: Loaded,
   now: number,
-  allowed: readonly string[],
+  options: OAuthStateStoreOptions,
 ): Loaded {
+  const allowed = options.allowedRedirectUris;
+  const origins = options.allowedClientIdOrigins ?? [];
+  const loadedIds = new Set(loaded.clients.map((client) => client.id));
   const allowedClients = loaded.clients.filter((client) =>
     client.redirectUris.some((uri) =>
       allowed.some((entry) => redirectMatches(uri, entry)),
@@ -663,7 +705,11 @@ function startupPurge(
   );
   const allowedIds = new Set(allowedClients.map((client) => client.id));
   const families = loaded.families.filter(
-    (family) => allowedIds.has(family.clientId) && !familyExpired(family, now),
+    (family) =>
+      (allowedIds.has(family.clientId) ||
+        (!loadedIds.has(family.clientId) &&
+          acceptableCimdClientId(family.clientId, origins, options.binding))) &&
+      !familyExpired(family, now),
   );
   const live = new Set(families.map((family) => family.clientId));
   const clients = allowedClients.filter(
@@ -677,7 +723,7 @@ function load(
   isEmpty: () => boolean,
   options: OAuthStateStoreOptions,
   checkIdentity: () => void,
-): Loaded {
+): Opened {
   step(unavailable, checkIdentity);
   step(lockFailure, () => {
     lock(db);
@@ -689,9 +735,9 @@ function load(
       initialize(db, options.binding);
     });
   const rows = step(contentFailure, () => {
-    checkHeaderFields(db);
+    const version = checkHeaderFields(db);
     checkStructure(db);
-    return readRows(db);
+    return readRows(db, version);
   });
   // Step (10), BR-296.
   const { binding } = options;
@@ -703,12 +749,15 @@ function load(
     refuse("OAUTH_STATE_MISMATCH");
   // Step (11): always a real write, then the purge, in one committed transaction.
   return step(unavailable, () => {
-    const kept = startupPurge(
-      rows,
-      options.clock().getTime(),
-      options.allowedRedirectUris,
-    );
-    db.exec(`PRAGMA user_version=${String(OAUTH_STATE_FORMAT_VERSION)}`);
+    const kept = startupPurge(rows, options.clock().getTime(), options);
+    // BR-311: version 2 while a CIMD family remains after the purge.
+    const ids = new Set(kept.clients.map((client) => client.id));
+    const version = kept.families.some((family) =>
+      isCimdFamily(family.clientId, ids),
+    )
+      ? OAUTH_STATE_CIMD_VERSION
+      : OAUTH_STATE_FORMAT_VERSION;
+    db.exec(`PRAGMA user_version=${String(version)}`);
     const keptFamilies = new Set(kept.families.map((family) => family.id));
     const keptClients = new Set(kept.clients.map((client) => client.id));
     const dropFamily = db.prepare("DELETE FROM families WHERE id = ?");
@@ -718,7 +767,7 @@ function load(
     for (const client of rows.clients)
       if (!keptClients.has(client.id)) dropClient.run(client.id);
     db.exec("COMMIT");
-    return kept;
+    return { ...kept, version };
   });
 }
 
@@ -759,7 +808,11 @@ function keyed(result: { changes: number | bigint }): void {
   if (Number(result.changes) !== 1) throw new WriteRefused();
 }
 
-function applyWrite(db: OAuthStateDatabase, write: StoreWrite): void {
+function applyWrite(
+  db: OAuthStateDatabase,
+  write: StoreWrite,
+  cimd: { inserted: boolean },
+): void {
   switch (write.op) {
     case "insertClient": {
       const { client } = write;
@@ -797,8 +850,12 @@ function applyWrite(db: OAuthStateDatabase, write: StoreWrite): void {
         db
           .prepare("SELECT 1 FROM clients WHERE id = ?")
           .get(family.clientId) === undefined
-      )
-        throw new WriteRefused();
+      ) {
+        // BR-311: a family with no client row must meet the CIMD syntax;
+        // its transaction then writes version 2.
+        if (!meetsCimdClientIdSyntax(family.clientId)) throw new WriteRefused();
+        cimd.inserted = true;
+      }
       keyed(
         db
           .prepare(
@@ -835,11 +892,13 @@ function applyWrite(db: OAuthStateDatabase, write: StoreWrite): void {
 
 function createStore(
   db: OAuthStateDatabase,
-  loaded: Loaded,
+  loaded: Opened,
   audience: string,
 ): OAuthStateStore {
   let closed = false;
   let latched = false;
+  /** BR-311: never lowered between startups. */
+  let version = loaded.version;
   return {
     clients: loaded.clients,
     families: loaded.families,
@@ -851,9 +910,19 @@ function createStore(
         if (!writes.every((write) => validWrite(write, audience)))
           throw new WriteRefused();
         db.exec("BEGIN EXCLUSIVE");
+        const cimd = { inserted: false };
         try {
-          for (const write of writes) applyWrite(db, write);
+          for (const write of writes) applyWrite(db, write, cimd);
+          // BR-298 v2 / BR-311: version 2 when the file is at 2 or the
+          // transaction inserts a CIMD family; set inside the transaction.
+          const written =
+            cimd.inserted || version === OAUTH_STATE_CIMD_VERSION
+              ? OAUTH_STATE_CIMD_VERSION
+              : OAUTH_STATE_FORMAT_VERSION;
+          if (written !== version)
+            db.exec(`PRAGMA user_version=${String(written)}`);
           db.exec("COMMIT");
+          version = written;
         } catch (error) {
           try {
             db.exec("ROLLBACK");

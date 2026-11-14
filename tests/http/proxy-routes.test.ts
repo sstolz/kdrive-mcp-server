@@ -69,6 +69,7 @@ function fakeProxy() {
     token: answer("token"),
     verifier: () =>
       Promise.resolve({ ok: true as const, identity: { iss: "i", sub: "s" } }),
+    cancelFetches: () => undefined,
   } satisfies OAuthProxy;
   return { proxy, calls };
 }

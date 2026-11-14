@@ -170,6 +170,123 @@ server never repairs, replaces or deletes the file.
 - The unauthenticated OAuth routes are rate-limited by the HTTP layer (F-012
   BR-162; see "HTTP server" below).
 
+## Client ID Metadata Documents (`OAUTH_ALLOWED_CLIENT_ID_ORIGINS`)
+
+[F-028 v2](../features/F-028-client-id-metadata-documents.md), pending
+acceptance. With Client ID Metadata Documents (CIMD) a client's `client_id` is
+an `https` URL, and the proxy fetches the client's metadata document from it
+instead of asking the client to register.
+
+- `OAUTH_ALLOWED_CLIENT_ID_ORIGINS` (option `--oauth-allowed-client-id-origins`,
+  YAML `oauthAllowedClientIdOrigins`; comma-separated) is empty by default.
+  CIMD is off while the list is empty: the metadata does not advertise it and
+  every `https` client ID is an unknown client.
+- Each entry is `https://<host>` or `https://<host>:<port>`, at most 16 entries
+  of at most 1,024 characters. The host is a DNS name of at least two labels of
+  ASCII lowercase letters, digits and hyphens (an internationalized name is
+  written as its A-labels, `xn--…`), the last label not all digits, not
+  `localhost`, no trailing dot; the port is not `443` (omit it) and has no
+  leading zero; there is no path, trailing slash, userinfo, query or fragment.
+  Anything else is refused with `INVALID_VALUE`. The setting is accepted only
+  with transport `http`, authentication on and OAuth mode `proxy`, and no entry
+  may be the origin of `MCP_PUBLIC_URL` or `OAUTH_ISSUER`
+  (`CONFLICTING_SETTINGS`).
+- A nonempty list advertises CIMD to every client
+  (`client_id_metadata_document_supported`). claude.ai, Claude iOS, Claude
+  Desktop, ChatGPT and Codex then use CIMD, and their documentation states no
+  documented fallback to dynamic registration. The list therefore holds the
+  document origin of every CIMD-capable client in use, or stays empty: a
+  client whose origin is missing cannot connect.
+- List an origin only when its vendor controls every path under it (no
+  multi-tenant hosting where third parties can publish files under the
+  origin): any document under a listed origin is accepted. One client may use
+  several document URLs under one origin (for example a per-callback
+  document), which is why origins, not URLs, are listed.
+- A document's redirect URIs are still limited to
+  `OAUTH_ALLOWED_REDIRECT_URIS`; the others are ignored. That allowlist acts on
+  CIMD clients only at authorization: removing a URI from it does not cut off a
+  CIMD client already holding a refresh family.
+- The consent page of a CIMD client shows its client ID URL and
+  `Client host: <host>` before the name, which comes from the document and is
+  unverified, and says when the client redirects to this computer only.
+
+### Origin discovery procedure
+
+1. Start with the list empty; confirm each client connects through dynamic
+   registration.
+2. Set `OAUTH_ALLOWED_CLIENT_ID_ORIGINS=https://cimd-discovery.invalid` and
+   restart. The metadata now advertises CIMD.
+3. Connect each CIMD-capable client in use. A connector that already holds a
+   dynamic registration may keep using it: remove that connector in the client
+   and add it again so that it starts a new authorization. Its authorization
+   request is refused with the 400 page; the browser address bar shows the
+   `client_id` query parameter, whose origin is the value to list. A client that
+   still connects through dynamic registration reveals no origin; record that
+   in the client matrix.
+4. Set the list to the origins found (no placeholder), keeping only origins
+   whose vendor controls every path, and restart; connect each client again and
+   approve. Record the origins found in the client matrix
+   ([mcp-client-compatibility.md](mcp-client-compatibility.md)).
+
+### Fetch limits
+
+- One HTTPS `GET` to the exact client ID URL, with only `Accept`,
+  `User-Agent: kdrive-mcp-server`, `Host` and `Connection: close`; no cookie
+  or credential. No redirect is followed: only status 200 with an
+  `application/json` or `application/<name>+json` body of at most 5,120 bytes,
+  not compressed, received within 5,000 ms, is accepted.
+- The host is resolved once through c-ares (`resolve4` and `resolve6`, 2,000 ms
+  per try, 2 tries, cancelled at the deadline), never through the libuv
+  threadpool. Every address must pass the address policy (IPv4 outside the
+  private, loopback, link-local, shared, documentation, benchmark, multicast
+  and reserved ranges; IPv6 only inside `2000::/3`, without Teredo, 6to4 and
+  the documentation ranges), and the connection is pinned to the checked
+  addresses.
+- At most four concurrent fetches; a fifth authorization request gets the 503
+  page. Valid documents are cached in memory (at most 100 entries) for their
+  `max-age` clamped to 60–3,600 s, 60 s with `no-store` or `no-cache`, 300 s
+  otherwise; failures are never cached. After expiry a document stays usable
+  for 3,600 s when the refetch fails transiently (timeout, connection, DNS,
+  429 or 5xx).
+- The fetch uses a dedicated agent: it ignores proxy variables
+  (`NODE_USE_ENV_PROXY`, `HTTPS_PROXY`, `HTTP_PROXY`, `NO_PROXY`), so CIMD is
+  unusable where egress must go through a proxy, and it always verifies the
+  certificate against Node's default CA store, whatever
+  `NODE_TLS_REJECT_UNAUTHORIZED` says. `NODE_EXTRA_CA_CERTS` extends the CAs
+  trusted for the fetch.
+- Events: `client_metadata_refused` (`reason`: `not_allowed`,
+  `blocked_address`, `resolution`, `connection`, `certificate`, `timeout`,
+  `status`, `content_type`, `size`, `document` or `busy`; `status`: the
+  document response status or 0) and `client_metadata_fetched` (`status`,
+  `count` of cache entries). No event names a URL, host or address.
+
+### Cut-off, tokens and the state file
+
+- A CIMD client authenticates at the token endpoint with method `none` only;
+  no document is fetched there. Removing an origin is the only cut-off for its
+  clients, effective at the restart that applies it: their refresh tokens are
+  refused with `401 invalid_client` and their refresh families are purged at
+  that startup. Access tokens already issued to those clients stay valid until
+  they expire (one hour) unless the signing key is replaced.
+- With `OAUTH_STATE_FILE`, CIMD refresh families are stored with the URL as
+  client ID and no client row. The file is at format version 2 while it holds
+  a CIMD family, and at version 1 otherwise. An older release refuses a
+  version 2 file with `OAUTH_STATE_VERSION`. To downgrade: remove the origins,
+  start this release once, then downgrade; that start purges the CIMD
+  families and writes version 1.
+
+### Accepted residual risks
+
+- The owner of a listed origin controls the document: the redirect allowlist
+  and the consent page bound what it can do.
+- c-ares reads the `resolv.conf` servers and ignores `/etc/hosts` and
+  nsswitch, so a CIMD host cannot be overridden locally.
+- `NODE_EXTRA_CA_CERTS`, set by the operator, extends the CAs trusted for the
+  fetch.
+- A TLS-intercepting proxy in front of the container is outside the threat
+  model; a deployment whose egress must go through a proxy cannot use CIMD.
+- The 503 page during a remote outage, when no stale document is cached.
+
 ## HTTP server (F-012, pending acceptance)
 
 `src/http/` serves the proxy and the MCP endpoint over Streamable HTTP in

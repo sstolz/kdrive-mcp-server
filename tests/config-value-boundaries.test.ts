@@ -529,3 +529,69 @@ boundary("P-BR290-007 BR-024 v3: refuses a state path in delegate mode", {
   error: { code: "CONFLICTING_SETTINGS", setting: "oauthStateFile" },
   noRead: true,
 });
+
+// F-028 BR-023 v3 / BR-024 v4 / BR-291: the CIMD origin list bounds (AC-01).
+const origins = (count: number) =>
+  Array.from({ length: count }, (_, n) => `https://c${String(n)}.example.com`);
+boundary("P-BR291-001 BR-023 v3: retains 16 distinct origins", {
+  context: "proxy",
+  env: { OAUTH_ALLOWED_CLIENT_ID_ORIGINS: origins(16).join(",") },
+  expected: { oauthAllowedClientIdOrigins: origins(16) },
+});
+boundary("P-BR291-002 BR-023 v3: rejects 17 origins with INVALID_VALUE", {
+  context: "proxy",
+  env: { OAUTH_ALLOWED_CLIENT_ID_ORIGINS: origins(17).join(",") },
+  error: invalid("oauthAllowedClientIdOrigins"),
+  noRead: true,
+});
+boundary(
+  "P-BR291-003 BR-023 v3: rejects a 1,025-character origin with INVALID_VALUE",
+  {
+    context: "proxy",
+    env: {
+      OAUTH_ALLOWED_CLIENT_ID_ORIGINS: `https://${"a".repeat(1009)}.example`,
+    },
+    error: invalid("oauthAllowedClientIdOrigins"),
+    noRead: true,
+  },
+);
+boundary("P-BR291-004 BR-023 v3: an empty value is the empty list", {
+  context: "proxy",
+  env: { OAUTH_ALLOWED_CLIENT_ID_ORIGINS: "" },
+  expected: { oauthAllowedClientIdOrigins: [] },
+});
+boundary("P-BR291-005 BR-024 v4: refuses origins in stdio", {
+  context: "stdio",
+  env: { OAUTH_ALLOWED_CLIENT_ID_ORIGINS: "https://client.example.com" },
+  error: {
+    code: "CONFLICTING_SETTINGS",
+    setting: "oauthAllowedClientIdOrigins",
+  },
+  noRead: true,
+});
+boundary("P-BR291-006 BR-024 v4: refuses origins in insecure HTTP", {
+  context: "insecure",
+  env: { OAUTH_ALLOWED_CLIENT_ID_ORIGINS: "https://client.example.com" },
+  error: {
+    code: "CONFLICTING_SETTINGS",
+    setting: "oauthAllowedClientIdOrigins",
+  },
+  noRead: true,
+});
+boundary("P-BR291-007 BR-024 v4: refuses origins in delegate mode", {
+  env: { OAUTH_ALLOWED_CLIENT_ID_ORIGINS: "https://client.example.com" },
+  error: {
+    code: "CONFLICTING_SETTINGS",
+    setting: "oauthAllowedClientIdOrigins",
+  },
+  noRead: true,
+});
+boundary("P-BR291-008 BR-024 v4: refuses the publicUrl origin", {
+  context: "proxy",
+  env: { OAUTH_ALLOWED_CLIENT_ID_ORIGINS: "https://service.example" },
+  error: {
+    code: "CONFLICTING_SETTINGS",
+    setting: "oauthAllowedClientIdOrigins",
+  },
+  noRead: true,
+});

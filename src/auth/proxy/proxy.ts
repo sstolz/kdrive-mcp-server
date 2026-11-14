@@ -10,6 +10,14 @@ import {
   verifiesWithKeys,
   type AccessTokenValidator,
 } from "../access-token.js";
+import {
+  acceptableCimdClientId,
+  createClientMetadataResolver,
+  type ClientMetadataFetch,
+  type MetadataRefusal,
+  type ResolvedCimdClient,
+} from "./client-metadata.js";
+import { createClientMetadataFetch } from "./client-metadata-fetch.js";
 import { loadSigningKey, signAccessToken } from "./keys.js";
 import {
   consentPage,
@@ -40,6 +48,8 @@ export interface EffectiveProxyConfig {
   oauthUpstreamClientSecret: string;
   oauthSigningKey: Uint8Array;
   oauthAllowedRedirectUris: readonly string[];
+  /** F-028 BR-291: CIMD origins; absent or empty keeps CIMD off. */
+  oauthAllowedClientIdOrigins?: readonly string[];
 }
 
 /** BR-143: the only event names the logger receives. */
@@ -55,7 +65,10 @@ export type ProxyEvent =
   | "refresh_family_revoked"
   | "store_full"
   | "store_write_failed"
-  | "store_loaded";
+  | "store_loaded"
+  // F-028 BR-394.
+  | "client_metadata_refused"
+  | "client_metadata_fetched";
 
 export interface ProxyLogger {
   event(name: ProxyEvent, fields: Record<string, string | number>): void;
@@ -69,6 +82,11 @@ export interface OAuthProxyOptions {
   logger?: ProxyLogger;
   /** BR-124 v2 / BR-292: the opened, checked, purged and loaded state store. */
   store?: OAuthStateStore;
+  /**
+   * F-028: the CIMD fetch port. Absent, the production port without any seam
+   * is used (AC-13).
+   */
+  clientMetadataFetch?: ClientMetadataFetch;
 }
 
 export interface OAuthProxy {
@@ -93,6 +111,11 @@ export interface OAuthProxy {
     form: URLSearchParams;
   }): Promise<ProxyResponse>;
   verifier: AccessTokenValidator;
+  /**
+   * F-028 BR-309 / BR-169 v3 step (2): cancels every in-flight CIMD fetch;
+   * the authorization requests waiting on one get the 503 page.
+   */
+  cancelFetches(): void;
 }
 
 const SECOND = 1000;
@@ -135,6 +158,8 @@ interface PendingRequest {
   state: string | undefined;
   codeChallenge: string;
   resource: string;
+  /** F-028 BR-308: the CIMD client's kept grants, snapshotted at resolution. */
+  cimdGrants?: readonly Grant[];
 }
 
 interface Consent {
@@ -262,6 +287,26 @@ function validState(state: string | null): boolean {
   );
 }
 
+/**
+ * BR-393: scheme `http` and host an IPv4 address in `127.0.0.0/8`, `[::1]` or
+ * `localhost`.
+ */
+function isLoopbackRedirect(uri: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(uri);
+  } catch {
+    return false;
+  }
+  if (url.protocol !== "http:") return false;
+  const host = url.hostname;
+  return (
+    host === "localhost" ||
+    host === "[::1]" ||
+    /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/u.test(host)
+  );
+}
+
 function canonical(url: string): string {
   // eslint-disable-next-line sonarjs/super-linear-regex -- F-011: applied only to short, locally bounded strings
   return new URL(url).href.replace(/\/+$/u, "");
@@ -364,6 +409,24 @@ export function createOAuthProxy(options: OAuthProxyOptions): OAuthProxy {
     Buffer.from(options.randomBytes(size)).toString("base64url");
   const log = (name: ProxyEvent, fields: Record<string, string | number>) =>
     logger?.event(name, fields);
+
+  // ---- F-028: Client ID Metadata Documents ---------------------------------
+  const origins = config.oauthAllowedClientIdOrigins ?? [];
+  const cimdBinding = { issuer, audience, upstreamIssuer };
+  const metadataLayer =
+    origins.length > 0
+      ? createClientMetadataResolver({
+          port: options.clientMetadataFetch ?? createClientMetadataFetch(),
+          clock: now,
+          allowedRedirectUris: config.oauthAllowedRedirectUris,
+          onFetched: (count) => {
+            log("client_metadata_fetched", { status: 200, count });
+          },
+        })
+      : undefined;
+  /** BR-305 with the current configuration. */
+  const acceptable = (clientId: string) =>
+    acceptableCimdClientId(clientId, origins, cimdBinding);
 
   // ---- BR-292: state loaded from the store, after its startup purge -------
   if (store) {
@@ -633,6 +696,10 @@ export function createOAuthProxy(options: OAuthProxyOptions): OAuthProxy {
         code_challenge_methods_supported: ["S256"],
         token_endpoint_auth_methods_supported: [...METHODS],
         authorization_response_iss_parameter_supported: true,
+        // BR-125 v2: only with a nonempty origin list.
+        ...(metadataLayer === undefined
+          ? {}
+          : { client_id_metadata_document_supported: true }),
       }),
     };
   }
@@ -772,6 +839,11 @@ export function createOAuthProxy(options: OAuthProxyOptions): OAuthProxy {
     query: URLSearchParams;
     cookie?: string;
   }): Promise<ProxyResponse> {
+    const clientId = input.query.get("client_id") ?? "";
+    // F-028 Contract details "Authorization refusal events": CIMD only with
+    // a nonempty list; every other request keeps today's handling.
+    if (metadataLayer !== undefined && clientId.startsWith("https://"))
+      return authorizeCimd(input.query, input.cookie, clientId, metadataLayer);
     return Promise.resolve(authorizeNow(input.query, input.cookie));
   }
 
@@ -793,11 +865,88 @@ export function createOAuthProxy(options: OAuthProxyOptions): OAuthProxy {
       !client.redirectUris.some((entry) =>
         redirectMatches(redirectUri, entry),
       ) ||
-      !config.oauthAllowedRedirectUris.some((entry) =>
+      !allowlisted(redirectUri)
+    )
+      return refuse();
+    return admit(query, cookie, redirectUri, {
+      id: client.id,
+      name: client.name,
+      touch: (time) => {
+        client.lastUse = time;
+      },
+    });
+  }
+
+  function allowlisted(redirectUri: string): boolean {
+    return config.oauthAllowedRedirectUris.some((entry) =>
+      redirectMatches(redirectUri, entry),
+    );
+  }
+
+  function metadataRefused(
+    reason: MetadataRefusal,
+    status: number,
+    page: 400 | 503,
+  ): ProxyResponse {
+    log("client_metadata_refused", { handler: "authorize", reason, status });
+    return errorPage(page === 503 ? "busy" : "invalid_request", page);
+  }
+
+  /** BR-128 v3: the CIMD checks, each before any fetch, then the resolution. */
+  async function authorizeCimd(
+    query: URLSearchParams,
+    cookie: string | undefined,
+    clientId: string,
+    layer: NonNullable<typeof metadataLayer>,
+  ): Promise<ProxyResponse> {
+    const busy = () =>
+      refusePage("authorization_refused", "authorize", "busy", 503);
+    if (latched) return busy();
+    const refuse = () =>
+      refusePage("authorization_refused", "authorize", "invalid_request");
+    if (hasRepetition(query)) return refuse();
+    if (!acceptable(clientId)) return metadataRefused("not_allowed", 0, 400);
+    const redirectUri = query.get("redirect_uri");
+    if (redirectUri === null || !allowlisted(redirectUri)) return refuse();
+    const resolution = await layer.resolve(clientId);
+    // BR-169 v3 / BR-299: closing, or latched during the await.
+    if (resolution.kind === "closed" || isLatched()) return busy();
+    if (resolution.kind === "refused")
+      return metadataRefused(
+        resolution.reason,
+        resolution.status,
+        resolution.transient ? 503 : 400,
+      );
+    const resolved: ResolvedCimdClient = resolution.client;
+    if (
+      !resolved.redirectUris.some((entry) =>
         redirectMatches(redirectUri, entry),
       )
     )
-      return refuse();
+      return metadataRefused("document", 200, 400);
+    return admit(query, cookie, redirectUri, {
+      id: clientId,
+      name: resolved.name,
+      cimd: {
+        grants: [...resolved.grantTypes],
+        host: new URL(clientId).hostname,
+        loopback: isLoopbackRedirect(redirectUri),
+      },
+    });
+  }
+
+  /** The checks after the client and redirect URI, then the consent page. */
+  function admit(
+    query: URLSearchParams,
+    cookie: string | undefined,
+    redirectUri: string,
+    client: {
+      id: string;
+      name: string | undefined;
+      touch?: (time: number) => void;
+      cimd?: { grants: Grant[]; host: string; loopback: boolean };
+    },
+  ): ProxyResponse {
     const state = query.get("state");
     const stateOk = validState(state);
     const challenge = query.get("code_challenge");
@@ -807,6 +956,7 @@ export function createOAuthProxy(options: OAuthProxyOptions): OAuthProxy {
       state: stateOk && state !== null ? state : undefined,
       codeChallenge: challenge ?? "",
       resource: query.get("resource") ?? "",
+      ...(client.cimd === undefined ? {} : { cimdGrants: client.cimd.grants }),
     };
     const fail = (error: string) =>
       refuseRedirect("authorization_refused", "authorize", request, error);
@@ -821,7 +971,7 @@ export function createOAuthProxy(options: OAuthProxyOptions): OAuthProxy {
       return fail("invalid_request");
     if (request.resource !== audience) return fail("invalid_target");
     const time = now();
-    client.lastUse = time;
+    client.touch?.(time);
     purge(time);
     if (full("consents", consents.size))
       return refusePage("store_full", "authorize", "busy", 503);
@@ -840,6 +990,11 @@ export function createOAuthProxy(options: OAuthProxyOptions): OAuthProxy {
         resource: audience,
         action: `${issuer}/oauth/consent`,
         consentId,
+        ...(client.cimd === undefined
+          ? {}
+          : {
+              cimd: { host: client.cimd.host, loopback: client.cimd.loopback },
+            }),
       },
       setCookie(binding),
     );
@@ -1242,7 +1397,12 @@ export function createOAuthProxy(options: OAuthProxyOptions): OAuthProxy {
     const challenge: Array<[string, string]> = presented.basic
       ? [["WWW-Authenticate", 'Basic realm="oauth-token"']]
       : [];
-    const client = clients.get(presented.id);
+    // BR-310 / BR-136 v2: a CIMD client ID authenticates with `none` only and
+    // must be acceptable now; decided before any code or family lookup.
+    const cimd = presented.id.startsWith("https://");
+    if (cimd && (presented.method !== "none" || !acceptable(presented.id)))
+      return tokenError(401, "invalid_client", challenge);
+    const client = cimd ? cimdClient(presented.id) : clients.get(presented.id);
     if (
       !client ||
       client.method !== presented.method ||
@@ -1260,6 +1420,28 @@ export function createOAuthProxy(options: OAuthProxyOptions): OAuthProxy {
     return grant === "authorization_code"
       ? redeemCode(client, form, time)
       : redeemRefresh(client, form, time);
+  }
+
+  /**
+   * BR-310: a CIMD client at the token endpoint. It has no client row; the
+   * snapshot bound to a code decides its refresh token (BR-308).
+   */
+  function cimdClient(id: string): Client {
+    return {
+      id,
+      redirectUris: [],
+      grantTypes: [...GRANTS],
+      method: "none",
+      name: undefined,
+      secretHash: undefined,
+      lastUse: 0,
+    };
+  }
+
+  /** A registered client has a row to touch; a CIMD client has none (BR-311). */
+  function touch(change: Change, client: Client, time: number): void {
+    if (clients.get(client.id) === client)
+      change.writes.push({ op: "touchClient", id: client.id, lastUse: time });
   }
 
   // ---- BR-137, BR-138, BR-139 -----------------------------------------------
@@ -1364,9 +1546,10 @@ export function createOAuthProxy(options: OAuthProxyOptions): OAuthProxy {
     if (resource !== null && resource !== code.request.resource)
       return Promise.resolve(tokenError(400, "invalid_target"));
     const change = begin(time);
-    change.writes.push({ op: "touchClient", id: client.id, lastUse: time });
+    touch(change, client, time);
     let refreshToken: string | undefined;
-    if (client.grantTypes.includes("refresh_token")) {
+    const grants = code.request.cimdGrants ?? client.grantTypes;
+    if (grants.includes("refresh_token")) {
       const started = startFamily(
         change,
         client,
@@ -1420,10 +1603,13 @@ export function createOAuthProxy(options: OAuthProxyOptions): OAuthProxy {
     const secret = random(32);
     const tokenHash = sha256(secret);
     const issued = Math.max(time, family.created);
-    change.writes.push(
-      { op: "touchClient", id: client.id, lastUse: time },
-      { op: "rotateFamily", id: family.id, tokenHash, issued: time },
-    );
+    touch(change, client, time);
+    change.writes.push({
+      op: "rotateFamily",
+      id: family.id,
+      tokenHash,
+      issued: time,
+    });
     change.apply.push(() => {
       family.tokenHash = tokenHash;
       family.lastIssued = issued;
@@ -1444,6 +1630,9 @@ export function createOAuthProxy(options: OAuthProxyOptions): OAuthProxy {
     callback,
     token,
     verifier,
+    cancelFetches: () => {
+      metadataLayer?.close();
+    },
   };
   snapshots.set(
     proxy,

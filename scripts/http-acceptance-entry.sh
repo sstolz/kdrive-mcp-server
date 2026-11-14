@@ -63,7 +63,7 @@ compose_guard
 exec "$docker" compose -f compose.yaml run --rm --publish "127.0.0.1:$port:$port" \
   -e MCP_HTTP_HOST=0.0.0.0 -e "MCP_HTTP_PORT=$port" \
   -e MCP_PUBLIC_URL -e OAUTH_ISSUER -e OAUTH_ALLOWED_SUBJECTS -e OAUTH_ALLOWED_EMAILS \
-  -e OAUTH_UPSTREAM_CLIENT_ID -e OAUTH_ALLOWED_REDIRECT_URIS \
+  -e OAUTH_UPSTREAM_CLIENT_ID -e OAUTH_ALLOWED_REDIRECT_URIS -e OAUTH_ALLOWED_CLIENT_ID_ORIGINS \
   --volume "$physical:/run/secrets:ro" \
   -e OAUTH_UPSTREAM_CLIENT_SECRET_FILE=/run/secrets/upstream-client-secret \
   -e OAUTH_SIGNING_KEY_FILE=/run/secrets/signing-key.pem \

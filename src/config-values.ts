@@ -55,6 +55,7 @@ function asList(value: unknown, key: Setting): unknown[] {
       "inviteDomains",
       "oauthAllowedSubjects",
       "oauthAllowedEmails",
+      "oauthAllowedClientIdOrigins",
     ].includes(key)
   )
     return [];
@@ -237,9 +238,40 @@ function normalizeListItem(
       return email(text, key);
     case "oauthAllowedRedirectUris":
       return url(text, key, true);
+    case "oauthAllowedClientIdOrigins":
+      return clientIdOrigin(text, key);
     default:
       return text;
   }
+}
+const ORIGIN_LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/u;
+/**
+ * BR-291: `https://<host>[:<port>]` with an ASCII lowercase LDH host of at
+ * least two labels, no port 443, equal to its own origin serialization.
+ */
+function clientIdOrigin(value: string, key: Setting): string {
+  const match = /^https:\/\/([^/:?#@\\]+)(?::([1-9]\d{0,4}))?$/u.exec(value);
+  const host = match?.[1] ?? "";
+  const port = match?.[2];
+  const labels = host.split(".");
+  if (
+    value.length > 1024 ||
+    !match ||
+    host.length > 253 ||
+    labels.length < 2 ||
+    !labels.every((label) => ORIGIN_LABEL.test(label)) ||
+    /^\d+$/u.test(labels.at(-1) ?? "") ||
+    (port !== undefined && (Number(port) > 65_535 || port === "443"))
+  )
+    fail("INVALID_VALUE", key);
+  let origin: string;
+  try {
+    origin = new URL(value).origin;
+  } catch {
+    return fail("INVALID_VALUE", key);
+  }
+  if (origin !== value) fail("INVALID_VALUE", key);
+  return value;
 }
 function normalizeList(
   value: unknown,
@@ -250,6 +282,9 @@ function normalizeList(
     ["roots", "driveIds", "oauthAllowedRedirectUris"].includes(key) &&
     !list.length
   )
+    fail("INVALID_VALUE", key);
+  // BR-291: at most 16 origins.
+  if (key === "oauthAllowedClientIdOrigins" && list.length > 16)
     fail("INVALID_VALUE", key);
   const normalized = list.map((item) => normalizeListItem(item, key));
   const unique = new Set(
@@ -422,7 +457,18 @@ function validateAuthenticatedHttp(values: Source, selected: Selected): void {
     required(values, "oauthSigningKeyFile");
     required(values, "oauthAllowedRedirectUris");
     validateStateFile(values);
+    validateClientIdOrigins(values);
   } else rejectExplicit(selected, proxyKeys);
+}
+/** BR-291: no origin equals the origin of `publicUrl` or `oauthIssuer`. */
+function validateClientIdOrigins(values: Source): void {
+  const origins =
+    (values.oauthAllowedClientIdOrigins as readonly string[] | undefined) ?? [];
+  const own = [values.publicUrl, values.oauthIssuer].map(
+    (value) => new URL(value as string).origin,
+  );
+  if (origins.some((origin) => own.includes(origin)))
+    fail("CONFLICTING_SETTINGS", "oauthAllowedClientIdOrigins");
 }
 /** BR-290: the state file and its journal never coincide with the audit log. */
 function validateStateFile(values: Source): void {

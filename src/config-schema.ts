@@ -114,6 +114,14 @@ export const inventory = [
   ],
   // F-019 BR-290: appended last; `proxyKeys` is `inventory.slice(27)`.
   ["oauthStateFile", "OAUTH_STATE_FILE", "oauth-state-file", "string"],
+  // F-028 BR-291: proxy-only, appended last (inside `proxyKeys`).
+  [
+    "oauthAllowedClientIdOrigins",
+    "OAUTH_ALLOWED_CLIENT_ID_ORIGINS",
+    "oauth-allowed-client-id-origins",
+    "list",
+    [],
+  ],
 ] as const;
 export type Setting = (typeof inventory)[number][0];
 export type DiagnosticSetting =
@@ -191,6 +199,8 @@ export interface LocalConfiguration {
   readonly oauthAllowedRedirectUris?: readonly string[];
   /** F-019 BR-290: the absolute OAuth state file path. */
   readonly oauthStateFile?: string;
+  /** F-028 BR-291: the CIMD origins; empty keeps CIMD off. */
+  readonly oauthAllowedClientIdOrigins: readonly string[];
 }
 export interface PreflightResolver {
   inspectDrive(driveId: number): Promise<unknown>;
