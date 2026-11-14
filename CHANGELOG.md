@@ -45,6 +45,11 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
 
 ### Fixed
 
+- #33 / F-032 v1 (pending acceptance): in `proxy` mode a double click on the
+  consent page's Approve or Deny button no longer ends on the "already used"
+  error page; a repeat of the consent form from the same browser within
+  10 seconds gets the same redirect as the first POST, without JavaScript or a
+  CSP change. The upstream flow stays one-use.
 - #16 / F-026 v1 (accepted 2026-11-13): parallel tool calls of one session
   wait in a bounded queue (up to 4 calls, at most 12 seconds each) instead of
   failing at once with `SERVER_BUSY`; `SERVER_BUSY` is now documented as

@@ -1,5 +1,13 @@
 # Capability map
 
+## Provisional — repeated consent POST answered idempotently
+
+[F-032 v1](features/F-032-repeated-consent-post.md) (#33), BR-411 v1 with
+BR-129 v5 and BR-142 v3, pending acceptance: in `proxy` mode a double click on
+Approve or Deny no longer ends on the "already used" page; a repeat of the
+consent form from the same browser within 10 seconds gets the same redirect as
+the first POST. No JavaScript, CSP change or stored data is added.
+
 ## Accepted — OAuth proxy pages in English and French
 
 [F-031 v1](features/F-031-oauth-proxy-page-languages.md) (#31), BR-404–BR-410 v1
