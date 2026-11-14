@@ -342,7 +342,8 @@ export function createPolicy(
         if (inv.pages >= 2 * N + 256) refuse("TRAVERSAL_LIMIT");
         inv.pages++;
         const request: EvidenceRequest = Object.freeze({
-          ...{ driveId: parent.driveId, id: parent.id },
+          driveId: parent.driveId,
+          id: parent.id,
           invocation: inv.token,
           listing,
           location: source.location,

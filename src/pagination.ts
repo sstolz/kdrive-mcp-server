@@ -91,21 +91,7 @@ export function createPagination(config: ResolvedConfiguration, ports: Ports) {
         args.type ?? null,
       ]);
       const input = args.cursor;
-      if (input !== undefined) {
-        if (
-          typeof input !== "string" ||
-          Buffer.byteLength(input) > 128 ||
-          !/^v1\.[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u.test(
-            input,
-          )
-        )
-          return fail("INVALID_CURSOR");
-        const previous = states.get(input);
-        if (!previous || previous.binding !== binding)
-          return fail("INVALID_CURSOR");
-        states.delete(input);
-        active = previous;
-      } else {
+      if (input === undefined) {
         while (states.size >= 16) {
           const oldest = [...states].sort((a, b) => a[1].used - b[1].used)[0];
           if (oldest) states.delete(oldest[0]);
@@ -137,6 +123,19 @@ export function createPagination(config: ResolvedConfiguration, ports: Ports) {
           seen: new Set(),
           cursors: new Set(),
         };
+      } else {
+        if (
+          typeof input !== "string" ||
+          Buffer.byteLength(input) > 128 ||
+          !/^v1\.[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u.test(
+            input,
+          )
+        )
+          return fail("INVALID_CURSOR");
+        const previous = states.get(input);
+        if (previous?.binding !== binding) return fail("INVALID_CURSOR");
+        states.delete(input);
+        active = previous;
       }
       const state = active;
       const items: NavigationItem[] = [];
@@ -170,7 +169,7 @@ export function createPagination(config: ResolvedConfiguration, ports: Ports) {
         // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- F-011: pre-existing assertion on a value checked earlier in the same flow; removing it is deferred to keep reviewed control flow unchanged (BACKLOG.md)
         const root = state.roots[state.position]!;
         const scope = await ports.read(root);
-        if (!scope || scope.type !== "dir") {
+        if (scope?.type !== "dir") {
           if (state.explicit) return fail("ACCESS_DENIED");
           state.position++;
           delete state.upstream;
@@ -180,7 +179,10 @@ export function createPagination(config: ResolvedConfiguration, ports: Ports) {
         const page = await ports.page(kind, root, query, state.upstream);
         if (!page) return fail("ACCESS_DENIED");
         for (const item of page.entries) add(item);
-        if (page.next !== undefined) {
+        if (page.next === undefined) {
+          state.position++;
+          delete state.upstream;
+        } else {
           const fingerprint = createHash("sha256")
             .update(
               JSON.stringify([
@@ -198,9 +200,6 @@ export function createPagination(config: ResolvedConfiguration, ports: Ports) {
           state.cursors.add(fingerprint);
           state.upstream = page.next;
           if (items.length || ports.listCalls() >= 5) return emit(items, true);
-        } else {
-          state.position++;
-          delete state.upstream;
         }
       }
       return emit(items, false);

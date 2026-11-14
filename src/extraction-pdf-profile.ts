@@ -522,9 +522,8 @@ function contentStats(bytes: Buffer, font: boolean, images: Set<string>) {
         )
           fail("UNSUPPORTED_FORMAT");
         for (const item of operands[0]) {
-          if (numericValue(item) !== undefined) {
-            if (!finite(item)) fail("UNSUPPORTED_FORMAT");
-          } else strings(item);
+          if (numericValue(item) === undefined) strings(item);
+          else if (!finite(item)) fail("UNSUPPORTED_FORMAT");
         }
         break;
       case "Do":

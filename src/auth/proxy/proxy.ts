@@ -412,6 +412,42 @@ function loadFamily(row: StoredFamily) {
   };
 }
 
+function setCookie(value: string): string {
+  return `${COOKIE_NAME}=${value}${COOKIE_ATTRIBUTES}`;
+}
+
+function tokenJson(
+  status: number,
+  body: Record<string, unknown>,
+  extra: Array<[string, string]> = [],
+): ProxyResponse {
+  return {
+    status,
+    headers: [
+      ["Content-Type", "application/json"],
+      ["Cache-Control", "no-store"],
+      ["Pragma", "no-cache"],
+      ...extra,
+    ],
+    body: JSON.stringify(body),
+  };
+}
+
+/** BR-411 (2): the first answer's headers, for approve with its cookie. */
+function replayed(
+  location: string,
+  decision: Decision,
+  cookie: string | undefined,
+): ProxyResponse {
+  const headers: Array<[string, string]> = [
+    ["Location", location],
+    ["Cache-Control", "no-store"],
+  ];
+  if (decision === "approve")
+    headers.push(["Set-Cookie", setCookie(boundCookie(cookie) ?? "")]);
+  return { status: 302, headers, body: "" };
+}
+
 /** BR-124–BR-143: the transport-independent OAuth proxy. */
 export function createOAuthProxy(options: OAuthProxyOptions): OAuthProxy {
   const { config, clock, upstream, logger, store } = options;
@@ -515,7 +551,7 @@ export function createOAuthProxy(options: OAuthProxyOptions): OAuthProxy {
     clients.delete(id);
     for (const [value, code] of codes)
       if (code.request.clientId === id) codes.delete(value);
-    for (const family of [...families.values()])
+    for (const family of families.values())
       if (family.clientId === id) families.delete(family.id);
   }
 
@@ -697,27 +733,6 @@ export function createOAuthProxy(options: OAuthProxyOptions): OAuthProxy {
   ): ProxyResponse {
     log(event, { handler, error });
     return clientRedirect(request, [["error", error]]);
-  }
-
-  function setCookie(value: string): string {
-    return `${COOKIE_NAME}=${value}${COOKIE_ATTRIBUTES}`;
-  }
-
-  function tokenJson(
-    status: number,
-    body: Record<string, unknown>,
-    extra: Array<[string, string]> = [],
-  ): ProxyResponse {
-    return {
-      status,
-      headers: [
-        ["Content-Type", "application/json"],
-        ["Cache-Control", "no-store"],
-        ["Pragma", "no-cache"],
-        ...extra,
-      ],
-      body: JSON.stringify(body),
-    };
   }
 
   function tokenError(
@@ -1154,21 +1169,6 @@ export function createOAuthProxy(options: OAuthProxyOptions): OAuthProxy {
         return true;
       }
     return false;
-  }
-
-  /** BR-411 (2): the first answer's headers, for approve with its cookie. */
-  function replayed(
-    location: string,
-    decision: Decision,
-    cookie: string | undefined,
-  ): ProxyResponse {
-    const headers: Array<[string, string]> = [
-      ["Location", location],
-      ["Cache-Control", "no-store"],
-    ];
-    if (decision === "approve")
-      headers.push(["Set-Cookie", setCookie(boundCookie(cookie) ?? "")]);
-    return { status: 302, headers, body: "" };
   }
 
   /** BR-411 (2)–(4): a POST of a consumed identifier that has a record. */
@@ -1657,8 +1657,7 @@ export function createOAuthProxy(options: OAuthProxyOptions): OAuthProxy {
       return tokenError(401, "invalid_client", challenge);
     const client = cimd ? cimdClient(presented.id) : clients.get(presented.id);
     if (
-      !client ||
-      client.method !== presented.method ||
+      client?.method !== presented.method ||
       (client.secretHash !== undefined &&
         !sameHash(sha256(presented.secret ?? ""), client.secretHash))
     )
