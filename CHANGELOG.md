@@ -36,6 +36,12 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
   notice, a short explanation, primary Approve and secondary Deny buttons, a
   link to the source code), with one inline stylesheet allowed by its SHA-256
   hash in the `Content-Security-Policy`; no script and no external resource.
+- #31 / F-031 v1 (pending acceptance): the OAuth proxy consent and error pages
+  are available in English and French. The language comes from the `lang`
+  query parameter (`en` or `fr`), else the browser's `Accept-Language`, else
+  English; the consent page has a switcher ("English", "Français") that keeps
+  the request and replaces its pending consent. No cookie or stored
+  preference is added.
 
 ### Fixed
 

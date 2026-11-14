@@ -19,6 +19,7 @@ import {
 } from "./client-metadata.js";
 import { createClientMetadataFetch } from "./client-metadata-fetch.js";
 import { loadSigningKey, signAccessToken } from "./keys.js";
+import { langParameter, pageLanguage, type Language } from "./language.js";
 import {
   consentPage,
   errorPage,
@@ -94,17 +95,23 @@ export interface OAuthProxy {
   readonly metadataPaths: readonly string[];
   metadata(): ProxyResponse;
   register(input: { body: string }): Promise<ProxyResponse>;
+  /** F-031: `acceptLanguage` is the request's `Accept-Language` header. */
   authorize(input: {
     query: URLSearchParams;
     cookie?: string;
+    acceptLanguage?: string;
   }): Promise<ProxyResponse>;
+  /** F-031 BR-129 v4: `query` is the consent route's own query (`lang`). */
   consent(input: {
     form: URLSearchParams;
     cookie?: string;
+    query?: URLSearchParams;
+    acceptLanguage?: string;
   }): Promise<ProxyResponse>;
   callback(input: {
     query: URLSearchParams;
     cookie?: string;
+    acceptLanguage?: string;
   }): Promise<ProxyResponse>;
   token(input: {
     authorization?: string;
@@ -122,6 +129,8 @@ const SECOND = 1000;
 /** BR-142 store bound. */
 export const STORE_LIMIT = 1000;
 const CONSENT_TTL = 600 * SECOND;
+/** F-031 BR-408 / BR-169: the longest switcher link path and query. */
+const MAX_SWITCH_LINK_BYTES = 8192;
 const FLOW_TTL = 600 * SECOND;
 const CODE_TTL = 60 * SECOND;
 const ACCESS_TTL_SECONDS = 3600;
@@ -237,6 +246,20 @@ function isHttpsUrl(value: unknown): value is string {
   } catch {
     return false;
   }
+}
+
+/** BR-409: two pending requests equal in every field. */
+function sameRequest(left: PendingRequest, right: PendingRequest): boolean {
+  const grants = (request: PendingRequest) =>
+    request.cimdGrants === undefined ? "" : JSON.stringify(request.cimdGrants);
+  return (
+    left.clientId === right.clientId &&
+    left.redirectUri === right.redirectUri &&
+    left.state === right.state &&
+    left.codeChallenge === right.codeChallenge &&
+    left.resource === right.resource &&
+    grants(left) === grants(right)
+  );
 }
 
 function hasRepetition(params: URLSearchParams): boolean {
@@ -635,10 +658,11 @@ export function createOAuthProxy(options: OAuthProxyOptions): OAuthProxy {
     event: ProxyEvent,
     handler: string,
     kind: ErrorPage,
+    language: Language,
     status = 400,
   ): ProxyResponse {
     log(event, { handler, status });
-    return errorPage(kind, status);
+    return errorPage(kind, status, language);
   }
 
   function refuseRedirect(
@@ -838,23 +862,31 @@ export function createOAuthProxy(options: OAuthProxyOptions): OAuthProxy {
   function authorize(input: {
     query: URLSearchParams;
     cookie?: string;
+    acceptLanguage?: string;
   }): Promise<ProxyResponse> {
     const clientId = input.query.get("client_id") ?? "";
+    // F-031 BR-404: the page language of every page this request gets.
+    const language = pageLanguage(input.query, input.acceptLanguage);
     // F-028 Contract details "Authorization refusal events": CIMD only with
     // a nonempty list; every other request keeps today's handling.
     if (metadataLayer !== undefined && clientId.startsWith("https://"))
-      return authorizeCimd(input.query, input.cookie, clientId, metadataLayer);
-    return Promise.resolve(authorizeNow(input.query, input.cookie));
+      return authorizeCimd(
+        input.query,
+        input.cookie,
+        clientId,
+        metadataLayer,
+        language,
+      );
+    return Promise.resolve(authorizeNow(input.query, input.cookie, language));
   }
 
   function authorizeNow(
     query: URLSearchParams,
     cookie: string | undefined,
+    language: Language,
   ): ProxyResponse {
-    if (latched)
-      return refusePage("authorization_refused", "authorize", "busy", 503);
-    const refuse = () =>
-      refusePage("authorization_refused", "authorize", "invalid_request");
+    if (latched) return authorizeBusy(language);
+    const refuse = () => authorizeInvalid(language);
     if (hasRepetition(query)) return refuse();
     const client = clients.get(query.get("client_id") ?? "");
     const redirectUri = query.get("redirect_uri");
@@ -868,13 +900,32 @@ export function createOAuthProxy(options: OAuthProxyOptions): OAuthProxy {
       !allowlisted(redirectUri)
     )
       return refuse();
-    return admit(query, cookie, redirectUri, {
+    return admit(query, cookie, redirectUri, language, {
       id: client.id,
       name: client.name,
       touch: (time) => {
         client.lastUse = time;
       },
     });
+  }
+
+  function authorizeBusy(language: Language): ProxyResponse {
+    return refusePage(
+      "authorization_refused",
+      "authorize",
+      "busy",
+      language,
+      503,
+    );
+  }
+
+  function authorizeInvalid(language: Language): ProxyResponse {
+    return refusePage(
+      "authorization_refused",
+      "authorize",
+      "invalid_request",
+      language,
+    );
   }
 
   function allowlisted(redirectUri: string): boolean {
@@ -887,9 +938,10 @@ export function createOAuthProxy(options: OAuthProxyOptions): OAuthProxy {
     reason: MetadataRefusal,
     status: number,
     page: 400 | 503,
+    language: Language,
   ): ProxyResponse {
     log("client_metadata_refused", { handler: "authorize", reason, status });
-    return errorPage(page === 503 ? "busy" : "invalid_request", page);
+    return errorPage(page === 503 ? "busy" : "invalid_request", page, language);
   }
 
   /** BR-128 v3: the CIMD checks, each before any fetch, then the resolution. */
@@ -898,14 +950,14 @@ export function createOAuthProxy(options: OAuthProxyOptions): OAuthProxy {
     cookie: string | undefined,
     clientId: string,
     layer: NonNullable<typeof metadataLayer>,
+    language: Language,
   ): Promise<ProxyResponse> {
-    const busy = () =>
-      refusePage("authorization_refused", "authorize", "busy", 503);
+    const busy = () => authorizeBusy(language);
     if (latched) return busy();
-    const refuse = () =>
-      refusePage("authorization_refused", "authorize", "invalid_request");
+    const refuse = () => authorizeInvalid(language);
     if (hasRepetition(query)) return refuse();
-    if (!acceptable(clientId)) return metadataRefused("not_allowed", 0, 400);
+    if (!acceptable(clientId))
+      return metadataRefused("not_allowed", 0, 400, language);
     const redirectUri = query.get("redirect_uri");
     if (redirectUri === null || !allowlisted(redirectUri)) return refuse();
     const resolution = await layer.resolve(clientId);
@@ -916,6 +968,7 @@ export function createOAuthProxy(options: OAuthProxyOptions): OAuthProxy {
         resolution.reason,
         resolution.status,
         resolution.transient ? 503 : 400,
+        language,
       );
     const resolved: ResolvedCimdClient = resolution.client;
     if (
@@ -923,8 +976,8 @@ export function createOAuthProxy(options: OAuthProxyOptions): OAuthProxy {
         redirectMatches(redirectUri, entry),
       )
     )
-      return metadataRefused("document", 200, 400);
-    return admit(query, cookie, redirectUri, {
+      return metadataRefused("document", 200, 400, language);
+    return admit(query, cookie, redirectUri, language, {
       id: clientId,
       name: resolved.name,
       cimd: {
@@ -940,6 +993,7 @@ export function createOAuthProxy(options: OAuthProxyOptions): OAuthProxy {
     query: URLSearchParams,
     cookie: string | undefined,
     redirectUri: string,
+    language: Language,
     client: {
       id: string;
       name: string | undefined;
@@ -973,9 +1027,13 @@ export function createOAuthProxy(options: OAuthProxyOptions): OAuthProxy {
     const time = now();
     client.touch?.(time);
     purge(time);
+    const bound = boundCookie(cookie);
+    // F-031 BR-409: a language switch replaces its own pending consent.
+    if (bound !== undefined && langParameter(query) !== undefined)
+      replaceConsent(sha256(bound), request);
     if (full("consents", consents.size))
-      return refusePage("store_full", "authorize", "busy", 503);
-    const binding = boundCookie(cookie) ?? random(32);
+      return refusePage("store_full", "authorize", "busy", language, 503);
+    const binding = bound ?? random(32);
     const consentId = random(32);
     consents.set(consentId, {
       request,
@@ -988,16 +1046,51 @@ export function createOAuthProxy(options: OAuthProxyOptions): OAuthProxy {
         clientId: client.id,
         redirectUri,
         resource: audience,
-        action: `${issuer}/oauth/consent`,
+        // BR-129 v4: the language of the consent handler's error pages.
+        action: `${issuer}/oauth/consent?lang=${language}`,
         consentId,
         ...(client.cimd === undefined
           ? {}
           : {
               cimd: { host: client.cimd.host, loopback: client.cimd.loopback },
             }),
+        ...switcher(query, language),
       },
       setCookie(binding),
+      language,
     );
+  }
+
+  /**
+   * BR-408: the authorize query with `lang` set to the other language, unless
+   * the link's path and query would exceed 8,192 bytes (BR-169).
+   */
+  function switcher(
+    query: URLSearchParams,
+    language: Language,
+  ): { switchQuery?: string } {
+    const link = new URLSearchParams(query);
+    link.set("lang", language === "en" ? "fr" : "en");
+    const switchQuery = link.toString();
+    const length = Buffer.byteLength(
+      `${issuerPath}/oauth/authorize?${switchQuery}`,
+    );
+    return length > MAX_SWITCH_LINK_BYTES ? {} : { switchQuery };
+  }
+
+  /**
+   * BR-409: deletes the oldest live pending consent of this cookie hash whose
+   * request equals `request` in every field, if any.
+   */
+  function replaceConsent(cookieHash: Buffer, request: PendingRequest): void {
+    for (const [id, entry] of consents)
+      if (
+        sameHash(entry.cookieHash, cookieHash) &&
+        sameRequest(entry.request, request)
+      ) {
+        consents.delete(id);
+        return;
+      }
   }
 
   function cookieMatches(header: string | undefined, hash: Buffer): boolean {
@@ -1008,9 +1101,15 @@ export function createOAuthProxy(options: OAuthProxyOptions): OAuthProxy {
   async function consent(input: {
     form: URLSearchParams;
     cookie?: string;
+    query?: URLSearchParams;
+    acceptLanguage?: string;
   }): Promise<ProxyResponse> {
-    if (latched) return refusePage("consent_refused", "consent", "busy", 503);
-    const refuse = () => refusePage("consent_refused", "consent", "consent");
+    // F-031 BR-404 / BR-129 v4: `lang` of the form target, else the header.
+    const language = pageLanguage(input.query, input.acceptLanguage);
+    if (latched)
+      return refusePage("consent_refused", "consent", "busy", language, 503);
+    const refuse = () =>
+      refusePage("consent_refused", "consent", "consent", language);
     const id = input.form.get("consent") ?? "";
     const entry = consents.get(id);
     consents.delete(id);
@@ -1035,7 +1134,7 @@ export function createOAuthProxy(options: OAuthProxyOptions): OAuthProxy {
     const found = await discover(time);
     // BR-299: a store latched during the await takes no new flow.
     if (isLatched())
-      return refusePage("consent_refused", "consent", "busy", 503);
+      return refusePage("consent_refused", "consent", "busy", language, 503);
     if (!found)
       return refuseRedirect(
         "upstream_unavailable",
@@ -1243,8 +1342,12 @@ export function createOAuthProxy(options: OAuthProxyOptions): OAuthProxy {
   async function callback(input: {
     query: URLSearchParams;
     cookie?: string;
+    acceptLanguage?: string;
   }): Promise<ProxyResponse> {
-    if (latched) return refusePage("callback_refused", "callback", "busy", 503);
+    // F-031 BR-404: a valid `lang` is honoured, else the header.
+    const language = pageLanguage(input.query, input.acceptLanguage);
+    if (latched)
+      return refusePage("callback_refused", "callback", "busy", language, 503);
     const { query } = input;
     const states = query.getAll("state");
     const flow = states.length === 1 ? flows.get(states[0] ?? "") : undefined;
@@ -1257,7 +1360,7 @@ export function createOAuthProxy(options: OAuthProxyOptions): OAuthProxy {
       !cookieMatches(input.cookie, flow.cookieHash) ||
       !discovery
     )
-      return refusePage("callback_refused", "callback", "callback");
+      return refusePage("callback_refused", "callback", "callback", language);
     const found = discovery;
     const request = flow.request;
     const fail = (event: ProxyEvent, error: string) =>
@@ -1318,7 +1421,7 @@ export function createOAuthProxy(options: OAuthProxyOptions): OAuthProxy {
     if (!authorized(identity)) return fail("identity_refused", "access_denied");
     // BR-299: a store latched during the awaits takes no new code.
     if (isLatched())
-      return refusePage("callback_refused", "callback", "busy", 503);
+      return refusePage("callback_refused", "callback", "busy", language, 503);
     const issued = now();
     purge(issued);
     if (full("codes", codes.size)) return fail("store_full", "server_error");

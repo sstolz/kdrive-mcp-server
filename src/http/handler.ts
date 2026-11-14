@@ -545,21 +545,28 @@ export function createHttpHandler(options: HttpHandlerOptions): HttpHandler {
     const cookie = request.headers.get("cookie");
     const authorization = request.headers.get("authorization");
     const withCookie = cookie === null ? {} : { cookie };
+    // F-031 BR-404: the page language's header, passed to the page routes.
+    const language = request.headers.get("accept-language");
+    const page = {
+      ...withCookie,
+      ...(language === null ? {} : { acceptLanguage: language }),
+    };
     const query = new URLSearchParams(queryOf(target));
     switch (name) {
       case "register":
         return fromProxy(await proxy.register({ body: text }));
       case "authorize":
-        return fromProxy(await proxy.authorize({ query, ...withCookie }));
+        return fromProxy(await proxy.authorize({ query, ...page }));
       case "consent":
         return fromProxy(
           await proxy.consent({
             form: new URLSearchParams(text),
-            ...withCookie,
+            query,
+            ...page,
           }),
         );
       case "callback":
-        return fromProxy(await proxy.callback({ query, ...withCookie }));
+        return fromProxy(await proxy.callback({ query, ...page }));
       default:
         return fromProxy(
           await proxy.token({

@@ -11,6 +11,7 @@ import {
   type ProxyResponse,
 } from "../../src/auth/proxy/pages.js";
 import { FakeMetadata, cimdDocument } from "../helpers/cimd.js";
+import { TEXTS, type PageLanguage } from "../helpers/page-texts.js";
 import { PUBLIC_URL, harness, header, s256 } from "../helpers/proxy.js";
 
 const PRODUCT = "kdrive-mcp-server";
@@ -385,7 +386,7 @@ describe("BR-402 consent page layout", () => {
       `<p>Client ID: <code>${client.clientId}</code></p>`,
       `<p>Redirect URI: <code>${client.redirect}</code></p>`,
       `<p>Protected resource: <code>${PUBLIC_URL}</code></p>`,
-      `<form method="post" action="${PUBLIC_URL}/oauth/consent">`,
+      `<form method="post" action="${PUBLIC_URL}/oauth/consent?lang=en">`,
       '<input type="hidden" name="consent" value="',
       '<button type="submit" name="decision" value="approve" class="button primary">Approve</button>',
       '<button type="submit" name="decision" value="deny" class="button secondary">Deny</button>',
@@ -437,7 +438,7 @@ describe("BR-402 consent page layout", () => {
         ...(loopback ? [loopbackLine] : []),
         `<p>Redirect URI: <code>${redirect}</code></p>`,
         `<p>Protected resource: <code>${PUBLIC_URL}</code></p>`,
-        `<form method="post" action="${PUBLIC_URL}/oauth/consent">`,
+        `<form method="post" action="${PUBLIC_URL}/oauth/consent?lang=en">`,
         'class="button primary">Approve</button>',
         'class="button secondary">Deny</button>',
         "</form>",
@@ -506,6 +507,276 @@ describe("BR-403 error page layout", () => {
         expect(response.body).not.toContain("<x>");
         expect(response.body).not.toContain("&lt;x&gt;");
         expect(response.body).not.toContain(client.redirect);
+      }
+    },
+  );
+});
+
+// ---- F-031 (#31): the same pages in English and French -------------------
+
+const LANGUAGES: PageLanguage[] = ["en", "fr"];
+const SWITCH = "client_id=x&state=%22%3Cx%3E&lang=fr";
+
+/** The AC-01 pages in one language, the consent pages with a switcher. */
+function pagesIn(
+  language: PageLanguage,
+  base: Partial<ConsentView> = {},
+): Array<[PageLanguage, string, ProxyResponse]> {
+  const consent = (extra: Partial<ConsentView>) =>
+    consentPage(
+      view({ switchQuery: SWITCH, ...extra, ...base }),
+      "c=1",
+      language,
+    );
+  return [
+    [language, "registered consent", consent({})],
+    [
+      language,
+      "CIMD consent with loopback",
+      consent({
+        clientId: CIMD_ID,
+        redirectUri: "http://127.0.0.1:33418/cb",
+        cimd: { host: "client.example.com", loopback: true },
+      }),
+    ],
+    [
+      language,
+      "CIMD consent without loopback",
+      consent({
+        clientId: CIMD_ID,
+        cimd: { host: "client.example.com", loopback: false },
+      }),
+    ],
+    ...KINDS.map((kind): [PageLanguage, string, ProxyResponse] => [
+      language,
+      `error ${kind} 400`,
+      errorPage(kind, 400, language),
+    ]),
+    [language, "error busy 503", errorPage("busy", 503, language)],
+  ];
+}
+
+describe("BR-399 v2 page shell in each language", () => {
+  it.each(LANGUAGES.flatMap((language) => pagesIn(language)))(
+    "BR-399 v2 AC-07 %s %s has the shared shell in its language",
+    (language, name, response) => {
+      const body = response.body;
+      const texts = TEXTS[language];
+      const consent = !name.startsWith("error");
+      const title = `${consent ? texts.consentTitle : texts.errorTitle} \u00b7 ${PRODUCT}`;
+      expect(
+        body.startsWith(
+          `<!doctype html><html lang="${language}"><head><meta charset="utf-8">` +
+            '<meta name="viewport" content="width=device-width, initial-scale=1">' +
+            '<meta name="color-scheme" content="light dark">' +
+            `<title>${title}</title><style>${PAGE_STYLESHEET}</style></head><body>`,
+        ),
+      ).toBe(true);
+      expect(body.endsWith("</body></html>")).toBe(true);
+      for (const tag of [
+        "<style",
+        "<header",
+        "<main",
+        "<footer",
+        "<h1",
+        "<svg",
+      ])
+        expect(count(body, tag)).toBe(1);
+      const head = body.slice(
+        body.indexOf("<header>"),
+        body.indexOf("</header>"),
+      );
+      expect(head).toContain(PRODUCT);
+      expect(head).toContain(`<p class="tagline">${texts.productTagline}</p>`);
+      const link = `<a href="${GITHUB}" target="_blank" rel="noopener noreferrer">${texts.sourceLink}</a>`;
+      expect(count(body, link)).toBe(1);
+      expect(body.indexOf(link)).toBeGreaterThan(body.indexOf("</main>"));
+      expect(count(body, "<a ")).toBe(consent ? 2 : 1);
+      expect(count(body, "<a")).toBe(consent ? 2 : 1);
+      expect(count(body, "<nav")).toBe(consent ? 1 : 0);
+      if (!consent) return;
+      const nav = head.slice(head.indexOf("<nav"));
+      expect(head.endsWith("</nav>")).toBe(true);
+      expect(count(nav, "<a ")).toBe(1);
+      const href = /<a href="([^"]*)"/u.exec(nav)?.[1] ?? "";
+      expect(href.startsWith("?")).toBe(true);
+      expect(href).not.toMatch(/^[a-z][a-z0-9+.-]*:|^\/\//iu);
+      expect(nav).not.toContain("button");
+      expect(body.indexOf("<nav")).toBeLessThan(body.indexOf("<main"));
+    },
+  );
+
+  it.each(LANGUAGES)(
+    "BR-399 v2 AC-07 hostile view and query values never add elements, attributes or URLs in %s",
+    (language) => {
+      const hostile = (field: string) =>
+        `<script>${field}" onload="x" style="y" http://evil.example/${field} javascript:alert(1)`;
+      const values = {
+        clientId: hostile("id"),
+        clientName: hostile("name"),
+        redirectUri: hostile("redirect"),
+        resource: hostile("resource"),
+        action: hostile("action"),
+        switchQuery: hostile("query"),
+      };
+      const host = hostile("host");
+      for (const [, , response] of [
+        ...pagesIn(language, values),
+        ...pagesIn(language, { ...values, cimd: { host, loopback: true } }),
+      ]) {
+        let body = response.body;
+        for (const value of [...Object.values(values), host])
+          body = body.replaceAll(escapeHtml(value), "");
+        expect(body).not.toMatch(
+          /<(script|link|img|iframe|object|embed|base)\b|http-equiv|\son[a-z]+\s*=|\sstyle\s*=|javascript:/iu,
+        );
+        expect(body.match(/https?:[^"<\s]*/giu) ?? []).toEqual([GITHUB]);
+      }
+    },
+  );
+});
+
+describe("BR-402 v2 consent page in each language", () => {
+  it.each(LANGUAGES)(
+    "BR-402 v2 AC-07 a registered client's page in %s shows its texts in order",
+    async (language) => {
+      const texts = TEXTS[language];
+      const h = await harness();
+      for (const name of ["Plain", undefined]) {
+        const client = await h.register(
+          name === undefined ? {} : { client_name: name },
+        );
+        const response = await h.proxy.authorize({
+          query: h.authorizeQuery(client, challenge, { lang: language }),
+        });
+        const shown =
+          name === undefined
+            ? texts.unnamedClient
+            : `${name} ${texts.selfDeclaredSuffix}`;
+        expectInOrder(response.body, [
+          `<html lang="${language}">`,
+          `<h1>${texts.consentTitle}</h1>`,
+          `<p>${texts.consentIntro}</p>`,
+          `<h2>${texts.requestDetails}</h2>`,
+          `<p>${texts.clientNameLabel} <strong>${shown}</strong></p>`,
+          `<p>${texts.selfDeclaredNotice}</p>`,
+          `<p>${texts.clientIdLabel} <code>${client.clientId}</code></p>`,
+          `<p>${texts.redirectUriLabel} <code>${client.redirect}</code></p>`,
+          `<p>${texts.resourceLabel} <code>${PUBLIC_URL}</code></p>`,
+          `<form method="post" action="${PUBLIC_URL}/oauth/consent?lang=${language}">`,
+          '<input type="hidden" name="consent" value="',
+          `<button type="submit" name="decision" value="approve" class="button primary">${texts.approve}</button>`,
+          `<button type="submit" name="decision" value="deny" class="button secondary">${texts.deny}</button>`,
+          "</form>",
+          `<p class="note">${texts.consentNote}</p>`,
+          "</main>",
+        ]);
+        expect(response.body).not.toContain(texts.clientHostLabel);
+      }
+    },
+  );
+
+  it.each(
+    LANGUAGES.flatMap((language) => [
+      [language, "http://127.0.0.1:33418/cb", true] as const,
+      [language, "https://app.example/cb", false] as const,
+    ]),
+  )(
+    "BR-402 v2 AC-07 a CIMD client's page in %s with redirect %s shows its lines in order",
+    async (language, redirect, loopback) => {
+      const texts = TEXTS[language];
+      const redirects = ["http://127.0.0.1:33418/cb", "https://app.example/cb"];
+      const meta = new FakeMetadata();
+      meta.serve.set(CIMD_ID, {
+        body: cimdDocument(CIMD_ID, {
+          client_name: "<b>Claude</b>",
+          redirect_uris: redirects,
+        }),
+      });
+      const h = await harness({
+        origins: ["https://client.example.com"],
+        clientMetadata: meta,
+        redirects,
+      });
+      const response = await h.proxy.authorize({
+        query: h.authorizeQuery(
+          { clientId: CIMD_ID, method: "none", redirect },
+          challenge,
+          { lang: language },
+        ),
+      });
+      const loopbackLine = `<p>${texts.loopbackLine}</p>`;
+      expectInOrder(response.body, [
+        `<h1>${texts.consentTitle}</h1>`,
+        `<p>${texts.consentIntro}</p>`,
+        `<h2>${texts.requestDetails}</h2>`,
+        `<p>${texts.clientIdLabel} <code>${CIMD_ID}</code></p>`,
+        `<p>${texts.clientHostLabel} client.example.com</p>`,
+        `<p>${texts.clientNameLabel} <strong>&lt;b&gt;Claude&lt;/b&gt; ${texts.selfDeclaredSuffix}</strong></p>`,
+        `<p>${texts.metadataNotice}</p>`,
+        ...(loopback ? [loopbackLine] : []),
+        `<p>${texts.redirectUriLabel} <code>${redirect}</code></p>`,
+        `<p>${texts.resourceLabel} <code>${PUBLIC_URL}</code></p>`,
+        `<form method="post" action="${PUBLIC_URL}/oauth/consent?lang=${language}">`,
+        `class="button primary">${texts.approve}</button>`,
+        `class="button secondary">${texts.deny}</button>`,
+        "</form>",
+        `<p class="note">${texts.consentNote}</p>`,
+      ]);
+      if (!loopback) expect(response.body).not.toContain(loopbackLine);
+      expect(response.body).not.toContain(texts.selfDeclaredNotice);
+    },
+  );
+
+  it.each(LANGUAGES)(
+    "BR-402 v2 AC-07 every view field shows only escaped in %s",
+    (language) => {
+      const raw = `"<>&'`;
+      const escaped = "&quot;&lt;&gt;&amp;&#39;";
+      const fields: ConsentView = {
+        clientName: `n${raw}`,
+        clientId: `i${raw}`,
+        redirectUri: `r${raw}`,
+        resource: `s${raw}`,
+        action: `a${raw}`,
+        consentId: `c${raw}`,
+        cimd: { host: `h${raw}`, loopback: true },
+        switchQuery: `q${raw}`,
+      };
+      const body = consentPage(fields, "c=1", language).body;
+      expect(body).not.toContain(raw);
+      for (const prefix of ["n", "i", "r", "s", "a", "c", "h"])
+        expect(body).toContain(`${prefix}${escaped}`);
+      expect(body).toContain(`href="?q${escaped}"`);
+      expect(body).toContain('name="decision" value="approve"');
+      expect(body).toContain('name="decision" value="deny"');
+    },
+  );
+});
+
+describe("BR-403 v2 error page in each language", () => {
+  it.each(
+    LANGUAGES.flatMap((language) =>
+      KINDS.map((kind) => [language, kind] as const),
+    ),
+  )(
+    "BR-403 v2 AC-07 the %s %s page carries its texts and no switcher",
+    (language, kind) => {
+      const texts = TEXTS[language];
+      for (const status of [400, 503]) {
+        const response = errorPage(kind, status, language);
+        expect(response.status).toBe(status);
+        expectInOrder(response.body, [
+          `<html lang="${language}">`,
+          `<title>${texts.errorTitle} \u00b7 ${PRODUCT}</title>`,
+          `<p class="tagline">${texts.productTagline}</p>`,
+          `<h1>${texts.errorTitle}</h1>`,
+          `<p>${texts.error[kind]}</p>`,
+          `<p class="note">${texts.errorNote}</p>`,
+          "</main>",
+          `${texts.sourceLink}</a>`,
+        ]);
+        expect(response.body).not.toContain("<nav");
       }
     },
   );
