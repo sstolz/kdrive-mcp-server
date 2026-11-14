@@ -191,7 +191,8 @@ ADR-008 stays allocated to F-019 (#103) and is not written yet (`BACKLOG.md`).
 (dependency overrides and `skipLibCheck`, F-020), accepted with F-020 on main `b6acf86`.
 #12 allocates [ADR-010](../architecture-decisions/ADR-010-direct-image-codecs.md)
 (direct image codecs, F-027), which supersedes ADR-009 and the image-codec
-choice (Jimp modules) of ADR-004; ADR-004 and ADR-009 keep their text.
+choice (Jimp modules) of ADR-004, accepted with F-027 on main `75bd9bb`;
+ADR-004 and ADR-009 keep their text.
 The next unused architecture-decision identifier is ADR-011. ADR-001 stays
 byte-for-byte unchanged; its unaffected foundation choices remain applicable.
 

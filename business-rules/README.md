@@ -580,7 +580,7 @@ active rule.
 | [BR-320](BR-320.md) | v1      | CI `audit` job, needed by `ci-result`, not a Sonar gate.            | [F-020 v1](../features/F-020-dependency-audit.md) | Active; v3 active since F-027 (see below)                                                                              |
 | [BR-321](BR-321.md) | v1      | Audit documentation: development, `SECURITY.md`, changelog.         | [F-020 v1](../features/F-020-dependency-audit.md) | Active; v3 active since [F-025 v1](../features/F-025-changelog-release-sections.md); v4 active since F-027 (see below) |
 | [BR-015](BR-015.md) | v6      | Job set adds `audit`; `make audit` admitted only there.             | [F-020 v1](../features/F-020-dependency-audit.md) | Active                                                                                                                 |
-| [BR-122](BR-122.md) | v2      | Jimp schemas run on the single root Zod 4.                          | [F-020 v1](../features/F-020-dependency-audit.md) | Active                                                                                                                 |
+| [BR-122](BR-122.md) | v2      | Jimp schemas run on the single root Zod 4.                          | [F-020 v1](../features/F-020-dependency-audit.md) | Active; v3 active since F-027 (see below)                                                                              |
 | [BR-225](BR-225.md) | v2      | `audit` on the label array, `timeout-minutes` 20.                   | [F-020 v1](../features/F-020-dependency-audit.md) | Active                                                                                                                 |
 | [BR-227](BR-227.md) | v2      | `audit` gated on `changes`; `ci-result` needs it.                   | [F-020 v1](../features/F-020-dependency-audit.md) | Active                                                                                                                 |
 
@@ -639,27 +639,27 @@ BR-183, BR-225 and BR-227 to v3, and BR-229 and BR-320 to v2. All were accepted
 on actual main `ad25fa2` on 2026-11-12 (#1 comment `1-acceptance-1-orchestrator`);
 for each versioned rule the new version is the active rule.
 
-| ID                  | Version | Rule                                                                 | Source                                                  | Status |
-| ------------------- | ------- | -------------------------------------------------------------------- | ------------------------------------------------------- | ------ |
-| [BR-341](BR-341.md) | v1      | CI `privacy-scan` job: hosted, read-only, 20 min, three exact steps. | [F-023 v1](../features/F-023-hosted-ci-privacy-scan.md) | Active |
-| [BR-342](BR-342.md) | v1      | Deny secret only in the scan step; passed by name; never printed.    | [F-023 v1](../features/F-023-hosted-ci-privacy-scan.md) | Active |
-| [BR-343](BR-343.md) | v1      | Secret format: lines, `#` comments, `giu` regexes, physical numbers. | [F-023 v1](../features/F-023-hosted-ci-privacy-scan.md) | Active |
-| [BR-344](BR-344.md) | v1      | Exit 2 with a fixed message on a missing secret or invalid regex.    | [F-023 v1](../features/F-023-hosted-ci-privacy-scan.md) | Active |
-| [BR-345](BR-345.md) | v1      | Tracked entries from the object database; decoders and views.        | [F-023 v1](../features/F-023-hosted-ci-privacy-scan.md) | Active |
-| [BR-346](BR-346.md) | v1      | Commit range or full history: messages, identities, changed blobs.   | [F-023 v1](../features/F-023-hosted-ci-privacy-scan.md) | Active |
-| [BR-347](BR-347.md) | v1      | PR title and body scanned only on `pull_request`.                    | [F-023 v1](../features/F-023-hosted-ci-privacy-scan.md) | Active |
-| [BR-348](BR-348.md) | v1      | Hit lines: location and pattern number only; `file #k` paths.        | [F-023 v1](../features/F-023-hosted-ci-privacy-scan.md) | Active |
-| [BR-349](BR-349.md) | v1      | Summary line, exit 0/1, one fixed internal-error line, exit 2.       | [F-023 v1](../features/F-023-hosted-ci-privacy-scan.md) | Active |
-| [BR-350](BR-350.md) | v1      | Fork PR notice step, exit 0.                                         | [F-023 v1](../features/F-023-hosted-ci-privacy-scan.md) | Active |
-| [BR-351](BR-351.md) | v1      | Runner guide: safe only privately, never attached here.              | [F-023 v1](../features/F-023-hosted-ci-privacy-scan.md) | Active |
-| [BR-352](BR-352.md) | v1      | Node built-ins only; `make privacy-scan` without `make setup`.       | [F-023 v1](../features/F-023-hosted-ci-privacy-scan.md) | Active |
-| [BR-015](BR-015.md) | v7      | Job set adds `privacy-scan`; hosted runners; deny secret placement.  | [F-023 v1](../features/F-023-hosted-ci-privacy-scan.md) | Active |
-| [BR-149](BR-149.md) | v3      | `sonar-pr` on `ubuntu-24.04`.                                        | [F-023 v1](../features/F-023-hosted-ci-privacy-scan.md) | Active |
-| [BR-183](BR-183.md) | v3      | `image` on `ubuntu-24.04`.                                           | [F-023 v1](../features/F-023-hosted-ci-privacy-scan.md) | Active |
-| [BR-225](BR-225.md) | v3      | Every `ci.yml` job on `ubuntu-24.04`; `privacy-scan` 20.             | [F-023 v1](../features/F-023-hosted-ci-privacy-scan.md) | Active |
-| [BR-227](BR-227.md) | v3      | `ci-result` needs `privacy-scan` and fails unless it succeeded.      | [F-023 v1](../features/F-023-hosted-ci-privacy-scan.md) | Active |
-| [BR-229](BR-229.md) | v2      | Runner acceptance guarded off this repository.                       | [F-023 v1](../features/F-023-hosted-ci-privacy-scan.md) | Active |
-| [BR-320](BR-320.md) | v2      | `audit` on `ubuntu-24.04`.                                           | [F-023 v1](../features/F-023-hosted-ci-privacy-scan.md) | Active |
+| ID                  | Version | Rule                                                                 | Source                                                  | Status                                    |
+| ------------------- | ------- | -------------------------------------------------------------------- | ------------------------------------------------------- | ----------------------------------------- |
+| [BR-341](BR-341.md) | v1      | CI `privacy-scan` job: hosted, read-only, 20 min, three exact steps. | [F-023 v1](../features/F-023-hosted-ci-privacy-scan.md) | Active                                    |
+| [BR-342](BR-342.md) | v1      | Deny secret only in the scan step; passed by name; never printed.    | [F-023 v1](../features/F-023-hosted-ci-privacy-scan.md) | Active                                    |
+| [BR-343](BR-343.md) | v1      | Secret format: lines, `#` comments, `giu` regexes, physical numbers. | [F-023 v1](../features/F-023-hosted-ci-privacy-scan.md) | Active                                    |
+| [BR-344](BR-344.md) | v1      | Exit 2 with a fixed message on a missing secret or invalid regex.    | [F-023 v1](../features/F-023-hosted-ci-privacy-scan.md) | Active                                    |
+| [BR-345](BR-345.md) | v1      | Tracked entries from the object database; decoders and views.        | [F-023 v1](../features/F-023-hosted-ci-privacy-scan.md) | Active                                    |
+| [BR-346](BR-346.md) | v1      | Commit range or full history: messages, identities, changed blobs.   | [F-023 v1](../features/F-023-hosted-ci-privacy-scan.md) | Active                                    |
+| [BR-347](BR-347.md) | v1      | PR title and body scanned only on `pull_request`.                    | [F-023 v1](../features/F-023-hosted-ci-privacy-scan.md) | Active                                    |
+| [BR-348](BR-348.md) | v1      | Hit lines: location and pattern number only; `file #k` paths.        | [F-023 v1](../features/F-023-hosted-ci-privacy-scan.md) | Active                                    |
+| [BR-349](BR-349.md) | v1      | Summary line, exit 0/1, one fixed internal-error line, exit 2.       | [F-023 v1](../features/F-023-hosted-ci-privacy-scan.md) | Active                                    |
+| [BR-350](BR-350.md) | v1      | Fork PR notice step, exit 0.                                         | [F-023 v1](../features/F-023-hosted-ci-privacy-scan.md) | Active                                    |
+| [BR-351](BR-351.md) | v1      | Runner guide: safe only privately, never attached here.              | [F-023 v1](../features/F-023-hosted-ci-privacy-scan.md) | Active                                    |
+| [BR-352](BR-352.md) | v1      | Node built-ins only; `make privacy-scan` without `make setup`.       | [F-023 v1](../features/F-023-hosted-ci-privacy-scan.md) | Active                                    |
+| [BR-015](BR-015.md) | v7      | Job set adds `privacy-scan`; hosted runners; deny secret placement.  | [F-023 v1](../features/F-023-hosted-ci-privacy-scan.md) | Active                                    |
+| [BR-149](BR-149.md) | v3      | `sonar-pr` on `ubuntu-24.04`.                                        | [F-023 v1](../features/F-023-hosted-ci-privacy-scan.md) | Active                                    |
+| [BR-183](BR-183.md) | v3      | `image` on `ubuntu-24.04`.                                           | [F-023 v1](../features/F-023-hosted-ci-privacy-scan.md) | Active                                    |
+| [BR-225](BR-225.md) | v3      | Every `ci.yml` job on `ubuntu-24.04`; `privacy-scan` 20.             | [F-023 v1](../features/F-023-hosted-ci-privacy-scan.md) | Active                                    |
+| [BR-227](BR-227.md) | v3      | `ci-result` needs `privacy-scan` and fails unless it succeeded.      | [F-023 v1](../features/F-023-hosted-ci-privacy-scan.md) | Active                                    |
+| [BR-229](BR-229.md) | v2      | Runner acceptance guarded off this repository.                       | [F-023 v1](../features/F-023-hosted-ci-privacy-scan.md) | Active                                    |
+| [BR-320](BR-320.md) | v2      | `audit` on `ubuntu-24.04`.                                           | [F-023 v1](../features/F-023-hosted-ci-privacy-scan.md) | Active; v3 active since F-027 (see below) |
 
 ## Accepted — gated beta publication
 
