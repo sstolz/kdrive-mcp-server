@@ -318,12 +318,12 @@ paths of F-010; `POST /mcp/oauth/register`, `GET /mcp/oauth/authorize`, `POST
 is byte-exact; any other path is 404 and any other method 405. There is no SSE
 stream, no legacy `/sse` or `/messages`, and no JSON-RPC batch.
 
-The consent and error pages (F-030, pending acceptance) follow the browser's
+The consent and error pages (F-030, accepted on main `f747072`) follow the browser's
 light or dark theme from one inline stylesheet, allowed by its SHA-256 hash in
 `Content-Security-Policy` (`style-src 'sha256-…'`); they load no script and no
 external resource.
 
-Page language (F-031, pending acceptance): the consent and error pages are in
+Page language (F-031, accepted on main `901f7af`): the consent and error pages are in
 English or French. A `lang=en` or `lang=fr` query parameter on the authorize
 or callback request chooses the language; otherwise the browser's
 `Accept-Language` header does, and English is the fallback. The consent page

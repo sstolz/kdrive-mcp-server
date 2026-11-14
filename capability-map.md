@@ -1,13 +1,13 @@
 # Capability map
 
-## Provisional — OAuth proxy pages in English and French
+## Accepted — OAuth proxy pages in English and French
 
 [F-031 v1](features/F-031-oauth-proxy-page-languages.md) (#31), BR-404–BR-410 v1
-with BR-129 v4, BR-143 v4, BR-393 v3, BR-399 v2, BR-402 v2 and BR-403 v2,
-pending acceptance: in `proxy` mode the consent and error pages are shown in
+with BR-129 v4, BR-143 v4, BR-393 v3, BR-399 v2, BR-402 v2 and BR-403 v2: in `proxy` mode the consent and error pages are shown in
 English or French, from the `lang` query parameter, else the browser's
 `Accept-Language`, else English; the consent page has a language switcher.
-No cookie, stored preference or CSP change is added.
+No cookie, stored preference or CSP change is added. Accepted on actual main
+`901f7af` on 2026-11-14 (#31 comment `31-acceptance-1-orchestrator`).
 
 ## Accepted — designed OAuth proxy pages
 
