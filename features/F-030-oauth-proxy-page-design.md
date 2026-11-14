@@ -85,8 +85,9 @@ codes, events and limits do not change.
   `<iframe>`, `<object>`, `<embed>`, `<base>`, `<meta http-equiv>`, `on*`
   attribute and `style` attribute, and no absolute URL other than the GitHub
   link and the HTML-escaped `ConsentView` values of BR-402 (`clientId`,
-  `cimd.host`, `redirectUri`, `resource`, `action`, which come from the
-  request or the configuration). The `<svg>` carries no `xmlns` attribute
+  `clientName`, `cimd.host`, `redirectUri`, `resource`, `action`, which come
+  from the request, the client's registration or document, or the
+  configuration). The `<svg>` carries no `xmlns` attribute
   (not needed in HTML). Verified by: AC-01, AC-02.
 - **BR-400** — The stylesheet is one fixed string (identical in every
   response) that: (1) declares exactly these colour tokens as CSS custom properties in
@@ -104,8 +105,8 @@ codes, events and limits do not change.
   (4) gives `:focus-visible` on buttons and links an `outline` of at least
   2px solid in a declared colour; (5) wraps long values
   (`overflow-wrap: anywhere` on `code`), limits the content width with a
-  `max-width` in `rem` or `%`, and sets no `width` or `min-width` above
-  `320px`; (6) reaches, in both themes, a WCAG 2.x contrast ratio of at least
+  `max-width` in `rem` or `%`, sets `box-sizing: border-box` on every
+  element, and sets no `width` or `min-width` other than `%` or `auto`; (6) reaches, in both themes, a WCAG 2.x contrast ratio of at least
   4.5:1 for each of these pairs: `--fg`/`--bg`, `--fg`/`--surface`,
   `--muted`/`--bg`, `--muted`/`--surface`, `--link`/`--bg`,
   `--code-fg`/`--code-bg`, `--primary-fg`/`--primary-bg`,
@@ -163,8 +164,8 @@ codes, events and limits do not change.
   footer with the exact GitHub link as the only `<a>`, after `</main>` and
   outside the form. Verified by: `BR-399 AC-01` in
   `tests/auth/proxy-pages.test.ts`.
-- **AC-02** (BR-399) — Given the same pages with request values chosen to
-  contain `<script>`, `" onload="`, `style=`, `http://evil.example` and
+- **AC-02** (BR-399) — Given the same pages with every `ConsentView` value,
+  `clientName` included, chosen to contain `<script>`, `" onload="`, `style=`, `http://evil.example` and
   `javascript:`, rendered through direct `consentPage` and `errorPage` calls,
   When the body is scanned after removing the escaped `ConsentView` values of
   BR-399, Then it holds none of the forbidden elements or attributes and no
@@ -175,7 +176,7 @@ codes, events and limits do not change.
   redeclared in dark, the token set is exactly BR-400 (1)'s and every value is
   `#rrggbb`, the stylesheet has no colour literal outside the two token
   blocks, items (2)–(5) hold as string checks (including the `max-width` unit
-  and no `width`/`min-width` above `320px`), and the contrast ratios of item
+  and no `width`/`min-width` other than `%` or `auto`), and the contrast ratios of item
   (6), computed with the WCAG relative-luminance formula for exactly the pairs
   listed there, meet their thresholds in both themes.
   Verified by: `BR-400 AC-03` in `tests/auth/proxy-pages.test.ts`.
@@ -274,3 +275,11 @@ retained (applied by the orchestrator, economical mode agreed with the owner):
 6. [minor] BR-393 v2 also rewords Example 3 and Verification.
 7. [minor] "files in kDrive"; the password sentence now tells the user where
    a password belongs.
+
+Review 2 (23-spec-review-2-reviewer), `changes` on `77ddcb3`; both retained
+(applied by the orchestrator):
+
+1. [major] `clientName` is added to the BR-399 exclusion list and to the
+   hostile values of AC-02.
+2. [minor] BR-400 (5) and AC-03: `box-sizing: border-box` and no
+   `width`/`min-width` other than `%` or `auto`, checkable by string.
