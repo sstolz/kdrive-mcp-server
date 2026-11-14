@@ -11,7 +11,7 @@ version: 1
 Author: Claude Opus 5.5 (effort unknown), spec phase, 2026-11-14.
 Base: branch `claude/beautiful-maxwell-8mdk2w` (main `2b08013`).
 IDs: F-033; BR-129 v6; BR-306 v2; BR-307 v2; BR-309 v2; BR-394 v2;
-AC-01–AC-09. No ADR: one display check, one branch in the resolver, one byte
+AC-01–AC-10. No ADR: one display check, one branch in the resolver, one byte
 bound and four address ranges, nothing persisted, cheap to reverse.
 Next free IDs checked on main (`docs/spec-index.md`, `business-rules/`):
 F-033, BR-412, ADR-012.
@@ -36,13 +36,18 @@ page.
    entry. A URL whose entry is stale but still usable gets the 503 page,
    although a transient fetch failure would have served the stale client.
 3. **Header bytes.** `watchBodyBytes` in `client-metadata-fetch.ts`
-   concatenates socket chunks until `\r\n\r\n`. Only Node's header limit
-   (16 KiB by default, then a `connection` failure) and the 5,000 ms deadline
-   bound that buffer. The watcher stops counting after the first block, so
-   the final block after an interim `1xx` block is bounded by Node alone, and
-   Node's parser, whose `data` listener is attached before the request emits
-   `socket`, sees each chunk before the watcher: a complete oversized block
-   reaches the status and media-type checks first.
+   concatenates socket chunks (one `Buffer.concat` per chunk) until the first
+   `\r\n\r\n`, and only the 5,000 ms deadline bounds that buffer: Node's
+   header limit (16 KiB by default, then a `connection` failure) counts
+   neither CR/LF bytes received before a status line nor whitespace after a
+   header colon, and accepts 200,000 CR/LF bytes before a 200 status line,
+   or 20,000 spaces after a header colon, without an error (probed on Node
+   26.13.0, the production runtime). The watcher stops
+   counting at the first `\r\n\r\n`, which can be an empty "block" before
+   the status line or the end of an interim `1xx` block, so the final block
+   can escape it. And Node's parser, whose `data` listener is attached
+   before the request emits `socket`, sees each chunk before the watcher: a
+   complete oversized block reaches the status and media-type checks first.
 4. **Address ranges.** The BR-307 IPv4 list omits three entries of the IANA
    IPv4 Special-Purpose Address Registry: `192.31.196.0/24` (AS112-v4),
    `192.52.193.0/24` (AMT) and `192.175.48.0/24` (Direct Delegation AS112
@@ -56,9 +61,11 @@ page.
   client, for CIMD and registered clients.
 - BR-309 v2: a usable stale entry is served before the in-flight cap check.
 - BR-306 v2: each response header block, interim `1xx` blocks included, is
-  bounded at 8,192 bytes, checked before Node's parser and before the
-  status, `Content-Type` and `Content-Encoding` checks; beyond that the fetch
-  fails as `size`, terminal, status 0. The request sets `maxHeaderSize`
+  bounded at 8,192 bytes, counted from the first received byte (CR/LF
+  before a status line included) and checked before Node's parser and
+  before the status, `Content-Type` and `Content-Encoding` checks; beyond
+  that the fetch fails as `size`, terminal, status 0. The body count keeps
+  its v1 order, after those checks. The request sets `maxHeaderSize`
   16,384.
 - BR-307 v2: the four ranges above join the blocked lists.
 - `docs/oauth-proxy.md`: the address-policy list, the in-flight cap
@@ -96,7 +103,8 @@ page.
   clients and to registered clients alike, whether the client was registered in
   this process or loaded from the state file. Nothing else changes: the name is
   still accepted, stored, snapshotted and echoed in the registration response as
-  before, no event is logged, and the rest of the page (the BR-393 lines
+  before, the display logs no event of its own (a CIMD resolution still logs its
+  one `client_metadata_fetched`), and the rest of the page (the BR-393 lines
   included) is unchanged. A name with any other format character (for example
   U+200B, U+200C, U+200D, U+00AD, U+FEFF or a tag character) is shown as sent,
   escaped and with the self-declared suffix, as under v5. Verified by:
@@ -110,22 +118,32 @@ page.
   503 HTML error page with `client_metadata_refused` `busy`. Verified by:
   AC-04.
 - **BR-306 v2** — v1 holds, except that every header block of the response
-  has at most 8,192 bytes. A header block is the bytes from its status line
-  through the `\r\n\r\n` that ends it, inclusive; each interim `1xx` block
-  and the final block are bounded separately, the count restarting at the
-  byte after an interim block. The v1 body count starts after the final
-  (non-`1xx`) block, so it still fails at the 5,121st body byte after any
-  interim block. The bound is checked on each received chunk before Node's
-  HTTP parser receives that chunk (the byte watcher's `data` listener is
-  added with `socket.prependListener`, since Node's client attaches its
-  parser listener before it emits `socket`), and therefore before the
-  status, `Content-Type` and `Content-Encoding` checks. As soon as more than
-  8,192 bytes of one block have been received and none of its first 8,192
-  completes it, the fetch fails as `size`, terminal, with `status` 0
-  (BR-394 v2), whatever status line the block starts with, and no further
-  header byte is buffered. The request sets Node's `maxHeaderSize` to 16,384
-  bytes, so Node's own limit stays above the bound whatever
-  `--max-http-header-size` says. Verified by: AC-05, AC-06, AC-08, AC-09.
+  has at most 8,192 bytes. The first block starts at the first received
+  byte of the response, and each later block at the byte after the
+  `\r\n\r\n` that ends an interim `1xx` block. A block's status line starts
+  at its first byte that is neither CR nor LF, and the block ends with the
+  first `\r\n\r\n` at or after that byte, inclusive. Every byte from the
+  start of a block is counted, the CR and LF bytes before its status line
+  and the whitespace in its header lines included; CR and LF bytes before a
+  status line never end a block. Each interim `1xx` block and the final
+  (non-`1xx`) block are bounded separately. The header bound is checked on
+  each received chunk before Node's HTTP parser receives that chunk (the
+  header watcher's `data` listener is added with `socket.prependListener`,
+  since Node's client attaches its parser listener before it emits
+  `socket`), and therefore before the status, `Content-Type` and
+  `Content-Encoding` checks. As soon as more than 8,192 bytes of one block
+  have been received and none of its first 8,192 completes it, the fetch
+  fails as `size`, terminal, with `status` 0 (BR-394 v2), whatever status
+  line the block starts with, and no further header byte is buffered. Only
+  the header bound runs before the parser: the v1 body count starts after
+  the final block and keeps its v1 order, after the status, `Content-Type`
+  and `Content-Encoding` checks, so a response whose final block passes the
+  header bound fails as `status` or `content_type` when those checks refuse
+  it, whatever its body length and however its bytes are split, and
+  otherwise still fails as `size` at the 5,121st body byte, after any
+  interim block. The request sets Node's `maxHeaderSize` to 16,384 bytes,
+  so Node's own limit stays above the bound whatever
+  `--max-http-header-size` says. Verified by: AC-05, AC-06, AC-08–AC-10.
 - **BR-307 v2** — v1 holds, except that the blocked IPv4 ranges also hold
   `192.31.196.0/24`, `192.52.193.0/24` and `192.175.48.0/24`, and the
   blocked IPv6 ranges inside `2000::/3` also hold `2620:4f:8000::/48`.
@@ -158,7 +176,8 @@ Proxy tests use the fake fetch port, clock and logger of
   `lang=en` and with `lang=fr`, Then the consent page is 200, its name line
   holds `unnamed client` (`client sans nom`) and no self-declared suffix, the
   page contains neither `Pal` nor the character, the client ID, host and
-  notice lines are present, and no event is logged. Verified by:
+  notice lines are present, and no event is logged other than the one
+  `client_metadata_fetched` of the fetch. Verified by:
   `BR-129 v6 AC-01 a CIMD client_name with %s is shown as unnamed`.
 - **AC-02** (BR-129 v6) — Given a registration with `client_name` `Pay`
   U+202E `laPyaP` (written with an escape in the test, never as a literal
@@ -187,12 +206,14 @@ Proxy tests use the fake fetch port, clock and logger of
   `BR-309 v2 AC-04 a stale entry is served while four fetches are pending`.
 - **AC-05** (BR-306 v2, BR-394 v2) — Given a server whose 200 JSON response has
   a header block of exactly 8,192 bytes, also when sent in single-byte writes,
-  Then the fetch succeeds; Given one of 8,193 bytes, one that sends 20,000
-  header bytes without `\r\n\r\n` and then stalls, and a 503 and a 302 response
-  each with a header block of 8,193 bytes sent in one write, Then each fails as
-  `size`, terminal, status 0, before the 5,000 ms deadline and without a
-  `connection` or `status` failure. Verified by:
-  `BR-306 v2 AC-05 the header block is bounded at 8,192 bytes`.
+  Then the fetch succeeds, and so does `\r\n\r\n` followed by a 200 JSON block,
+  8,192 bytes in total; Given one of 8,193 bytes, one that sends 20,000 header
+  bytes without `\r\n\r\n` and then stalls, a 503 and a 302 response each with a
+  header block of 8,193 bytes sent in one write, `\r\n\r\n` followed by a 200
+  JSON block, 8,193 bytes in total, and 8,193 CR/LF bytes (`\r\n` pairs, then
+  one CR) followed by a stall, Then each fails as `size`, terminal, status 0,
+  before the 5,000 ms deadline and without a `connection` or `status` failure.
+  Verified by: `BR-306 v2 AC-05 the header block is bounded at 8,192 bytes`.
 - **AC-06** (BR-306 v2, BR-309 v2, BR-394 v2) — Given a cached client past its
   fresh end, When the refetch fails as `size`, terminal, status 0, Then
   authorize gets the 400 page with `client_metadata_refused` `size` status 0 and
@@ -224,9 +245,20 @@ Proxy tests use the fake fetch port, clock and logger of
   Then the fetch succeeds (each block is bounded on its own); and given an
   interim `103` block followed by a 200 JSON response with `Content-Length:
   10` and 5,121 body bytes, Then the fetch fails as `size` (the body count
-  starts after the final block). Verified by:
+  starts after the final block); and given an interim `103` block, then
+  `\r\n\r\n`, then a final 200 JSON block, the `\r\n\r\n` and the final
+  block totalling 8,193 bytes, Then the fetch fails as `size`, terminal,
+  status 0 (the CR/LF bytes are counted in the final block). Verified by:
   `BR-306 v2 AC-09 each interim and final header block is bounded at 8,192
   bytes` in `tests/auth/cimd-fetch.test.ts`.
+- **AC-10** (BR-306 v2) — Given a server whose 200 `text/html` response has
+  `Content-Length: 6000` and a 6,000-byte body, sent once in one write and
+  once as the header block and then the body in separate writes, Then each
+  fetch fails as `content_type`, terminal, with `status` 200, never as
+  `size`; and given a 503 response with a 6,000-byte body in one write, Then
+  it fails as `status`, transient, with `status` 503. Verified by:
+  `BR-306 v2 AC-10 the body bound runs after the status and media-type
+  checks` in `tests/auth/cimd-fetch.test.ts`.
 
 ## Decisions
 
@@ -254,22 +286,34 @@ Proxy tests use the fake fetch port, clock and logger of
 - **D-3 — Stale before the cap.** The cap protects the fetch slots; a stale
   use takes none and already answers a transient failure, so `busy` is
   treated as one more transient condition. Rejected: queueing for a slot
-  (holds a request open on an unauthenticated route).
-- **D-4 — 8,192 bytes per header block, checked first, `size` terminal.**
-  `size` is terminal for consistency with the body bound of BR-306: an
-  oversized response fails the same way whether its headers or its body
-  pass the bound. The count runs on raw bytes before Node's parser sees a
-  chunk, so an oversized block gives `size`, status 0, whatever its status
-  line and however its bytes are split, never `status` or `content_type`
-  depending on the chunking. 8,192 is far above the headers a static
-  document host sends, and `maxHeaderSize` 16,384 on the request keeps
-  Node's limit above it whatever `--max-http-header-size` says. Each
-  interim `1xx` block is bounded too, so no block escapes the bound by
-  following an interim one. `status` 0 is stated in BR-394 v2 since no
-  status was parsed; BR-394 is versioned (AGENTS.md: a new case) because its
-  v1 list of status-0 reasons does not name `size`. Rejected: `connection`
-  transient (what Node's limit gives today; it would treat oversized
-  headers unlike an oversized body); checking after the status (the outcome
+  (holds a request open on an unauthenticated route). Accepted residual,
+  listed in `docs/oauth-proxy.md`: any unauthenticated requester can hold
+  the four slots (four slow or parallel URLs on listed origins), so a third
+  party can defer the refetch of a cached document, which may have changed
+  or been withdrawn, until its stale end, at most 3,600 s past its fresh
+  end. Under v1 the same requester denies that client with the 503 page
+  instead.
+- **D-4 — 8,192 bytes per header block, checked first, `size` terminal.** `size`
+  is terminal for consistency with the body bound of BR-306: an oversized
+  response fails the same way whether its headers or its body pass the bound.
+  The count runs on raw bytes before Node's parser sees a chunk, so an oversized
+  block gives `size`, status 0, whatever its status line and however its bytes
+  are split, never `status` or `content_type` depending on the chunking. The
+  count starts at the first received byte, since Node skips CR/LF bytes before a
+  status line without counting them. Only the header bound moves ahead of the
+  parser: the body count stays after the status and media-type checks, so a
+  refused status or media type is reported as such whatever the body length and
+  chunking (AC-10). 8,192 is far above the headers a static document host sends,
+  and `maxHeaderSize` 16,384 on the request keeps Node's limit above it whatever
+  `--max-http-header-size` says. Each interim `1xx` block is bounded too, so no
+  block escapes the bound by following an interim one. `status` 0 is stated in
+  BR-394 v2 since no status was parsed; BR-394 is versioned (AGENTS.md: a new
+  case) because its v1 list of status-0 reasons does not name `size`. Rejected:
+  `connection` transient (what Node's limit gives today; it would treat
+  oversized headers unlike an oversized body); relying on Node's `maxHeaderSize`
+  and mapping `HPE_HEADER_OVERFLOW` to `size` (Node counts neither CR/LF bytes
+  before a status line nor whitespace after a header colon, so it bounds neither
+  the watcher's buffer nor the block); checking after the status (the outcome
   would depend on chunking); one cumulative bound over all blocks (no added
   protection: a finished interim block is not kept, and the 5,000 ms deadline
   ends the fetch); a new `reason` value (a new BR-394 reason and a BR-143
@@ -335,3 +379,28 @@ fixed):
   BR-394 v2.
 - (minor) Lines over 80 columns or not reflowed; a loose list. Retained:
   reflowed; blank line removed.
+
+Spec decision pass (`26-spec-decision-1-fable`, changes); all findings
+retained:
+
+- (major) Bytes before a status line were outside every block: Node skips
+  CR/LF there without counting it, so a watcher ending a block at the first
+  `\r\n\r\n` stopped bounding. Retained: BR-306 v2 counts from the first
+  received byte and from the byte after each interim block, CR/LF before a
+  status line counted and never ending a block (probed on Node 26.13.0);
+  AC-05 rows (`\r\n\r\n` with a 200 block, 8,192 and 8,193 bytes; 8,193
+  CR/LF bytes then a stall) and an AC-09 row.
+- (major) Prepending the watcher also moved the body count ahead of the
+  parser, so a 200 `text/html` response with a 6,000-byte body in one write
+  gave `size` instead of `content_type`. Retained: only the header bound
+  runs before the parser; the body count keeps its v1 order (BR-306 v2,
+  D-4); AC-10.
+- (minor) Context 3 and D-4 said Node's limit bounds the watcher's buffer.
+  Retained: only the deadline does; D-4 rejects relying on `maxHeaderSize`
+  and mapping `HPE_HEADER_OVERFLOW`.
+- (minor) AC-01 and BR-129 v6 said no event is logged, but the resolution
+  logs `client_metadata_fetched`. Retained: reworded in both; AC-02 and
+  AC-03 make no event claim and are unchanged.
+- (minor) `busy` can be induced by any unauthenticated requester, which
+  lets a third party defer a refetch until the stale end. Retained: D-3
+  kept; the residual recorded in D-3 and `docs/oauth-proxy.md`.

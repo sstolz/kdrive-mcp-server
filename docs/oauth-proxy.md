@@ -236,9 +236,11 @@ instead of asking the client to register.
   `application/json` or `application/<name>+json` body of at most 5,120 bytes,
   not compressed, received within 5,000 ms, is accepted.
 - Header bound (F-033, pending acceptance): each response header block,
-  interim `1xx` blocks included, has at most 8,192 bytes. The bound is
-  checked on the received bytes before the status and media type, so an
-  oversized block is refused as `size` with `status` 0 whatever its status;
+  interim `1xx` blocks included, has at most 8,192 bytes, counted from the
+  first received byte (CR and LF bytes before a status line included). The
+  bound is checked on the received bytes before the status and media type,
+  so an oversized block is refused as `size` with `status` 0 whatever its
+  status; the body bound still runs after the status and media-type checks.
   Node's own header limit is set to 16,384 bytes for the fetch, whatever
   `--max-http-header-size` says.
 - The host is resolved once through c-ares (`resolve4` and `resolve6`, 2,000 ms
@@ -296,6 +298,12 @@ instead of asking the client to register.
 - A TLS-intercepting proxy in front of the container is outside the threat
   model; a deployment whose egress must go through a proxy cannot use CIMD.
 - The 503 page during a remote outage, when no stale document is cached.
+- Deferred refetch (F-033, pending acceptance): any unauthenticated
+  requester can keep the four fetch slots busy with slow or parallel URLs
+  on listed origins, and while they are busy a stale cached document is
+  served without a refetch, so a third party can defer the refetch of a
+  document that has changed or been withdrawn until its stale end, at most
+  3,600 s after its `max-age` ends.
 - Client names (F-033, pending acceptance): a name with a bidirectional
   control character, U+2028 or U+2029 is shown as an unnamed client; other
   format characters are shown as sent, so two names that differ only by an
