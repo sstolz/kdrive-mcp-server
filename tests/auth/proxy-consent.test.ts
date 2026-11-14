@@ -1,15 +1,28 @@
 import { createHash } from "node:crypto";
-import { describe, expect, it } from "vitest";
+import { readFileSync, readdirSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
+import { STORE_LIMIT, type ProxyResponse } from "../../src/auth/proxy/index.js";
+import { proxyStateSnapshot } from "../../src/auth/proxy/proxy.js";
+import type { OAuthStateStore } from "../../src/auth/proxy/store.js";
 import {
+  CLAUDE,
   COOKIE,
+  Clock,
   PUBLIC_URL,
   SECOND,
+  UPSTREAM,
+  counterRandom,
   harness,
   header,
   headers,
   location,
+  openState,
+  removeStateFiles,
   s256,
+  stateFile,
   type Harness,
+  type HarnessOptions,
   type Registered,
 } from "../helpers/proxy.js";
 import { FakeMetadata, cimdDocument } from "../helpers/cimd.js";
@@ -167,6 +180,8 @@ describe("BR-130 browser binding of the consent", () => {
       cookie: `${COOKIE}=${h.cookieOf(fresh)}`,
     });
     expect(ok.status).toBe(302);
+    // BR-129 v5: a reuse inside the BR-411 window is replayed (AC-04).
+    h.clock.advance(10 * SECOND);
     const again = await h.proxy.consent({
       form: new URLSearchParams(flow),
       cookie: `${COOKIE}=${h.cookieOf(fresh)}`,
@@ -375,5 +390,566 @@ describe("BR-129 v4 BR-393 v3 consent flow in French", () => {
     expect(body).toContain(`<p>${FR.loopbackLine}</p>`);
     expect(body).not.toContain("Client host:");
     expect(body).not.toContain("(loopback)");
+  });
+});
+
+// F-032 (#33): a repeated consent POST by the same browser within 10 s is
+// answered idempotently (BR-411, BR-129 v5, BR-142 v3).
+describe("BR-411 BR-129 v5 BR-142 v3 repeated consent POST", () => {
+  afterEach(() => {
+    removeStateFiles();
+  });
+
+  const DISCOVERY = "/.well-known/openid-configuration";
+
+  interface Replays {
+    flows: Array<[string, { created: number }]>;
+    replays?: Array<
+      [string, { t0: number; decision: string; settled: boolean }]
+    >;
+  }
+  const stateOf = (h: Harness) => proxyStateSnapshot(h.proxy) as Replays;
+  const recorded = (h: Harness) =>
+    (stateOf(h).replays ?? []).map(([id, record]) => [id, record.settled]);
+
+  interface Pending {
+    client: Registered;
+    page: ProxyResponse;
+    id: string;
+    value: string;
+    cookie: string;
+  }
+
+  async function pending(h: Harness, known?: Registered): Promise<Pending> {
+    const client = known ?? (await h.register());
+    const response = await page(h, client);
+    const value = h.cookieOf(response);
+    return {
+      client,
+      page: response,
+      id: h.consentId(response),
+      value,
+      cookie: `${COOKIE}=${value}`,
+    };
+  }
+
+  function post(
+    h: Harness,
+    id: string,
+    cookie: string | undefined,
+    decision = "approve",
+    extra: Array<[string, string]> = [],
+  ): Promise<ProxyResponse> {
+    return h.proxy.consent({
+      form: new URLSearchParams([
+        ["consent", id],
+        ["decision", decision],
+        ...extra,
+      ]),
+      ...(cookie === undefined ? {} : { cookie }),
+    });
+  }
+
+  /** Holds every upstream fetch until `release` (or `fail`) is called. */
+  function holdDiscovery(h: Harness) {
+    const original = h.upstream.fetchJson.bind(h.upstream);
+    let settle!: (fail: boolean) => void;
+    const held = new Promise<boolean>((resolve) => {
+      settle = resolve;
+    });
+    h.upstream.fetchJson = async (url: string) => {
+      if (await held) throw new Error("synthetic discovery failure");
+      return original(url);
+    };
+    return {
+      release: () => {
+        settle(false);
+      },
+      fail: () => {
+        settle(true);
+      },
+    };
+  }
+
+  async function storeHarness(options: HarnessOptions = {}) {
+    const clock = options.clock ?? new Clock();
+    const path = stateFile();
+    const store = openState(path, { clock });
+    const h = await harness({ ...options, clock, store });
+    return { h, store, path };
+  }
+
+  /** BR-299 / BR-304: a write on a closed store latches the proxy. */
+  async function latch(h: Harness, store: OAuthStateStore): Promise<void> {
+    store.close();
+    const refused = await h.proxy.register({
+      body: JSON.stringify({
+        redirect_uris: [CLAUDE],
+        token_endpoint_auth_method: "none",
+      }),
+    });
+    expect(refused.status).toBe(503);
+  }
+
+  /** A random source that throws once `failing` is set. */
+  function breakableRandom() {
+    const base = counterRandom();
+    const control = { failing: false };
+    const random = (size: number) => {
+      if (control.failing) throw new Error("synthetic random failure");
+      return base(size);
+    };
+    return { control, random };
+  }
+
+  function expectConsentPage(response: ProxyResponse): void {
+    expect(response.status).toBe(400);
+    expect(header(response, "location")).toBeUndefined();
+    expect(response.body).toContain(TEXTS.en.error.consent);
+  }
+
+  function expectBusy(response: ProxyResponse): void {
+    expect(response.status).toBe(503);
+    expect(header(response, "content-type")).toContain("text/html");
+    expect(header(response, "location")).toBeUndefined();
+  }
+
+  const refusals = (h: Harness) =>
+    h.logs.filter((entry) => entry.name === "consent_refused").length;
+
+  it("BR-411 AC-01 a repeated approve replays the upstream redirect", async () => {
+    const h = await harness();
+    const c = await pending(h);
+    const first = await post(h, c.id, c.cookie);
+    h.clock.advance(SECOND);
+    const logged = h.logs.length;
+    const second = await post(h, c.id, c.cookie);
+    expect(h.logs).toHaveLength(logged);
+    expect(first.status).toBe(302);
+    expect(second.status).toBe(302);
+    expect(header(second, "location")).toBe(header(first, "location"));
+    const target = location(second);
+    expect(`${target.origin}${target.pathname}`).toBe(`${UPSTREAM}/authorize`);
+    expect(header(second, "cache-control")).toBe("no-store");
+    expect(headers(second, "set-cookie")).toEqual(headers(first, "set-cookie"));
+    expect(headers(second, "set-cookie")).toEqual([
+      `${COOKIE}=${c.value}${ATTRIBUTES}`,
+    ]);
+    expect(second.headers).toEqual(first.headers);
+    expect(second.body).toBe("");
+    expect(stateOf(h).flows).toHaveLength(1);
+    expect(h.upstream.count("get", DISCOVERY)).toBe(1);
+    const flow = { page: c.page, cookie: c.cookie, upstreamRedirect: second };
+    const done = await h.callback(flow);
+    expect(done.status).toBe(302);
+    expect(location(done).searchParams.get("code")).toBeTruthy();
+    const again = await h.callback(flow);
+    expect(again.status).toBe(400);
+    expect(header(again, "location")).toBeUndefined();
+  });
+
+  async function sharedApproval(): Promise<void> {
+    const h = await harness();
+    const c = await pending(h);
+    const hold = holdDiscovery(h);
+    const first = post(h, c.id, c.cookie);
+    const second = post(h, c.id, c.cookie);
+    hold.release();
+    const [a, b] = await Promise.all([first, second]);
+    expect(a.status).toBe(302);
+    expect(b.status).toBe(302);
+    expect(header(b, "location")).toBe(header(a, "location"));
+    expect(b.headers).toEqual(a.headers);
+    expect(h.upstream.count("get", DISCOVERY)).toBe(1);
+    expect(stateOf(h).flows).toHaveLength(1);
+  }
+
+  async function sharedFailure(): Promise<void> {
+    const h = await harness();
+    const c = await pending(h);
+    const hold = holdDiscovery(h);
+    const first = post(h, c.id, c.cookie);
+    const second = post(h, c.id, c.cookie);
+    hold.fail();
+    const a = await first;
+    expect(a.status).toBe(302);
+    expect(location(a).searchParams.get("error")).toBe(
+      "temporarily_unavailable",
+    );
+    expectConsentPage(await second);
+    expect(stateOf(h).flows).toEqual([]);
+  }
+
+  async function sharedException(): Promise<void> {
+    const { control, random } = breakableRandom();
+    const h = await harness({ random });
+    const c = await pending(h);
+    const hold = holdDiscovery(h);
+    const first = post(h, c.id, c.cookie);
+    const second = post(h, c.id, c.cookie);
+    control.failing = true;
+    hold.release();
+    await expect(first).rejects.toThrow("synthetic random failure");
+    expectConsentPage(await second);
+  }
+
+  async function sharedLatch(): Promise<void> {
+    const { h, store } = await storeHarness();
+    const c = await pending(h);
+    const hold = holdDiscovery(h);
+    const first = post(h, c.id, c.cookie);
+    const second = post(h, c.id, c.cookie);
+    await latch(h, store);
+    hold.release();
+    expectBusy(await first);
+    expectBusy(await second);
+  }
+
+  it("BR-411 AC-02 a repeat during discovery shares the first outcome", async () => {
+    await sharedApproval();
+    await sharedFailure();
+    await sharedException();
+    await sharedLatch();
+  });
+
+  it("BR-411 AC-03 a repeated deny replays the client redirect", async () => {
+    const h = await harness();
+    const c = await pending(h);
+    const first = await post(h, c.id, c.cookie, "deny");
+    h.clock.advance(SECOND);
+    const second = await post(h, c.id, c.cookie, "deny");
+    for (const response of [first, second]) {
+      expect(response.status).toBe(302);
+      const target = location(response);
+      expect(target.searchParams.get("error")).toBe("access_denied");
+      expect(target.searchParams.get("state")).toBe("client-state");
+      expect(target.searchParams.get("iss")).toBe(PUBLIC_URL);
+      expect(headers(response, "set-cookie")).toEqual([]);
+    }
+    expect(header(second, "location")).toBe(header(first, "location"));
+    expect(second.headers).toEqual(first.headers);
+    expect(refusals(h)).toBe(1);
+    expect(h.upstream.calls).toEqual([]);
+  });
+
+  it("BR-411 AC-04 the window is 10 seconds from t0", async () => {
+    const h = await harness();
+    const c = await pending(h);
+    const first = await post(h, c.id, c.cookie);
+    expect(first.status).toBe(302);
+    h.clock.advance(6 * SECOND);
+    const six = await post(h, c.id, c.cookie);
+    h.clock.advance(3 * SECOND + 999);
+    const almost = await post(h, c.id, c.cookie);
+    h.clock.advance(1);
+    const ten = await post(h, c.id, c.cookie);
+    for (const replay of [six, almost]) {
+      expect(replay.status).toBe(302);
+      expect(header(replay, "location")).toBe(header(first, "location"));
+    }
+    expectConsentPage(ten);
+  });
+
+  it.each<
+    [
+      string,
+      (c: Pending) => {
+        cookie?: string;
+        decision?: string;
+        extra?: Array<[string, string]>;
+      },
+    ]
+  >([
+    [
+      "a repeat with another well-formed cookie",
+      () => ({ cookie: `${COOKIE}=${"A".repeat(43)}` }),
+    ],
+    ["a repeat without a cookie", () => ({})],
+    [
+      "a repeat with two binding cookies",
+      (c) => ({ cookie: `${c.cookie}; ${c.cookie}` }),
+    ],
+    [
+      "a repeat with decision=deny",
+      (c) => ({ cookie: c.cookie, decision: "deny" }),
+    ],
+    [
+      "a repeat with a repeated consent field",
+      (c) => ({ cookie: c.cookie, extra: [["consent", c.id]] }),
+    ],
+  ])("BR-411 AC-05 %s is not replayed", async (_name, make) => {
+    const h = await harness();
+    const c = await pending(h);
+    const first = await post(h, c.id, c.cookie);
+    expect(first.status).toBe(302);
+    h.clock.advance(SECOND);
+    const before = refusals(h);
+    const variant = make(c);
+    const refused = await post(
+      h,
+      c.id,
+      variant.cookie,
+      variant.decision ?? "approve",
+      variant.extra ?? [],
+    );
+    expectConsentPage(refused);
+    expect(refusals(h)).toBe(before + 1);
+    const replay = await post(h, c.id, c.cookie);
+    expect(replay.status).toBe(302);
+    expect(header(replay, "location")).toBe(header(first, "location"));
+  });
+
+  async function wrongFirst(
+    cookie: (c: Pending) => string,
+    decision: string,
+  ): Promise<{ h: Harness; c: Pending; status: number }> {
+    const h = await harness();
+    const c = await pending(h);
+    expectConsentPage(await post(h, c.id, cookie(c), decision));
+    return { h, c, status: 400 };
+  }
+
+  async function downstreamFailure(): Promise<{
+    h: Harness;
+    c: Pending;
+    status: number;
+  }> {
+    const h = await harness();
+    h.upstream.metadataStatus = 500;
+    const c = await pending(h);
+    const first = await post(h, c.id, c.cookie);
+    expect(location(first).searchParams.get("error")).toBe(
+      "temporarily_unavailable",
+    );
+    return { h, c, status: 400 };
+  }
+
+  async function fullFlows(): Promise<{
+    h: Harness;
+    c: Pending;
+    status: number;
+  }> {
+    const h = await harness();
+    const client = await h.register();
+    for (let index = 0; index < STORE_LIMIT; index += 1)
+      await h.approve(client, "v".repeat(43));
+    expect(stateOf(h).flows).toHaveLength(STORE_LIMIT);
+    const c = await pending(h, client);
+    const first = await post(h, c.id, c.cookie);
+    expect(location(first).searchParams.get("error")).toBe(
+      "temporarily_unavailable",
+    );
+    return { h, c, status: 400 };
+  }
+
+  async function busyFirst(): Promise<{
+    h: Harness;
+    c: Pending;
+    status: number;
+  }> {
+    const { h, store } = await storeHarness();
+    const c = await pending(h);
+    const hold = holdDiscovery(h);
+    const first = post(h, c.id, c.cookie);
+    await latch(h, store);
+    hold.release();
+    expectBusy(await first);
+    return { h, c, status: 503 };
+  }
+
+  async function throwingFirst(): Promise<{
+    h: Harness;
+    c: Pending;
+    status: number;
+  }> {
+    const { control, random } = breakableRandom();
+    const h = await harness({ random });
+    const c = await pending(h);
+    control.failing = true;
+    await expect(post(h, c.id, c.cookie)).rejects.toThrow(
+      "synthetic random failure",
+    );
+    control.failing = false;
+    return { h, c, status: 400 };
+  }
+
+  it.each<[string, () => Promise<{ h: Harness; c: Pending; status: number }>]>([
+    [
+      "an unknown identifier",
+      async () => {
+        const h = await harness();
+        const c = await pending(h);
+        return { h, c: { ...c, id: "unknown-consent" }, status: 400 };
+      },
+    ],
+    [
+      "an identifier first presented with a wrong cookie",
+      () => wrongFirst(() => `${COOKIE}=${"A".repeat(43)}`, "approve"),
+    ],
+    [
+      "an identifier first presented with decision=maybe",
+      () => wrongFirst((c) => c.cookie, "maybe"),
+    ],
+    ["an approval that ended with the upstream down", downstreamFailure],
+    ["an approval that ended with a full flow store", fullFlows],
+    ["an approval that ended in the busy page", busyFirst],
+    ["an approval that ended in an exception", throwingFirst],
+  ])(
+    "BR-411 AC-05 %s is not replayed",
+    async (_name, setup) => {
+      const { h, c, status } = await setup();
+      h.clock.advance(SECOND);
+      const repeat = await post(h, c.id, c.cookie);
+      expect(repeat.status).toBe(status);
+      expect(header(repeat, "location")).toBeUndefined();
+      if (status === 400) expectConsentPage(repeat);
+      else expectBusy(repeat);
+    },
+    60_000,
+  );
+
+  async function boundedRecords(): Promise<void> {
+    const h = await harness();
+    const client = await h.register();
+    const oldest = await pending(h, client);
+    expect((await post(h, oldest.id, oldest.cookie, "deny")).status).toBe(302);
+    let newest = oldest;
+    for (let index = 0; index < STORE_LIMIT; index += 1) {
+      newest = await pending(h, client);
+      expect((await post(h, newest.id, newest.cookie, "deny")).status).toBe(
+        302,
+      );
+    }
+    expect(stateOf(h).replays).toHaveLength(STORE_LIMIT);
+    expectConsentPage(await post(h, oldest.id, oldest.cookie, "deny"));
+    expect((await post(h, newest.id, newest.cookie, "deny")).status).toBe(302);
+  }
+
+  /** BR-411 (5): when every record is pending, a new first POST records nothing. */
+  async function allPendingRecords(): Promise<void> {
+    const h = await harness();
+    const client = await h.register();
+    const hold = holdDiscovery(h);
+    const firsts: Array<Promise<ProxyResponse>> = [];
+    for (let index = 0; index < STORE_LIMIT; index += 1) {
+      const c = await pending(h, client);
+      firsts.push(post(h, c.id, c.cookie));
+    }
+    const pendingIds = recorded(h);
+    expect(pendingIds).toHaveLength(STORE_LIMIT);
+    expect(pendingIds.every(([, settled]) => settled === false)).toBe(true);
+    const extra = await pending(h, client);
+    const extraFirst = post(h, extra.id, extra.cookie);
+    const deny = await pending(h, client);
+    const refusalsBefore = refusals(h);
+    const denied = await post(h, deny.id, deny.cookie, "deny");
+    expect(denied.status).toBe(302);
+    expect(location(denied).searchParams.get("error")).toBe("access_denied");
+    const ids = recorded(h).map(([id]) => id);
+    expect(ids).toHaveLength(STORE_LIMIT);
+    expect(ids).not.toContain(extra.id);
+    expect(ids).not.toContain(deny.id);
+    expectConsentPage(await post(h, deny.id, deny.cookie, "deny"));
+    expect(refusals(h)).toBe(refusalsBefore + 2);
+    hold.release();
+    for (const first of firsts) expect((await first).status).toBe(302);
+    const late = await extraFirst;
+    expect(late.status).toBe(302);
+    expect(location(late).searchParams.get("error")).toBe(
+      "temporarily_unavailable",
+    );
+    expectConsentPage(await post(h, extra.id, extra.cookie));
+  }
+
+  async function purgedRecords(): Promise<void> {
+    const h = await harness();
+    const client = await h.register();
+    for (let index = 0; index < 3; index += 1) {
+      const c = await pending(h, client);
+      expect((await post(h, c.id, c.cookie, "deny")).status).toBe(302);
+    }
+    const c = await pending(h, client);
+    const hold = holdDiscovery(h);
+    const first = post(h, c.id, c.cookie);
+    expect(recorded(h)).toHaveLength(4);
+    h.clock.advance(10 * SECOND);
+    await page(h, client);
+    expect(recorded(h)).toEqual([[c.id, false]]);
+    hold.release();
+    expect((await first).status).toBe(302);
+  }
+
+  async function neverStored(): Promise<void> {
+    const { h, store, path } = await storeHarness();
+    const c = await pending(h);
+    const first = await post(h, c.id, c.cookie);
+    h.clock.advance(SECOND);
+    const second = await post(h, c.id, c.cookie);
+    expect(second.status).toBe(302);
+    expect(header(second, "location")).toBe(header(first, "location"));
+    const state = location(first).searchParams.get("state") ?? "";
+    store.close();
+    const directory = dirname(path);
+    for (const name of readdirSync(directory)) {
+      const bytes = readFileSync(join(directory, name)).toString("latin1");
+      for (const secret of [c.id, c.value, state])
+        expect(bytes, name).not.toContain(secret);
+    }
+    const reopened = openState(path, { clock: h.clock });
+    const fresh = await harness({
+      clock: h.clock,
+      store: reopened,
+      pem: h.pem,
+    });
+    expectConsentPage(await post(fresh, c.id, c.cookie));
+    reopened.close();
+  }
+
+  it(
+    "BR-411 AC-06 the replay records are bounded, purged and never stored",
+    { timeout: 60_000 },
+    async () => {
+      await boundedRecords();
+      await allPendingRecords();
+      await purgedRecords();
+      await neverStored();
+    },
+  );
+
+  it("BR-411 AC-09 a replay moves no lifetime", async () => {
+    const h = await harness();
+    const c = await pending(h);
+    const first = await post(h, c.id, c.cookie);
+    expect(first.status).toBe(302);
+    const created = h.clock.ms;
+    expect(stateOf(h).flows.map(([, flow]) => flow.created)).toEqual([created]);
+    h.clock.advance(SECOND);
+    expect((await post(h, c.id, c.cookie)).status).toBe(302);
+    expect(stateOf(h).flows.map(([, flow]) => flow.created)).toEqual([created]);
+    h.clock.advance(599 * SECOND - 1);
+    await page(h, c.client);
+    expect(stateOf(h).flows).toHaveLength(1);
+    h.clock.advance(1);
+    await page(h, c.client);
+    expect(stateOf(h).flows).toEqual([]);
+  });
+
+  it("BR-411 AC-13 the window is checked on arrival", async () => {
+    const h = await harness();
+    const c = await pending(h);
+    const hold = holdDiscovery(h);
+    const first = post(h, c.id, c.cookie);
+    h.clock.advance(SECOND);
+    const second = post(h, c.id, c.cookie);
+    h.clock.advance(9 * SECOND);
+    await page(h, c.client);
+    expect(recorded(h)).toEqual([[c.id, false]]);
+    hold.release();
+    const [a, b] = await Promise.all([first, second]);
+    expect(a.status).toBe(302);
+    expect(b.status).toBe(302);
+    expect(header(b, "location")).toBe(header(a, "location"));
+    expect(stateOf(h).flows).toHaveLength(1);
+    expectConsentPage(await post(h, c.id, c.cookie));
   });
 });

@@ -133,6 +133,8 @@ const CONSENT_TTL = 600 * SECOND;
 const MAX_SWITCH_LINK_BYTES = 8192;
 const FLOW_TTL = 600 * SECOND;
 const CODE_TTL = 60 * SECOND;
+/** F-032 BR-411: a repeated consent POST is replayed until `t0` + 10 s. */
+const REPLAY_WINDOW = 10 * SECOND;
 const ACCESS_TTL_SECONDS = 3600;
 const RETRY_INTERVAL = 60 * SECOND;
 const JWKS_TTL = 3600 * SECOND;
@@ -175,6 +177,20 @@ interface Consent {
   request: PendingRequest;
   cookieHash: Buffer;
   created: number;
+}
+
+type Decision = "approve" | "deny";
+
+/** F-032 BR-411: a decided consent, kept for a repeat from the same browser. */
+interface Replay {
+  cookieHash: Buffer;
+  decision: Decision;
+  /** The clock read when the identifier was consumed. */
+  t0: number;
+  /** The decision's 302 `Location` once settled; undefined while pending. */
+  location?: string;
+  /** The first POST's completion: its `Location`, or undefined; never rejects. */
+  done: Promise<string | undefined>;
 }
 
 interface Flow {
@@ -417,6 +433,8 @@ export function createOAuthProxy(options: OAuthProxyOptions): OAuthProxy {
   const flows = new Map<string, Flow>();
   const codes = new Map<string, Code>();
   const families = new Map<string, Family>();
+  /** F-032 BR-411 / BR-142 v3: consent replay records, memory only. */
+  const replays = new Map<string, Replay>();
   /** BR-299: set when a commit fails or meets a closed store; never cleared. */
   let latched = false;
   /** Reads the latch after an await, where it may have been set meanwhile. */
@@ -470,9 +488,15 @@ export function createOAuthProxy(options: OAuthProxyOptions): OAuthProxy {
     upstreamIssuer,
   });
 
-  // ---- BR-142 v2: bounded stores ------------------------------------------
-  /** The memory-only stores (consents, flows, codes); never persisted (BR-292). */
+  // ---- BR-142 v3: bounded stores ------------------------------------------
+  /**
+   * The memory-only stores (consents, flows, codes, settled replay records);
+   * never persisted (BR-292). A pending replay record is never purged.
+   */
   function purge(time: number): void {
+    for (const [id, record] of replays)
+      if (record.location !== undefined && time >= record.t0 + REPLAY_WINDOW)
+        replays.delete(id);
     for (const [id, entry] of consents)
       if (time >= entry.created + CONSENT_TTL) consents.delete(id);
     for (const [id, entry] of flows)
@@ -1098,6 +1122,80 @@ export function createOAuthProxy(options: OAuthProxyOptions): OAuthProxy {
     return value !== undefined && sameHash(sha256(value), hash);
   }
 
+  /**
+   * F-032 BR-411 (1): records a decided consent before `discover()`. Returns
+   * the settlement, or undefined when the set is full of pending records.
+   */
+  function remember(
+    id: string,
+    cookieHash: Buffer,
+    decision: Decision,
+    t0: number,
+  ): ((location: string | undefined) => void) | undefined {
+    if (replays.size >= STORE_LIMIT && !evictSettled()) return undefined;
+    let release!: (location: string | undefined) => void;
+    const done = new Promise<string | undefined>((resolve) => {
+      release = resolve;
+    });
+    const record: Replay = { cookieHash, decision, t0, done };
+    replays.set(id, record);
+    return (location) => {
+      if (location === undefined) replays.delete(id);
+      else record.location = location;
+      release(location);
+    };
+  }
+
+  /** BR-411 (5): deletes the oldest settled record, if any. */
+  function evictSettled(): boolean {
+    for (const [id, record] of replays)
+      if (record.location !== undefined) {
+        replays.delete(id);
+        return true;
+      }
+    return false;
+  }
+
+  /** BR-411 (2): the first answer's headers, for approve with its cookie. */
+  function replayed(
+    location: string,
+    decision: Decision,
+    cookie: string | undefined,
+  ): ProxyResponse {
+    const headers: Array<[string, string]> = [
+      ["Location", location],
+      ["Cache-Control", "no-store"],
+    ];
+    if (decision === "approve")
+      headers.push(["Set-Cookie", setCookie(boundCookie(cookie) ?? "")]);
+    return { status: 302, headers, body: "" };
+  }
+
+  /** BR-411 (2)–(4): a POST of a consumed identifier that has a record. */
+  async function replay(
+    record: Replay,
+    input: { form: URLSearchParams; cookie?: string },
+    time: number,
+    language: Language,
+  ): Promise<ProxyResponse> {
+    if (
+      time >= record.t0 + REPLAY_WINDOW ||
+      hasRepetition(input.form) ||
+      input.form.get("decision") !== record.decision ||
+      !cookieMatches(input.cookie, record.cookieHash)
+    )
+      return refusePage("consent_refused", "consent", "consent", language);
+    if (record.location !== undefined)
+      return replayed(record.location, record.decision, input.cookie);
+    // The completion captured on arrival; the window is not checked again.
+    const location = await record.done;
+    if (isLatched())
+      return refusePage("consent_refused", "consent", "busy", language, 503);
+    if (location === undefined)
+      return refusePage("consent_refused", "consent", "consent", language);
+    return replayed(location, record.decision, input.cookie);
+  }
+
   async function consent(input: {
     form: URLSearchParams;
     cookie?: string;
@@ -1115,6 +1213,9 @@ export function createOAuthProxy(options: OAuthProxyOptions): OAuthProxy {
     consents.delete(id);
     const time = now();
     const decision = input.form.get("decision");
+    // F-032 BR-129 v5: a consumed identifier with a record is a BR-411 repeat.
+    const record = entry ? undefined : replays.get(id);
+    if (record) return replay(record, input, time, language);
     if (
       !entry ||
       hasRepetition(input.form) ||
@@ -1123,34 +1224,80 @@ export function createOAuthProxy(options: OAuthProxyOptions): OAuthProxy {
       (decision !== "approve" && decision !== "deny")
     )
       return refuse();
-    if (decision === "deny")
-      return refuseRedirect(
+    const settle = remember(id, entry.cookieHash, decision, time);
+    let location: string | undefined;
+    try {
+      const decided = await decide(
+        entry,
+        decision,
+        input.cookie,
+        time,
+        language,
+      );
+      location = decided.location;
+      return decided.response;
+    } finally {
+      // BR-411 (1): settled with the decision's 302, else deleted.
+      settle?.(location);
+    }
+  }
+
+  /**
+   * BR-129 / BR-131: the answer to a live consent past every check, with the
+   * `Location` of the decision's own 302 (BR-411), absent for any other end.
+   */
+  async function decide(
+    entry: Consent,
+    decision: Decision,
+    cookie: string | undefined,
+    time: number,
+    language: Language,
+  ): Promise<{ response: ProxyResponse; location?: string }> {
+    if (decision === "deny") {
+      const response = refuseRedirect(
         "consent_refused",
         "consent",
         entry.request,
         "access_denied",
       );
-    const binding = boundCookie(input.cookie) ?? "";
+      const location = response.headers.find(
+        ([name]) => name === "Location",
+      )?.[1];
+      return location === undefined ? { response } : { response, location };
+    }
+    const binding = boundCookie(cookie) ?? "";
     const found = await discover(time);
     // BR-299: a store latched during the await takes no new flow.
     if (isLatched())
-      return refusePage("consent_refused", "consent", "busy", language, 503);
+      return {
+        response: refusePage(
+          "consent_refused",
+          "consent",
+          "busy",
+          language,
+          503,
+        ),
+      };
     if (!found)
-      return refuseRedirect(
-        "upstream_unavailable",
-        "consent",
-        entry.request,
-        "temporarily_unavailable",
-      );
+      return {
+        response: refuseRedirect(
+          "upstream_unavailable",
+          "consent",
+          entry.request,
+          "temporarily_unavailable",
+        ),
+      };
     const after = now();
     purge(after);
     if (full("flows", flows.size))
-      return refuseRedirect(
-        "store_full",
-        "consent",
-        entry.request,
-        "temporarily_unavailable",
-      );
+      return {
+        response: refuseRedirect(
+          "store_full",
+          "consent",
+          entry.request,
+          "temporarily_unavailable",
+        ),
+      };
     const state = random(32);
     const verifierValue = random(32);
     const nonce = random(32);
@@ -1172,13 +1319,16 @@ export function createOAuthProxy(options: OAuthProxyOptions): OAuthProxy {
       ["code_challenge_method", "S256"],
     ]);
     return {
-      status: 302,
-      headers: [
-        ["Location", location],
-        ["Cache-Control", "no-store"],
-        ["Set-Cookie", setCookie(binding)],
-      ],
-      body: "",
+      response: {
+        status: 302,
+        headers: [
+          ["Location", location],
+          ["Cache-Control", "no-store"],
+          ["Set-Cookie", setCookie(binding)],
+        ],
+        body: "",
+      },
+      location,
     };
   }
 
@@ -1747,6 +1897,15 @@ export function createOAuthProxy(options: OAuthProxyOptions): OAuthProxy {
           flows: [...flows.entries()],
           codes: [...codes.entries()],
           families: [...families.values()],
+          // F-032 BR-411: the replay records without their cookie hash.
+          replays: [...replays.entries()].map(([id, record]) => [
+            id,
+            {
+              t0: record.t0,
+              decision: record.decision,
+              settled: record.location !== undefined,
+            },
+          ]),
           discovery,
           jwks,
         }),

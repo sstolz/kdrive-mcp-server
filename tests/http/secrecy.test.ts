@@ -5,6 +5,8 @@ import {
   httpFixture,
   jsonRpc,
   oauthLogin,
+  openConsent,
+  postConsent,
   type Fixture,
 } from "../helpers/http.js";
 
@@ -390,6 +392,69 @@ describe("BR-167 secrecy and logging", () => {
       );
       expect(names).toContain(route);
     }
+    await f.handler.close();
+  });
+});
+
+// F-032 (#33): a replayed consent answer carries no secret beyond the
+// replayed Location and, for approve, the BR-130 cookie (BR-411).
+describe("BR-411 replay secrecy", () => {
+  const ATTRIBUTES = "; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=600";
+
+  function except(response: Response, names: string[]): string {
+    return [...response.headers]
+      .filter(([name]) => !names.includes(name))
+      .map(([name, value]) => `${name}: ${value}`)
+      .join("\n");
+  }
+
+  it("BR-411 AC-08 a replay leaks no consent, cookie or upstream secret", async () => {
+    const f = await httpFixture();
+    const approve = await openConsent(f);
+    const deny = await openConsent(f);
+    const send = (opened: typeof approve, decision: string) =>
+      postConsent(
+        f,
+        { consent: opened.consent, decision },
+        { origin: "null", cookie: opened.cookie },
+      );
+    const first = await send(approve, "approve");
+    expect(first.status).toBe(302);
+    const up = new URL(first.headers.get("location") ?? "");
+    const denied = await send(deny, "deny");
+    expect(denied.status).toBe(302);
+    f.clock.advance(1000);
+    const logged = f.logs.length;
+    const replay = await send(approve, "approve");
+    const denyReplay = await send(deny, "deny");
+    expect(f.logs).toHaveLength(logged);
+    expect(replay.status).toBe(302);
+    expect(denyReplay.status).toBe(302);
+    expect(replay.headers.get("location")).toBe(first.headers.get("location"));
+    expect(replay.headers.getSetCookie()).toEqual([
+      `__Host-kdrive-oauth=${approve.value}${ATTRIBUTES}`,
+    ]);
+    expect(denyReplay.headers.getSetCookie()).toEqual([]);
+    const secrets = [
+      approve.consent,
+      approve.value,
+      deny.consent,
+      deny.value,
+      ...["state", "nonce", "code_challenge"].map(
+        (name) => up.searchParams.get(name) ?? "",
+      ),
+    ];
+    for (const secret of secrets) expect(secret).not.toBe("");
+    for (const response of [replay, denyReplay]) {
+      const rest = except(response, ["location", "set-cookie"]);
+      const body = await response.text();
+      for (const secret of secrets) {
+        expect(rest).not.toContain(secret);
+        expect(body).not.toContain(secret);
+      }
+    }
+    const logs = JSON.stringify(f.logs);
+    for (const secret of secrets) expect(logs).not.toContain(secret);
     await f.handler.close();
   });
 });
