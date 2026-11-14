@@ -293,7 +293,7 @@ MCP-client connections are deferred to #12/#13 and are not established.
 | [BR-140](BR-140.md) | v2      | Ordered refresh checks; reuse or cross-client use revokes the family.                                 | [F-010 v1](../features/F-010-oauth-proxy.md) | Active (v2, #103)                                    |
 | [BR-141](BR-141.md) | v1      | Proxy verifier is the F-008 validator with `upstreamIssuer` (BR-100 v2).                              | [F-010 v1](../features/F-010-oauth-proxy.md) | Active                                               |
 | [BR-142](BR-142.md) | v2      | Single-instance in-memory state, restart semantics and 1,000-entry store bounds.                      | [F-010 v1](../features/F-010-oauth-proxy.md) | Active (v2, #103)                                    |
-| [BR-143](BR-143.md) | v2      | No secret, code, token, cookie or identity in refusals or fixed-event logs.                           | [F-010 v1](../features/F-010-oauth-proxy.md) | Active (v2, #103); v3 active since F-028 (see below) |
+| [BR-143](BR-143.md) | v2      | No secret, code, token, cookie or identity in refusals or fixed-event logs.                           | [F-010 v1](../features/F-010-oauth-proxy.md) | Active (v2, #103); v4 active since F-031 (see below) |
 
 <a id="pending--http-image"></a>
 
@@ -559,7 +559,7 @@ real-client restart check has not been run.
 | [BR-139](BR-139.md) | v2      | Refresh token `<family id>.<secret>`; one stored hash per family.                  | [F-019 v1](../features/F-019-persistent-oauth-state.md) | Active                                    |
 | [BR-140](BR-140.md) | v2      | Family-ID based refresh checks; BR-301 after step (3).                             | [F-019 v1](../features/F-019-persistent-oauth-state.md) | Active                                    |
 | [BR-142](BR-142.md) | v2      | State in memory only without `oauthStateFile`; purge and eviction persisted.       | [F-019 v1](../features/F-019-persistent-oauth-state.md) | Active                                    |
-| [BR-143](BR-143.md) | v2      | Event list adds the store events and the `clients`/`families` fields.              | [F-019 v1](../features/F-019-persistent-oauth-state.md) | Active; v3 active since F-028 (see below) |
+| [BR-143](BR-143.md) | v2      | Event list adds the store events and the `clients`/`families` fields.              | [F-019 v1](../features/F-019-persistent-oauth-state.md) | Active; v4 active since F-031 (see below) |
 | [BR-152](BR-152.md) | v2      | The handler opens the store before the proxy and any socket.                       | [F-019 v1](../features/F-019-persistent-oauth-state.md) | Active                                    |
 | [BR-169](BR-169.md) | v2      | `close()` waits for the listener, then closes the store.                           | [F-019 v1](../features/F-019-persistent-oauth-state.md) | Active; v3 active since F-028 (see below) |
 
