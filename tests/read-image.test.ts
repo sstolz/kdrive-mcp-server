@@ -191,8 +191,8 @@ const PNG_WRITE = {
 it("TestBR390_codec_calls decodes and encodes with the exact codec options", async () => {
   // pngjs fills defaults into the options object it receives, so each spy
   // records a copy of the options as passed, then delegates.
-  const realRead = PNG.sync.read,
-    realWrite = PNG.sync.write,
+  const realRead = PNG.sync.read.bind(PNG.sync),
+    realWrite = PNG.sync.write.bind(PNG.sync),
     realDecode = jpegJs.decode;
   const read = vi
       .spyOn(PNG.sync, "read")
