@@ -2,7 +2,7 @@
 id: F-029
 title: Persisted OAuth proxy state in the owner-run HTTP acceptance launcher
 ticket: "#25"
-status: ready-for-freeze
+status: frozen
 version: 2
 ---
 
@@ -12,10 +12,11 @@ Author: Claude Opus 5.5 (effort unknown), spec phase, 2026-11-14.
 Version 1 frozen 2026-11-14 (autonomous mode, PROJECT.md D-1) on reviewed
 revision `07ba2c6` after spec reviews 1 and 2 (`changes`) and 3 (`approve`),
 published on #25; kept in `features/history/F-029-v1.md`. Version 2
-(2026-11-14) changes only AC-04 (and the F-029 version cited in the BR-171
-v3 records): the scan also allows the existing F-013 production path `/audit/oauth-state.sqlite` in
-`docs/deployment.md`. It becomes frozen only after an independent review
-approves it on the pull request.
+(2026-11-14) changes only AC-04 (and the F-029 version cited in the
+BR-171 v3 records): the scan also allows the existing F-013 production path
+`/audit/oauth-state.sqlite` in `docs/deployment.md`. Version 2 frozen
+2026-11-14 on reviewed revision `8624580` after 25-code-review-3-reviewer
+approved it (PR #28).
 Base: branch `claude/beautiful-maxwell-8mdk2w` at `01b43ff` (main `7a8c239`).
 IDs: F-029; BR-396–BR-398 v1; BR-171 v3. No ADR: the change is confined to
 an owner-run launcher and is cheap to reverse. Next free IDs checked on main
