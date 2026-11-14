@@ -237,8 +237,8 @@ checked against the deny patterns.
 
 ## Client ID Metadata Documents (F-028)
 
-Accepted on main `aa540d4` (2026-11-14). In OAuth `proxy` mode, a client ID that is an `https` URL
-makes the server fetch that URL: an unauthenticated request can trigger it, so
+Accepted on main `aa540d4` (2026-11-14). In OAuth `proxy` mode, a client ID
+that is an `https` URL makes the server fetch that URL: an unauthenticated request can trigger it, so
 it is a server-side request forgery (SSRF) primitive. The limits are:
 
 - CIMD is off by default: `OAUTH_ALLOWED_CLIENT_ID_ORIGINS` is empty, and only
