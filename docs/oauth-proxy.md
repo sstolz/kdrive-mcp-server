@@ -323,6 +323,16 @@ light or dark theme from one inline stylesheet, allowed by its SHA-256 hash in
 `Content-Security-Policy` (`style-src 'sha256-…'`); they load no script and no
 external resource.
 
+Page language (F-031, pending acceptance): the consent and error pages are in
+English or French. A `lang=en` or `lang=fr` query parameter on the authorize
+or callback request chooses the language; otherwise the browser's
+`Accept-Language` header does, and English is the fallback. The consent page
+has a switcher ("English", "Français") that reloads the same authorize request
+with the other `lang` and replaces its pending consent; the form posts to
+`/mcp/oauth/consent?lang=xx` so a refusal page keeps the language. Error pages
+have no switcher. `lang` never changes an OAuth outcome or a client redirect,
+and the language is not stored: no cookie, no state-file field, no log field.
+
 ### Protocol era
 
 Only the 2025-era sessionful protocol (`initialize`, `Mcp-Session-Id`) is
