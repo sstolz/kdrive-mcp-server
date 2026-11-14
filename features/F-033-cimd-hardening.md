@@ -2,7 +2,7 @@
 id: F-033
 title: CIMD document handling hardened
 ticket: "#26"
-status: frozen
+status: done
 version: 1
 ---
 

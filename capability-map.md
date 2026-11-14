@@ -1,15 +1,16 @@
 # Capability map
 
-## Provisional — CIMD document handling hardened
+## Accepted — CIMD document handling hardened
 
 [F-033 v1](features/F-033-cimd-hardening.md) (#26), BR-129 v6 with BR-306 v2,
-BR-307 v2, BR-309 v2 and BR-394 v2, pending acceptance: in `proxy` mode the
-consent page shows a client name holding bidirectional control characters or
-line or paragraph separators as an unnamed client; a CIMD client whose cached
-document is stale but usable is served while four fetches are pending; a
-document response with a header block (interim blocks included) over 8,192 bytes
-is refused; and four more special-purpose address blocks are refused for
-document fetches.
+BR-307 v2, BR-309 v2 and BR-394 v2: in `proxy` mode the consent page shows a
+client name holding bidirectional control characters or line or paragraph
+separators as an unnamed client; a CIMD client whose cached document is stale
+but usable is served while four fetches are pending; a document response with a
+header block (interim blocks included) over 8,192 bytes is refused; and four
+more special-purpose address blocks are refused for document fetches. Accepted
+on actual main `6ef8b55` on 2026-11-14 (#26 comment
+`26-acceptance-1-orchestrator`).
 
 ## Accepted — repeated consent POST answered idempotently
 

@@ -60,7 +60,7 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
   error page; a repeat of the consent form from the same browser within
   10 seconds gets the same redirect as the first POST, without JavaScript or a
   CSP change. The upstream flow stays one-use.
-- #26 / F-033 v1 (pending acceptance): in `proxy` mode the consent page shows a
+- #26 / F-033 v1 (accepted 2026-11-14): in `proxy` mode the consent page shows a
   client name holding bidirectional control characters or line or paragraph
   separators as an unnamed client, so the name can no longer reorder the consent
   line; a CIMD client with a stale but usable cached document is no longer
