@@ -3,7 +3,7 @@
 ## Provisional — CIMD document handling hardened
 
 [F-033 v1](features/F-033-cimd-hardening.md) (#26), BR-129 v6 with BR-306 v2,
-BR-307 v2 and BR-309 v2, pending acceptance: in `proxy` mode the consent page
+BR-307 v2, BR-309 v2 and BR-394 v2, pending acceptance: in `proxy` mode the consent page
 shows a client name holding bidirectional control characters or line or
 paragraph separators as an unnamed client; a CIMD client whose cached document is stale but usable is
 served while four fetches are pending; a document response with a header

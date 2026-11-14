@@ -10,9 +10,9 @@ version: 1
 
 Author: Claude Opus 5.5 (effort unknown), spec phase, 2026-11-14.
 Base: branch `claude/beautiful-maxwell-8mdk2w` (main `2b08013`).
-IDs: F-033; BR-129 v6; BR-306 v2; BR-307 v2; BR-309 v2; AC-01–AC-09. No ADR:
-one display check, one branch in the resolver, one byte bound and four
-address ranges, nothing persisted, cheap to reverse.
+IDs: F-033; BR-129 v6; BR-306 v2; BR-307 v2; BR-309 v2; BR-394 v2;
+AC-01–AC-09. No ADR: one display check, one branch in the resolver, one byte
+bound and four address ranges, nothing persisted, cheap to reverse.
 Next free IDs checked on main (`docs/spec-index.md`, `business-rules/`):
 F-033, BR-412, ADR-012.
 
@@ -115,22 +115,27 @@ page.
   and the final block are bounded separately, the count restarting at the
   byte after an interim block. The v1 body count starts after the final
   (non-`1xx`) block, so it still fails at the 5,121st body byte after any
-  interim block. The bound is checked on each received chunk
-  before Node's HTTP parser receives that chunk (the byte watcher's `data`
-  listener is added with `socket.prependListener`, since Node's client
-  attaches its parser listener before it emits `socket`), and therefore
-  before the status, `Content-Type` and `Content-Encoding` checks. As soon as
-  more than 8,192 bytes of one block have been received and none of its
-  first 8,192 completes it, the fetch fails as `size`, terminal, with
-  `status` 0, whatever status line the block starts with, and no further
+  interim block. The bound is checked on each received chunk before Node's
+  HTTP parser receives that chunk (the byte watcher's `data` listener is
+  added with `socket.prependListener`, since Node's client attaches its
+  parser listener before it emits `socket`), and therefore before the
+  status, `Content-Type` and `Content-Encoding` checks. As soon as more than
+  8,192 bytes of one block have been received and none of its first 8,192
+  completes it, the fetch fails as `size`, terminal, with `status` 0
+  (BR-394 v2), whatever status line the block starts with, and no further
   header byte is buffered. The request sets Node's `maxHeaderSize` to 16,384
-  bytes (as `src/http/server.ts` does for the server), so Node's own limit
-  stays above the bound whatever `--max-http-header-size` says. Verified by:
-  AC-05, AC-06, AC-08, AC-09.
+  bytes, so Node's own limit stays above the bound whatever
+  `--max-http-header-size` says. Verified by: AC-05, AC-06, AC-08, AC-09.
 - **BR-307 v2** — v1 holds, except that the blocked IPv4 ranges also hold
   `192.31.196.0/24`, `192.52.193.0/24` and `192.175.48.0/24`, and the
   blocked IPv6 ranges inside `2000::/3` also hold `2620:4f:8000::/48`.
   Verified by: AC-07.
+
+- **BR-394 v2** — v1 holds, except that the reasons with `status` 0 also
+  include `size` from the BR-306 v2 header bound: it is decided before any
+  status line is parsed, even when the oversized block starts with one (a
+  503 or a 302 included). A `size` from the body bound keeps the received
+  status (200). Verified by: AC-05.
 
 Existing rules this feature relies on without change:
 
@@ -138,14 +143,8 @@ Existing rules this feature relies on without change:
   accepted; only their display changes (BR-129 v6).
 - **BR-393 v3** and **BR-407 v1**: the CIMD lines and the "unnamed client"
   catalogue texts are reused as they are.
-- **BR-394 v1**: `size` is an existing `reason`. A header-bound `size`
-  always has `status` 0: BR-306 v2 decides it before any status line is
-  parsed, even when the oversized block starts with one (a 503 or a 302
-  included), so no response status was received in BR-394's sense. BR-394
-  needs no new version: its rule defines `status` 0 as "no response status
-  was received", which a header-bound `size` meets; its parenthetical list
-  of such reasons predates the header bound and is read as examples (D-4). A
-  terminal `size` deletes a stale entry and gives the 400 page under BR-309.
+- `size` is an existing BR-394 `reason`; a terminal `size` deletes a stale
+  entry and gives the 400 page under BR-309.
 - **BR-143 v4**: no new event or field; the header bound adds no logged text.
 
 ## Acceptance criteria
@@ -158,11 +157,10 @@ Proxy tests use the fake fetch port, clock and logger of
   followed by each of U+061C, U+200E, U+200F, U+202A, U+202B, U+202C, U+202D,
   U+202E, U+2066, U+2067, U+2068, U+2069 (all twelve `\p{Bidi_Control}` code
   points), U+2028 or U+2029 and then `Pal`, When authorize resolves it with
-  `lang=en` and
-  with `lang=fr`, Then the consent page is 200, its name line holds
-  `unnamed client` (`client sans nom`) and no self-declared suffix, the page
-  contains neither `Pal` nor the character, the client ID, host and notice
-  lines are present, and no event is logged. Verified by:
+  `lang=en` and with `lang=fr`, Then the consent page is 200, its name line
+  holds `unnamed client` (`client sans nom`) and no self-declared suffix, the
+  page contains neither `Pal` nor the character, the client ID, host and
+  notice lines are present, and no event is logged. Verified by:
   `BR-129 v6 AC-01 a CIMD client_name with %s is shown as unnamed`.
 - **AC-02** (BR-129 v6) — Given a registration with `client_name` `Pay`
   U+202E `laPyaP` (written with an escape in the test, never as a literal
@@ -189,7 +187,7 @@ Proxy tests use the fake fetch port, clock and logger of
   given the same `c5` entry at `T + 300` s after the four fetches have
   settled, Then the `c5` request calls the port. Verified by:
   `BR-309 v2 AC-04 a stale entry is served while four fetches are pending`.
-- **AC-05** (BR-306 v2) — Given a server whose 200 JSON response has a
+- **AC-05** (BR-306 v2, BR-394 v2) — Given a server whose 200 JSON response has a
   header block of exactly 8,192 bytes, also when sent in single-byte writes,
   Then the fetch succeeds; Given one of 8,193 bytes, one that sends
   20,000 header bytes without `\r\n\r\n` and then stalls, and a 503 and a
@@ -269,12 +267,11 @@ Proxy tests use the fake fetch port, clock and logger of
   document host sends, and `maxHeaderSize` 16,384 on the request keeps
   Node's limit above it whatever `--max-http-header-size` says. Each
   interim `1xx` block is bounded too, so no block escapes the bound by
-  following an interim one. `status` 0 follows BR-394 since no status was
-  parsed; BR-394 is not versioned, because its rule text ("no response status
-  was received") already covers this case and its parenthetical list of
-  reasons is read as examples. Rejected: `connection` transient (what
-  Node's limit gives today;
-  it would treat oversized headers unlike an oversized body); checking after
+  following an interim one. `status` 0 is stated in BR-394 v2 since no
+  status was parsed; BR-394 is versioned (AGENTS.md: a new case) because its
+  v1 list of status-0 reasons does not name `size`. Rejected: `connection`
+  transient (what Node's limit gives today; it would treat oversized
+  headers unlike an oversized body); checking after
   the status (the outcome would depend on chunking); one cumulative bound
   over all blocks (no added protection: a finished interim block is not
   kept, and the 5,000 ms deadline ends the fetch); a new `reason`
@@ -313,3 +310,19 @@ retained:
   and U+2029 (D-1, AC-01, AC-03); no CSS clipping, combining marks recorded
   as a residual.
 - (minor) `docs/oauth-proxy.md` was stale. Retained: added to the scope.
+
+Spec review 2 (`26-spec-review-2-reviewer`, approve with minors):
+
+- (minor) The body count was lost after an interim block. Retained: BR-306
+  v2 starts it after the final block; AC-09 row.
+- (minor) AC-01 tested 7 of 12 Bidi_Control code points. Retained: all 12.
+- (minor) BR-394's status-0 list did not name `size`. Retained after spec
+  review 3: BR-394 v2.
+
+Spec review 3 (`26-spec-review-3-reviewer`, approve with minors):
+
+- (minor) Versioning BR-394 versus a reading note. Retained: BR-394 v2
+  (D-4, AC-05).
+- (minor) Paragraphs not reflowed. Retained: reflowed.
+- (minor) BR-306 v2 in the spec and in its record differed. Retained: the
+  spec's server reference dropped; both now match.
