@@ -6,6 +6,7 @@ import {
   PAGES,
   T,
   classicXref,
+  flate,
   modern,
   pageDict,
   pdf,
@@ -21,6 +22,8 @@ import {
   type Body,
   type Entry,
 } from "./helpers/pdf-corpus.js";
+import { Budget } from "../src/pdf-decode.js";
+import { readXref, terminalFrame } from "../src/pdf-xref.js";
 import { refuses, text } from "./helpers/pdf-run.js";
 vi.mock("pdfjs-dist", async (original) => {
   const actual = await original<typeof import("pdfjs-dist")>();
@@ -383,6 +386,80 @@ it.each([
       ),
     "CONTENT_UNAVAILABLE",
   ],
+  [
+    "(o) /Length 7 5 R after object 7 0 R is resolved",
+    () => {
+      const content = textOf(T);
+      return pdf([
+        CATALOG,
+        PAGES("3 0 R"),
+        pageDict("<< /Font << /F1 5 0 R >> >>", "[4 0 R 6 0 R]"),
+        `<< /Length 7 0 R >>\nstream\n${content}\nendstream`,
+        HELV,
+        `<< /Length 7 5 R >>\nstream\n${content}\nendstream`,
+        String(content.length),
+      ]).bytes;
+    },
+    "CONTENT_UNAVAILABLE",
+  ],
+  [
+    "(p) /F2 5 7 R selected after /F1 5 0 R",
+    () =>
+      pdf([
+        CATALOG,
+        PAGES("3 0 R"),
+        pageDict("<< /Font << /F1 5 0 R /F2 5 7 R >> >>", "4 0 R"),
+        stm("<< >>", "BT /F1 12 Tf 72 720 Td (A) Tj /F2 12 Tf (B) Tj ET"),
+        HELV,
+      ]).bytes,
+    "CONTENT_UNAVAILABLE",
+  ],
 ] as const)("BR-413 AC-03 object resolution %s", async (_name, build, code) => {
   await refuses(build(), code);
+});
+/** (p): a classic section whose `/Prev` chain holds 30 streams of 65,536 one-byte rows. */
+function floodedChain() {
+  const written = writeObjects(objects());
+  const parts = [...written.parts];
+  let pos = written.pos,
+    prev: number | undefined;
+  for (let i = 0; i < 30; i++) {
+    const data = flate(Buffer.alloc(65536));
+    const link = prev === undefined ? "" : ` /Prev ${String(prev)}`;
+    const part = Buffer.concat([
+      L(
+        `${String(100 + i)} 0 obj\n<< /Type /XRef /Size 65536 /W [0 1 0]${link} /Filter /FlateDecode /Length ${String(data.length)} >>\nstream\n`,
+      ),
+      data,
+      L("\nendstream\nendobj\n"),
+    ]);
+    prev = pos;
+    parts.push(part);
+    pos += part.length;
+  }
+  const trailer = "/Root 1 0 R /Prev " + String(prev);
+  parts.push(
+    L(
+      `${classicXref(written.entries, 6, trailer)}startxref\n${String(pos)}\n%%EOF\n`,
+    ),
+  );
+  return Buffer.concat(parts);
+}
+it("BR-412 AC-02 cross-reference chain (p) 31 sections of 65,536 rows merged as they are read", async () => {
+  const bytes = floodedChain();
+  expect(await text(bytes)).toBe(T);
+  const set = vi.spyOn(Map.prototype, "set");
+  let inserts = 0;
+  try {
+    const { table } = readXref(
+      bytes,
+      terminalFrame(bytes),
+      new Budget(16777216),
+    );
+    inserts = set.mock.calls.length;
+    expect(table.size).toBe(65536);
+  } finally {
+    set.mockRestore();
+  }
+  expect(inserts).toBeLessThanOrEqual(65536 + 1024);
 });

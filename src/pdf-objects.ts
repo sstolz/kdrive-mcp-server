@@ -79,13 +79,18 @@ export class PdfFile {
     readonly table: Map<number, XrefEntry>,
     readonly budget: Budget,
   ) {}
-  /** BR-413: `n g R` names entry `n` with generation `g`; 4,096 distinct objects. */
-  resolve(ref: { ref: number; gen: number }, depth = 0): Framed {
-    const cached = this.cache.get(ref.ref);
+  /** BR-413: `n g R` names an in-use entry `n` of generation `g` (0 in an object stream). */
+  checkGeneration(ref: { ref: number; gen: number }) {
     const entry = this.table.get(ref.ref);
     if (!entry || entry.type === 0) return fail("CONTENT_UNAVAILABLE");
     if (entry.type === 1 ? entry.gen !== ref.gen : ref.gen !== 0)
       fail("CONTENT_UNAVAILABLE");
+    return entry;
+  }
+  /** BR-413: `n g R` names entry `n` with generation `g`; 4,096 distinct objects. */
+  resolve(ref: { ref: number; gen: number }, depth = 0): Framed {
+    const entry = this.checkGeneration(ref);
+    const cached = this.cache.get(ref.ref);
     if (cached) return cached;
     if (this.pending.has(ref.ref)) fail("CONTENT_UNAVAILABLE");
     if (this.cache.size + this.pending.size >= 4096) fail("LIMIT_EXCEEDED");
@@ -118,11 +123,11 @@ export class PdfFile {
     if (!isRef(v)) return directLength(v);
     const entry = this.table.get(v.ref);
     if (entry?.type === 2 && depth > 0) fail("CONTENT_UNAVAILABLE");
+    this.checkGeneration(v);
     const cached = this.cache.get(v.ref);
     if (cached) return directLength(cached.stream ? undefined : cached.value);
     if (entry?.type === 1) {
-      if (entry.gen !== v.gen || this.pending.has(v.ref))
-        fail("CONTENT_UNAVAILABLE");
+      if (this.pending.has(v.ref)) fail("CONTENT_UNAVAILABLE");
       if (this.cache.size + this.pending.size >= 4096) fail("LIMIT_EXCEEDED");
       const framed = this.typeOne(v.ref, entry, depth, false);
       this.cache.set(v.ref, framed);

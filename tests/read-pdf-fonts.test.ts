@@ -65,25 +65,29 @@ const allCodes = (destination: string) => {
     );
   return `/CIDInit /ProcSet findresource begin 12 dict begin begincmap\n1 begincodespacerange <0000> <FFFF> endcodespacerange\n256 beginbfrange\n${lines.join("\n")}\nendbfrange\nendcmap end end\n`;
 };
-function manyCMapFonts(count: number, last: string) {
+/** `count` Type0 fonts (5, 6, …) shown on one page; each has its own `ToUnicode`
+ * stream (the last one `last`), or all share the first stream when `shared`. */
+function manyCMapFonts(count: number, last: string, shared = false) {
   const fonts: Body[] = [];
   const names: string[] = [];
+  const cid = 5 + count,
+    firstStream = 6 + count,
+    streams = shared ? 1 : count;
   for (let i = 0; i < count; i++) {
-    const tuId = i === count - 1 ? 7 + count : 6 + count;
+    const tuId = shared ? firstStream : firstStream + i;
     fonts.push(
-      `<< /Type /Font /Subtype /Type0 /BaseFont /X /Encoding /Identity-H /DescendantFonts [${5 + count} 0 R] /ToUnicode ${tuId} 0 R >>`,
+      `<< /Type /Font /Subtype /Type0 /BaseFont /X /Encoding /Identity-H /DescendantFonts [${cid} 0 R] /ToUnicode ${tuId} 0 R >>`,
     );
     names.push(`/F${i + 1} 12 Tf`);
   }
   fonts.push(
-    "<< /Type /Font /Subtype /CIDFontType2 /BaseFont /X /CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> /FontDescriptor 9999 0 R >>".replace(
-      "9999",
-      String(8 + count),
-    ),
-    stm("<< >>", allCodes("0000")),
-    stm("<< >>", last),
-    DESCRIPTOR,
+    `<< /Type /Font /Subtype /CIDFontType2 /BaseFont /X /CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> /FontDescriptor ${firstStream + streams} 0 R >>`,
   );
+  for (let i = 0; i < streams; i++)
+    fonts.push(
+      stm("<< >>", i === count - 1 && !shared ? last : allCodes("0000")),
+    );
+  fonts.push(DESCRIPTOR);
   return onePage(
     stm("<< >>", `BT ${names.join(" ")} 72 720 Td <0041> Tj ET`),
     fonts,
@@ -110,6 +114,21 @@ function fonts128(count: number) {
   objs[3] = stm("<< >>", `BT ${selects} 72 720 Td (${T}) Tj ET`);
   return pdf(objs).bytes;
 }
+/** A WinAnsi Helvetica whose one-byte `ToUnicode` CMap (6) is `cmap`. */
+const oneByteCMap = (cmap: string) =>
+  simple(
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding /ToUnicode 6 0 R >>",
+    textOf("A"),
+    [stm("<< >>", cmap)],
+  );
+const plusOneCode = allCodes("0000").replace(
+  "endcmap",
+  "1 beginbfchar\n<0041> <0042>\nendbfchar\nendcmap",
+);
+const withW = (w: string) =>
+  type0(hex2("Hi"), {
+    descendant: `<< /Type /Font /Subtype /CIDFontType2 /BaseFont /X /CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> /FontDescriptor 8 0 R /W [${w}] >>`,
+  });
 const noPrograms = (document: string) => {
   for (const token of [
     "/FontFile",
@@ -212,6 +231,24 @@ it.each([
       type0(hex2("Hi"), {
         descendant: `<< /Type /Font /Subtype /CIDFontType2 /BaseFont /X /CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> /FontDescriptor 8 0 R /W [0 [${widths(65535)}]] >>`,
       }),
+    "Hi",
+    [],
+  ],
+  [
+    "(v) a CMap assigning 65,536 codes through 256 bfrange entries",
+    () => type0("0041", { cmap: allCodes("0000") }),
+    "A",
+    [],
+  ],
+  [
+    "(x) one ToUnicode stream of 65,536 codes shared by five fonts",
+    () => manyCMapFonts(5, "", true),
+    "A",
+    [],
+  ],
+  [
+    "(y) a descendant W covering 65,536 CIDs",
+    () => withW("0 65534 500 65535 [500]"),
     "Hi",
     [],
   ],
@@ -333,6 +370,29 @@ it.each([
     "(u) a Type3 font without Widths",
     () => type3("[0.001 0 0 0.001 0 0]", "/FirstChar 1 /LastChar 1"),
     "CONTENT_UNAVAILABLE",
+  ],
+  [
+    "(v) a CMap assigning 65,537 codes, one bfchar after 256 bfrange entries",
+    () => type0("0041", { cmap: plusOneCode }),
+    "LIMIT_EXCEEDED",
+  ],
+  [
+    "(w) a CMap of 65,536 <00> <FF> <0041> entries",
+    () =>
+      oneByteCMap(
+        `65536 beginbfrange\n${"<00> <FF> <0041>\n".repeat(65536)}endbfrange\n`,
+      ),
+    "LIMIT_EXCEEDED",
+  ],
+  [
+    "(y) a descendant W covering 65,537 CIDs",
+    () => withW("0 65534 500 65535 [500 500]"),
+    "LIMIT_EXCEEDED",
+  ],
+  [
+    "(z) a descendant W of 21,845 full-range triples",
+    () => withW(seq(21845, () => "0 65535 500")),
+    "LIMIT_EXCEEDED",
   ],
 ] as const)("BR-417 AC-07 fonts %s", async (_name, build, code) => {
   await refuses(build(), code);

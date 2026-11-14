@@ -3,11 +3,18 @@ import { type Budget, decodeStream } from "./pdf-decode.js";
 import { directLength, parseObjectAt, type XrefEntry } from "./pdf-objects.js";
 import { PdfParser, isName, isRef, type PdfValue } from "./pdf-syntax.js";
 type Entries = Map<number, XrefEntry>;
-interface Section {
-  entries: Entries;
-  trailer: Map<string, PdfValue>;
-  stream?: Entries;
+/**
+ * BR-412: the merged table, filled as sections are read, newest first; an
+ * entry is stored only when no newer section listed its object, so the table
+ * holds at most 65,536 entries whatever the number of sections.
+ */
+class MergedTable {
+  readonly entries: Entries = new Map();
+  put(id: number, entry: () => XrefEntry) {
+    if (!this.entries.has(id)) this.entries.set(id, entry());
+  }
 }
+type Trailer = Map<string, PdfValue>;
 const horizontal = (n: number | undefined) =>
   n !== undefined && (n === 0 || n === 9 || n === 12 || n === 32);
 const eol = (n: number | undefined) => n === 10 || n === 13;
@@ -78,14 +85,18 @@ function sizeOf(trailer: Map<string, PdfValue>) {
   if (size > 65536) fail("LIMIT_EXCEEDED");
   return size;
 }
-function checkListed(entries: Entries, size: number) {
-  for (const id of entries.keys()) if (id >= size) fail("LIMIT_EXCEEDED");
-}
-function classicSection(source: Buffer, offset: number): Section {
+/**
+ * BR-412: a classic section. In-use entries go into the table at once; free
+ * entries are returned, since a hybrid section's `/XRefStm` entries rank
+ * between the two.
+ */
+function classicSection(source: Buffer, offset: number, table: MergedTable) {
   const p = new PdfParser(source, offset);
   p.expect("xref");
   endLine(p);
-  const entries: Entries = new Map();
+  const listed = new Set<number>(),
+    free: number[] = [];
+  let highest = -1;
   for (;;) {
     p.skip();
     if (source.toString("latin1", p.pos, p.pos + 7) === "trailer") break;
@@ -95,15 +106,20 @@ function classicSection(source: Buffer, offset: number): Section {
     endLine(p);
     if (first + count > 65536) fail("LIMIT_EXCEEDED");
     for (let i = 0; i < count; i++) {
-      if (entries.has(first + i)) fail("CONTENT_UNAVAILABLE");
-      entries.set(first + i, xrefEntry(p));
+      const id = first + i;
+      if (listed.has(id)) fail("CONTENT_UNAVAILABLE");
+      listed.add(id);
+      highest = Math.max(highest, id);
+      const entry = xrefEntry(p);
+      if (entry.type === 0) free.push(id);
+      else table.put(id, () => entry);
     }
   }
   p.expect("trailer");
   const trailer = p.value();
   if (!(trailer instanceof Map)) return fail("CONTENT_UNAVAILABLE");
-  checkListed(entries, sizeOf(trailer));
-  return { entries, trailer };
+  if (highest >= sizeOf(trailer)) fail("LIMIT_EXCEEDED");
+  return { trailer, free };
 }
 function directInteger(v: PdfValue | undefined) {
   if (typeof v !== "number" || !Number.isSafeInteger(v) || v < 0)
@@ -161,7 +177,8 @@ function streamSection(
   source: Buffer,
   offset: number,
   budget: Budget,
-): Section {
+  table: MergedTable,
+): Trailer {
   const parsed = parseObjectAt(source, offset, directLength);
   const stream = parsed.framed.stream;
   if (!stream) return fail("CONTENT_UNAVAILABLE");
@@ -177,19 +194,19 @@ function streamSection(
     row = w0 + w1 + w2,
     count = pairs.reduce((sum, pair) => sum + (pair[1] ?? 0), 0);
   if (data.length !== count * row) fail("CONTENT_UNAVAILABLE");
-  const entries: Entries = new Map();
   let at = 0;
   for (const [start = 0, n = 0] of pairs)
-    for (let i = 0; i < n; i++, at += row)
-      entries.set(
-        start + i,
+    for (let i = 0; i < n; i++, at += row) {
+      const here = at;
+      table.put(start + i, () =>
         streamEntry(
-          field(data, at, w0, 1),
-          field(data, at + w0, w1, 0),
-          field(data, at + w0 + w1, w2, 0),
+          field(data, here, w0, 1),
+          field(data, here + w0, w1, 0),
+          field(data, here + w0 + w1, w2, 0),
         ),
       );
-  return { entries, trailer: d };
+    }
+  return d;
 }
 function optionalOffset(trailer: Map<string, PdfValue>, key: string) {
   const v = trailer.get(key);
@@ -198,7 +215,8 @@ function optionalOffset(trailer: Map<string, PdfValue>, key: string) {
 /** BR-412: the chain from the last `startxref`, newest section first, merged. */
 export function readXref(source: Buffer, start: number, budget: Budget) {
   const seen = new Set<number>(),
-    sections: Section[] = [];
+    table = new MergedTable(),
+    trailers: Trailer[] = [];
   const visit = (offset: number) => {
     if (seen.has(offset)) fail("CONTENT_UNAVAILABLE");
     if (seen.size >= 32) fail("LIMIT_EXCEEDED");
@@ -210,33 +228,20 @@ export function readXref(source: Buffer, start: number, budget: Budget) {
     visit(offset);
     const classic =
       source.subarray(offset, offset + 4).toString("latin1") === "xref";
-    const section = classic
-      ? classicSection(source, offset)
-      : streamSection(source, offset, budget);
-    const hybrid = classic
-      ? optionalOffset(section.trailer, "XRefStm")
-      : undefined;
-    if (hybrid !== undefined) {
-      visit(hybrid);
-      section.stream = streamSection(source, hybrid, budget).entries;
-    }
-    sections.push(section);
-    offset = optionalOffset(section.trailer, "Prev");
+    let trailer: Trailer;
+    if (classic) {
+      // In-use table entries, then the hybrid `/XRefStm`, then free entries.
+      const section = classicSection(source, offset, table);
+      trailer = section.trailer;
+      const hybrid = optionalOffset(trailer, "XRefStm");
+      if (hybrid !== undefined) {
+        visit(hybrid);
+        streamSection(source, hybrid, budget, table);
+      }
+      for (const id of section.free) table.put(id, () => ({ type: 0 }));
+    } else trailer = streamSection(source, offset, budget, table);
+    trailers.push(trailer);
+    offset = optionalOffset(trailer, "Prev");
   }
-  return { table: merge(sections), trailers: sections.map((s) => s.trailer) };
-}
-function merge(sections: Section[]) {
-  const table: Entries = new Map();
-  const put = (entries: Entries, keep: (e: XrefEntry) => boolean) => {
-    for (const [id, entry] of entries)
-      if (keep(entry) && !table.has(id)) table.set(id, entry);
-  };
-  for (const section of sections) {
-    if (section.stream) {
-      put(section.entries, (e) => e.type !== 0);
-      put(section.stream, () => true);
-    }
-    put(section.entries, () => true);
-  }
-  return table;
+  return { table: table.entries, trailers };
 }

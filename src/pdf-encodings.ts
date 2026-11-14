@@ -1,3 +1,4 @@
+import { contentFailure } from "./content.js";
 import { extractionFail as fail } from "./extraction-values.js";
 import {
   macExpertEncoding,
@@ -86,11 +87,14 @@ class Cleartext {
     this.p = new PdfParser(data);
     this.p.refs = false;
   }
-  next(): PdfToken | undefined {
+  /** Any parser failure is `UNSUPPORTED_FORMAT`, except a glyph name over the
+   * tokenizer's name limit, which passes the 31-byte ceiling (BR-420). */
+  next(glyph = false): PdfToken | undefined {
     let token: PdfToken | undefined;
     try {
       token = this.p.token();
-    } catch {
+    } catch (error) {
+      if (glyph && contentFailure(error) === "LIMIT_EXCEEDED") throw error;
       fail("UNSUPPORTED_FORMAT");
     }
     return token;
@@ -140,7 +144,7 @@ function readPuts(
     if (++groups > 256) fail("LIMIT_EXCEEDED");
     const code = reader.integer();
     if (code < 0 || code >= size) fail("UNSUPPORTED_FORMAT");
-    table[code] = glyphName(reader.next());
+    table[code] = glyphName(reader.next(true));
     reader.expect("put");
     token = reader.next();
   }

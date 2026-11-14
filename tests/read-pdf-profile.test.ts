@@ -114,6 +114,38 @@ it("BR-415 AC-05 canonical projection", async () => {
   expect(length(pages[2]?.[2])).toBe("0");
   await refuses(bytes, "UNSUPPORTED_FORMAT", undefined, [3]);
 });
+it("BR-415 AC-05 canonical projection (b) unread resources of a page not selected", async () => {
+  const bytes = pdf([
+    CATALOG,
+    PAGES("3 0 R 6 0 R", 2),
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
+    stm("<< >>", textOf(T)),
+    HELV,
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources 99 0 R /Contents 4 0 R >>",
+  ]).bytes;
+  expect(await text(bytes, undefined, [1])).toBe(T);
+  await refuses(bytes, "CONTENT_UNAVAILABLE", undefined, [2]);
+});
+it("BR-415 AC-05 canonical projection (c) a font selected only in a text-free Form", async () => {
+  const bytes = pdf([
+    CATALOG,
+    PAGES("3 0 R"),
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> /XObject << /Fm 6 0 R >> >> /Contents 4 0 R >>",
+    stm("<< >>", `/Fm Do ${textOf(T)}`),
+    HELV,
+    stm(
+      "<< /Type /XObject /Subtype /Form /BBox [0 0 612 792] /Resources << /Font << /F2 7 0 R >> >> >>",
+      "/F2 12 Tf 0 0 m",
+    ),
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Courier /Encoding /WinAnsiEncoding >>",
+  ]).bytes;
+  expect(await text(bytes)).toBe(T);
+  const projected = await canonical(bytes);
+  expect(projected).toContain("/K1 12 Tf");
+  expect(projected).not.toContain("/K2");
+  expect(projected).not.toContain("/Courier");
+  expect(projected.match(/\/Type \/Font /gu)).toHaveLength(1);
+});
 const base = () => onePage(textOf(T));
 function withHeader(header: string) {
   const bytes = base().toString("latin1");

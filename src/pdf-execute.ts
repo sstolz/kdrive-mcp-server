@@ -26,6 +26,10 @@ export class Production {
   private items() {
     return 2 * (this.s + this.o + this.pages);
   }
+  /** BR-418/419: canonical tokens the sum of I can still admit. */
+  allowance() {
+    return 32768 - (this.s + this.o + this.pages);
+  }
   check() {
     if (this.canonical > this.budget || this.items() > 65536)
       fail("LIMIT_EXCEEDED");
@@ -57,48 +61,83 @@ export class CanonicalContent {
   }
 }
 interface Item {
-  text: string;
+  /** The token text; a `Tf` builds it once its font has its canonical name. */
+  text: string | (() => string);
   op: string;
   font?: ProjectedFont;
   /** Counts a text-show once the tokens buffered before it are written. */
   shown?: () => void;
 }
-/** BR-419: buffers a Form's tokens until it shows text; text-free Forms emit nothing. */
-class Emitter {
-  private readonly frames: { items: Item[]; live: boolean }[] = [];
+interface Frame {
+  items: Item[];
+  live: boolean;
+  /** Tokens past the allowance were dropped: a later text-show can only refuse. */
+  overflow: boolean;
+}
+/**
+ * BR-419: buffers a Form's tokens until it shows text; text-free Forms emit
+ * nothing. At most one token more than the sum of I can still admit is held
+ * (observable by tests), so writing the held tokens refuses at the same token.
+ */
+export class Emitter {
+  private readonly frames: Frame[] = [];
   private depth = 0;
+  private held = 0;
+  private overflowed = 0;
   constructor(
     private readonly sink: CanonicalContent,
     private readonly production: Production,
+    private readonly nameOf: (font: ProjectedFont) => string,
   ) {}
   push() {
-    this.frames.push({ items: [], live: false });
+    this.frames.push({ items: [], live: false, overflow: false });
   }
   pop() {
-    this.frames.pop();
+    const frame = this.frames.pop();
+    if (!frame || frame.live) return;
+    this.held -= frame.items.length;
+    if (frame.overflow) this.overflowed--;
   }
   emit(item: Item) {
     const top = this.frames.at(-1);
-    if (top && !top.live) top.items.push(item);
-    else this.write(item);
+    if (!top || top.live) this.write(item);
+    else if (this.overflowed === 0 && this.held <= this.production.allowance())
+      this.hold(top, item);
+    else if (!top.overflow) {
+      top.overflow = true;
+      this.overflowed++;
+    }
+  }
+  hold(frame: Frame, item: Item) {
+    frame.items.push(item);
+    this.held++;
   }
   show(item: Item) {
+    let overflow = false;
     for (const frame of this.frames) {
       if (frame.live) continue;
       frame.live = true;
+      overflow ||= frame.overflow;
       for (const buffered of frame.items) this.write(buffered);
       frame.items = [];
     }
+    this.held = 0;
+    this.overflowed = 0;
+    if (overflow) fail("LIMIT_EXCEEDED");
     this.write(item);
   }
   private write(item: Item) {
     if (item.op === "q" && ++this.depth > 32) fail("UNSUPPORTED_FORMAT");
     if (item.op === "Q") this.depth--;
-    if (item.font) this.sink.fonts.add(item.font);
+    if (item.font) {
+      this.nameOf(item.font);
+      this.sink.fonts.add(item.font);
+    }
     item.shown?.();
-    this.sink.emit(item.text);
+    const text = typeof item.text === "string" ? item.text : item.text();
+    this.sink.emit(text);
     this.production.o++;
-    this.production.canonical += Buffer.byteLength(item.text, "latin1") + 1;
+    this.production.canonical += Buffer.byteLength(text, "latin1") + 1;
     this.production.check();
   }
 }
@@ -137,7 +176,13 @@ export class Executor {
     private readonly fonts: FontRegistry,
     readonly production: Production,
   ) {}
-  /** Replays a projection built once per stream (list) and resource scope. */
+  /**
+   * Replays a projection built once per stream (list) and resource scope. A
+   * projection with more operations than can still be emitted (each emits at
+   * least one token) is not kept: it can only complete inside a Form that
+   * emits nothing, and it is rebuilt at each execution, which pays its decoded
+   * length again.
+   */
   private *program(
     key: unknown,
     scope: Scope,
@@ -148,18 +193,26 @@ export class Executor {
       yield* known;
       return;
     }
-    const ops: Op[] = [];
+    const limit = this.production.allowance() + 1;
+    let ops: Op[] | undefined = [];
     for (const op of recordContent(bytes(), this.file, scope)) {
-      ops.push(op);
+      if (ops) {
+        ops.push(op);
+        if (ops.length > limit) ops = undefined;
+      }
       yield op;
     }
+    if (ops) this.keep(key, scope, ops);
+  }
+  /** Keeps one projection (observable by tests). */
+  keep(key: unknown, scope: Scope, ops: Op[]) {
     const byScope = this.programs.get(key) ?? new Map<Scope, Op[]>();
     byScope.set(scope, ops);
     this.programs.set(key, byScope);
   }
   async page(key: string, scope: Scope, bytes: () => Buffer) {
     const sink = new CanonicalContent();
-    this.emitter = new Emitter(sink, this.production);
+    this.emitter = new Emitter(sink, this.production, this.fonts.nameOf);
     this.production.pages++;
     await this.execute(
       this.program(key, scope, bytes),
@@ -183,9 +236,11 @@ export class Executor {
     for (const op of ops) {
       if (op.kind === "form") await this.form(op, scope, state, path);
       else if (op.kind === "font") {
-        state.font = this.fonts.select(op.font);
-        const text = `${serializeName(state.font.name)} ${operandText(op.size)} Tf`;
-        this.out.emit({ text, op: "Tf", font: state.font });
+        const font = this.fonts.select(op.font);
+        state.font = font;
+        const text = () =>
+          `${serializeName(font.name)} ${operandText(op.size)} Tf`;
+        this.out.emit({ text, op: "Tf", font });
       } else if (op.kind === "show") await this.show(op, state);
       else {
         if (op.op === "q") stack.push({ ...state });

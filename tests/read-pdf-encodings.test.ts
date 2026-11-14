@@ -311,6 +311,14 @@ it.each([
     "LIMIT_EXCEEDED",
   ],
   [
+    "(z) a cleartext glyph name of 300 bytes",
+    () =>
+      embedded({
+        encoding: encodingLines([`dup 72 /${"a".repeat(300)} put`, ...hiPuts]),
+      }),
+    "LIMIT_EXCEEDED",
+  ],
+  [
     "(h) a cleartext /Length1 of 65,537",
     () => {
       const p = paddedProgram(65537);

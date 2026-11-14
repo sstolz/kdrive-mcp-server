@@ -1,5 +1,5 @@
 import { expect, it, vi } from "vitest";
-import { CanonicalContent } from "../src/pdf-execute.js";
+import { CanonicalContent, Emitter, Executor } from "../src/pdf-execute.js";
 import {
   CATALOG,
   HELV,
@@ -295,3 +295,21 @@ it("BR-419 AC-11 Form inlining (n) Form executions paid for at the Do that passe
     emit.mockRestore();
   }
 });
+it("BR-419 AC-11 Form inlining (o) a text-free Form of 2,000,000 q Q pairs", async () => {
+  const bytes = withForms(
+    "/Fm Do BT /F1 12 Tf 72 720 Td (A) Tj ET",
+    "<< /Font << /F1 4 0 R >> /XObject << /Fm 5 0 R >> >>",
+    [form("q Q ".repeat(2000000))],
+  );
+  const hold = vi.spyOn(Emitter.prototype, "hold");
+  const keep = vi.spyOn(Executor.prototype, "keep");
+  try {
+    expect(await text(bytes)).toBe("A");
+    expect(hold.mock.calls.length).toBeLessThanOrEqual(32769);
+    for (const call of keep.mock.calls)
+      expect(call[2].length).toBeLessThanOrEqual(32769);
+  } finally {
+    hold.mockRestore();
+    keep.mockRestore();
+  }
+}, 60000);

@@ -17,7 +17,8 @@ interface PageNode {
   kind: "page";
   index: number;
   mediaBox: PdfValue[];
-  scope: Scope;
+  /** BR-415: the raw `/Resources` value, resolved only for a selected page. */
+  resources: PdfValue | undefined;
   contents: PdfValue | undefined;
 }
 interface PagesNode {
@@ -146,19 +147,23 @@ class PageTree {
   private page(d: Dict, here: Inherited): PageNode {
     if (this.pages.length >= 256) fail("LIMIT_EXCEEDED");
     const box = mediaBox(this.file, here.mediaBox);
-    const resources = this.file.deref(here.resources);
-    if (resources !== undefined && !(resources instanceof Map))
-      fail("CONTENT_UNAVAILABLE");
     const node: PageNode = {
       kind: "page",
       index: this.pages.length + 1,
       mediaBox: box,
-      scope: resources,
+      resources: here.resources,
       contents: d.get("Contents"),
     };
     this.pages.push(node);
     return node;
   }
+}
+/** BR-415: a selected page's resource scope, resolved when that page is processed. */
+function pageScope(file: PdfFile, value: PdfValue | undefined): Scope {
+  const resources = file.deref(value);
+  if (resources !== undefined && !(resources instanceof Map))
+    fail("CONTENT_UNAVAILABLE");
+  return resources;
 }
 /** BR-416: `Contents` references, each use counting its decoded length against B. */
 function contentStreams(file: PdfFile, contents: PdfValue | undefined) {
@@ -231,7 +236,7 @@ interface Projected {
 function writeDocument(
   root: TreeNode,
   projected: Map<number, Projected>,
-  fonts: ProjectedFont[],
+  fonts: readonly ProjectedFont[],
   budget: number,
 ) {
   const w = new Writer(budget),
@@ -314,9 +319,10 @@ export async function preflightPdf(
   for (const index of [...new Set(selected)].sort((a, b) => a - b)) {
     const page = tree.pages[index - 1];
     if (!page) return fail("INVALID_RANGE");
+    const scope = pageScope(file, page.resources);
     const streams = contentStreams(file, page.contents);
     const key = streams.map((s) => String(s.id)).join(",");
-    const content = await executor.page(key, page.scope, () =>
+    const content = await executor.page(key, scope, () =>
       Buffer.concat(
         streams.flatMap((s, i) => (i ? [Buffer.from("\n"), s.data] : [s.data])),
       ),

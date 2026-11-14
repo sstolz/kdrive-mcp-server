@@ -39,12 +39,20 @@ function increment(dst: Buffer) {
   next[last] = 0;
   return next;
 }
+/** BR-417: counts assigned codes, before they are assigned. */
+export type AssignCounter = (codes: number) => void;
 class CMapReader {
   readonly map: CMap = new Map();
-  private entries = 0;
-  constructor(private readonly p: PdfParser) {}
-  private count() {
-    if (++this.entries > 65536) fail("LIMIT_EXCEEDED");
+  private assigned = 0;
+  constructor(
+    private readonly p: PdfParser,
+    private readonly aggregate: AssignCounter,
+  ) {}
+  /** BR-417: every assigned code counts, per CMap and per invocation. */
+  private count(codes: number) {
+    this.assigned += codes;
+    if (this.assigned > 65536) fail("LIMIT_EXCEEDED");
+    this.aggregate(codes);
   }
   private items(end: string, read: (first: PdfToken) => void) {
     for (;;) {
@@ -65,14 +73,13 @@ class CMapReader {
   }
   bfchar() {
     this.items("endbfchar", (first) => {
-      this.count();
+      this.count(1);
       const source = code(first);
       this.map.set(valueOf(source), destination(this.p.token()));
     });
   }
   bfrange() {
     this.items("endbfrange", (first) => {
-      this.count();
       const low = code(first),
         high = code(this.p.token());
       const lo = valueOf(low),
@@ -83,6 +90,7 @@ class CMapReader {
         lo > hi
       )
         fail("CONTENT_UNAVAILABLE");
+      this.count(hi - lo + 1);
       this.range(lo, hi, this.p.token());
     });
   }
@@ -100,10 +108,10 @@ class CMapReader {
   }
 }
 /** BR-417: parse with the bounded tokenizer; only ranges, bfchar and bfrange count. */
-export function parseCMap(data: Buffer): CMap {
+export function parseCMap(data: Buffer, aggregate: AssignCounter): CMap {
   const p = new PdfParser(data);
   p.refs = false;
-  const reader = new CMapReader(p);
+  const reader = new CMapReader(p, aggregate);
   for (;;) {
     const token = p.token();
     if (token === undefined) return reader.map;
@@ -113,6 +121,17 @@ export function parseCMap(data: Buffer): CMap {
     else if (token.op === "beginbfchar") reader.bfchar();
     else if (token.op === "beginbfrange") reader.bfrange();
   }
+}
+const weights = new WeakMap<CMap, number>();
+/** BR-418: the largest UTF-8 length of a CMap's destinations, computed once per CMap. */
+export function cmapWeight(map: CMap) {
+  let weight = weights.get(map);
+  if (weight === undefined) {
+    weight = 1;
+    for (const dst of map.values()) weight = Math.max(weight, utf8Length(dst));
+    weights.set(map, weight);
+  }
+  return weight;
 }
 /** BR-418: UTF-8 length of a UTF-16BE destination; an unpaired surrogate counts 3. */
 export function utf8Length(dst: Buffer) {

@@ -1,5 +1,5 @@
 import { extractionFail as fail } from "./extraction-values.js";
-import { canonicalCMap, parseCMap, utf8Length, type CMap } from "./pdf-cmap.js";
+import { canonicalCMap, cmapWeight, parseCMap, type CMap } from "./pdf-cmap.js";
 import { finiteNumber, readCleartext } from "./pdf-decode.js";
 import {
   baseTables,
@@ -9,7 +9,7 @@ import {
   parseDifferences,
   pdfjsMapsGlyph,
 } from "./pdf-encodings.js";
-import type { PdfFile } from "./pdf-objects.js";
+import type { PdfFile, PdfStream } from "./pdf-objects.js";
 import {
   isBytes,
   isName,
@@ -111,20 +111,23 @@ class Descriptor {
 }
 /** BR-417/418: shared ToUnicode handling and the D weight of a font. */
 abstract class ProjectedFont {
-  readonly baseFont: string;
+  /** BR-415: the canonical name, given when an emitted `Tf` first names the font. */
+  name = "";
+  private readonly standardBase: string | undefined;
   protected weightD = 1;
   constructor(
-    readonly name: string,
     readonly type0: boolean,
     protected readonly toUnicode: CMap | undefined,
     sourceBase: string | undefined,
   ) {
-    this.baseFont =
+    this.standardBase =
       sourceBase !== undefined && standardLatin.has(sourceBase)
         ? sourceBase
-        : name;
-    for (const dst of toUnicode?.values() ?? [])
-      this.weightD = Math.max(this.weightD, utf8Length(dst));
+        : undefined;
+    if (toUnicode) this.weightD = cmapWeight(toUnicode);
+  }
+  get baseFont() {
+    return this.standardBase ?? this.name;
   }
   /** BR-418: m = max(1, ceil(D / 3)). */
   get m() {
@@ -153,12 +156,10 @@ class SimpleFont extends ProjectedFont {
   private readonly emitted = new Map<number, string>();
   private readonly seen = new Set<number>();
   constructor(
-    name: string,
     toUnicode: CMap | undefined,
     private readonly source: SimpleSource,
   ) {
     super(
-      name,
       false,
       toUnicode,
       source.subtype === "Type3" ? undefined : source.base,
@@ -204,11 +205,10 @@ interface CidSource {
 /** BR-417: Type0 Identity-H/V fonts whose `ToUnicode` maps every shown code. */
 class Type0Font extends ProjectedFont {
   constructor(
-    name: string,
     toUnicode: CMap,
     private readonly source: CidSource,
   ) {
-    super(name, true, toUnicode, undefined);
+    super(true, toUnicode, undefined);
   }
   show(bytes: Buffer) {
     if (bytes.length % 2) fail("CONTENT_UNAVAILABLE");
@@ -234,24 +234,37 @@ const subsetPrefix = /^[A-Z]{6}\+/u;
 export class FontRegistry {
   private readonly byRef = new Map<number, ProjectedFont>();
   private readonly byDict = new Map<Dict, ProjectedFont>();
+  private readonly cmaps = new Map<PdfStream, CMap>();
+  private readonly named: ProjectedFont[] = [];
   private count = 0;
   private codes = 0;
   constructor(private readonly file: PdfFile) {}
-  get fonts() {
-    return [...this.byRef.values(), ...this.byDict.values()];
+  /** BR-415: the fonts an emitted `Tf` names, in the order of first emission. */
+  get fonts(): readonly ProjectedFont[] {
+    return this.named;
   }
+  /** BR-415: names a font `/K<n>` when an emitted `Tf` first names it. */
+  readonly nameOf = (font: ProjectedFont) => {
+    if (!font.name) {
+      this.named.push(font);
+      font.name = `K${String(this.named.length)}`;
+    }
+    return font.name;
+  };
   select(value: PdfValue): ProjectedFont {
     let known: ProjectedFont | undefined;
-    if (isRef(value)) known = this.byRef.get(value.ref);
-    else if (value instanceof Map) known = this.byDict.get(value);
+    if (isRef(value)) {
+      this.file.checkGeneration(value);
+      known = this.byRef.get(value.ref);
+    } else if (value instanceof Map) known = this.byDict.get(value);
     if (known) return known;
     if (++this.count > 128) fail("LIMIT_EXCEEDED");
-    const font = this.load(value, `K${String(this.count)}`);
+    const font = this.load(value);
     if (isRef(value)) this.byRef.set(value.ref, font);
     else this.byDict.set(value as Dict, font);
     return font;
   }
-  private load(value: PdfValue, name: string): ProjectedFont {
+  private load(value: PdfValue): ProjectedFont {
     const resolved = isRef(value) ? this.file.resolve(value) : { value };
     if (resolved.stream || !(resolved.value instanceof Map))
       return fail("CONTENT_UNAVAILABLE");
@@ -261,9 +274,9 @@ export class FontRegistry {
       fail("CONTENT_UNAVAILABLE");
     const subtype = d.get("Subtype");
     if (!isName(subtype)) return fail("CONTENT_UNAVAILABLE");
-    if (subtype.name === "Type0") return this.type0(d, name);
+    if (subtype.name === "Type0") return this.type0(d);
     if (["Type1", "MMType1", "TrueType", "Type3"].includes(subtype.name))
-      return this.simple(d, name, subtype.name);
+      return this.simple(d, subtype.name);
     return fail("UNSUPPORTED_FORMAT");
   }
   private cmap(v: PdfValue | undefined): CMap | undefined {
@@ -272,9 +285,13 @@ export class FontRegistry {
     if (!isRef(v)) return fail("CONTENT_UNAVAILABLE");
     const stream = this.file.resolve(v).stream;
     if (!stream) return fail("CONTENT_UNAVAILABLE");
-    const map = parseCMap(this.file.decoded(stream));
-    this.codes += map.size;
-    if (this.codes > 262144) fail("LIMIT_EXCEEDED");
+    const known = this.cmaps.get(stream);
+    if (known) return known;
+    const map = parseCMap(this.file.decoded(stream), (codes) => {
+      this.codes += codes;
+      if (this.codes > 262144) fail("LIMIT_EXCEEDED");
+    });
+    this.cmaps.set(stream, map);
     return map;
   }
   private widths(d: Dict, type3: number | undefined) {
@@ -344,7 +361,7 @@ export class FontRegistry {
       ? undefined
       : new Descriptor(this.file, dictOf(this.file, v));
   }
-  private simple(d: Dict, name: string, subtype: string): ProjectedFont {
+  private simple(d: Dict, subtype: string): ProjectedFont {
     const type3 = subtype === "Type3";
     const scale = type3 ? this.fontMatrix(d) : undefined;
     const rawBase = d.get("BaseFont");
@@ -364,7 +381,7 @@ export class FontRegistry {
       descriptor,
       d,
     });
-    return new SimpleFont(name, toUnicode, {
+    return new SimpleFont(toUnicode, {
       subtype,
       base,
       widths,
@@ -437,7 +454,7 @@ export class FontRegistry {
     }
     integerValue(this.file.deref(info.get("Supplement")), -Infinity, Infinity);
   }
-  private type0(d: Dict, name: string): ProjectedFont {
+  private type0(d: Dict): ProjectedFont {
     const encoding = this.file.deref(d.get("Encoding"));
     if (
       !isName(encoding) ||
@@ -461,7 +478,7 @@ export class FontRegistry {
     const extra = this.cidMetrics(cid);
     const toUnicode = this.cmap(d.get("ToUnicode"));
     if (!toUnicode) return fail("UNSUPPORTED_FORMAT");
-    return new Type0Font(name, toUnicode, {
+    return new Type0Font(toUnicode, {
       encoding: encoding.name,
       subtype: subtype.name,
       descriptor,
@@ -479,17 +496,24 @@ export class FontRegistry {
   }
 }
 const cidCode = (v: PdfValue | undefined) => integerValue(v, 0, 65535);
-/** BR-417: `c [w …]` and `c1 c2 w` forms, at most 65,536 numbers in total. */
+/** BR-417: `c [w …]` and `c1 c2 w` forms, at most 65,536 numbers in total
+ * and at most 65,536 CIDs covered, so PDF.js expands a bounded number of widths. */
 function cidWidths(w: PdfValue): PdfValue[] {
   if (!Array.isArray(w)) fail("CONTENT_UNAVAILABLE");
   const out: PdfValue[] = [];
-  let total = 0;
+  let total = 0,
+    covered = 0;
   const count = (n: number) => {
     total += n;
     if (total > 65536) fail("LIMIT_EXCEEDED");
   };
+  const cover = (n: number) => {
+    covered += Math.max(0, n);
+    if (covered > 65536) fail("LIMIT_EXCEEDED");
+  };
   for (let i = 0; i < w.length;) {
-    out.push(cidCode(w[i]));
+    const first = cidCode(w[i]);
+    out.push(first);
     const next = w[i + 1];
     if (Array.isArray(next)) {
       count(1 + next.length);
@@ -497,12 +521,15 @@ function cidWidths(w: PdfValue): PdfValue[] {
         next.every((n) => finiteNumber(n)),
         0,
       );
+      cover(next.length);
       out.push(next);
       i += 2;
     } else {
       count(3);
-      out.push(cidCode(next));
+      const last = cidCode(next);
+      out.push(last);
       typed(finiteNumber(w[i + 2]), 0);
+      cover(last - first + 1);
       out.push(w[i + 2] ?? 0);
       i += 3;
     }
