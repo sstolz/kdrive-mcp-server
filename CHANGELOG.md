@@ -10,7 +10,7 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
   installs the packed tarball from the npm registry into a new prefix and fails
   on any `zod` below 4.6.6, any former image-library package or any symbolic
   link; the CI `audit` job runs it as its fourth step.
-- #3 / F-028 v1 (pending acceptance): Client ID Metadata Documents in the OAuth
+- #3 / F-028 v2 (pending acceptance): Client ID Metadata Documents in the OAuth
   proxy. `OAUTH_ALLOWED_CLIENT_ID_ORIGINS` (empty by default, `proxy` mode
   only) advertises CIMD and accepts `https` client IDs under the listed
   origins; the proxy fetches each metadata document over one pinned HTTPS
@@ -22,7 +22,7 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
 
 ### Changed
 
-- #3 / F-028 v1 (pending acceptance): the OAuth state file is at format
+- #3 / F-028 v2 (pending acceptance): the OAuth state file is at format
   version 2 while it holds a CIMD refresh family (ADR-011); earlier releases
   refuse such a file with `OAUTH_STATE_VERSION`. Removing the origins and
   starting this release once returns it to version 1.

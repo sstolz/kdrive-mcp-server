@@ -2,7 +2,7 @@
 
 ## Provisional — Client ID Metadata Documents (pending acceptance)
 
-[F-028 v1](features/F-028-client-id-metadata-documents.md) (#3), BR-291,
+[F-028 v2](features/F-028-client-id-metadata-documents.md) (#3), BR-291,
 BR-305–BR-311 and BR-393–BR-395 v1 with BR-023 v3, BR-024 v4, BR-125 v2,
 BR-128 v3, BR-129 v2, BR-136 v2, BR-143 v3, BR-169 v3, BR-295 v2, BR-298 v2,
 BR-299 v2 and BR-302 v2, and

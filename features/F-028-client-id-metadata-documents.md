@@ -3,13 +3,17 @@ id: F-028
 title: Client ID Metadata Documents in the OAuth proxy
 ticket: "#3"
 status: frozen
-version: 1
+version: 2
 ---
 
-Frozen 2026-11-14 (autonomous mode, PROJECT.md D-1) on reviewed revision
-`67efaf8` after spec reviews 1 (`changes`), 2 (`approve`), decision pass 1
-(Fable, `approve`), review 3 (`changes`) and review 4 (`approve`), published
-on #3.
+Version 1 frozen 2026-11-14 (autonomous mode, PROJECT.md D-1) on reviewed
+revision `67efaf8` after spec reviews 1 (`changes`), 2 (`approve`), decision
+pass 1 (Fable, `approve`), review 3 (`changes`) and review 4 (`approve`),
+published on #3; kept in `features/history/F-028-v1.md`. Version 2
+(2026-11-14) changes only the owner-run acceptance paragraph and D-13: the
+owner run is blocked until #25 makes the launcher persist the OAuth state;
+see `## Stress-test`, Code review 1. It is frozen after an independent review
+published on the pull request.
 
 Author: Claude Opus 5.5 (effort unknown), spec phase, 2026-11-14.
 Base: branch `claude/beautiful-maxwell-8mdk2w` at `254d5da` (main `75c9f48`).
@@ -669,7 +673,10 @@ cached).
   handles. Verified by: `tests/auth/cimd-fetch.test.ts`.
 
 Owner-run acceptance (after merge, not a merge condition, recorded on the
-ticket separately, as for F-019; D-13): run `make http-acceptance` behind the quick tunnel (learnings
+ticket separately, as for F-019; D-13). Blocked until #25: `make
+http-acceptance` does not yet read or persist `OAUTH_STATE_FILE`, and AC-12
+injects the state file without exercising the launcher, so no owner run is
+requested before #25 lands and its rehearsal passes. Once unblocked: run `make http-acceptance` behind the quick tunnel (learnings
 2026-11-04) with `OAUTH_STATE_FILE` set, follow the discovery procedure with
 claude.ai, list the origin found, connect claude.ai, check that the consent
 page shows the client host, call a tool, restart, and check that the
@@ -805,6 +812,9 @@ keep valid cached metadata, client host and redirect URI shown on consent,
 loopback-only redirect warning, client ID equal to the issuer refused, `iss`
 in the authorization response (already BR-132), persisted state scoped to
 client ID and `resource` (families already carry `resource`).
+  F-028 v2: the owner run is blocked until #25 (launcher state file and its
+  rehearsal); AGENTS.md §6 requires the rehearsal through the real launcher
+  before a real run is requested.
 
 ## Open questions
 
@@ -923,3 +933,12 @@ findings; both retained:
    cite it.
 2. AC-12's stub DNS server also answers the AAAA query with an empty NOERROR
    (ENODATA), so the parallel `resolve6` does not time out.
+
+Code review 1 (3-code-review-1-reviewer, PR #24), version 2 (2026-11-14):
+
+1. [major] The owner-run restart step cannot run through `make
+   http-acceptance` (no `OAUTH_STATE_FILE` in the launcher) and AC-12 does
+   not exercise the launcher. Retained by deferral: the launcher is another
+   contract (its mount rule), CIMD ships off with an empty origin list, and
+   the owner run is not a merge condition; F-028 v2 blocks the owner run
+   until #25 adds the state file and its rehearsal.

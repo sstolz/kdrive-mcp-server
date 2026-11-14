@@ -737,7 +737,7 @@ describe("BR-394 BR-143 v3 CIMD refusal events and secrecy (F-028 AC-10)", () =>
           "certificate",
           "DEPTH_ZERO",
         ])
-          expect(text.replace(/"reason":"certificate"/gu, "")).not.toContain(
+          expect(text.replaceAll(/"reason":"certificate"/gu, "")).not.toContain(
             value,
           );
       }

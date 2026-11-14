@@ -172,7 +172,7 @@ server never repairs, replaces or deletes the file.
 
 ## Client ID Metadata Documents (`OAUTH_ALLOWED_CLIENT_ID_ORIGINS`)
 
-[F-028 v1](../features/F-028-client-id-metadata-documents.md), pending
+[F-028 v2](../features/F-028-client-id-metadata-documents.md), pending
 acceptance. With Client ID Metadata Documents (CIMD) a client's `client_id` is
 an `https` URL, and the proxy fetches the client's metadata document from it
 instead of asking the client to register.
