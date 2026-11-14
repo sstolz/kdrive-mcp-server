@@ -13,17 +13,16 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
 
 ### Fixed
 
-- #12 / F-027 v1 (pending acceptance): an install of the packed tarball or of
-  the published package no longer resolves Zod 3 (`zod` 3.25.76,
-  GHSA-mrhx-c7xc-m3w5): the image route calls `pngjs` 7.0.0 and `jpeg-js` 0.4.4
-  directly with a local nearest-neighbour resize instead of Jimp, with
-  byte-identical PNG output, and `tsconfig.json` no longer sets `skipLibCheck`.
-
 - #16 / F-026 v1 (accepted 2026-11-13): parallel tool calls of one session
   wait in a bounded queue (up to 4 calls, at most 12 seconds each) instead of
   failing at once with `SERVER_BUSY`; `SERVER_BUSY` is now documented as
   retryable, and stdio writes queued responses in order instead of closing
   the session.
+- #12 / F-027 v1 (pending acceptance): an install of the packed tarball or of
+  the published package no longer resolves Zod 3 (`zod` 3.25.76,
+  GHSA-mrhx-c7xc-m3w5): the image route calls `pngjs` 7.0.0 and `jpeg-js` 0.4.4
+  directly with a local nearest-neighbour resize instead of Jimp, with
+  byte-identical PNG output, and `tsconfig.json` no longer sets `skipLibCheck`.
 
 ## [0.6.0-beta.1] - 2026-11-13
 
