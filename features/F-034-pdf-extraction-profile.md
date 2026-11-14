@@ -9,8 +9,8 @@ version: 1
 # F-034 — PDF text extraction for common generator output
 
 Author: Claude Opus 5.5 (effort unknown), spec phase, 2026-11-14; revised
-after spec reviews 1, 2 and 3 and the spec decision pass by fresh authors,
-Claude Opus 5.5 (effort unknown), 2026-11-14.
+after spec reviews 1, 2 and 3, the spec decision pass and spec review 4 by
+fresh authors, Claude Opus 5.5 (effort unknown), 2026-11-14.
 Base: branch `feat/4-pdf-profile` (main `3151786`).
 IDs: F-034; BR-114 v2; BR-412–BR-420 v1; AC-01–AC-13; ADR-012 (proposed,
 supersedes the PDF admission profile of ADR-004 and nothing else).
@@ -153,15 +153,16 @@ synthetic equivalents, built by the test helper.
 | Type3 (LibreOffice shape): `FontMatrix [0.001 0 0 0.001 0 0]`, glyph `/gid883`, `ToUnicode` to U+1F600, between Helvetica text (S32) | `Smile 😀 done` raw, and the same projected as a `Type1` font `/K2` with the same `Widths`, no program |
 | Type3 (cairo shape): `FontMatrix [1 0 0 -1 0 0]`, `Widths [1.0]`, glyph `/0`, `ToUnicode` (S33) | `Smile 😀done` raw, and the same projected with `Widths [1000]`; with glyph `/H` and no `ToUnicode`, `Smile Hdone` both ways |
 | Content `[/ASCII85Decode /FlateDecode]` (ReportLab default, S30) or `/ASCIIHexDecode` (S31) | `Hello modern PDF` |
-| `Tf` size 12, 1, 0.5, −12; 0; 1,000,000 | `Hello\nworld\nend`; `Helloworldend`; `Hwend` (as on the source: the size changes PDF.js's item geometry, not the bounds) |
+| `Tf` size 0.0001, ±0.001, ±0.5, ±12, ±100,000, ±200,000; 0; 250,000; 1,000,000; each showing `Hello modern world`, `T*`, `second line here`, `T*`, `end` with `TL` 1.2 times the absolute size from a point where the text fits its page (`MediaBox [-1000000 -1000000 1000000 1000000]`, the largest the numeric check admits, at 100,000 and above) | `Hello modern world\nsecond line here\nend`; `Hello modern worldsecond line hereend` (no line ends); `Hello modern wor\nsecond line here\nend`; `Hello\nseco` (the lines no longer fit the page and PDF.js leaves out the glyphs outside it) |
+| A 120-character line at size 12 on a Letter page; `Hello` and `world` 14 units apart at sizes 100, 512 and 1,000,000 on a Letter page | cut at the page edge; `Hello modernsecond line h\nend`, `Heseend` and `Hsend` with a longer first line, `Hwend` with `Hello`: PDF.js leaves out glyphs outside the page box and joins overlapping lines at any size, on the source and the projection alike |
 | Node 26.13.0 inflate of a 64 MiB bomb | `inflateSync` with `maxOutputLength` 65,536 throws `ERR_BUFFER_TOO_LARGE` and returns no output; `createInflate` (`chunkSize` 16,384) destroyed once 65,536 bytes were produced stopped after 4 chunks in about 2 ms |
 
 The survey found, in the LibreOffice sample, a Type3 emoji font with
 `ToUnicode`; in the cairo sample, a Type3 font with a flipped `FontMatrix` and
 a Type0 font showing a code whose `ToUnicode` destination has two code
 points; and in the ReportLab sample, `[/ASCII85Decode /FlateDecode]` on every
-stream. Each was refused by the earlier draft on that feature alone. Four
-findings follow:
+stream. Each was refused by the earlier draft on that feature alone. Five
+findings follow (10 from the spec review 4 rows):
 
 6. Inlining a Form changes where PDF.js reports a line end, so the expected
    text of a projected file is its own measured string, not raw PDF.js on
@@ -176,6 +177,10 @@ findings follow:
 9. Type3 fonts and the ASCII filters are common generator output (emoji in
    LibreOffice and cairo, every ReportLab stream) and admit a program-less
    projection or a small decoder.
+10. The `Tf` size changes no projected text while the lines fit their page. Size
+    0 drops every line end, and above 200,000 a line of three words no longer
+    fits the largest admissible page, so PDF.js leaves out its last glyphs; the
+    projection admits nonzero sizes up to 100,000 in absolute value.
 
 ## Scope
 
@@ -279,11 +284,12 @@ findings follow:
   well-formed but uses a feature outside the profile (encryption, an unadmitted
   filter, font, encoding, glyph name or operator, an inline image of unknown
   length) or fails an F-009 operand check (arity, type, the 1,000,000 numeric
-  bound, the 32-level `q` nesting of BR-416), which keeps its F-009 code and is
-  not a ceiling; and with `CONTENT_UNAVAILABLE` when the file contradicts its
-  own structure (an offset that does not hold the object it names, a cycle, a
-  length that overruns its data, a missing required object or resource).
-  Verified by: AC-01, AC-09, AC-10.
+  bound, the 32-level `q` nesting of BR-416) or the `Tf` size check of BR-416,
+  each keeping its F-009 code and is not a ceiling; and with
+  `CONTENT_UNAVAILABLE` when the file contradicts its own structure (an offset
+  that does not hold the object it names, a cycle, a length that overruns its
+  data, a missing required object or resource). Verified by: AC-01, AC-09,
+  AC-10.
 - **BR-412** — Cross-reference data is read only from the last `startxref`
   offset and the chain it starts, with no scan for objects and no repair.
   Each section is either a classic `xref` table with a trailer, or a stream
@@ -348,31 +354,35 @@ findings follow:
   space, up to `>` (a final single digit is followed by 0); `/ASCII85Decode`
   reads groups of five characters `!`–`u`, `z` for four zero bytes at the start
   of a group, skipping white space, up to `~>`, a final group of 2–4 characters
-  giving 1–3 bytes; another byte, a group above 2^32 − 1, a final group of one
-  character or a missing end marker refuses as `CONTENT_UNAVAILABLE`, and bytes
-  after the end marker are ignored. Each needed stream is decoded once per
-  invocation, and the output of each filter of its chain, the ASCII stage before
-  `/FlateDecode` included, counts against B with the F-009 inflate rules
-  (`maxOutputLength` set to the remaining B, `rejectGarbageAfterEnd`); an ASCII
-  stage whose output passes the remaining B refuses as `LIMIT_EXCEEDED` at that
-  byte. Content and Form streams also count their decoded length again at each
-  further use (BR-416, BR-419). Two exceptions apply. A Flate inline image
-  (BR-416) is inflated from the rest of its content stream with
-  `maxOutputLength` set to the smaller of its computed size and the remaining B
-  and without `rejectGarbageAfterEnd`, since the content after its data is not
-  garbage; its data length is the number of input bytes the inflate consumed up
-  to the end of the zlib stream. A Type 1 program (BR-420) has no filter or
-  `/FlateDecode` alone, without `/DecodeParms`; another filter or any
-  `/DecodeParms` refuses as `UNSUPPORTED_FORMAT`, and a `/Length1` over the
-  remaining B refuses as `LIMIT_EXCEEDED` before inflating. Node offers no
-  synchronous inflate that stops early (`inflateSync` with `maxOutputLength`
-  throws and returns no output), so a Flate program is inflated with the
-  asynchronous `zlib.createInflate` with `chunkSize` 16,384: output chunks are
-  kept until `/Length1` bytes are held, then the stream is destroyed and reads
-  no further input. Every byte it produced, at most `/Length1` + 16,383, counts
-  against B, and output passing the remaining B refuses as `LIMIT_EXCEEDED`; a
-  program whose output (or unfiltered data) ends before `/Length1` bytes refuses
-  as `CONTENT_UNAVAILABLE`. Verified by: AC-04, AC-12.
+  giving 1–3 bytes. Under either filter, a byte other than those it reads (a
+  hexadecimal digit; `!`–`u`, or `z` at the start of a group), white space and
+  its end marker, an ASCII85 group above 2^32 − 1 or final group of one
+  character, or data that ends without its end marker (`>` for
+  `/ASCIIHexDecode`, `~>` for `/ASCII85Decode`) refuses as
+  `CONTENT_UNAVAILABLE`, and bytes after the end marker are ignored. Each needed
+  stream is decoded once per invocation, and the output of each filter of its
+  chain, the ASCII stage before `/FlateDecode` included, counts against B with
+  the F-009 inflate rules (`maxOutputLength` set to the remaining B,
+  `rejectGarbageAfterEnd`); an ASCII stage whose output passes the remaining B
+  refuses as `LIMIT_EXCEEDED` at that byte. Content and Form streams also count
+  their decoded length again at each further use (BR-416, BR-419). Two
+  exceptions apply. A Flate inline image (BR-416) is inflated from the rest of
+  its content stream with `maxOutputLength` set to the smaller of its computed
+  size and the remaining B and without `rejectGarbageAfterEnd`, since the
+  content after its data is not garbage; its data length is the number of input
+  bytes the inflate consumed up to the end of the zlib stream. A Type 1 program
+  (BR-420) has no filter or `/FlateDecode` alone, without `/DecodeParms`;
+  another filter or any `/DecodeParms` refuses as `UNSUPPORTED_FORMAT`, and a
+  `/Length1` over the remaining B refuses as `LIMIT_EXCEEDED` before inflating.
+  Node offers no synchronous inflate that stops early (`inflateSync` with
+  `maxOutputLength` throws and returns no output), so a Flate program is
+  inflated with the asynchronous `zlib.createInflate` with `chunkSize` 16,384:
+  output chunks are kept until `/Length1` bytes are held, then the stream is
+  destroyed and reads no further input. Every byte it produced, at most
+  `/Length1` + 16,383, counts against B, and output passing the remaining B
+  refuses as `LIMIT_EXCEEDED`; a program whose output (or unfiltered data) ends
+  before `/Length1` bytes refuses as `CONTENT_UNAVAILABLE`. Verified by: AC-04,
+  AC-12.
 - **BR-415** — The canonical document holds exactly: a Catalog with `Type` and
   `Pages`; every Pages node with `Type`, `Kids`, `Count` and `Parent` except at
   the root; every page with `Type`, `Parent`, its `MediaBox` (its own, or the
@@ -410,47 +420,50 @@ findings follow:
   wraps each inlined Form and the Forms' own `q`s included (BR-419); the `q`
   that opens a 33rd level refuses as `UNSUPPORTED_FORMAT`. String bytes are not
   restricted to 0x20–0xFF, and `Tf` takes a font name of the resource scope and
-  a size that passes the F-009 numeric operand check (finite, absolute value at
-  most 1,000,000; otherwise `UNSUPPORTED_FORMAT`). The F-009 size range 1–512 is
-  dropped: no bound of F-009 or F-034 depends on the size, which only changes
-  the geometry of PDF.js's items, as it does on the source. Text state is part
-  of the graphics state: it persists across `BT`/`ET`, is saved and restored by
-  `q`/`Q`, `BT` resets only the text matrices, and text state operators are kept
-  inside or outside `BT`/`ET`. A text-show operator with no font set refuses as
-  `CONTENT_UNAVAILABLE`. Dropped, operands included: path construction and
-  painting, clipping, colour and colour space, line and rendering state, `sh`,
-  marked content (`BMC`, `BDC`, `EMC`, `MP`, `DP`), `BX`/`EX`, `gs` (refused
-  when the ExtGState it names in the resource scope holds `/Font`), `Do` of an
-  Image or PostScript XObject, and inline images whose data is framed as
-  follows: after `BI`, at most 32 key/value pairs up to `ID`, with direct values
-  only, and one white-space byte; the data length is `/L` (or `/Length`) when
-  present, else, when the first filter of `/F` (or `/Filter`) is `/AHx` (or
-  `/ASCIIHexDecode`), the bytes up to and including the first `>`, else, when it
-  is `/A85` (or `/ASCII85Decode`), the bytes up to and including the first `~>`,
-  else, with no filter, the computed size, else, when the only filter is `/Fl`
-  (or `/FlateDecode`) with no `/DP` (or `/DecodeParms`), the input bytes that
-  one inflate of BR-414 consumes (`maxOutputLength` the smaller of the computed
-  size and the remaining B). The computed size is `H` × ceil(`W` × `BPC` ×
-  components / 8), where `W` and `H` are 1–65,536, `BPC` is 1, 2, 4, 8 or 16 and
-  is 1 when absent with `/IM true`, and components are 1 for `/G`, `/I`, an
-  indexed space or `/IM true`, 3 for `/RGB` and 4 for `/CMYK`, long names
-  included; a `W` or `H` over 65,536 refuses as `LIMIT_EXCEEDED`. After the data
-  come optional white space and `EI` followed by white space, a delimiter or the
-  end. An inline image whose length is none of these refuses as
-  `UNSUPPORTED_FORMAT`; framing that overruns the content or is not followed by
-  `EI` refuses as `CONTENT_UNAVAILABLE`; an inflate whose output passes the
-  remaining B refuses as `LIMIT_EXCEEDED`; one whose output passes the computed
-  size first, a consistency check and not a ceiling, refuses as
-  `CONTENT_UNAVAILABLE`, as does a zlib stream that does not end within the
-  content; inflated inline bytes count against B. `Do` of a Form XObject is
-  inlined by BR-419. `Do` inside `BT`/`ET`, `d0`, `d1` and any other operator
-  refuse as `UNSUPPORTED_FORMAT`. A `Q` with no open `q` of the same content
-  stream or Form is dropped, and `Q`s are appended for the `q`s left open at its
-  end. The kept tokens are rebuilt by the canonical serializer (numbers in the
-  F-009 form, strings as hexadecimal strings, names with `#xx` escapes for bytes
-  outside 0x21–0x7E, delimiters and `#`, `Tf` operands renamed to the canonical
-  font names), never copied as source bytes; that stream counts against the
-  canonical bound. Verified by: AC-06.
+  a size that passes the F-009 numeric operand check, is not 0 and is at most
+  100,000 in absolute value (otherwise `UNSUPPORTED_FORMAT`); negative and
+  fractional sizes are admitted. This measured bound replaces the F-009 size
+  range 1–512: within it the size only changes the geometry of PDF.js's items,
+  as it does on the source, while size 0 drops PDF.js's line ends and, above
+  200,000, a line of three words no longer fits the largest page the numeric
+  check admits, so PDF.js leaves out its last glyphs (F-034 Measurement 3,
+  D-13). Text state is part of the graphics state: it persists across `BT`/`ET`,
+  is saved and restored by `q`/`Q`, `BT` resets only the text matrices, and text
+  state operators are kept inside or outside `BT`/`ET`. A text-show operator
+  with no font set refuses as `CONTENT_UNAVAILABLE`. Dropped, operands included:
+  path construction and painting, clipping, colour and colour space, line and
+  rendering state, `sh`, marked content (`BMC`, `BDC`, `EMC`, `MP`, `DP`),
+  `BX`/`EX`, `gs` (refused when the ExtGState it names in the resource scope
+  holds `/Font`), `Do` of an Image or PostScript XObject, and inline images
+  whose data is framed as follows: after `BI`, at most 32 key/value pairs up to
+  `ID`, with direct values only, and one white-space byte; the data length is
+  `/L` (or `/Length`) when present, else, when the first filter of `/F` (or
+  `/Filter`) is `/AHx` (or `/ASCIIHexDecode`), the bytes up to and including the
+  first `>`, else, when it is `/A85` (or `/ASCII85Decode`), the bytes up to and
+  including the first `~>`, else, with no filter, the computed size, else, when
+  the only filter is `/Fl` (or `/FlateDecode`) with no `/DP` (or
+  `/DecodeParms`), the input bytes that one inflate of BR-414 consumes
+  (`maxOutputLength` the smaller of the computed size and the remaining B). The
+  computed size is `H` × ceil(`W` × `BPC` × components / 8), where `W` and `H`
+  are 1–65,536, `BPC` is 1, 2, 4, 8 or 16 and is 1 when absent with `/IM true`,
+  and components are 1 for `/G`, `/I`, an indexed space or `/IM true`, 3 for
+  `/RGB` and 4 for `/CMYK`, long names included; a `W` or `H` over 65,536
+  refuses as `LIMIT_EXCEEDED`. After the data come optional white space and `EI`
+  followed by white space, a delimiter or the end. An inline image whose length
+  is none of these refuses as `UNSUPPORTED_FORMAT`; framing that overruns the
+  content or is not followed by `EI` refuses as `CONTENT_UNAVAILABLE`; an
+  inflate whose output passes the remaining B refuses as `LIMIT_EXCEEDED`; one
+  whose output passes the computed size first, a consistency check and not a
+  ceiling, refuses as `CONTENT_UNAVAILABLE`, as does a zlib stream that does not
+  end within the content; inflated inline bytes count against B. `Do` of a Form
+  XObject is inlined by BR-419. `Do` inside `BT`/`ET`, `d0`, `d1` and any other
+  operator refuse as `UNSUPPORTED_FORMAT`. A `Q` with no open `q` of the same
+  content stream or Form is dropped, and `Q`s are appended for the `q`s left
+  open at its end. The kept tokens are rebuilt by the canonical serializer
+  (numbers in the F-009 form, strings as hexadecimal strings, names with `#xx`
+  escapes for bytes outside 0x21–0x7E, delimiters and `#`, `Tf` operands renamed
+  to the canonical font names), never copied as source bytes; that stream counts
+  against the canonical bound. Verified by: AC-06.
 - **BR-417** — Only fonts selected by a kept `Tf` are read, at most 128 distinct
   fonts per invocation; a `Tf` naming no font of its resource scope refuses as
   `CONTENT_UNAVAILABLE`. Every key the projection keeps or reads is
@@ -630,10 +643,10 @@ passing any of them refuses as `LIMIT_EXCEEDED`, in the BR texts and here alike;
 a value below a lower bound or of the wrong type refuses as its BR says. Flate
 inline image output over its computed size is a consistency check, not a
 ceiling, and refuses as `CONTENT_UNAVAILABLE` (BR-416). The F-009 operand checks
-(arity, type, the 1,000,000 numeric bound, 32 nested `q` levels) are not
-ceilings and keep their F-009 code, `UNSUPPORTED_FORMAT`. F-009 ceilings are
-unchanged. AC-13 covers one example on each side of every ceiling not covered by
-AC-02–AC-12.
+(arity, type, the 1,000,000 numeric bound, 32 nested `q` levels), and the
+BR-416 `Tf` size check, are not ceilings and keep their F-009 code,
+`UNSUPPORTED_FORMAT`. F-009 ceilings are unchanged. AC-13 covers one example
+on each side of every ceiling not covered by AC-02–AC-12.
 
 | Work | Ceiling |
 | --- | --- |
@@ -771,19 +784,26 @@ the processing order.
   `/Columns` 65,536 with `/Colors` 4 and `/Columns` 65,537, (e) predictor 2, (f)
   predicted data that is not a whole number of rows, (g) `LZWDecode` content,
   (h) a page that also draws a `DCTDecode` image whose data is not a JPEG, (i) a
-  `/Length` past the end of the file, (j) content with `/Filter [/ASCII85Decode
-  /FlateDecode]` and `/DecodeParms [null << /Predictor 12 /Columns 4 >>]`, a
-  `ToUnicode` with `/ASCIIHexDecode`, and an object stream with
-  `[/ASCIIHexDecode /FlateDecode]`, (k) `/DecodeParms [<< /Predictor 12 >>
-  null]` on that chain, (l) `[/FlateDecode /ASCII85Decode]`, (m)
-  `/ASCII85Decode` data holding the byte `v`, and data without `~>`, (n)
-  `/ASCII85Decode` data of `z` groups whose output passes the remaining B, When
-  page 1 is read, Then (a) gives the text at B and `LIMIT_EXCEEDED` at B + 1,
-  (b) and (c) are `LIMIT_EXCEEDED`, (d) gives the text at 65,536 and
-  `LIMIT_EXCEEDED` at 65,537, (e), (g), (k) and (l) are `UNSUPPORTED_FORMAT`,
-  (f), (i) and (m) are `CONTENT_UNAVAILABLE`, (h) gives the text with the image
-  never decoded, (j) gives the text, and (n) is `LIMIT_EXCEEDED` with no more
-  than the remaining B decoded. Verified by: `BR-414 AC-04 stream decoding`.
+  `/Length` past the end of the file, (j) content with
+  `/Filter [/ASCII85Decode /FlateDecode]` and
+  `/DecodeParms [null << /Predictor 12 /Columns 4 >>]`, a `ToUnicode` with
+  `/ASCIIHexDecode`, and an object stream with `[/ASCIIHexDecode /FlateDecode]`,
+  (k) `/DecodeParms [<< /Predictor 12 >> null]` on that chain, (l)
+  `[/FlateDecode /ASCII85Decode]`, (m) `/ASCII85Decode` data holding the byte
+  `v`, `/ASCII85Decode` data without `~>`, `/ASCIIHexDecode` data holding the
+  byte `G`, and `/ASCIIHexDecode` data without `>`, each in its own file, (n)
+  `/ASCII85Decode` data of `z` groups whose output passes the remaining B, (o)
+  `/ASCIIHexDecode` and (p) `/ASCII85Decode` content with no other filter whose
+  decoded bytes, counted against B with everything else the file decodes, reach
+  exactly B and B + 1, and the same filter before `/FlateDecode` with its ASCII
+  stage output reaching B + 1, When page 1 is read, Then (a) gives the text at B
+  and `LIMIT_EXCEEDED` at B + 1, (b) and (c) are `LIMIT_EXCEEDED`, (d) gives the
+  text at 65,536 and `LIMIT_EXCEEDED` at 65,537, (e), (g), (k) and (l) are
+  `UNSUPPORTED_FORMAT`, (f), (i) and (m) are `CONTENT_UNAVAILABLE`, (h) gives
+  the text with the image never decoded, (j) gives the text, (n) is
+  `LIMIT_EXCEEDED` with no more than the remaining B decoded, and (o) and (p)
+  give the text at B and are `LIMIT_EXCEEDED` at B + 1, the chained case at its
+  ASCII stage with no inflate run. Verified by: `BR-414 AC-04 stream decoding`.
 - **AC-05** (BR-415) — Given a three-page file with `/OpenAction` JavaScript, a
   link annotation with a URI action, `/AcroForm`, `/Names /EmbeddedFiles`,
   `/Outlines`, `/StructTreeRoot`, `/Metadata`, a `MediaBox` and `Resources`
@@ -801,9 +821,9 @@ the processing order.
   unclosed `q`, (g) a `Contents` array splitting `BT ... ET` across two streams,
   (h) one content stream shared by pages 1 and 2, (i) 1,024 and 1,025 `Contents`
   references, (j) inline images framed by `/L`, by `/A85`, by `/AHx`, by size
-  with no filter (S29), and by one `/Fl` inflate, (k) an inline image with `/F
-  /DCT` and no `/L`, (l) an inline image with `/F /Fl` and `/DP`, (m) an inline
-  image whose computed size overruns the content, (n) 32 and 33 inline
+  with no filter (S29), and by one `/Fl` inflate, (k) an inline image with
+  `/F /DCT` and no `/L`, (l) an inline image with `/F /Fl` and `/DP`, (m) an
+  inline image whose computed size overruns the content, (n) 32 and 33 inline
   dictionary pairs, (o) `Do` inside `BT`, (p) a font name with bytes outside
   0x21–0x7E, (q) a Flate inline image with `W` and `H` 65,536, `BPC` 16 and
   `/CMYK` (computed size 2^35 bytes) whose data inflates to more than the
@@ -815,16 +835,21 @@ the processing order.
   times by the `Contents` array of each of 10 selected pages, with 10,240 × L
   plus the file's other decoded bytes at B and at B + 1, (w) `q` inside `BT`,
   `BT` inside `BT`, `Td` outside `BT`/`ET` and `ET` outside a text object, each
-  on its own page, (x) `Tf` sizes 0, −12, 0.5 and 1,000,000, and 1,000,001, When
-  the page(s) are read, Then (a), (b), (f), (g), (h), (j), (p), (s) and (u) give
-  the text (h for pages `[1, 2]`) and the canonical content holds only kept
-  operators, hexadecimal strings and `#`-escaped names, (x) at 1,000,000 and
-  below gives the text, (c), (m) and (r) are `CONTENT_UNAVAILABLE`, (q) is
-  `LIMIT_EXCEEDED` with no more than the remaining B inflated, (d), (e), (k),
-  (l), (o), (w) and (x) at 1,000,001 are `UNSUPPORTED_FORMAT`, (i), (n), (t) and
-  (v) give the text then `LIMIT_EXCEEDED`, (v) refusing at the page's `Contents`
-  array before its content is joined or tokenized (the test observes no
-  tokenizer call for that page), each refusal before PDF.js. Verified by:
+  on its own page, (x) `Tf` sizes −100,000, −12, −0.5, 0.001, 0.5 and 100,000,
+  each showing `Hello modern world`, `T*`, `second line here`, `T*` and `end`
+  with `TL` 1.2 times the absolute size from a point where the text fits its
+  page (`MediaBox [-1000000 -1000000 1000000 1000000]` at ±100,000), and the
+  same at sizes 0, 100,001 and −100,001, When the page(s) are read, Then (a),
+  (b), (f), (g), (h), (j), (p), (s) and (u) give the text (h for pages `[1, 2]`)
+  and the canonical content holds only kept operators, hexadecimal strings and
+  `#`-escaped names, (x) at each nonzero size of absolute value at most 100,000
+  gives exactly `Hello modern world\nsecond line here\nend`, (c), (m) and (r)
+  are `CONTENT_UNAVAILABLE`, (q) is `LIMIT_EXCEEDED` with no more than the
+  remaining B inflated, (d), (e), (k), (l), (o), (w) and (x) at 0, 100,001 and
+  −100,001 are `UNSUPPORTED_FORMAT`, (i), (n), (t) and (v) give the text then
+  `LIMIT_EXCEEDED`, (v) refusing at the page's `Contents` array before its
+  content is joined or tokenized (the test observes no tokenizer call for that
+  page), each refusal before PDF.js. Verified by:
   `BR-416 AC-06 content projection`.
 - **AC-07** (BR-417) — Given (a) a TrueType font in WinAnsiEncoding whose
   `FontFile2` holds random bytes, (b) a Type0 Identity-H font with a
@@ -863,7 +888,7 @@ the processing order.
   case gives its text and each second case is `LIMIT_EXCEEDED` before PDF.js;
   and the exact-pin dependency stress of `TestBR114_pdf_producer_admission`
   passes for Type0/`ToUnicode`, Differences, Type3 and Form-inlined text, with
-  `Tf` sizes 0, −12 and 1,000,000 among the cases, with produced bytes and items
+  `Tf` sizes −12, 0.5 and 100,000 among the cases, with produced bytes and items
   never above the admitted U and I. Verified by: `BR-418 AC-08 producer
   admission`, `TestBR114_pdf_producer_admission`.
 - **AC-09** (BR-114 v2) — Given (a) a well-formed file with `/Encrypt`,
@@ -923,8 +948,8 @@ the processing order.
   `ToUnicode`, (l) an equality test of the four base tables against the pinned
   PDF.js tables, (m) a pdfTeX-style `Type1` font with a `FontFile` whose
   `/Length1` is 70,000, full `/Differences` for its shown codes and no
-  `/BaseEncoding`, (n) a cleartext that puts code 65 twice, (o) a cleartext `10
-  array` that puts code 12, (p) a `FontFile` that inflates to fewer than
+  `/BaseEncoding`, (n) a cleartext that puts code 65 twice, (o) a cleartext
+  `10 array` that puts code 12, (p) a `FontFile` that inflates to fewer than
   `/Length1` bytes, (q) a nonembedded `Symbol` font with `/Differences` naming
   `/H`, `/alpha` and `/beta` for its shown codes, (r) a nonembedded `TrueType`
   font whose `BaseFont` is `/#CB#CE#CC#E5` with `WinAnsiEncoding` and a
@@ -936,18 +961,26 @@ the processing order.
   `/Foo`, `/G00` and `/cAB`, each in its own file, (v) a `Type1` font whose
   `FontFile` has `/Length1` 1,000 and Flate data that inflates to 2^30 bytes,
   with a shown code that needs its built-in encoding, (w) a Type3 font with no
-  `/BaseEncoding` and no `ToUnicode` showing a code named `/gid883`, When page 1
-  is read, Then (a), (b), (c), (m), (q), (r), (s) and (v) give their text, (a)
-  with no `/BaseEncoding` in the canonical font, (c) with `/BaseFont
-  /Helvetica`, (m) without its program being read, (q) as `Hαβ` with `/BaseFont
-  /K1`, (r) as `Hi` with `/BaseFont /K1` and `/FontName /K1`, (s) as `€•‚ƒ` with
+  `/BaseEncoding` and no `ToUnicode` showing a code named `/gid883`, (x) a
+  `Type1` font whose `FontFile` has `/Length1` 1,000 and Flate data that
+  inflates to 20,000 bytes, so that its inflate produces one 16,384-byte chunk
+  (`/Length1` and an overshoot of 15,384 bytes), with a shown code that needs
+  its built-in encoding, and (y) the same font with Flate data that inflates to
+  exactly 1,000 bytes, each with those produced bytes and everything else the
+  file decodes at exactly B and at B + 1, When page 1 is read, Then (a), (b),
+  (c), (m), (q), (r), (s) and (v) give their text, (a) with no `/BaseEncoding`
+  in the canonical font, (c) with `/BaseFont /Helvetica`, (m) without its
+  program being read, (q) as `Hαβ` with `/BaseFont /K1`, (r) as `Hi` with
+  `/BaseFont /K1` and `/FontName /K1`, (s) as `€•‚ƒ` with
   `/BaseEncoding /WinAnsiEncoding` and as U+0080–U+0083 with no `/BaseEncoding`,
-  (v) with at most 1,000 + 16,383 bytes inflated, (n) gives the text of the last
-  group, the canonical font carrying no `/BaseEncoding`, every shown code in
-  `/Differences` and `Flags` with Nonsymbolic set and Symbolic clear, (d), (e),
-  (i), (j), (k), (o), (t), (u) and (w) are `UNSUPPORTED_FORMAT`, (p) is
-  `CONTENT_UNAVAILABLE`, (f), (g) and (h) give the text then `LIMIT_EXCEEDED`,
-  and (l) holds. Verified by: `BR-420 AC-12 simple font encoding`.
+  (v) with at most 1,000 + 16,383 bytes inflated, (x) and (y) give the text at B
+  and are `LIMIT_EXCEEDED` at B + 1, (x) counting all 16,384 produced bytes, (n)
+  gives the text of the last group, the canonical font carrying no
+  `/BaseEncoding`, every shown code in `/Differences` and `Flags` with
+  Nonsymbolic set and Symbolic clear, (d), (e), (i), (j), (k), (o), (t), (u) and
+  (w) are `UNSUPPORTED_FORMAT`, (p) is `CONTENT_UNAVAILABLE`, (f), (g) and (h)
+  give the text then `LIMIT_EXCEEDED`, and (l) holds. Verified by:
+  `BR-420 AC-12 simple font encoding`.
 - **AC-13** (BR-412–BR-420) — Given a valid file at each ceiling of the table
   "Ceilings added by F-034" not exercised by AC-02–AC-12 (at least the
   4,096-pair `/Index`, the 4,096-object object stream, the 32 inline dictionary
@@ -1110,11 +1143,22 @@ the processing order.
   ISO 32000-1 §8.2 forbids them, none of the surveyed generators writes them,
   and PDF.js runs them with rules of its own (its `q` also saves the text
   matrix) that the projection would have to model. The F-009 `Tf` size range
-  1–512 is dropped: no bound depends on the size, since U and I count codes,
-  bytes and operators; sizes such as 0.5 and −12 gave the source text; the
-  numeric operand check still bounds the value. Rejected: keeping 1–512 (refuses
-  valid files for no safety gain); following PDF.js for nested text objects
-  (state rules outside ISO, unmeasured).
+  1–512 is replaced by a measured one, a nonzero size of absolute value at most
+  100,000. No bound of F-009 or F-034 depends on the size, since U and I count
+  codes, bytes and operators, and within the range the projection gives the
+  source text (Measurement 3: every nonzero size up to ±200,000, 0.0001
+  included, gave `Hello modern world\nsecond line here\nend`). Size 0 drops
+  every line end PDF.js reports, and from 250,000 a line of three words
+  overflows the largest page the 1,000,000 numeric check admits, so PDF.js
+  leaves out its last glyphs; 100,000 stays a factor of two below the first
+  loss. Text placed outside its page is left out by PDF.js at any size (a
+  120-character line at size 12 on a Letter page is cut at its edge), on the
+  source as on the projection, and is not a projection loss. Rejected: keeping
+  1–512 (refuses negative and fractional sizes measured exact); the numeric
+  check alone (admits 0 and sizes whose text fits no admissible page, losing
+  text silently); refusing text outside the page box (needs a model of PDF.js's
+  glyph geometry); following PDF.js for nested text objects (state rules outside
+  ISO, unmeasured).
 
 ## Open questions
 
@@ -1283,3 +1327,35 @@ Spec decision pass (`4-spec-decision-1-fable`, changes):
    canonical document uses generation 0 (BR-413, BR-415); S, and so I, counts
    Type0 codes rather than bytes (BR-418). AC-03 (m), (n); AC-06 (w), (x);
    AC-08. Supersedes spec review 3 item 4.
+
+Spec review 4 (`4-spec-review-4-reviewer`, changes):
+
+1. major (`Tf` size loses text) — retained, orchestrator decision, measured with
+   PDF.js 6.5.438 in the dev container (Measurement 3, finding 10): a nonzero
+   size of absolute value at most 100,000 is admitted, 0 and larger sizes refuse
+   as `UNSUPPORTED_FORMAT`. Every nonzero size up to ±200,000 (0.0001, ±0.001,
+   ±0.5, ±12, ±100,000 included) gave
+   `Hello modern world\nsecond line here\nend` and `Hello modern PDF` when the
+   text fits its page; size 0 dropped every line end; from 250,000 the
+   three-word line no longer fits the largest admissible `MediaBox` and PDF.js
+   left out its last glyphs. The reviewer's `Hwend` at 1,000,000 and the losses
+   at 100–512 on a Letter page are PDF.js leaving out glyphs outside the page
+   box and joining overlapping lines, which it also does at size 12 on a line
+   longer than the page, on the source and the projection alike. BR-114 v2,
+   BR-416, D-13, Contract details. AC-06 (x) pins ±100,000, −12, −0.5, 0.001 and
+   0.5 at the exact string and 0, ±100,001 as `UNSUPPORTED_FORMAT`; AC-08 sizes
+   −12, 0.5 and 100,000. ADR-012 does not mention `Tf` and is unchanged.
+   Supersedes the `Tf` outcome of the spec decision pass item 7.
+2. minor (BR-420 rationale) — retained: the GBK-named simple font is admitted,
+   its canonical name removing the hint (D-5, Measurement 3);
+   `business-rules/BR-420.md` rationale reworded.
+3. minor (limit edge cases) — retained: AC-04 (o), (p) put the output of an
+   `/ASCIIHexDecode` or `/ASCII85Decode` stage at B and B + 1, and at B + 1
+   before `/FlateDecode` with no inflate run; AC-12 (x), (y) put a Type 1 Flate
+   program at B and B + 1, (x) with a 16,384-byte chunk for a `/Length1` of
+   1,000 (overshoot 15,384 bytes). BR-414 states that a byte the filter does not
+   read or data without its end marker (`>` or `~>`) refuses as
+   `CONTENT_UNAVAILABLE` for both ASCII filters; AC-04 (m) adds
+   `/ASCIIHexDecode` data holding `G` and data without `>`.
+4. minor (CHANGELOG wrap) — retained: the F-034 entry of `CHANGELOG.md`
+   rewrapped to 80 columns.
