@@ -7,6 +7,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { createServer, type Server } from "node:https";
 import type { AddressInfo, Socket } from "node:net";
+import { createServer as createTlsServer, type TLSSocket } from "node:tls";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -179,6 +180,100 @@ export async function startDocumentServer(
         });
       }),
   };
+}
+
+/** F-033: what a raw document server writes on each connection. */
+export interface RawScript {
+  /** Written in order, each with its own `write` call. */
+  parts: readonly Buffer[];
+  /** Waits this long between two parts (default: only the write callback). */
+  gapMs?: number;
+  /** Keeps the connection open after the last part instead of ending it. */
+  stall?: boolean;
+}
+
+export interface RawDocumentServer {
+  port: number;
+  close(): Promise<void>;
+}
+
+async function writeScript(socket: TLSSocket, script: RawScript) {
+  for (const part of script.parts) {
+    if (socket.destroyed) return;
+    await new Promise<void>((done) => {
+      socket.write(part, () => {
+        done();
+      });
+    });
+    if (script.gapMs !== undefined)
+      await new Promise((done) => setTimeout(done, script.gapMs));
+  }
+  if (!script.stall && !socket.destroyed) socket.end();
+}
+
+/**
+ * F-033 (BR-306 v2): a loopback TLS server that answers the request head with
+ * the scripted raw bytes, so a test controls every response byte and write.
+ */
+export async function startRawDocumentServer(
+  script: RawScript,
+): Promise<RawDocumentServer> {
+  const tls = cimdCertificates();
+  const sockets = new Set<TLSSocket>();
+  const server = createTlsServer({ key: tls.key, cert: tls.cert }, (socket) => {
+    sockets.add(socket);
+    socket.on("close", () => sockets.delete(socket));
+    socket.on("error", () => undefined);
+    let head = "";
+    const onData = (chunk: Buffer) => {
+      head += chunk.toString("latin1");
+      if (!head.includes("\r\n\r\n")) return;
+      socket.off("data", onData);
+      void writeScript(socket, script);
+    };
+    socket.on("data", onData);
+  });
+  await new Promise<void>((resolve) => {
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  return {
+    port: (server.address() as AddressInfo).port,
+    close: () =>
+      new Promise<void>((resolve) => {
+        for (const socket of sockets) socket.destroy();
+        server.close(() => {
+          resolve();
+        });
+      }),
+  };
+}
+
+/**
+ * F-033: one response header block of exactly `size` bytes, terminator
+ * included, padded with an `X-Pad` field; `lead` CR/LF bytes come first and
+ * count toward `size`.
+ */
+export function headerBlock(
+  size: number,
+  options: { status?: string; fields?: readonly string[]; lead?: string } = {},
+): Buffer {
+  const lead = options.lead ?? "";
+  const fields = (options.fields ?? []).map((field) => field + "\r\n");
+  const start = `${lead}HTTP/1.1 ${options.status ?? "200 OK"}\r\n${fields.join("")}X-Pad: `;
+  const pad = size - start.length - "\r\n\r\n".length;
+  if (pad < 1) throw new Error(`header block too small: ${String(size)}`);
+  const block = Buffer.from(`${start}${"a".repeat(pad)}\r\n\r\n`, "latin1");
+  if (block.length !== size) throw new Error("header block size mismatch");
+  return block;
+}
+
+/** F-033: the fields of a 200 JSON response with a `Content-Length`. */
+export function jsonFields(length: number): string[] {
+  return [
+    "Content-Type: application/json",
+    `Content-Length: ${String(length)}`,
+    "Connection: close",
+  ];
 }
 
 /** Writes one JSON response with the given status and extra headers. */

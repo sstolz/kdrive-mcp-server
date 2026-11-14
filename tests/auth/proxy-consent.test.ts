@@ -286,6 +286,46 @@ describe("BR-393 v2 BR-129 v3 consent page of a CIMD client", () => {
   });
 });
 
+// F-033 AC-02: a registered name with a bidi control is shown as unnamed.
+describe("BR-129 v6 registered client names (F-033)", () => {
+  it("BR-129 v6 AC-02 a registered client_name with a format character is shown as unnamed", async () => {
+    const name = "Pay\u202elaPyaP";
+    const clock = new Clock();
+    const path = stateFile();
+    const store = openState(path, { clock });
+    const h = await harness({ clock, store });
+    const registered = await h.proxy.register({
+      body: JSON.stringify({
+        redirect_uris: [CLAUDE],
+        token_endpoint_auth_method: "none",
+        client_name: name,
+      }),
+    });
+    expect(registered.status).toBe(201);
+    const data = JSON.parse(registered.body) as Record<string, unknown>;
+    expect(data.client_name).toBe(name);
+    const client: Registered = {
+      clientId: data.client_id as string,
+      method: "none",
+      redirect: CLAUDE,
+    };
+    const expectUnnamed = (response: ProxyResponse) => {
+      expect(response.status).toBe(200);
+      expect(response.body).toContain(
+        "<p>Client name: <strong>unnamed client</strong></p>",
+      );
+      expect(response.body).not.toContain("\u202e");
+      expect(response.body).not.toContain("laPyaP");
+    };
+    expectUnnamed(await page(h, client));
+    store.close();
+    const reopened = openState(path, { clock });
+    const fresh = await harness({ clock, store: reopened, pem: h.pem });
+    expectUnnamed(await page(fresh, client));
+    reopened.close();
+  });
+});
+
 // F-031 AC-08: the consent flow in French (BR-129 v4, BR-393 v3, BR-404).
 describe("BR-129 v4 BR-393 v3 consent flow in French", () => {
   const FR = TEXTS.fr;

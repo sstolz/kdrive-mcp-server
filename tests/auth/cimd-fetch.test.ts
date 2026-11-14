@@ -15,16 +15,21 @@ import {
   allowEveryAddress,
   cimdCertificates,
   dnsError,
+  headerBlock,
+  jsonFields,
   reply,
   scriptedResolver,
   startDnsStub,
   startDocumentServer,
+  startRawDocumentServer,
   type DocumentHandler,
   type DocumentServer,
+  type RawDocumentServer,
+  type RawScript,
   type ResolverScript,
 } from "../helpers/cimd.js";
 
-let servers: DocumentServer[] = [];
+let servers: Array<DocumentServer | RawDocumentServer> = [];
 afterEach(async () => {
   vi.useRealTimers();
   await Promise.all(servers.map((server) => server.close()));
@@ -489,4 +494,188 @@ describe("BR-306 c-ares resolution outside the threadpool (AC-14)", () => {
       await stub.close();
     }
   }, 20_000);
+});
+
+// ---- F-033 (#26): the header block bound and the body count order ----------
+
+const BODY = Buffer.from("{}");
+/** The F-033 terminal header overflow (BR-306 v2, BR-394 v2). */
+const HEADER_SIZE = {
+  ok: false,
+  reason: "size",
+  status: 0,
+  transient: false,
+} as const;
+/** The body bound (BR-306 v1): the received status is kept. */
+const BODY_SIZE = { ...HEADER_SIZE, status: 200 } as const;
+
+async function serveRaw(script: RawScript) {
+  const server = await startRawDocumentServer(script);
+  servers.push(server);
+  return server;
+}
+
+/** Fetches a scripted response and measures how long the fetch took. */
+async function fetchRaw(script: RawScript) {
+  const server = await serveRaw(script);
+  const started = Date.now();
+  const outcome = await port().fetch.fetch(urlFor(server), signal());
+  return { outcome, elapsed: Date.now() - started };
+}
+
+/** A complete 200 JSON response whose final header block has `size` bytes. */
+const jsonResponse = (size: number, lead = "") =>
+  Buffer.concat([
+    headerBlock(size, { fields: jsonFields(BODY.length), lead }),
+    BODY,
+  ]);
+const singleBytes = (bytes: Buffer) =>
+  [...bytes].map((byte) => Buffer.from([byte]));
+const earlyHints = (size?: number) =>
+  size === undefined
+    ? Buffer.from("HTTP/1.1 103 Early Hints\r\nLink: </s.css>\r\n\r\n")
+    : headerBlock(size, { status: "103 Early Hints" });
+/** A 200 JSON response announcing 10 body bytes and sending 5,121. */
+const overlongBody = () =>
+  Buffer.concat([
+    Buffer.from(
+      "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 10\r\nConnection: close\r\n\r\n",
+    ),
+    Buffer.alloc(5121, 0x20),
+  ]);
+
+describe("BR-306 v2 BR-394 v2 header block bound (F-033)", () => {
+  it("BR-306 v2 AC-05 the header block is bounded at 8,192 bytes", async () => {
+    const accepted: RawScript[] = [
+      { parts: [jsonResponse(8192)] },
+      {
+        parts: [
+          ...singleBytes(headerBlock(8192, { fields: jsonFields(2) })),
+          BODY,
+        ],
+      },
+      { parts: [jsonResponse(8192, "\r\n\r\n")] },
+    ];
+    for (const script of accepted)
+      expect((await fetchRaw(script)).outcome).toMatchObject({
+        ok: true,
+        status: 200,
+      });
+    const refused: RawScript[] = [
+      { parts: [jsonResponse(8193)] },
+      { parts: [Buffer.alloc(20_000, 0x61)], stall: true },
+      {
+        parts: [
+          Buffer.concat([
+            headerBlock(8193, {
+              status: "503 Service Unavailable",
+              fields: jsonFields(2),
+            }),
+            BODY,
+          ]),
+        ],
+      },
+      {
+        parts: [
+          Buffer.concat([
+            headerBlock(8193, {
+              status: "302 Found",
+              fields: ["Location: /other.json", ...jsonFields(2)],
+            }),
+            BODY,
+          ]),
+        ],
+      },
+      { parts: [jsonResponse(8193, "\r\n\r\n")] },
+      {
+        parts: [Buffer.from(`${"\r\n".repeat(4096)}\r`, "latin1")],
+        stall: true,
+      },
+    ];
+    for (const script of refused) {
+      const { outcome, elapsed } = await fetchRaw(script);
+      expect(outcome).toEqual(HEADER_SIZE);
+      expect(elapsed).toBeLessThan(5000);
+    }
+  }, 30_000);
+
+  it("BR-306 v2 AC-08 the 8,192-byte header bound decides with --max-http-header-size=4096 in a child process", async () => {
+    const exact = await serveRaw({ parts: [jsonResponse(8192)] });
+    const over = await serveRaw({ parts: [jsonResponse(8193)] });
+    const child = spawn(
+      process.execPath,
+      [
+        resolve("tests/helpers/cimd-header-child.mjs"),
+        String(exact.port),
+        String(over.port),
+      ],
+      {
+        env: {
+          PATH: process.env.PATH,
+          NODE_OPTIONS: "--max-http-header-size=4096",
+          CIMD_TEST_CA: cimdCertificates().ca,
+        },
+        stdio: ["ignore", "pipe", "pipe"],
+      },
+    );
+    let out = "";
+    child.stdout.on("data", (data: Buffer) => {
+      out += data.toString();
+    });
+    const code = await new Promise<number | null>((done) =>
+      child.on("close", done),
+    );
+    expect(code).toBe(0);
+    expect(JSON.parse(out.trim())).toEqual({
+      exact: { ok: true, status: 200 },
+      over: HEADER_SIZE,
+    });
+  });
+
+  it("BR-306 v2 AC-09 each interim and final header block is bounded at 8,192 bytes", async () => {
+    const refused: RawScript[] = [
+      { parts: [earlyHints(), jsonResponse(8193)] },
+      { parts: [earlyHints(8193), jsonResponse(8192)] },
+      { parts: [earlyHints(), jsonResponse(8193, "\r\n\r\n")] },
+    ];
+    for (const script of refused)
+      expect((await fetchRaw(script)).outcome).toEqual(HEADER_SIZE);
+    expect(
+      (await fetchRaw({ parts: [earlyHints(8192), jsonResponse(8192)] }))
+        .outcome,
+    ).toMatchObject({ ok: true, status: 200 });
+    expect(
+      (await fetchRaw({ parts: [earlyHints(), overlongBody()] })).outcome,
+    ).toEqual(BODY_SIZE);
+    expect(
+      (
+        await fetchRaw({
+          parts: [Buffer.concat([Buffer.from("\r\n\r\n"), overlongBody()])],
+        })
+      ).outcome,
+    ).toEqual(BODY_SIZE);
+  }, 30_000);
+
+  it("BR-306 v2 AC-10 the body bound runs after the status and media-type checks", async () => {
+    const html = Buffer.from(
+      "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: 6000\r\nConnection: close\r\n\r\n",
+    );
+    const body = Buffer.alloc(6000, 0x20);
+    for (const script of [
+      { parts: [Buffer.concat([html, body])] },
+      { parts: [html, body], gapMs: 20 },
+    ])
+      expect((await fetchRaw(script)).outcome).toEqual({
+        ok: false,
+        reason: "content_type",
+        status: 200,
+        transient: false,
+      });
+    const unavailable = Buffer.from(
+      "HTTP/1.1 503 Service Unavailable\r\nContent-Type: application/json\r\nContent-Length: 6000\r\nConnection: close\r\n\r\n",
+    );
+    expect(
+      (await fetchRaw({ parts: [Buffer.concat([unavailable, body])] })).outcome,
+    ).toEqual({ ok: false, reason: "status", status: 503, transient: true });
+  });
 });
