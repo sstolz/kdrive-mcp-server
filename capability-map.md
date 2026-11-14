@@ -1,13 +1,14 @@
 # Capability map
 
-## Provisional — designed OAuth proxy pages
+## Accepted — designed OAuth proxy pages
 
 [F-030 v1](features/F-030-oauth-proxy-page-design.md) (#23), BR-399–BR-403 v1
-with BR-129 v3 and BR-393 v2, pending acceptance: in `proxy` mode the consent
+with BR-129 v3 and BR-393 v2: in `proxy` mode the consent
 and error pages show the product name, the unofficial notice and a link to the
 source code, with a light and a dark theme from one inline stylesheet allowed
 by its hash in the `Content-Security-Policy`. Flows, routes and texts of
-BR-129/BR-393 are unchanged.
+BR-129/BR-393 are unchanged. Accepted on actual main `f747072` on 2026-11-14
+(#23 comment `23-acceptance-1-orchestrator`).
 
 ## Accepted — Client ID Metadata Documents
 
