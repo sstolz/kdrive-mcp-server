@@ -2,7 +2,7 @@
 id: F-027
 title: Direct image codecs without Jimp
 ticket: "#12"
-status: frozen
+status: done
 version: 2
 ---
 
