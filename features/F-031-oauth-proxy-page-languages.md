@@ -124,7 +124,8 @@ response to them (redirects, JSON) changes.
   `de-CH,de;q=0.9` → none; `de, *;q=0.1` → `en`; `en;q=0, fr;q=0.1` → `fr`;
   `fr;q=0` → none; `FR-ch` → `fr`; `fr;q=0.5, en;q=0.5` → `fr`;
   `fr;q=2` → none; `fr_CH` → none; `fr;level=1` → none;
-  `en;q=0, *` → `fr`. Verified by: AC-01.
+  `en;q=0, *` → `fr`; `en-GB;q=0, *` → `fr` (an item counts as `en` or `fr`
+  by its primary subtag, weight 0 included). Verified by: AC-01.
 - **BR-407** — The fixed texts of the pages come from one catalogue object
   per language, `MESSAGES.en` and `MESSAGES.fr`, both typed by one `Messages`
   type so that a missing or extra key fails `tsc`; the error sentences are a
@@ -303,8 +304,10 @@ No language switch submits a form, re-posts a consent or replays a callback.
   language; a query whose serialization makes the path + query exceed 8,192
   bytes yields no `<nav>`; and no error page (each kind, both languages,
   each route) contains `<nav`, `hreflang` or `?lang=`, and its only `<a>` is
-  the GitHub link; the `state` value appears only in the consent page's
-  switcher href. Verified by: `BR-408 AC-04` and `BR-143 v4 ...` in
+  the GitHub link; for the `state` `"<x>'&`, the raw and the plain
+  HTML-escaped forms appear in no page, and the URLSearchParams-encoded form
+  `%22%3Cx%3E%27%26` appears exactly once, inside the consent page's switcher
+  href, and in no error page. Verified by: `BR-408 AC-04` and `BR-143 v4 ...` in
   `tests/auth/proxy-language.test.ts`.
 - **AC-05** (BR-409) — Given a consent page obtained with cookie C, When the
   switcher link is followed with C, Then the pending-consent count is
@@ -418,3 +421,8 @@ retained (applied by the orchestrator, economical mode agreed with the owner):
 
 D-2 (no switcher on error pages) departs from the owner's wish for a
 switcher on every page; the owner is told at freeze.
+
+Review 2 (31-spec-review-2-reviewer), `approve` on `b4850ea` with two minor
+findings; both retained (applied by the orchestrator): AC-04 names the
+encodings of `state` its test checks; BR-406 adds `en-GB;q=0, *` → `fr`
+(primary subtag decides).
