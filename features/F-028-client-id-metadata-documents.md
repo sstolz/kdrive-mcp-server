@@ -2,9 +2,14 @@
 id: F-028
 title: Client ID Metadata Documents in the OAuth proxy
 ticket: "#3"
-status: draft
+status: frozen
 version: 1
 ---
+
+Frozen 2026-11-14 (autonomous mode, PROJECT.md D-1) on reviewed revision
+`67efaf8` after spec reviews 1 (`changes`), 2 (`approve`), decision pass 1
+(Fable, `approve`), review 3 (`changes`) and review 4 (`approve`), published
+on #3.
 
 Author: Claude Opus 5.5 (effort unknown), spec phase, 2026-11-14.
 Base: branch `claude/beautiful-maxwell-8mdk2w` at `254d5da` (main `75c9f48`).
