@@ -141,6 +141,33 @@ describe("BR-165 OAuth routes call the F-010 handlers", () => {
     await f.handler.close();
   });
 
+  it("BR-404 passes Accept-Language to authorize, consent and callback and the query to consent", async () => {
+    const fake = fakeProxy();
+    vi.mocked(createOAuthProxy).mockImplementation(() => fake.proxy);
+    const f = await httpFixture();
+    const language = { "accept-language": "fr-CH, fr;q=0.9" };
+    await f.send("GET", "/mcp/oauth/authorize?lang=fr", { headers: language });
+    await f.send("POST", "/mcp/oauth/consent?lang=fr", {
+      headers: {
+        ...language,
+        "content-type": "application/x-www-form-urlencoded",
+      },
+      body: "consent=x&decision=deny",
+    });
+    await f.send("GET", "/mcp/oauth/callback?state=s", { headers: language });
+    await f.send("GET", "/mcp/oauth/callback?state=s");
+    const calls = fake.calls as Record<
+      string,
+      Array<{ query?: URLSearchParams; acceptLanguage?: string }>
+    >;
+    for (const name of ["authorize", "consent", "callback"])
+      expect(calls[name]![0]!.acceptLanguage).toBe("fr-CH, fr;q=0.9");
+    expect(calls.authorize![0]!.query?.get("lang")).toBe("fr");
+    expect(calls.consent![0]!.query?.get("lang")).toBe("fr");
+    expect(Object.hasOwn(calls.callback![1]!, "acceptLanguage")).toBe(false);
+    await f.handler.close();
+  });
+
   it("BR-165 BR-170 AC-15 (socket) joins Cookie headers and keeps handler headers unchanged", async () => {
     const fake = fakeProxy();
     vi.mocked(createOAuthProxy).mockImplementation(() => fake.proxy);

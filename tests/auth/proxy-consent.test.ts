@@ -13,6 +13,7 @@ import {
   type Registered,
 } from "../helpers/proxy.js";
 import { FakeMetadata, cimdDocument } from "../helpers/cimd.js";
+import { TEXTS } from "../helpers/page-texts.js";
 
 const challenge = s256("v".repeat(43));
 const ATTRIBUTES = "; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=600";
@@ -47,7 +48,9 @@ describe("BR-129 consent page", () => {
       expect(response.body).toContain(client.redirect);
       expect(response.body).toContain(client.clientId);
       expect(response.body).toContain(PUBLIC_URL);
-      expect(response.body).toContain(`action="${PUBLIC_URL}/oauth/consent"`);
+      expect(response.body).toContain(
+        `action="${PUBLIC_URL}/oauth/consent?lang=en"`,
+      );
       expect(header(response, "cache-control")).toBe("no-store");
       expect(header(response, "x-frame-options")).toBe("DENY");
       expect(header(response, "referrer-policy")).toBe("no-referrer");
@@ -260,10 +263,117 @@ describe("BR-393 v2 BR-129 v3 consent page of a CIMD client", () => {
       ].join(""),
     );
     expect(response.body).toContain(
-      `<form method="post" action="${PUBLIC_URL}/oauth/consent"><input type="hidden" name="consent" value="${consentId}">`,
+      `<form method="post" action="${PUBLIC_URL}/oauth/consent?lang=en"><input type="hidden" name="consent" value="${consentId}">`,
     );
     expect(response.body).not.toContain("Client host:");
     expect(response.body).not.toContain("metadata document");
     expect(response.body).not.toContain("(loopback)");
+  });
+});
+
+// F-031 AC-08: the consent flow in French (BR-129 v4, BR-393 v3, BR-404).
+describe("BR-129 v4 BR-393 v3 consent flow in French", () => {
+  const FR = TEXTS.fr;
+
+  it("BR-129 v4 a French page posts to the consent route with lang=fr and labels the client in French", async () => {
+    const h = await harness();
+    const named = await h.register({ client_name: "Plain" });
+    const unnamed = await h.register();
+    const query = h.authorizeQuery(named, challenge, { lang: "fr" });
+    const response = await h.proxy.authorize({ query });
+    expect(response.body).toContain(
+      `<form method="post" action="${PUBLIC_URL}/oauth/consent?lang=fr"><input type="hidden" name="consent" value="${h.consentId(response)}">`,
+    );
+    expect(response.body).toContain(
+      `<p>${FR.clientNameLabel} <strong>Plain ${FR.selfDeclaredSuffix}</strong></p>`,
+    );
+    const anonymous = await h.proxy.authorize({
+      query: h.authorizeQuery(unnamed, challenge),
+      acceptLanguage: "fr-CH, fr;q=0.9",
+    });
+    expect(anonymous.body).toContain(
+      `<p>${FR.clientNameLabel} <strong>${FR.unnamedClient}</strong></p>`,
+    );
+    expect(anonymous.body).toContain(
+      `action="${PUBLIC_URL}/oauth/consent?lang=fr"`,
+    );
+  });
+
+  it.each([
+    ["the form target lang=fr", { query: new URLSearchParams("lang=fr") }],
+    ["Accept-Language: fr", { acceptLanguage: "fr" }],
+    [
+      "lang=fr over Accept-Language: en",
+      { query: new URLSearchParams("lang=fr"), acceptLanguage: "en" },
+    ],
+  ])(
+    "BR-129 v4 an unknown consent posted with %s gets the French consent page",
+    async (_name, extra) => {
+      const h = await harness();
+      const refused = await h.proxy.consent({
+        form: new URLSearchParams({ consent: "unknown", decision: "approve" }),
+        ...extra,
+      });
+      expect(refused.status).toBe(400);
+      expect(refused.body).toContain('<html lang="fr">');
+      expect(refused.body).toContain(`<h1>${FR.errorTitle}</h1>`);
+      expect(refused.body).toContain(`<p>${FR.error.consent}</p>`);
+    },
+  );
+
+  it("BR-129 v4 an unknown consent without a language gets the English page", async () => {
+    const h = await harness();
+    const refused = await h.proxy.consent({
+      form: new URLSearchParams({ consent: "unknown", decision: "approve" }),
+      query: new URLSearchParams("lang=de"),
+    });
+    expect(refused.body).toContain('<html lang="en">');
+    expect(refused.body).toContain(`<p>${TEXTS.en.error.consent}</p>`);
+  });
+
+  it.each([
+    ["Accept-Language: fr", "", "fr"],
+    ["?lang=fr and no header", "&lang=fr", undefined],
+  ])(
+    "BR-129 v4 a callback with an unknown state and %s gets the French callback page",
+    async (_name, suffix, acceptLanguage) => {
+      const h = await harness();
+      const refused = await h.proxy.callback({
+        query: new URLSearchParams(`code=c&state=unknown${suffix}`),
+        ...(acceptLanguage === undefined ? {} : { acceptLanguage }),
+      });
+      expect(refused.status).toBe(400);
+      expect(refused.body).toContain('<html lang="fr">');
+      expect(refused.body).toContain(`<p>${FR.error.callback}</p>`);
+      expect(refused.body).not.toContain("<nav");
+    },
+  );
+
+  it("BR-393 v3 a CIMD loopback request with lang=fr shows the French lines", async () => {
+    const URL_ID = "https://client.example.com/c.json";
+    const redirect = "http://127.0.0.1:33418/cb";
+    const meta = new FakeMetadata();
+    meta.serve.set(URL_ID, {
+      body: cimdDocument(URL_ID, { redirect_uris: [redirect] }),
+    });
+    const h = await harness({
+      origins: ["https://client.example.com"],
+      clientMetadata: meta,
+      redirects: [redirect],
+    });
+    const response = await h.proxy.authorize({
+      query: h.authorizeQuery(
+        { clientId: URL_ID, method: "none", redirect },
+        challenge,
+        { lang: "fr" },
+      ),
+    });
+    expect(response.status).toBe(200);
+    const body = response.body;
+    expect(body).toContain(`<p>${FR.clientHostLabel} client.example.com</p>`);
+    expect(body).toContain(`<p>${FR.metadataNotice}</p>`);
+    expect(body).toContain(`<p>${FR.loopbackLine}</p>`);
+    expect(body).not.toContain("Client host:");
+    expect(body).not.toContain("(loopback)");
   });
 });
