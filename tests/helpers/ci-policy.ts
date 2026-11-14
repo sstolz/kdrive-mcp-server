@@ -187,8 +187,9 @@ const expectedImageJob: Job = {
     })),
   ],
 };
-// BR-320 / BR-015 v6: the dependency audit job, compared exactly. It is not
-// one of the five build gates, so Sonar never waits for it (BR-149 v2).
+// BR-320 v3 / BR-015 v6: the dependency audit job, compared exactly, with
+// the F-027 install check as its fourth step. It is not one of the five
+// build gates, so Sonar never waits for it (BR-149 v2).
 export const expectedAuditJob: Job = {
   "runs-on": HOSTED,
   needs: ["changes"],
@@ -198,6 +199,7 @@ export const expectedAuditJob: Job = {
     { uses: CHECKOUT, with: { "persist-credentials": false } },
     { run: "make setup" },
     { run: "make audit" },
+    { run: "make install-check" },
   ],
 };
 // BR-227: the classification job.
@@ -371,6 +373,8 @@ function validateRun(job: string, run: string): number {
     check(job === "image", "image targets only in the image job");
   else if (run === "make audit")
     check(job === "audit", "make audit only in the audit job");
+  else if (run === "make install-check")
+    check(job === "audit", "make install-check only in the audit job");
   else if (run === "make ci-changes")
     check(job === "changes", "make ci-changes only in the changes job");
   else if (run === "make privacy-scan")
@@ -679,7 +683,7 @@ export function validateWorkflow(workflow: Workflow): void {
 
   check(
     canonical(workflow.jobs.audit) === canonical(expectedAuditJob),
-    "audit job: changes-gated heavy job, bounded, checkout, make setup, make audit",
+    "audit job: changes-gated heavy job, bounded, checkout, make setup, make audit, make install-check",
   );
 
   const pr = workflow.jobs["sonar-pr"];

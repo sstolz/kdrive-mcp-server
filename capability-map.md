@@ -1,5 +1,20 @@
 # Capability map
 
+## Provisional — direct image codecs (pending acceptance)
+
+[F-027 v2](features/F-027-direct-image-codecs.md) (#12), BR-389–BR-392 v1
+with BR-122 v3, BR-315 v2, BR-318 v2, BR-320 v3 and BR-321 v4, BR-317
+superseded by BR-390, and
+[ADR-010](architecture-decisions/ADR-010-direct-image-codecs.md); all pending
+acceptance on actual main. `kdrive_read` with `format: image` decodes and
+encodes through `pngjs` 7.0.0 and `jpeg-js` 0.4.4 directly with a local
+nearest-neighbour resize instead of Jimp, with byte-identical output pinned by
+characterization tests. An install of the packed tarball or of the published
+package from the first release that includes #12 resolves no `zod` below
+4.6.6; `make install-check`, run by the CI `audit` job, checks such an install.
+`tsconfig.json` checks every third-party declaration. Not available until
+acceptance.
+
 ## Accepted — bounded invocation queue
 
 [F-026 v1](features/F-026-bounded-invocation-queue.md) (#16), BR-380–BR-388 v1
@@ -35,8 +50,8 @@ BR-379 v1 with BR-016 v3 and BR-178 v3. The npm package is renamed
 environment, then, only for `dry_run=false` and after the owner's approval,
 pushes the two-platform image `ghcr.io/sstolz/kdrive-mcp-server:<version>` and
 publishes the verified tarball to npm under `beta` with provenance, and reads
-both back. npm installs still resolve Jimp's nested Zod 3 during the beta
-(residual risk (f), fixed before 1.0 in #12). Accepted on actual main
+both back. npm installs of `0.6.0-beta.1` still resolve Jimp's nested Zod 3
+(residual risk (f)); F-027 (#12, provisional entry above) removes Jimp. Accepted on actual main
 `163e701` on 2026-11-13: `make check` rc=0 (4028 tests), AC-16 refused
 dispatches 43374504547, 43375479137 and 43374822744, AC-22 dry run 43410611002,
 and release run 43412989345 published `0.6.0-beta.1`
@@ -96,7 +111,8 @@ BR-015 v6, BR-122 v2, BR-225 v2 and BR-227 v2, and
 11.0.8, so `npm audit` on the lockfile reports no high finding; `make audit`
 and the CI `audit` job, needed by `ci-result`, fail on any high or critical
 finding. An install of the packed tarball does not get the overrides
-(`SECURITY.md`).
+(`SECURITY.md`); F-027 (#12, provisional entry above) removes Jimp and its
+overrides, so no such install resolves Zod 3.
 
 ## Accepted — persistent OAuth proxy state
 

@@ -8,7 +8,7 @@ COMPOSE = "$(DOCKER)" compose
 	coverage sonar sonar-pr quality oidc-qualify http-acceptance kdrive-record kdrive-acceptance \
 	kdrive-write-acceptance kdrive-upload-acceptance \
 	image-binfmt image image-smoke \
-	audit ci-changes privacy-scan runner-probe runner-reset-mark runner-reset-check \
+	audit install-check ci-changes privacy-scan runner-probe runner-reset-mark runner-reset-check \
 	release-check release-setup release-npm release-image release-verify \
 	_require-container-config _require-config _require-setup
 
@@ -26,6 +26,7 @@ help:
 		'  make test          Build and run tests' \
 		'  make pack          Pack and verify the executable artifact' \
 		'  make audit         Fail on any high or critical npm audit finding (network)' \
+		'  make install-check Install the packed tarball from the registry and check zod (network)' \
 		'  make shell         Open a shell inside dev' \
 		'  make coverage      Run container tests with V8/LCOV coverage' \
 		'  make sonar         Fresh trusted-main coverage and guarded official analysis' \
@@ -106,6 +107,11 @@ check:
 # BR-319: not part of check; npm audit queries the registry advisory service.
 audit: _require-setup
 	$(COMPOSE) run --rm dev npm audit --audit-level=high
+
+# F-027 BR-392: not part of check; installs the packed tarball from the npm
+# registry into a new prefix and checks the installed zod and @jimp/ packages.
+install-check: _require-setup build
+	$(COMPOSE) run --rm -T dev node scripts/install-check.ts
 
 shell: _require-setup
 	$(COMPOSE) run --rm dev sh

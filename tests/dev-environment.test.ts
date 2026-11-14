@@ -896,3 +896,49 @@ it("TestBR319_make_audit help lists the target and check never runs npm audit", 
   expect(dry.stdout).toContain("npm run lint");
   expect(dry.stdout).not.toContain("npm audit");
 });
+
+function runInstallCheck(fail: string) {
+  const fixture = makeFixture(fail);
+  const result = spawnSync(
+    fixture.make,
+    ["install-check", `DOCKER=${join(fixture.directory, "bin/docker")}`],
+    { cwd: fixture.directory, env: fixture.env, encoding: "utf8" },
+  );
+  return { result, calls: readFileSync(fixture.log, "utf8").split("\n") };
+}
+it("TestBR392_install_check runs exactly the install-check script in dev after the build", () => {
+  const { result, calls } = runInstallCheck("");
+  expect(result.status, result.stderr).toBe(0);
+  expect(calls[0]).toContain("node_modules/.package-lock.json");
+  const build = calls.indexOf("compose run --rm dev npm run build");
+  const check = calls.indexOf(
+    "compose run --rm -T dev node scripts/install-check.ts",
+  );
+  expect(build).toBeGreaterThan(0);
+  expect(check).toBeGreaterThan(build);
+  expect(calls.filter((line) => line.includes("install-check"))).toHaveLength(
+    1,
+  );
+});
+it("TestBR392_install_check fails with the script failure status", () => {
+  const { result } = runInstallCheck("scripts/install-check.ts");
+  expect(result.status).not.toBe(0);
+  expect(result.stderr).toContain("install-check] Error 37");
+});
+it("TestBR392_install_check help lists the target and check never runs it", () => {
+  const fixture = makeFixture();
+  const help = spawnSync(fixture.make, ["help"], {
+    cwd: fixture.directory,
+    env: fixture.env,
+    encoding: "utf8",
+  });
+  expect(help.stdout).toContain("make install-check");
+  const dry = spawnSync(
+    fixture.make,
+    ["-n", "check", `DOCKER=${join(fixture.directory, "bin/docker")}`],
+    { cwd: fixture.directory, env: fixture.env, encoding: "utf8" },
+  );
+  expect(dry.status, dry.stderr).toBe(0);
+  expect(dry.stdout).toContain("npm run lint");
+  expect(dry.stdout).not.toContain("install-check");
+});

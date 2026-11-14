@@ -163,19 +163,15 @@ it.each(malformedPdfs())(
 );
 
 it("TestBR116_image_budgets review1 related high-bit PNG framing is never repaired", async () => {
-  const [
-    { default: png },
-    { crc32 },
-    { preflightImage },
-    { validateExtracted },
-  ] = await Promise.all([
-    import("@jimp/js-png"),
-    import("node:zlib"),
-    import("../src/extraction-image.js"),
-    import("../src/extraction.js"),
-  ]);
+  const [{ encodePng }, { crc32 }, { preflightImage }, { validateExtracted }] =
+    await Promise.all([
+      import("./helpers/image-codecs.js"),
+      import("node:zlib"),
+      import("../src/extraction-image.js"),
+      import("../src/extraction.js"),
+    ]);
   const bytes = Buffer.from(
-    png().encode({ width: 1, height: 1, data: Buffer.alloc(4, 255) }),
+    encodePng({ width: 1, height: 1, data: Buffer.alloc(4, 255) }),
   );
   bytes[12] = bytes[12]! | 128;
   bytes.writeUInt32BE(crc32(bytes.subarray(12, 29)), 29);

@@ -120,33 +120,35 @@ both JSON escaping layers, image base64 expansion and all block overhead against
 262144 UTF-8 bytes and maxOutputChars UTF-16 units. Oversize containers refuse
 before partial extraction; text truncates only at whole code points.
 
-The pinned pure-JavaScript dependencies are Mozilla pdfjs-dist6.5.438 and minimal
-Jimp core/PNG/JPEG/resize modules1.6.1; Node text/zlib APIs need no external
-executable. [ADR-004](../architecture-decisions/ADR-004-bounded-extraction-dependencies.md)
-records the choice, alternatives and compatibility cost. Exact source-hash and
+The pinned pure-JavaScript dependencies are Mozilla pdfjs-dist6.5.438 and the
+image codecs `pngjs` 7.0.0 and `jpeg-js` 0.4.4, called directly with a local
+nearest-neighbour resize (F-027, #12, pending acceptance); Node text/zlib APIs
+need no external executable.
+[ADR-004](../architecture-decisions/ADR-004-bounded-extraction-dependencies.md)
+records the choice, alternatives and compatibility cost, and
+[ADR-010](../architecture-decisions/ADR-010-direct-image-codecs.md) replaces its
+image-codec part. Exact source-hash and
 producer tests bind the PDF profile. Runtime verification inside Docker installs
 with dev/optional packages omitted and proves extraction without native canvas;
 the unchanged development npm-ci contract can install inactive optional canvas.
 The modern PDF entry uses no native canvas, WASM, external fetching or eval.
 
-Dependency audit (F-020, #104, accepted 2026-11-11): `package.json` overrides
-make `@jimp/types` and `@jimp/plugin-resize` use the root `zod` 4 (`"$zod"`),
-which removes the high Zod 3.25.76
-[oversized-collection advisory](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5),
-and pin `minimatch` to `11.0.8` for the development tooling. Jimp declares
-`zod ^3.23.8`; its runtime schemas use only APIs present in Zod 4, and the
-BR-317 tests pin that behaviour through the real image route. Jimp's
-declarations name Zod 3 types, so `tsconfig.json` sets `skipLibCheck: true`;
-`src/extraction-image.ts` types its resize options locally because the library
-type becomes `any`.
-[ADR-009](../architecture-decisions/ADR-009-dependency-overrides-skiplibcheck.md)
-records the choice and its residual risks. `make audit` runs
+Dependency audit (F-020, #104; F-027, #12, pending acceptance): the image
+codecs declare no dependencies, so no package on the image route loads `zod`,
+and `tsconfig.json` checks every third-party declaration (no `skipLibCheck`).
+The only `package.json` override (BR-315) pins `minimatch` to `11.0.8` for the
+development tooling.
+[ADR-010](../architecture-decisions/ADR-010-direct-image-codecs.md) records the
+codec choice and its consequences. `make audit` runs
 `npm audit --audit-level=high` inside `dev` and fails on any high or critical
 finding; it queries the registry advisory service, so `make check` does not run
-it. The CI `audit` job runs `make setup` then `make audit` on every heavy run,
-and `ci-result` needs it. The overrides apply only to installs from this
-repository's lockfile (`npm ci`, the container image), not to an install of the
-packed tarball (see `SECURITY.md`).
+it. `make install-check` packs the package, installs the packed tarball from the
+npm registry into a new empty prefix (`npm install --global --prefix`), and
+fails when an installed `zod` is below 4.6.6, when a package of the former
+image library is installed, or when the tree holds a symbolic link; it needs
+the registry, so `make check` does not run it either. The CI
+`audit` job runs `make setup`, `make audit`, then `make install-check` on every
+heavy run, and `ci-result` needs it (see `SECURITY.md`).
 
 This is an explicit composition boundary: compiled `navigation.js` provides
 `createNavigationServer(configuration, dependencies)`, and `stdio.js` provides
@@ -213,21 +215,22 @@ never recursively changes checkout ownership or deletes volumes.
 
 ## Commands and checks
 
-| Command             | Runs inside `dev`                                                              |
-| ------------------- | ------------------------------------------------------------------------------ |
-| `make lint`         | `npm run lint`: type-aware ESLint, including unhandled Promises; warnings fail |
-| `make format-check` | `npm run format:check`: Prettier without rewriting                             |
-| `make format`       | `npm run format`: explicit formatting writes                                   |
-| `make typecheck`    | `npm run typecheck`: TypeScript source, tests and quality scripts              |
-| `make build`        | `npm run build`: strict NodeNext compilation to `dist/`                        |
-| `make test`         | Build, then `npm test`: non-watch Vitest; zero tests fail                      |
-| `make pack`         | Build, `npm pack --pack-destination artifacts`, packed artifact checks         |
-| `make audit`        | `npm audit --audit-level=high` (network; not part of `make check`)             |
-| `make check`        | Ordered lint, format, typecheck, build, tests, package verification            |
-| `make coverage`     | Build, pinned Vitest V8 coverage, LCOV and input-digest metadata               |
-| `make shell`        | Container shell for diagnosis                                                  |
-| `make lockfile`     | Explicit container-only lockfile generation/update                             |
-| `make oidc-qualify` | Interactive OIDC provider qualification with `ARGS="..."` (see below)          |
+| Command              | Runs inside `dev`                                                                                      |
+| -------------------- | ------------------------------------------------------------------------------------------------------ |
+| `make lint`          | `npm run lint`: type-aware ESLint, including unhandled Promises; warnings fail                         |
+| `make format-check`  | `npm run format:check`: Prettier without rewriting                                                     |
+| `make format`        | `npm run format`: explicit formatting writes                                                           |
+| `make typecheck`     | `npm run typecheck`: TypeScript source, tests and quality scripts                                      |
+| `make build`         | `npm run build`: strict NodeNext compilation to `dist/`                                                |
+| `make test`          | Build, then `npm test`: non-watch Vitest; zero tests fail                                              |
+| `make pack`          | Build, `npm pack --pack-destination artifacts`, packed artifact checks                                 |
+| `make audit`         | `npm audit --audit-level=high` (network; not part of `make check`)                                     |
+| `make install-check` | Installs the packed tarball from the registry and checks its `zod` (network; not part of `make check`) |
+| `make check`         | Ordered lint, format, typecheck, build, tests, package verification                                    |
+| `make coverage`      | Build, pinned Vitest V8 coverage, LCOV and input-digest metadata                                       |
+| `make shell`         | Container shell for diagnosis                                                                          |
+| `make lockfile`      | Explicit container-only lockfile generation/update                                                     |
+| `make oidc-qualify`  | Interactive OIDC provider qualification with `ARGS="..."` (see below)                                  |
 
 Focused targets require successful setup. `make check` stops on the first
 failure; its five CI jobs use the same image and Make targets. Tests include

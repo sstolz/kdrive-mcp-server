@@ -11,20 +11,12 @@ import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { expect, it } from "vitest";
-import png from "@jimp/js-png";
-import { createJimp } from "@jimp/core";
-import { methods } from "@jimp/plugin-resize";
-import { JimpClassSchema } from "@jimp/types";
-import { ZodError } from "zod";
+import { encodePng } from "./helpers/image-codecs.js";
 import { extractPdf } from "../src/extraction-pdf.js";
 import { preflightPdf } from "../src/extraction-pdf-profile.js";
 import { classicPdf } from "./helpers/extraction.js";
 const require = createRequire(import.meta.url);
-// BR-317 / BR-122 v2: the zod each Jimp schema package loads at run time.
-function jimpZod(name: string): string {
-  return createRequire(require.resolve(name)).resolve("zod");
-}
-it("TestBR122_pure_js_dependencies pins exact producer source, scalar-only Jimp schema surface and root Zod 4", () => {
+it("TestBR122_pure_js_dependencies pins exact producer source and dependency-free image codecs", () => {
   const directory = dirname(require.resolve("pdfjs-dist"));
   for (const [file, hash] of [
     [
@@ -41,64 +33,16 @@ it("TestBR122_pure_js_dependencies pins exact producer source, scalar-only Jimp 
         .update(readFileSync(join(directory, file!)))
         .digest("hex"),
     ).toBe(hash);
-  for (const name of ["@jimp/types", "@jimp/plugin-resize"]) {
-    const code = readFileSync(
-      join(dirname(require.resolve(name)), "../esm/index.js"),
-      "utf8",
-    );
-    expect(code).not.toMatch(/z\.(?:array|record|map|set)\s*\(/u);
+  // BR-122 v3: the image codecs declare no dependencies, so the image route
+  // loads no zod.
+  const lock = JSON.parse(readFileSync("package-lock.json", "utf8")) as {
+    packages: Record<string, { version?: string; dependencies?: unknown }>;
+  };
+  for (const name of ["node_modules/pngjs", "node_modules/jpeg-js"]) {
+    const entry = lock.packages[name];
+    expect(entry, name).toBeDefined();
+    expect(entry, name).not.toHaveProperty("dependencies");
   }
-  const types = readFileSync(
-    join(dirname(require.resolve("@jimp/types")), "../esm/index.js"),
-    "utf8",
-  );
-  expect(types).toContain("z.instanceof(Buffer)");
-  expect(types).toContain("z.instanceof(Uint8Array)");
-  const root = require.resolve("zod");
-  const version = (
-    JSON.parse(
-      readFileSync(
-        join(root.slice(0, root.lastIndexOf("/zod/") + 4), "package.json"),
-        "utf8",
-      ),
-    ) as { version: string }
-  ).version;
-  expect(Number(version.split(".")[0])).toBeGreaterThanOrEqual(4);
-  for (const name of ["@jimp/types", "@jimp/plugin-resize"])
-    expect(jimpZod(name)).toBe(root);
-});
-it("TestBR317_jimp_on_root_zod Jimp schema packages resolve the root zod", () => {
-  const root = require.resolve("zod");
-  expect(jimpZod("@jimp/types")).toBe(root);
-  expect(jimpZod("@jimp/plugin-resize")).toBe(root);
-});
-it("TestBR317_jimp_on_root_zod resize validation throws the root ZodError", () => {
-  const Jimp = createJimp({ plugins: [methods], formats: [] });
-  const image = new Jimp({ data: Buffer.alloc(16, 255), width: 2, height: 2 });
-  let thrown: unknown;
-  try {
-    image.resize({ w: -1 });
-  } catch (error) {
-    thrown = error;
-  }
-  expect(thrown).toBeInstanceOf(ZodError);
-  expect([image.bitmap.width, image.bitmap.height]).toEqual([2, 2]);
-});
-// Under skipLibCheck the declared schema type names Zod 3 types (BR-318), so
-// the test reads it through the minimal surface it calls.
-const jimpClassSchema = JimpClassSchema as unknown as {
-  safeParse(value: unknown): { success: boolean };
-};
-it("TestBR317_jimp_on_root_zod JimpClassSchema refuses a bitmap whose data is not bytes", () => {
-  expect(
-    jimpClassSchema.safeParse({ bitmap: { data: "x", width: 1, height: 1 } })
-      .success,
-  ).toBe(false);
-  expect(
-    jimpClassSchema.safeParse({
-      bitmap: { data: Buffer.alloc(4), width: 1, height: 1 },
-    }).success,
-  ).toBe(true);
 });
 it("TestBR114_pdf_producer_admission exact dependency stress respects pre-admitted U/I", async () => {
   const operators = [
@@ -156,7 +100,7 @@ it("TestBR122_pure_js_dependencies packed-runtime composition works with optiona
     false,
   );
   const pdf = classicPdf(["Pure JS \\200\\351"], true),
-    image = png().encode({ width: 2, height: 1, data: Buffer.alloc(8, 255) });
+    image = encodePng({ width: 2, height: 1, data: Buffer.alloc(8, 255) });
   writeFileSync(
     join(directory, "probe.mjs"),
     `import {runExtraction} from './dist/extraction.js';globalThis.fetch=()=>{throw Error('NETWORK_FORBIDDEN')};const inputs=${JSON.stringify(

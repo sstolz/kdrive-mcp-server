@@ -72,6 +72,7 @@ override the current Docker-only development contract.
 | F-024 | #2      | `features/F-024-gated-publication.md`          | Done v2, accepted on main 163e701 (2026-11-13; v1 in history); BR-353–375, BR-378, BR-379 and BR-016/178 v3 active; BR-376/377 withdrawn, never reused                                                          |
 | F-025 | #2      | `features/F-025-changelog-release-sections.md` | Done v1, accepted on main e857db3 (2026-11-13); BR-321 v3 active (v2 withdrawn in F-024 v2, never reused)                                                                                                       |
 | F-026 | #16     | `features/F-026-bounded-invocation-queue.md`   | Done v1, accepted on main 2d10e19 (2026-11-13); BR-380–388 v1 and BR-258 v2, BR-070 v3, BR-118 v2 active                                                                                                        |
+| F-027 | #12     | `features/F-027-direct-image-codecs.md`        | Frozen v2 (2026-11-14; v1 2026-11-13); implementation pending acceptance; BR-389–392 v1 and BR-122 v3, BR-315 v2, BR-318 v2, BR-320 v3, BR-321 v4 pending; BR-317 superseded by BR-390 on acceptance; ADR-010   |
 
 Version history: [v1 immutable snapshot](../features/history/F-001-v1.md),
 [v2 immutable snapshot](../features/history/F-001-v2.md),
@@ -112,7 +113,8 @@ BR-014 and BR-015 to v2 in its [frozen quality-gate contract](../features/F-011-
 #1 allocates F-023 / BR-341–BR-352 v1 and versions BR-015 to v7, BR-149, BR-183, BR-225 and BR-227 to v3, and BR-229 and BR-320 to v2 in its [hosted CI and privacy-scan contract](../features/F-023-hosted-ci-privacy-scan.md), with no ADR; all were accepted on actual main `ad25fa2` on 2026-11-12 ([evidence](https://github.com/sstolz/kdrive-mcp-server/issues/1#issuecomment-6831523066)) and are active. The next unused feature ID was then F-024 and the next unused business-rule ID BR-353.
 #2 allocates F-024 / BR-353–BR-379 and versions BR-016 and BR-178 to v3 in its [gated publication contract](../features/F-024-gated-publication.md), with no ADR; F-024 v2 withdraws BR-376 and BR-377 (never accepted, no record, never reused) and the BR-321 v2 of F-024 v1 (never accepted, number never reused; F-025 v1 versions BR-321 to v3, accepted on actual main `e857db3`). BR-353–BR-375, BR-378 and BR-379 v1 and BR-016 v3 and BR-178 v3 were accepted on actual main `163e701` on 2026-11-13 ([evidence](https://github.com/sstolz/kdrive-mcp-server/issues/2#issuecomment-6851666057)) and are active. The next unused feature ID was then F-025 and the next unused business-rule ID BR-380.
 #2 allocates F-025 and versions BR-321 to v3 (BR-321 v2 is skipped: it names the withdrawn rule of F-024 v1) in its [changelog release-sections contract](../features/F-025-changelog-release-sections.md), with no new BR ID and no ADR; F-025 v1 and BR-321 v3 were accepted on actual main `e857db3` on 2026-11-13 ([evidence](https://github.com/sstolz/kdrive-mcp-server/issues/2#issuecomment-6852513497)). The next unused feature ID was then F-026 and the next unused business-rule ID BR-380.
-#16 allocates F-026 / BR-380–BR-388 v1 and versions BR-258 to v2, BR-070 to v3 and BR-118 to v2 in its [bounded invocation queue contract](../features/F-026-bounded-invocation-queue.md), with no ADR; F-026 v1, BR-380–BR-388 v1 and BR-070 v3, BR-118 v2 and BR-258 v2 were accepted on actual main `2d10e19` on 2026-11-13 and are active ([evidence](https://github.com/sstolz/kdrive-mcp-server/issues/16#issuecomment-6863879656)). The next unused feature ID is F-027; the next unused business-rule ID is BR-389 (BR-291 and BR-305–BR-311 stay reserved for #109; BR-376 and BR-377 are withdrawn).
+#16 allocates F-026 / BR-380–BR-388 v1 and versions BR-258 to v2, BR-070 to v3 and BR-118 to v2 in its [bounded invocation queue contract](../features/F-026-bounded-invocation-queue.md), with no ADR; F-026 v1, BR-380–BR-388 v1 and BR-070 v3, BR-118 v2 and BR-258 v2 were accepted on actual main `2d10e19` on 2026-11-13 and are active ([evidence](https://github.com/sstolz/kdrive-mcp-server/issues/16#issuecomment-6863879656)). The next unused feature ID was then F-027 and the next unused business-rule ID BR-389.
+#12 allocates F-027 / BR-389–BR-392 v1, versions BR-122 to v3, BR-315 to v2, BR-318 to v2, BR-320 to v3 and BR-321 to v4, supersedes BR-317 by BR-390 and writes ADR-010 in its [direct image codecs contract](../features/F-027-direct-image-codecs.md); all are pending acceptance on actual main, and the previous versions and BR-317 v1 stay active until then. The next unused feature ID is F-028; the next unused business-rule ID is BR-393 (BR-291 and BR-305–BR-311 stay reserved for #109; BR-376 and BR-377 are withdrawn).
 #14 was frozen after independent review and autonomous freeze; these
 allocations were accepted on actual main `7b046a0`. ADR-001–003 were verified on both actual
 main and the concurrent #11 branch before allocating ADR-004.
@@ -187,7 +189,10 @@ accepted design for #14 / F-009, whose implementation was accepted on actual mai
 ADR-008 stays allocated to F-019 (#103) and is not written yet (`BACKLOG.md`).
 #104 allocates [ADR-009](../architecture-decisions/ADR-009-dependency-overrides-skiplibcheck.md)
 (dependency overrides and `skipLibCheck`, F-020), accepted with F-020 on main `b6acf86`.
-The next unused architecture-decision identifier is ADR-010. ADR-001 stays
+#12 allocates [ADR-010](../architecture-decisions/ADR-010-direct-image-codecs.md)
+(direct image codecs, F-027), which supersedes ADR-009 and the image-codec
+choice (Jimp modules) of ADR-004; ADR-004 and ADR-009 keep their text.
+The next unused architecture-decision identifier is ADR-011. ADR-001 stays
 byte-for-byte unchanged; its unaffected foundation choices remain applicable.
 
 ## Templates
