@@ -2,7 +2,7 @@
 id: F-030
 title: Designed OAuth proxy consent and error pages
 ticket: "#23"
-status: frozen
+status: done
 version: 1
 ---
 
