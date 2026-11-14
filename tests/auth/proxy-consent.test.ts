@@ -180,6 +180,8 @@ describe("BR-130 browser binding of the consent", () => {
       cookie: `${COOKIE}=${h.cookieOf(fresh)}`,
     });
     expect(ok.status).toBe(302);
+    // BR-129 v5: a reuse inside the BR-411 window is replayed (AC-04).
+    h.clock.advance(10 * SECOND);
     const again = await h.proxy.consent({
       form: new URLSearchParams(flow),
       cookie: `${COOKIE}=${h.cookieOf(fresh)}`,
