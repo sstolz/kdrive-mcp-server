@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import {
   COOKIE,
@@ -16,6 +17,13 @@ import { FakeMetadata, cimdDocument } from "../helpers/cimd.js";
 const challenge = s256("v".repeat(43));
 const ATTRIBUTES = "; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=600";
 
+/** BR-401: the CSP with the hash recomputed from the page's own `<style>`. */
+function expectedCsp(body: string): string {
+  const style = /<style>([^<]*)<\/style>/u.exec(body)?.[1] ?? "";
+  const hash = createHash("sha256").update(style, "utf8").digest("base64");
+  return `default-src 'none'; frame-ancestors 'none'; base-uri 'none'; style-src 'sha256-${hash}'`;
+}
+
 async function page(h: Harness, client: Registered, cookie?: string) {
   return h.proxy.authorize({
     query: h.authorizeQuery(client, challenge),
@@ -24,7 +32,7 @@ async function page(h: Harness, client: Registered, cookie?: string) {
 }
 
 describe("BR-129 consent page", () => {
-  it("BR-129 shows an escaped, unverified client name, the exact redirect and a fresh identifier each time", async () => {
+  it("BR-129 v3 shows an escaped, unverified client name, the exact redirect and a fresh identifier each time", async () => {
     const h = await harness();
     const client = await h.register({
       client_name: "<script>alert(1)</script>",
@@ -44,7 +52,7 @@ describe("BR-129 consent page", () => {
       expect(header(response, "x-frame-options")).toBe("DENY");
       expect(header(response, "referrer-policy")).toBe("no-referrer");
       expect(header(response, "content-security-policy")).toBe(
-        "default-src 'none'; frame-ancestors 'none'; base-uri 'none'",
+        expectedCsp(response.body),
       );
     }
     expect(h.consentId(first)).not.toBe(h.consentId(second));
@@ -174,8 +182,8 @@ describe("BR-130 browser binding of the consent", () => {
   });
 });
 
-// F-028 AC-09: the consent page of a CIMD client (BR-393, BR-129 v2).
-describe("BR-393 BR-129 v2 consent page of a CIMD client", () => {
+// F-028 AC-09 / F-030 AC-05: the consent page of a CIMD client (BR-393 v2, BR-129 v3).
+describe("BR-393 v2 BR-129 v3 consent page of a CIMD client", () => {
   const URL_ID = "https://client.example.com/c.json";
   const redirects = [
     "http://127.0.0.1/cb",
@@ -207,7 +215,7 @@ describe("BR-393 BR-129 v2 consent page of a CIMD client", () => {
     "http://[::1]/cb",
     "http://localhost:8080/cb",
   ])(
-    "BR-393 shows the client ID, its host, the unverified name and the loopback line for %s",
+    "BR-393 v2 shows the client ID, its host, the unverified name and the loopback line for %s",
     async (redirect) => {
       const response = await cimdPage(redirect);
       expect(response.status).toBe(200);
@@ -228,7 +236,7 @@ describe("BR-393 BR-129 v2 consent page of a CIMD client", () => {
   );
 
   it.each(["https://app.example/cb", "http://localhost.example.com/cb"])(
-    "BR-393 omits the loopback line for %s",
+    "BR-393 v2 omits the loopback line for %s",
     async (redirect) => {
       const response = await cimdPage(redirect);
       expect(response.status).toBe(200);
@@ -237,26 +245,25 @@ describe("BR-393 BR-129 v2 consent page of a CIMD client", () => {
     },
   );
 
-  it("BR-129 v2 a registered client's page is byte-identical to the F-010 page", async () => {
+  it("BR-129 v3 a registered client's page carries no BR-393 line", async () => {
     const h = await harness();
     const client = await h.register({ client_name: "Plain" });
     const response = await page(h, client);
     const consentId = h.consentId(response);
-    expect(response.body).toBe(
+    expect(response.body).toContain(
       [
-        '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Authorize access</title></head><body>',
-        "<h1>Authorize access</h1>",
         "<p>Client name: <strong>Plain (self-declared, unverified)</strong></p>",
         "<p>The client name is self-declared and unverified.</p>",
         `<p>Client ID: <code>${client.clientId}</code></p>`,
         `<p>Redirect URI: <code>${client.redirect}</code></p>`,
         `<p>Protected resource: <code>${PUBLIC_URL}</code></p>`,
-        `<form method="post" action="${PUBLIC_URL}/oauth/consent">`,
-        `<input type="hidden" name="consent" value="${consentId}">`,
-        '<button type="submit" name="decision" value="approve">Approve</button>',
-        '<button type="submit" name="decision" value="deny">Deny</button>',
-        "</form></body></html>",
       ].join(""),
     );
+    expect(response.body).toContain(
+      `<form method="post" action="${PUBLIC_URL}/oauth/consent"><input type="hidden" name="consent" value="${consentId}">`,
+    );
+    expect(response.body).not.toContain("Client host:");
+    expect(response.body).not.toContain("metadata document");
+    expect(response.body).not.toContain("(loopback)");
   });
 });
