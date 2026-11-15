@@ -1,5 +1,18 @@
 # Capability map
 
+## Provisional — bounded audit waits and shutdown
+
+[F-039 v1](features/F-039-bounded-audit-sink.md) (#47 lot C, draft),
+[BR-070 v5](business-rules/BR-070.md), [BR-240 v2](business-rules/BR-240.md),
+[BR-241 v2](business-rules/BR-241.md), [BR-254 v2](business-rules/BR-254.md)
+and [BR-259 v2](business-rules/BR-259.md): proposed 5,000 ms append budgets
+including queue time for stderr and files, immediate rejection on stream
+errors, permanent failure until restart, and bounded sink/gate shutdown.
+Intent failure sends no mutation; outcome failure preserves the upstream
+classification with `audit:"outcome_unrecorded"`. No new event or configuration.
+Not reviewed, implemented or accepted; existing accepted versions remain
+active. Acceptance evidence will be recorded in #47 on the actual main SHA.
+
 ## Accepted — fragmented reads and defensive validator handling
 
 [F-038 v1](features/F-038-stream-budget-and-weak-etags.md) (#47 lot B),
