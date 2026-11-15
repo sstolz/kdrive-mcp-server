@@ -30,7 +30,7 @@ There are two ways to get the runtime image:
   `ghcr.io/sstolz/kdrive-mcp-server:0.6.0-beta.2`, for `linux/amd64` and
   `linux/arm64`. A beta never gets the `latest` tag, and image tags can be
   overwritten, so pin the image by its digest
-  ([publishing](publishing.md#versions), and step 1 below); for this release
+  ([publishing](publishing.md#versions), and step 1 below); for `0.6.0-beta.2`
   it is `sha256:6e561933d78e1443db3b67356d6d081362531158c77cd8a47fe895e1a5d5a866`.
 - **Build from source.** `make image` builds the image from a checkout of
   `main`, with every merged change ([Build](#build)). A local build loads the

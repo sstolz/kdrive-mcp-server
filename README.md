@@ -49,8 +49,8 @@ has been verified end to end so far.
 **Status:** beta `0.6.0-beta.2` ([VERSION](VERSION)) is published through
 the gated release workflow ([docs/publishing.md](docs/publishing.md)): the
 container image is `ghcr.io/sstolz/kdrive-mcp-server:0.6.0-beta.2`
-(`linux/amd64` and `linux/arm64`; pin it by digest, `sha256:6e561933d78e1443db3b67356d6d081362531158c77cd8a47fe895e1a5d5a866` for
-this release), and the npm package is `@sstolz/kdrive-mcp-server@beta`.
+(`linux/amd64` and `linux/arm64`; pin it by digest: for `0.6.0-beta.2` it
+is `sha256:6e561933d78e1443db3b67356d6d081362531158c77cd8a47fe895e1a5d5a866`), and the npm package is `@sstolz/kdrive-mcp-server@beta`.
 Changes are listed in [CHANGELOG.md](CHANGELOG.md).
 
 <a id="quick-start"></a>
