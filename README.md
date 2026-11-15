@@ -15,12 +15,13 @@ rename, move, trash, restore and upload. Every call goes through a policy
 (configured roots, deny patterns, received-share rules) and every write is
 recorded in an audit log before and after it is sent.
 
-**Why this server.** Infomaniak offers a REST API for kDrive but no hosted
-MCP endpoint, and Anthropic provides no kDrive connector. Infomaniak's own
+**Why this server.** As of November 2026, Infomaniak offers a REST API for
+kDrive but no hosted MCP endpoint, and Anthropic provides no kDrive connector. Infomaniak's own
 MCP server (`@infomaniak/mcp-server-kdrive`, checked at version 1.2.0) runs
 over stdio only, so a remote client such as claude.ai cannot reach it. It is
-bound to a single drive: it lists items other users shared with you but cannot
-read them, since they live in another user's drive. It also has no tool to:
+bound to a single drive: it lists items other users shared with you, but its
+file tools only act on that one drive, so they cannot open items that live in
+another user's drive. It also has no tool to:
 
 - read a file as text (`kdrive_read`: text files, PDF text, or a PNG preview
   of an image);
