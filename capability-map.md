@@ -1,5 +1,22 @@
 # Capability map
 
+## Provisional — process-wide extraction admission
+
+[F-040 draft v1](features/F-040-process-wide-extraction-admission.md)
+(#47 lot D), [BR-423 v1](business-rules/BR-423.md),
+[BR-424 v1](business-rules/BR-424.md),
+[BR-425 v1](business-rules/BR-425.md) and
+[BR-426 v1](business-rules/BR-426.md): proposed admission for all
+`kdrive_read` formats uses two process-wide permits before source buffering
+and at most eight FIFO waiters. Queue overflow returns `LIMIT_EXCEEDED`
+without automatic retry; waiting spends the running invocation's deadline,
+with `REQUEST_TIMEOUT` on expiry and `ACCESS_DENIED` on cancel/close.
+Permits remain owned through source/worker cleanup on every terminal path.
+Raw downloads and resource reads keep their existing contracts. This limits
+concurrent extraction pipelines, not total process memory. Not reviewed,
+frozen, implemented or accepted; existing capabilities remain unchanged.
+Lot C's F-039 reservation and pending rule versions remain separate.
+
 ## Accepted — fragmented reads and defensive validator handling
 
 [F-038 v1](features/F-038-stream-budget-and-weak-etags.md) (#47 lot B),
