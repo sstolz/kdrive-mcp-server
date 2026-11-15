@@ -14,15 +14,15 @@ export const LIFETIME_MS = 86_400_000;
 export const SESSIONS_PER_IDENTITY = 8;
 export const SESSIONS_TOTAL = 64;
 
-/** BR-162: process-wide windows keyed by route name. */
+/** BR-162 v3: per-peer windows and independent global ceilings. */
 export const ROUTE_WINDOWS: Readonly<
-  Record<string, { limit: number; windowMs: number }>
+  Record<string, { limit: number; global: number; windowMs: number }>
 > = {
-  register: { limit: 30, windowMs: 3_600_000 },
-  authorize: { limit: 30, windowMs: 60_000 },
-  consent: { limit: 30, windowMs: 60_000 },
-  callback: { limit: 30, windowMs: 60_000 },
-  token: { limit: 60, windowMs: 60_000 },
+  register: { limit: 30, global: 60, windowMs: 3_600_000 },
+  authorize: { limit: 30, global: 60, windowMs: 60_000 },
+  consent: { limit: 30, global: 60, windowMs: 60_000 },
+  callback: { limit: 30, global: 60, windowMs: 60_000 },
+  token: { limit: 60, global: 1200, windowMs: 60_000 },
 };
 
 /** F-021 BR-325: the two process-wide `/healthz` windows. */
@@ -60,5 +60,72 @@ export class WindowLimiter {
       return Math.ceil((window.start + this.windowMs - now) / 1000);
     window.count++;
     return undefined;
+  }
+}
+
+export interface AdmissionRefusal {
+  window: "peer" | "global";
+  retryAfter: number;
+}
+export interface AdmissionStats {
+  entries: number;
+  peerRequests: number;
+  globalRequests: number;
+}
+
+/** BR-162 v3: check both windows before mutating either one. */
+export class OAuthWindowLimiter {
+  private readonly peers = new Map<string, Window>();
+  private globalWindow: Window | undefined;
+
+  constructor(
+    private readonly peerLimit: number,
+    private readonly globalLimit: number,
+    private readonly windowMs: number,
+  ) {}
+
+  private live(window: Window | undefined, now: number): Window | undefined {
+    return window && now < window.start + this.windowMs ? window : undefined;
+  }
+
+  private refusal(
+    window: Window | undefined,
+    limit: number,
+    now: number,
+  ): number | undefined {
+    return window && window.count >= limit
+      ? Math.ceil((window.start + this.windowMs - now) / 1000)
+      : undefined;
+  }
+
+  take(peer: string, now: number): AdmissionRefusal | undefined {
+    const current = this.live(this.peers.get(peer), now);
+    const peerWait = this.refusal(current, this.peerLimit, now);
+    if (peerWait !== undefined) return { window: "peer", retryAfter: peerWait };
+    const global = this.live(this.globalWindow, now);
+    const globalWait = this.refusal(global, this.globalLimit, now);
+    if (globalWait !== undefined)
+      return { window: "global", retryAfter: globalWait };
+    if (current) current.count++;
+    else {
+      for (const [key, window] of this.peers)
+        if (!this.live(window, now)) this.peers.delete(key);
+      this.peers.set(peer, { start: now, count: 1 });
+    }
+    if (global) global.count++;
+    else this.globalWindow = { start: now, count: 1 };
+    return undefined;
+  }
+
+  /** Aggregate test evidence only; never exposes peer keys. */
+  stats(): AdmissionStats {
+    return {
+      entries: this.peers.size,
+      peerRequests: [...this.peers.values()].reduce(
+        (sum, window) => sum + window.count,
+        0,
+      ),
+      globalRequests: this.globalWindow?.count ?? 0,
+    };
   }
 }

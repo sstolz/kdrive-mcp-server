@@ -28,6 +28,7 @@ import {
   parseCredential,
   readBounded,
 } from "./checks.js";
+import { createPeerResolver } from "./peer.js";
 import { HttpStartupError } from "./errors.js";
 import {
   IDENTITY_LIMIT,
@@ -40,6 +41,8 @@ import {
   HEALTH_PATH,
   HEALTH_WINDOW_MS,
   ROUTE_WINDOWS,
+  OAuthWindowLimiter,
+  type AdmissionStats,
   WindowLimiter,
 } from "./limits.js";
 import { errorResponse, fromProxy } from "./responses.js";
@@ -50,6 +53,18 @@ import type {
   HttpHandlerOptions,
   RouteName,
 } from "./types.js";
+
+const admissionSnapshots = new WeakMap<
+  HttpHandler,
+  () => Record<string, AdmissionStats>
+>();
+
+/** F-035 bounded aggregate test seam, analogous to proxyStateSnapshot. */
+export function httpAdmissionSnapshot(
+  handler: HttpHandler,
+): Record<string, AdmissionStats> {
+  return admissionSnapshots.get(handler)?.() ?? {};
+}
 
 interface Route {
   readonly name: Exclude<RouteName, "unknown">;
@@ -269,9 +284,10 @@ export function createHttpHandler(options: HttpHandlerOptions): HttpHandler {
   const routeWindows = new Map(
     Object.entries(ROUTE_WINDOWS).map(([name, window]) => [
       name,
-      new WindowLimiter(window.limit, window.windowMs),
+      new OAuthWindowLimiter(window.limit, window.global, window.windowMs),
     ]),
   );
+  const resolvePeer = createPeerResolver(configuration.httpTrustedProxies);
   const healthWindow = new WindowLimiter(HEALTH_LIMIT, HEALTH_WINDOW_MS);
   const now = () => clock().getTime();
 
@@ -281,8 +297,14 @@ export function createHttpHandler(options: HttpHandlerOptions): HttpHandler {
     status: number,
     code: string,
     extra: Readonly<Record<string, string>> = {},
+    window?: "peer" | "global",
   ): Response {
-    safeEmit("request_refused", { route, status, error: code });
+    safeEmit("request_refused", {
+      route,
+      status,
+      error: code,
+      ...(window === undefined ? {} : { window }),
+    });
     return errorResponse(status, code, {
       ...extra,
       ...(status === 413 ? { connection: "close" } : {}),
@@ -525,12 +547,21 @@ export function createHttpHandler(options: HttpHandlerOptions): HttpHandler {
     request: Request,
     target: string,
     route: Route,
+    remoteAddress: string | undefined,
   ): Promise<Response> {
     if (!proxy) throw new Error("proxy");
     const name = route.name;
-    const wait = routeWindows.get(name)?.take(name, now());
-    if (wait !== undefined)
-      return refuse(name, 429, "rate_limited", { "retry-after": String(wait) });
+    const refusal = routeWindows
+      .get(name)
+      ?.take(resolvePeer(request.headers, remoteAddress), now());
+    if (refusal !== undefined)
+      return refuse(
+        name,
+        429,
+        "rate_limited",
+        { "retry-after": String(refusal.retryAfter) },
+        refusal.window,
+      );
     let text = "";
     if (request.method === "POST" && route.limit !== undefined) {
       const read = await readText(
@@ -615,7 +646,11 @@ export function createHttpHandler(options: HttpHandlerOptions): HttpHandler {
     );
   }
 
-  async function dispatch(request: Request, target: string): Promise<Response> {
+  async function dispatch(
+    request: Request,
+    target: string,
+    remoteAddress?: string,
+  ): Promise<Response> {
     const path = pathOf(target);
     const route = path.startsWith("/") ? routes.get(path) : undefined;
     const name: RouteName = route?.name ?? "unknown";
@@ -653,13 +688,13 @@ export function createHttpHandler(options: HttpHandlerOptions): HttpHandler {
         { status: 200, headers: { "content-type": JSON_TYPE } },
       );
     if (name === "as_metadata") return fromProxy(proxy.metadata());
-    return await oauth(request, target, route);
+    return await oauth(request, target, route, remoteAddress);
   }
 
-  return {
-    async handle(request, target) {
+  const handler: HttpHandler = {
+    async handle(request, target, remoteAddress) {
       try {
-        return await dispatch(request, target);
+        return await dispatch(request, target, remoteAddress);
       } catch {
         return refuse(routeOf(target), 500, "server_error");
       }
@@ -673,4 +708,10 @@ export function createHttpHandler(options: HttpHandlerOptions): HttpHandler {
     },
     closeStore,
   };
+  admissionSnapshots.set(handler, () =>
+    Object.fromEntries(
+      [...routeWindows].map(([name, limiter]) => [name, limiter.stats()]),
+    ),
+  );
+  return handler;
 }

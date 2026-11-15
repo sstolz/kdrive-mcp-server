@@ -1,5 +1,6 @@
 import { isAbsolute, resolve } from "node:path";
 import { isIP } from "node:net";
+import { parseTrustedProxy } from "./ip-address.js";
 import { trimAsciiListEntry, removeTerminalSlashes } from "./config-text.js";
 import {
   budget,
@@ -56,6 +57,7 @@ function asList(value: unknown, key: Setting): unknown[] {
       "oauthAllowedSubjects",
       "oauthAllowedEmails",
       "oauthAllowedClientIdOrigins",
+      "httpTrustedProxies",
     ].includes(key)
   )
     return [];
@@ -197,6 +199,8 @@ function budgetListItem(item: unknown, key: Setting): void {
 function prepareValue(value: unknown, key: Setting, kind: Kind): unknown {
   if (listKeys.has(key)) {
     const list = asList(value, key);
+    if (key === "httpTrustedProxies" && list.length > 64)
+      fail("INVALID_VALUE", key);
     if (list.length > (key === "driveIds" ? 64 : 256))
       fail("LIMIT_EXCEEDED", key);
     for (const item of list) budgetListItem(item, key);
@@ -273,11 +277,27 @@ function clientIdOrigin(value: string, key: Setting): string {
   if (origin !== value) fail("INVALID_VALUE", key);
   return value;
 }
+/** BR-421: keep supplied spelling, but detect equivalent explicit host prefixes. */
+function trustedProxyList(list: unknown[], key: Setting): readonly string[] {
+  const seen = new Set<string>();
+  const values = list.map((item) => {
+    const text = string(item, key);
+    const prefix = parseTrustedProxy(text);
+    if (!prefix) return fail("INVALID_VALUE", key);
+    const identity = `${prefix.address.text}/${String(prefix.length)}`;
+    if (seen.has(identity)) fail("INVALID_VALUE", key);
+    seen.add(identity);
+    return text;
+  });
+  return Object.freeze(values);
+}
+
 function normalizeList(
   value: unknown,
   key: Setting,
 ): readonly (number | string | RootSelector)[] {
   const list = value as unknown[];
+  if (key === "httpTrustedProxies") return trustedProxyList(list, key);
   if (
     ["roots", "driveIds", "oauthAllowedRedirectUris"].includes(key) &&
     !list.length
