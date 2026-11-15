@@ -800,6 +800,30 @@ describe("BR-257 received-share mutation evidence", () => {
       (await c.invoke("kdrive_info", { drive_id: OWNER, file_id: 500 }))
         .isError,
     ).toBeUndefined();
+    // F-042 AC-06 / BR-429: production capabilities never grant received writes,
+    // even when the provider advertises can_write/can_rename.
+    const received = (await adapter.dependencies.received.inspect(
+      { driveId: OWNER, id: 500 },
+      "live",
+    )) as { capabilities: Record<string, boolean> };
+    expect(received.capabilities).toEqual({
+      read: true,
+      list: true,
+      search: true,
+      createFile: false,
+      createDirectory: false,
+      replace: false,
+      rename: false,
+      renameTree: false,
+      moveOut: false,
+      acceptMove: false,
+      moveTree: false,
+      trash: false,
+      trashTree: false,
+      restore: false,
+      restoreTree: false,
+      acceptRestore: false,
+    });
     const afterRead = shared();
     expect(afterRead).toBeGreaterThan(0);
     const result = await c.mutate(
