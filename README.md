@@ -120,19 +120,32 @@ whether it is required and a fake example.
 ### Values from the Infomaniak side
 
 This project is not affiliated with Infomaniak; the links below go to
-Infomaniak's own documentation, and the exact menu paths in Infomaniak's
-interfaces are still to be confirmed by the maintainer. The
+Infomaniak's own documentation. Menu paths are those of the Infomaniak
+Manager in French at the time of writing; Infomaniak may rename them. The
 [deployment guide](docs/deployment.md#2-collect-the-infomaniak-values-and-register-the-oauth-client)
 describes the same steps in order.
 
-- **API token** (`KDRIVE_TOKEN_FILE`).
-  <!-- owner: confirm Infomaniak UI paths -->
-  Create a token with the `drive` scope while logged in as an account with the
-  **admin** role on every drive you configure. Infomaniak's guide:
+- **API application** (needed for the token, and for the OAuth client of a
+  remote deployment). In the Manager: **Utilisateurs et profils** → **Mon
+  profil** → **Développeur** → **Application API** → **Créer une nouvelle
+  application**. Choose the type **Application**, any name, and as the
+  application URL the redirect URI `<MCP_PUBLIC_URL>/oauth/callback`, for
+  example `https://mcp.example.com/mcp/oauth/callback`.
+  <!-- owner: confirm which URL Infomaniak expects in this field -->
+  Keep the client ID and client secret that are shown: a remote deployment
+  uses them as `OAUTH_UPSTREAM_CLIENT_ID` and the client secret file.
+- **API token** (`KDRIVE_TOKEN_FILE`). In the Manager: **Utilisateurs et
+  profils** → **Mon profil** → **Développeur** → **Tokens API** → **Créer un
+  token**. Select the application created above, the scope **drive — Produits
+  Drive**, and a validity (1 day, 1 month, 6 months, 1 year or unlimited; a
+  shorter validity limits the damage of a leak but needs renewal). Log in as
+  an account with the **admin** role on every drive you configure. Infomaniak's
+  guide:
   [Add and manage Infomaniak API tokens](https://www.infomaniak.com/en/support/faq/2582/add-and-manage-infomaniak-api-tokens);
   token list in the Manager:
-  <https://manager.infomaniak.com/v3/ng/accounts/token/list>. Store the token
-  in a file only you can read, never in a CLI argument or a committed file.
+  <https://manager.infomaniak.com/v3/ng/accounts/token/list>. The token is
+  shown once: store it in a file only you can read, never in a CLI argument or
+  a committed file.
 - **Drive ID** (`KDRIVE_ID`). <!-- owner: confirm Infomaniak UI paths -->
   The numeric ID of your kDrive, for example `123456`. Look for it in your
   kDrive account, or list the drives your token can access with the
@@ -150,15 +163,12 @@ describes the same steps in order.
   documented here.
 
 - **OAuth client and issuer** (`OAUTH_UPSTREAM_CLIENT_ID`, its secret,
-  `OAUTH_ISSUER`; remote deployment only).
-  <!-- owner: confirm Infomaniak UI paths -->
-  Register a confidential OAuth 2.0 / OpenID Connect application at your
-  provider with the redirect URI `<MCP_PUBLIC_URL>/oauth/callback`. With
-  Infomaniak as the provider, start from the
-  [Infomaniak developer portal](https://developer.infomaniak.com/). Take the
-  issuer exactly as the provider's `/.well-known/openid-configuration`
-  document gives it. The maintainer's acceptance used Infomaniak's provider
-  behind this proxy; its issuer value is not yet recorded here.
+  `OAUTH_ISSUER`; remote deployment only). With Infomaniak as the provider,
+  use the client ID and client secret of the API application above. With
+  another provider, register a confidential OAuth 2.0 / OpenID Connect
+  application with the redirect URI `<MCP_PUBLIC_URL>/oauth/callback`. Take
+  the issuer exactly as the provider's `/.well-known/openid-configuration`
+  document gives it. <!-- owner: confirm the Infomaniak issuer value -->
 
 ## Connect an AI client
 

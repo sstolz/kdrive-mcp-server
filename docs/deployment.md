@@ -356,17 +356,24 @@ the image build context.
 Collect four things before you configure anything. The official Infomaniak
 pages for each are linked from the
 [README](../README.md#values-from-the-infomaniak-side). The menu paths in
-Infomaniak's interfaces are not described here and are still to be confirmed
-by the maintainer; each such step carries an HTML comment that marks it.
+the Infomaniak Manager are given in French, as the Manager shows them at the
+time of writing.
 
-1. **The kDrive API token.** <!-- owner: confirm Infomaniak UI paths -->
-   Create an API token in your Infomaniak account's API token management,
-   with the `drive` scope (the scope this project's measurements used). Log
-   in as an account that has the **admin** role on every drive you will
-   configure: startup checks the role and stops with `[DRIVE_NOT_ALLOWED]`
-   otherwise. The token is shown when it is created; it goes into
-   `secrets/kdrive-token` in step 3, never into a variable or a file you
-   commit.
+1. **The API application and the kDrive API token.** First choose the public
+   MCP URL (step 3): the application needs it. In the Manager, open
+   **Utilisateurs et profils** → **Mon profil** → **Développeur** →
+   **Application API** → **Créer une nouvelle application**, type
+   **Application**, any name, and the application URL
+   `<MCP_PUBLIC_URL>/oauth/callback`, here
+   `https://mcp.example.com/mcp/oauth/callback`.
+   <!-- owner: confirm which URL Infomaniak expects in this field -->
+   Keep its client ID and client secret (step 4). Then open **Développeur** →
+   **Tokens API** → **Créer un token**: select that application, the scope
+   **drive — Produits Drive** and a validity (1 day to unlimited). Log in as
+   an account that has the **admin** role on every drive you will configure:
+   startup checks the role and stops with `[DRIVE_NOT_ALLOWED]` otherwise. The
+   token is shown once; it goes into `secrets/kdrive-token` in step 3, never
+   into a variable or a file you commit.
 2. **The drive ID.** <!-- owner: confirm Infomaniak UI paths -->
    Each kDrive has a numeric ID (for example `123456`), which becomes
    `KDRIVE_ID`. Look for it in your kDrive account; the README gives a read
@@ -375,15 +382,13 @@ by the maintainer; each such step carries an HTML comment that marks it.
 3. **The public MCP URL.** Choose it before registering the client. It needs
    a path, for example `https://mcp.example.com/mcp`; an origin-only URL is
    refused.
-4. **The OAuth client.** <!-- owner: confirm Infomaniak UI paths -->
-   Register a confidential OAuth 2.0 / OpenID Connect client (an
-   "application") at your provider, Infomaniak's or another one, with the
-   redirect URI `<MCP_PUBLIC_URL>/oauth/callback`, here
-   `https://mcp.example.com/mcp/oauth/callback`. Note the client ID, the
-   client secret and the issuer URL exactly as the provider's
-   `/.well-known/openid-configuration` gives it (a trailing slash matters).
-   The maintainer's acceptance run used Infomaniak's provider behind this
-   proxy; its issuer value is not recorded in this repository.
+4. **The OAuth client.** With Infomaniak as the provider, it is the API
+   application of item 1: its client ID becomes `OAUTH_UPSTREAM_CLIENT_ID` and
+   its client secret goes into the client secret file. With another provider,
+   register a confidential OAuth 2.0 / OpenID Connect client with the redirect
+   URI `<MCP_PUBLIC_URL>/oauth/callback`. Note the issuer URL exactly as the
+   provider's `/.well-known/openid-configuration` gives it (a trailing slash
+   matters). <!-- owner: confirm the Infomaniak issuer value -->
 
 ### 3. Provision the three secret files
 
