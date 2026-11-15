@@ -87,7 +87,7 @@ override the current Docker-only development contract.
 | F-039 | #47 lot C | `features/F-039-bounded-audit-sink.md`                | Done v1, accepted on main 8bc1780 (2026-11-15); BR-070 v5 and BR-240, BR-241, BR-254 and BR-259 v2 active; no new BR ID or ADR                                                                                                                                                                                                                           |
 | F-040 | #47 lot D | `features/F-040-process-wide-extraction-admission.md` | Done v1, accepted on main 67c101a (2026-11-15); BR-423–BR-426 v1 and BR-118 v3 active; no ADR                                                                                                                                                                                                                                                            |
 | F-041 | #47 lot E | `features/F-041-configured-root-ancestors.md`         | Done v1, accepted on main 448a48f (2026-11-15); BR-277 and BR-278 v2 and BR-427 v1 active; no ADR                                                                                                                                                                                                                                                        |
-| F-042 | #42       | `features/F-042-mcp-tool-descriptions.md`             | Frozen v1, supplied review and freeze-decision dispositions recorded; BR-428–BR-430 v1 pending acceptance; exact descriptions for all 16 tools and 58 parameters; existing active rules unchanged; no ADR                                                                                                                                                |
+| F-042 | #42       | `features/F-042-mcp-tool-descriptions.md`             | Done v1, accepted on main 3b035b8 (2026-11-15); BR-428–BR-430 v1 active; no ADR                                                                                                                                                                                                                                                                          |
 
 Version history: [v1 immutable snapshot](../features/history/F-001-v1.md),
 [v2 immutable snapshot](../features/history/F-001-v2.md),
@@ -141,12 +141,7 @@ BR-014 and BR-015 to v2 in its [frozen quality-gate contract](../features/F-011-
 
 #47 lot E allocates F-041 / BR-427 v1 and versions BR-277 and BR-278 to v2 in its [ancestor-protection contract](../features/F-041-configured-root-ancestors.md). All three versions were accepted on actual main `448a48f` on 2026-11-15 (#47 comment `6898895634`) and are active. R-17-2's known-ancestor bypass is addressed; the external-mutation check-then-act window remains. No ADR is allocated. Next free IDs after lot E were F-042, BR-428, ADR-013 (BR-376 and BR-377 are withdrawn).
 
-#42 allocates F-042 / BR-428–BR-430 v1 in the [MCP description catalog](../features/F-042-mcp-tool-descriptions.md).
-The specification is frozen v1 with supplied review and freeze-decision
-dispositions recorded in its Stress-test; the three new rules are
-pending acceptance. BR-068 v1, BR-263 v2, BR-283 v2 and BR-424 v1 remain
-active and unchanged. No implementation or acceptance is claimed. No ADR.
-Next free IDs: **F-043, BR-431, ADR-013** (BR-376 and BR-377 remain withdrawn).
+#42 allocates F-042 / BR-428–BR-430 v1 in its [MCP description catalog](../features/F-042-mcp-tool-descriptions.md). All three versions were accepted on actual main `3b035b8` on 2026-11-15 (#42 comment `6900828692`) and are active. BR-068 v1, BR-263 v2, BR-283 v2 and BR-424 v1 remain active and unchanged. No ADR is allocated. Next free IDs: **F-043, BR-431, ADR-013** (BR-376 and BR-377 are withdrawn).
 
 #14 was frozen after independent review and autonomous freeze; these
 allocations were accepted on actual main `7b046a0`. ADR-001–003 were verified on both actual
