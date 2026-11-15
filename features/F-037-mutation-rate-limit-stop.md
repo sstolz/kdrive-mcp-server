@@ -2,7 +2,7 @@
 id: F-037
 title: Stop rate-limited mutations before stale authorization can be reused
 ticket: "#47"
-status: draft
+status: ready-for-freeze
 version: 1
 ---
 
@@ -11,7 +11,7 @@ version: 1
 Author: Codex (model and effort unknown), spec phase, 2026-11-15.
 Base: branch `fix/47-a-mutation-retry`, main
 `22db2a07a73a1842903a814339e7b93a174524a7`.
-IDs: F-037; BR-248 v2 and BR-250 v2; AC-01–AC-08. No new BR ID or ADR.
+IDs: F-037; BR-248, BR-249, BR-250 and BR-268 v2; AC-01–AC-08. No new BR ID or ADR.
 Next free IDs checked in the supplied main checkout (`docs/spec-index.md`,
 `business-rules/`): F-037, BR-423, ADR-013. Recheck on main before freeze
 and before opening the implementation PR; no remote check was performed.
@@ -28,7 +28,7 @@ therefore be bypassed by a later attempt. Write/share callers and audit
 operators are affected.
 
 The owner permits either full authorization before every retry or returning
-`RATE_LIMITED` without retrying. This draft selects the latter (D-1): every
+`RATE_LIMITED` without retrying. This spec selects the latter (D-1): every
 gate run makes at most one upstream attempt. A subsequent client invocation
 enters the ordinary admission and policy path afresh. This removes the
 retry window without building another authorization/execution lifecycle.
@@ -53,17 +53,26 @@ a run after this change, and no new version guarantee is claimed.
 
 - BR-248 v2: terminate a valid upstream 429 with the existing `RATE_LIMITED`
   result after one attempt; remove automatic mutation retries and their waits.
+- BR-249 v2: retain the 60,000 ms run deadline from the first attempt and
+  the 30,000 ms attempt cap; explicitly apply them to the sole attempt and
+  replace the historical second-attempt example (D-5).
 - BR-250 v2: remove the obsolete cancellation-during-retry-wait branch;
   cancellation during the sole attempt leaves its classification intact,
   including a 429. Preserve all pre-attempt cancellation rules.
+- BR-268 v2: preserve the raw-port contract and bounded `Retry-After`
+  forwarding; replace the gate-level wait example with a terminal 429.
 - Specify exact audit/results, race and control tests, malformed-reply
   classification, deadlines and outcome-write failure regressions.
 - Prepare pending records only in this phase. At implementation update
-  `SECURITY.md` and `docs/development.md` to explain the one-attempt rule,
-  fresh authorization on a new invocation, and unchanged uncertainty warning.
-  Append pending cross-references to BR-249 and BR-268 explaining that their
-  historical retry examples are no longer reachable under BR-248 v2;
-  their deadline and raw-port rules do not change.
+  `SECURITY.md`, `docs/development.md` and `docs/mcp-client-compatibility.md`
+  to explain the one-attempt rule, fresh authorization on a new invocation,
+  and unchanged uncertainty warning. Client guidance distinguishes a new
+  invocation after a pause for `RATE_LIMITED` from an uncertain write, which
+  must not be re-invoked without first verifying the item state.
+- At implementation, document in `SECURITY.md` the quantified residual
+  first-attempt window and the unmeasured D-16-5 assumption described under
+  Risks; add the exact follow-up line specified there to `BACKLOG.md`.
+  Tracking this residual risk is in scope; closing the window is not.
 
 ### Out of scope
 
@@ -74,7 +83,8 @@ a run after this change, and no new version guarantee is claimed.
 - Closing the existing check-then-act window before the first request,
   including an asynchronous intent append; atomic provider authorization.
 - Editing `src/` or `tests/`, running Docker or network operations, commits,
-  review, freeze, implementation, acceptance or release in this draft step.
+  a new review, freeze, implementation, acceptance or release in this
+  spec-revision step; record the two supplied reviews under Stress-test.
 
 ## Business rules
 
@@ -85,25 +95,33 @@ a run after this change, and no new version guarantee is claimed.
   Any subsequent client invocation is a new run subject to all ordinary
   admission and authorization checks; it inherits no grant from the previous
   run. Verified by: AC-01–AC-08.
+- **BR-249 v2** — The run retains a 60,000 ms monotonic deadline from
+  the first attempt; its sole upstream attempt is aborted after the smaller
+  of 30,000 ms and the remaining run time and is then `uncertain`. The
+  60,000 ms ceiling is retained but redundant for one attempt, not a retry
+  window or an additional wait. A valid 429 before timeout terminates under
+  BR-248 v2. Verified by: AC-06.
 - **BR-250 v2** — v1 holds except that there is no 429 wait or cancellation
   branch after a 429. Cancellation during the sole upstream attempt does
   not abort it or replace its classification, including `failed` /
   `RATE_LIMITED` on a valid 429; cancellation after that classification
   likewise cannot replace it. Pre-intent and post-intent/pre-attempt rules
   stay unchanged. Verified by: AC-05 and AC-06.
+- **BR-268 v2** — The v1 raw-port reply, body validation and 32-byte
+  `Retry-After` bound remain unchanged. Forwarding a bounded header never
+  schedules a gate retry: a valid 429 terminates under BR-248 v2 regardless
+  of whether the header is passed or omitted. Verified by: AC-08.
 
 Unchanged dependencies: [BR-243](../business-rules/BR-243.md) (one durable
 intent and one outcome), [BR-244](../business-rules/BR-244.md) (intent
 failure), [BR-245](../business-rules/BR-245.md) (admission),
 [BR-246](../business-rules/BR-246.md) (policy denial),
 [BR-247](../business-rules/BR-247.md) (reply validation/classification),
-[BR-249](../business-rules/BR-249.md) (deadlines),
 [BR-251](../business-rules/BR-251.md) (uncertainty),
 [BR-252](../business-rules/BR-252.md) (outcome-write failure),
 [BR-255](../business-rules/BR-255.md) (result fields),
 [BR-256](../business-rules/BR-256.md) (composition),
-[BR-258 v2](../business-rules/BR-258.md) (navigation commit boundary),
-[BR-268](../business-rules/BR-268.md) (bounded raw port reply), and
+[BR-258 v2](../business-rules/BR-258.md) (navigation commit boundary), and
 [BR-278](../business-rules/BR-278.md) (protected roots). BR-247's ordinary
 classification table still excludes the special 429 handled by BR-248.
 
@@ -121,11 +139,12 @@ classification: a malformed object merely containing `status: 429` is
 still `uncertain`, not proof of a rate-limit refusal.
 
 BR-248's former three-attempt ceiling becomes one, and its 30-second wait
-ceiling and fallback waits no longer apply. BR-249's 60,000 ms total
-deadline from the first attempt is unchanged, never reset or extended;
-the sole attempt remains bounded by the smaller of 30,000 ms and remaining
-run time. A 429 received before that attempt expires ends immediately
-after the outcome append, even with a zero, missing or invalid retry delay.
+ceiling and fallback waits no longer apply. BR-249 v2 keeps the 60,000 ms
+total deadline from the first attempt, never reset or extended; the sole
+attempt remains bounded by the smaller of 30,000 ms and remaining run
+time. D-5 retains this now-redundant ceiling; it never permits waiting
+beyond the sole attempt's 30,000 ms cap. A 429 received before that attempt
+expires ends immediately after the outcome append, even with a zero, missing or invalid retry delay.
 At the attempt timeout, the existing `uncertain` classification wins;
 late replies cannot change it. Audit append bounds remain unchanged.
 
@@ -227,7 +246,7 @@ local transport double, no socket or external provider is involved.
   new `op`, and there are exactly two total mutator calls. Verified by
   `TestBR248_v2_AC03_unchanged_target_requires_a_new_authorized_invocation`
   in `tests/mutation-composition.test.ts`.
-- **AC-04** (BR-248 v2, BR-030, BR-035 v2, BR-039 v2, BR-041, BR-278) —
+- **AC-04** (BR-248 v2, BR-030, BR-035 v2, BR-039 v2, BR-041, BR-042 v2, BR-278) —
   Given a completed 429 run, When the relevant state changes before a
   second explicit invocation, Then no background attempt occurs and
   the new invocation applies the same refusal as a first invocation in
@@ -240,8 +259,12 @@ local transport double, no socket or external provider is involved.
   `read_mode` uses the gate-admission result and `[]`. Use real configured
   policy and injected mutators, including sharing. For configuration
   changes construct a new gate/policy with the new configuration: do not
-  imply in-process reload. For `configured_root_target`, configure the
-  former target as a root before invoking rename again. For replacement,
+  imply in-process reload. For `share_mode_removed`, keep the injected
+  share mutators registered in the new write-mode gate so admission does
+  not return `UNAVAILABLE` (`src/mutation-gate.ts:327-328`); the refusal
+  must come from BR-042 policy denial with `[D]`.
+  For `configured_root_target`, configure the former target as a root
+  before invoking rename again. For replacement,
   keep both paths allowed and change only the target's parent to isolate
   BR-035's binding check. Verified by
   `TestBR248_v2_AC04_new_invocation_after_%s_uses_current_authorization`
@@ -262,17 +285,22 @@ local transport double, no socket or external provider is involved.
   `TestBR250_v2_AC05_cancellation_%s_does_not_replace_a_429` and
   `TestBR250_v2_AC05_pre_attempt_cancellation_keeps_its_boundary` in
   `tests/mutation-gate.test.ts` (rows `during_attempt`, `during_outcome`).
-- **AC-06** (BR-248 v2, BR-249, BR-250 v2, BR-258 v2) — Given a first
+- **AC-06** (BR-248 v2, BR-249 v2, BR-250 v2, BR-258 v2) — Given a first
   attempt answering 429 at 8,000 ms with `Retry-After: 5`, When it
   settles, Then the controller returns `{ok:true,value:<429 result>}`
   at 8,000 ms with `[I,L]`, `M=8000`, one attempt, and no navigation
   timeout or later write after advancing past 60,000 ms. Given a pending
   attempt at 29,999 ms, Then no outcome yet; at 30,000 ms it is aborted
   with exactly the timeout result and `[I,U]`, `M=30000`; a subsequently
-  delivered 429 or accepted 200 changes nothing. Verified by
+  delivered 429 or accepted 200 changes nothing. Given a valid 429 at
+  25,000 ms with `Retry-After: 10` and a queued second reply that never
+  settles, Then the run ends at 25,000 ms with the exact 429 result,
+  `[I,L]`, `M=25000` and attempts 1; after advancing through 60,001 ms
+  no second attempt or record exists. Verified by
   `TestBR248_v2_AC06_429_at_8000_ms_finishes_without_a_navigation_retry`
   in `tests/mutation-composition.test.ts` and
-  `TestBR248_v2_AC06_attempt_deadline_remains_uncertain_without_retry`
+  `TestBR249_v2_AC06_attempt_deadline_remains_uncertain_without_retry`
+  and `TestBR249_v2_AC06_429_at_25000_ms_never_starts_a_second_attempt`
   in `tests/mutation-gate.test.ts`.
 - **AC-07** (BR-248 v2, BR-247, BR-251, BR-252) — Given valid 503 or
   412, an unbranded throw, a branded `NotSent`, or malformed replies
@@ -293,25 +321,47 @@ local transport double, no socket or external provider is involved.
   `TestBR248_v2_AC07_reply_%s_preserves_classification_without_retry` and
   `TestBR248_v2_AC07_failed_429_outcome_append_never_replays` in
   `tests/mutation-gate.test.ts`.
-- **AC-08** (BR-248 v2, BR-268, BR-255) — Given the production mutator
+- **AC-08** (BR-248 v2, BR-268 v2, BR-255) — Given the production mutator
   and a local injected transport double answering 429, When `Retry-After`
   is `"2"`, 32 ASCII digits or 33 ASCII digits, Then the port still
   passes through the bounded raw value for the first two rows and omits
   it for the third; the complete gate result is always the 429 row with
   exactly one non-GET request and `[I,L]`. No retry header, body or path
   appears in result/audit. Verified by
-  `TestBR268_TestBR248_v2_AC08_bounded_retry_after_%s_never_replays`
-  in `tests/kdrive-mutation-port.test.ts`. Given the implementation docs
-  and pending records, Then they describe one attempt, fresh checks for
-  a new invocation, and no automatic replay of uncertain writes; verify
-  with a scoped content/link check, not a new prose unit test.
+  `TestBR268_v2_TestBR248_v2_AC08_bounded_retry_after_%s_never_replays`
+  in `tests/kdrive-mutation-port.test.ts`. Given the production upload
+  mutator for each of `upload-new` and `replace` and a transport double
+  queued to answer 429 then 200, When the run completes, Then there is
+  exactly one request with the original payload and the result is `failed`,
+  code `RATE_LIMITED`, status 429, attempts 1; the queued 200 is unused.
+  Verified by `TestBR248_v2_${kind}_429_then_200_stops_after_one_request`
+  in `tests/kdrive-upload-mutator.test.ts`.
+  Given the implementation docs and pending records, Then a scoped
+  content/link check (not a new prose unit test) verifies all of:
+
+  - `SECURITY.md:128` and `docs/development.md:385` (the baseline wording
+    "Only HTTP 429 is retried") are replaced with the one-attempt rule and
+    fresh authorization for every new invocation; uncertainty guidance stays.
+  - `SECURITY.md` names the residual first-attempt window: intent append up
+    to 5,000 ms, followed by transport queue, DNS and TLS within the
+    30,000 ms attempt timer. It states that authorization is not atomic,
+    and that "429 means not applied" is the unmeasured F-016 D-16-5
+    assumption, with a link to `docs/kdrive-write-evidence.md` (baseline
+    lines 69–70: none of the 85 measured responses was a 429).
+  - `docs/mcp-client-compatibility.md` says a `RATE_LIMITED` mutation may
+    be explicitly re-invoked after a pause, with fresh admission and full
+    authorization. An uncertain result must not be re-invoked without first
+    verifying the item state; it is never automatically replayed.
+  - `BACKLOG.md` contains the exact residual-window follow-up line in Risks;
+    BR-248, BR-249, BR-250 and BR-268 v2 remain pending acceptance with
+    v1 active in their frontmatter, README table and spec index.
 
 ## Test plan
 
 1. After independent review and freeze, characterize the implementation
    base before editing production code: run the existing mutation gate,
-   mutation composition, policy and mutation-port suites. Retain their
-   first-attempt authorization, audit and classification assertions.
+   mutation composition, policy, mutation-port and upload-mutator suites.
+   Retain their first-attempt authorization, audit and classification assertions.
 2. Write AC-01–AC-08 first. In AC-02/AC-03, drive the real guarded policy
    with mutable synthetic ancestry, a controlled 429 and fake time. The
    denied-directory row must fail on the old code's second upstream call;
@@ -324,7 +374,14 @@ local transport double, no socket or external provider is involved.
    BR-250's wait-cancellation test,
    `TestBR258_TestBR070_a_429_at_8000_ms_retried_after_5_s_succeeds`, and
    `TestBR268_a_429_with_Retry_After_%s_is_retried_after_%i_ms` with the
-   named v2 AC tests. Keep the existing 30,000 ms timeout, BR-247/251
+   named v2 AC tests. Also replace
+   `TestBR248_${kind}_429_then_200_resends_identical_bytes` in
+   `tests/kdrive-upload-mutator.test.ts:249` for both `upload-new` and
+   `replace` with
+   `TestBR248_v2_${kind}_429_then_200_stops_after_one_request` (AC-08):
+   one request with the original payload, `failed` / `RATE_LIMITED`,
+   status 429, attempts 1, and no consumed second response. Keep the
+   existing 30,000 ms timeout, BR-247/251
    uncertainty, BR-243/244 audit, BR-246 denial and BR-278 root tests.
    This changes assertions for a versioned contract, not a gate exemption.
 4. Implement only this contract; run the same suites and `make check`
@@ -338,9 +395,10 @@ local transport double, no socket or external provider is involved.
    not close #47's other lots. Keep records pending until that acceptance;
    synchronize final markers in the next scoped reviewed PR before release.
 
-This draft-authoring step uses the owner's author approval and sandbox
-override: no Docker, network, commits, implementation or tests are run.
-No passing-test, independent-review, freeze or CI claim is made here.
+This spec-revision step uses the owner's author approval and sandbox
+override: no Docker, network, commits, implementation or product tests are
+run. The supplied reviews and their dispositions are recorded below; no
+new review, passing product test, freeze or CI result is claimed here.
 
 ## Decisions
 
@@ -357,19 +415,20 @@ No passing-test, independent-review, freeze or CI claim is made here.
   repair. Cost: transient 429s previously hidden by successful retries
   become visible; a client must choose whether and when to invoke again.
 - **D-2 — Preserve audit truth and uncertainty.** A valid 429 is still a
-  proven refusal under F-016 D-16-5, producing one intent and one failed
-  outcome. It is not a policy denial and has no `denied` event. Keep the
+  refusal under the unmeasured F-016 D-16-5 assumption, producing one intent
+  and one failed outcome. It is not a policy denial and has no `denied` event. Keep the
   existing assumption that 429 means no mutation effect; this is not a new
   provider measurement. No idempotency is inferred for other outcomes.
   Unknown effects still require state verification before any new attempt.
   Do not turn malformed responses, transport failures or timeouts into
   `RATE_LIMITED`, and never replay after an audit failure.
-- **D-3 — Keep boundaries and public schemas.** Version BR-248 and BR-250
-  only, preserving their v1 text and active status until acceptance.
-  BR-249 still bounds the single attempt and needs no new rule version;
-  obsolete multi-attempt examples remain historical, with explicit pending
-  notes at implementation. BR-268 keeps bounded header parsing, even though
-  its historical gate-level wait example is superseded by BR-248 v2.
+- **D-3 — Keep boundaries and public schemas.** Version BR-248, BR-249,
+  BR-250 and BR-268 to v2, preserving their v1 text, examples, evidence and
+  active status until acceptance. Frontmatter stays `status: active`; the
+  v2 blocks, README table and spec index mark v2 pending acceptance.
+  BR-249 v2 states the single-attempt deadline interpretation (D-5) and
+  replaces its second-attempt example. BR-268 v2 retains bounded header
+  parsing and replaces its gate-level wait example with terminal 429 cases.
   Do not add a delay field, event, API switch or alternative retry mode.
   No ADR is needed for this localized, reversible behavior change.
 - **D-4 — Re-enter the complete existing path on client resubmission.**
@@ -379,15 +438,38 @@ No passing-test, independent-review, freeze or CI claim is made here.
   the existing construction/startup boundary. Adding hot reload or atomic
   ETag/version preconditions would be separate contracts, not implied by
   this fix. Preserve valid upstream 412 as `UPSTREAM_REJECTED`.
+- **D-5 — Keep BR-249's 60,000 ms run deadline clause.** It continues to
+  start with the first attempt and is never reset or extended. With one
+  attempt capped at 30,000 ms, the 60,000 ms ceiling is redundant; it is
+  neither a retry allowance nor a minimum run duration. BR-249 v2 makes
+  that consequence explicit and replaces the now-unreachable second-attempt
+  example. Removing the ceiling or changing its origin is rejected as an
+  unnecessary deadline-contract change. Intent and outcome appends retain
+  their separate existing bounds; the run deadline is not an end-to-end
+  invocation deadline.
 
 ## Risks
 
 - Clients see more `RATE_LIMITED` results and might resubmit too quickly.
   This feature adds no client scheduler, backoff hint or cross-invocation
   limit; each new invocation still passes ordinary admission and policy.
-- The first-attempt check-then-act window remains, including during intent
-  persistence; this lot prevents reuse after 429 and does not claim atomic
-  provider-side authorization. Existing F-017 residual risks remain.
+- The first-attempt check-then-act window remains: intent append may take
+  up to 5,000 ms, followed by transport queueing, DNS and TLS bounded by
+  the 30,000 ms attempt timer. The intent bound is separate from that timer;
+  these stages can therefore consume up to 35,000 ms after the policy
+  check, not a single 30,000 ms total bound. This lot prevents reuse after
+  429 and does not claim atomic provider-side authorization. `SECURITY.md`
+  must document these bounds and this residual risk. Existing F-017 risks
+  remain. Add this exact line to `BACKLOG.md` at implementation (in scope):
+
+  > - 2026-11-15 — F-037 (#47 lot A) leaves the first-attempt authorization window: intent append up to 5,000 ms plus transport queue, DNS and TLS within the 30,000 ms attempt timer — src/mutation-gate.ts; SECURITY.md — A target or ancestor may move after policy validation and before the first write; track a separate authorization/precondition design, since stopping 429 retries does not make authorization atomic.
+
+- "429 means not applied" remains the unmeasured F-016 D-16-5 assumption,
+  not an observed provider guarantee: `docs/kdrive-write-evidence.md:69-70`
+  reports no 429 among 85 responses. If the provider applies a write before
+  returning 429, a later explicit invocation could duplicate its effect.
+  `SECURITY.md` must repeat this assumption and link the measurement limit;
+  this feature supplies no new provider evidence or idempotency guarantee.
 - Tests that use a fake dispatch cannot establish fresh root/deny checks.
   AC-02–AC-04 use the actual policy; fixture moves update complete evidence.
   Read-mode gate admission and policy denial have different audit shapes.
@@ -400,9 +482,53 @@ No passing-test, independent-review, freeze or CI claim is made here.
 
 ## Open questions
 
-None. D-1 selects the explicitly permitted no-retry alternative; independent
-review and the security decision pass are still required before freeze.
+None. D-1 keeps the explicitly permitted no-retry alternative. The supplied
+review and decision pass are recorded below; this revision is ready for
+freeze, not frozen. Any required confirmation of the corrected revision
+remains with the orchestrator before freeze.
 
 ## Stress-test
 
-Not reviewed.
+The owner supplied these reviews for this revision; the entries below record
+their verdicts and the disposition of every finding, not a new review or an
+approval of the revised head. Reviewer model/effort and token counters were
+not supplied (unknown); no usage is inferred.
+
+### 47a-spec-review-1-reviewer — verdict: changes
+
+1. **Major — active v1 frontmatter. Retained, fixed in this revision.**
+   BR-248 and BR-250 frontmatter is `status: active`; only v2 is pending
+   in the version block, README table and spec index.
+2. **Major — stale BR-249/BR-268 examples. Retained, fixed in this revision.**
+   Added pending v2 blocks, replacement examples and named tests while
+   preserving active v1 verbatim. Both versions are listed in Scope,
+   Business rules, README and spec index. D-5 explicitly keeps the
+   60,000 ms deadline as a redundant ceiling under the 30,000 ms sole
+   attempt cap; AC-06 covers timeout and the former second-attempt case.
+3. **Minor — `share_mode_removed` fixture. Retained, fixed in this revision.**
+   AC-04 keeps injected share mutators registered so BR-042 policy denial
+   produces `[D]`, rather than admission returning `UNAVAILABLE`.
+4. **Minor — precise doc checks. Retained, fixed in this revision.**
+   AC-08 names `SECURITY.md:128` and `docs/development.md:385` and their
+   baseline "Only HTTP 429 is retried" wording for replacement.
+
+### 47a-spec-decision-1-fable — verdict: approve, with minors
+
+5. **Minor — upload migration. Retained, fixed in this revision.**
+   The migration list names `TestBR248_${kind}_429_then_200_resends_identical_bytes`
+   and its v2 successor for `upload-new` and `replace`; AC-08 requires one
+   request, `RATE_LIMITED`, status 429 and attempts 1.
+6. **Minor — residual first-attempt window. Retained, fixed in this revision.**
+   Risks quantifies the separate 5,000 ms intent append and transport queue,
+   DNS and TLS within the 30,000 ms attempt timer. Scope and AC-08 require
+   the SECURITY documentation and the exact BACKLOG line given in Risks
+   at implementation; closing the window remains out of scope.
+7. **Minor — unmeasured 429 assumption. Retained, fixed in this revision.**
+   Risks repeats D-16-5 and the no-429 measurement limit at
+   `docs/kdrive-write-evidence.md:69-70`; AC-08 requires the same warning
+   and evidence link in `SECURITY.md`. D-2 no longer calls it proven.
+8. **Minor — client compatibility guidance. Retained, fixed in this revision.**
+   Scope and AC-08 include `docs/mcp-client-compatibility.md`: explicit
+   re-invocation after a pause is allowed for `RATE_LIMITED`, with fresh
+   authorization; uncertain writes require state verification first and
+   are never automatically replayed.

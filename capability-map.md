@@ -2,9 +2,11 @@
 
 ## Provisional — rate-limited mutations stop after one attempt
 
-[F-037 v1](features/F-037-mutation-rate-limit-stop.md) (#47 lot A), draft:
-[BR-248 v2](business-rules/BR-248.md) and
-[BR-250 v2](business-rules/BR-250.md), pending acceptance; v1 remains active.
+[F-037 v1](features/F-037-mutation-rate-limit-stop.md) (#47 lot A), ready for freeze:
+[BR-248 v2](business-rules/BR-248.md),
+[BR-249 v2](business-rules/BR-249.md),
+[BR-250 v2](business-rules/BR-250.md) and
+[BR-268 v2](business-rules/BR-268.md), pending acceptance; v1 remains active.
 The proposed gate returns `failed` / `RATE_LIMITED` after the first valid
 upstream 429, without an automatic retry or `Retry-After` wait. A later
 client invocation requires fresh admission and complete authorization and
