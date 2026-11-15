@@ -2,11 +2,11 @@
 
 ## Provisional — process-wide extraction admission
 
-[F-040 draft v1](features/F-040-process-wide-extraction-admission.md)
+[F-040 frozen v1](features/F-040-process-wide-extraction-admission.md)
 (#47 lot D), [BR-423 v1](business-rules/BR-423.md),
 [BR-424 v1](business-rules/BR-424.md), [BR-425 v1](business-rules/BR-425.md),
 [BR-426 v1](business-rules/BR-426.md) and pending [BR-118 v3](business-rules/BR-118.md)
-(v2 remains active): proposed admission for all `kdrive_read` formats uses two
+(v2 remains active): frozen admission contract for all `kdrive_read` formats uses two
 process-wide permits before source buffering, at most one permit and one live
 waiter per identity, and four waiters globally, serving the oldest eligible
 waiter. Queue/identity saturation returns `SERVER_BUSY` without automatic retry;
@@ -17,13 +17,16 @@ charged until exit. That identity's existing waiter and later extraction calls
 refuse immediately with `SERVER_BUSY` (earlier liveness causes still prevail).
 Live termination rejection preserves final authorization before
 `CONTENT_UNAVAILABLE`; expiry uses `REQUEST_TIMEOUT`, earlier cancel/close
-keeps `ACCESS_DENIED`. Fixed payload-free detach/release diagnostics signal
+keeps `ACCESS_DENIED`. A process-owned stderr sink in both transports, retained after session close,
+offers fixed payload-free detach/release diagnostics to signal
 lost/recovered capacity; permanently stuck workers reduce capacity until restart
-(two block all extraction, one blocks the shared stdio identity). README/tool
+(two cause immediate refusal for every new extraction caller, one blocks the
+shared stdio identity). README/tool/compatibility
 wording will explain transient `SERVER_BUSY` and its recovery limits. Raw
 and resource reads retain their contracts. This limits concurrent pipelines,
-not total process memory. Reviews 1–2 and Decision 1 are dispositioned; revised
-approval, freeze, implementation and acceptance remain pending.
+not total process memory. Reviews 1–3 and Decisions 1–2 are dispositioned; v1 is frozen at the explicit
+owner instruction, with no corrected-head approval claimed. Implementation
+and acceptance remain pending.
 Lot C's F-039 reservation and pending rule versions remain separate.
 
 ## Accepted — fragmented reads and defensive validator handling

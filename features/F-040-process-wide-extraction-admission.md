@@ -2,7 +2,7 @@
 id: F-040
 title: Bound process-wide extraction admission before source buffering
 ticket: "#47"
-status: draft
+status: frozen
 version: 1
 ---
 
@@ -17,14 +17,28 @@ Review-2 / Decision-1 revision base: `13b0f8d` (local HEAD verified; no commit c
 IDs: F-040; new BR-423–BR-426 v1; pending BR-118 v3; AC-01–AC-12. No new ADR.
 The owner reserves F-039 for lot C on `fix/47-c-audit-sink`, not yet merged,
 including BR-070 v5 and pending versions of BR-240, BR-241, BR-254 and
-BR-259. This draft does not edit or version those rules. Next IDs after this
+BR-259. This feature does not edit or version those rules. Next IDs after this
 allocation: F-041, BR-427, ADR-013. Recheck current main and concurrent
 allocations before freeze and PR; no remote check is authorized here.
 
-This assignment authors the draft and pending records only. Review 1, Review 2 and Decision 1 dispositions are recorded below; revised-spec
-approval, decision pass, freeze, tests, implementation and acceptance are pending.
-The supplied finding and owner brief are the ticket context; no GitHub access
-or ticket-state update is performed under the no-network instruction.
+Frozen v1 on 2026-11-15 at the owner's explicit instruction, from reviewed
+base `ca61295225c814f973857b6583651610d840f1e5`, with supplied
+`47d-spec-review-3-reviewer` (approve, minors) and
+`47d-spec-decision-2-fable` (changes, one major), with all corrections
+and verdicts recorded below. This explicit freeze instruction overrides the
+usual requirement for a new approval of the corrected decision-pass head;
+no such approval is claimed. This uncommitted freeze revision has no new SHA.
+Implementation, code review, CI and actual-main acceptance remain pending.
+Review token totals and reported reviewer model/effort were not supplied;
+no retrospective usage is inferred. Decision-pass tier is Fable 5.2 per PROJECT.md.
+
+Freeze allocation recheck: local `main` is stale at `7fdc7b3`; cached
+`origin/main` is `c39a77a`, where F-039 and BR-423 are next. The supplied
+head `ca61295` allocates F-040 and BR-423–BR-426; F-039 remains reserved for
+lot C. Next IDs are F-041, BR-427 and ADR-013. No ID is reused; recheck
+current main before the PR. No network or ticket-state update is performed.
+Tests first follows AGENTS.md §3; local checks use existing host dependencies
+under this assignment's no-Docker constraint and are neither `make check` nor CI.
 
 ## Context
 
@@ -60,7 +74,7 @@ owned cleanup, and to bound the calls waiting for them, across sessions.
 - Preserve per-call source, decoded, structural, worker, output and time
   bounds, fresh authorization, byte evidence and worker isolation.
 - Prepare new pending BR records, indexes, provisional capability and changelog.
-- Require README and `kdrive_read` description guidance for transient queue
+- Require README, MCP compatibility and `kdrive_read` description guidance for transient queue
   saturation, verified by a named documentation test in the implementation phase.
 
 ### Out of scope
@@ -71,8 +85,8 @@ owned cleanup, and to bound the calls waiting for them, across sessions.
 - A hard RSS or external-memory byte cap, OS isolation, parser budget changes,
   new format support, source caching, retry/backoff or changes to raw downloads
   and resource reads. They do not acquire extraction permits.
-- Source/test edits, Docker, network, commits, PR publication, review, freeze,
-  acceptance or release in this authoring assignment. No current rule is
+- Source edits, Docker, network, commits, PR publication, new review,
+  acceptance or release in this freeze-and-tests assignment. No current rule is
   promoted or marked accepted by these records.
 
 ## Business rules
@@ -83,7 +97,8 @@ owned cleanup, and to bound the calls waiting for them, across sessions.
 - **BR-424 v1** — Contended extraction admission uses at most four live
   waiters, at most one per identity, serving the oldest whose identity holds
   no active permit; it immediately refuses an identity with a detached permit,
-  a second live waiter of one identity, or a caller unable to obtain an eligible
+  a second live waiter of one identity, all permits held by detached workers,
+  or a caller unable to obtain an eligible
   permit or queue place with `SERVER_BUSY`,
   without an automatic retry. Verified by: AC-02, AC-03, AC-09, AC-11, AC-12.
 - **BR-425 v1** — Extraction waiting uses the running invocation's existing
@@ -156,7 +171,11 @@ a new identity per controller. No identity is exposed in errors or diagnostics.
 Retire cancelled/expired waiters before counting capacity or granting; no
 queue entry remains as a tombstone. After checking liveness, immediately
 refuse a caller whose identity holds a detached permit with `SERVER_BUSY`,
-without enqueueing. A second live waiter of an identity also refuses immediately
+without enqueueing. After the same liveness check, if every global permit
+is held by a detached worker, refuse any new caller immediately with
+`SERVER_BUSY`, even for another identity; do not occupy its session slot
+until timeout. Existing distinct-identity waiters keep their original deadline
+and can start only after confirmed exit frees capacity. A second live waiter of an identity also refuses immediately
 with `SERVER_BUSY`. On detach, remove and settle any already-queued waiter of
 that identity with `SERVER_BUSY` (unless its earlier abort/deadline dictates
 its existing liveness code); this prevents an earlier waiter from remaining
@@ -227,7 +246,8 @@ Install the exit observer before requesting termination; transfer ownership
 atomically with an already-observed-exit check so exit/rejection/deadline
 races cannot lose or duplicate a release. The detached watcher retains only
 the worker handle, minimal exit/error-drain bookkeeping and the permit/
-identity release token, not the invocation, session, source or result. It
+identity release token and the process-owned diagnostic sink, not the
+invocation, session, source or result. It
 consumes late messages/errors without publishing or retaining their payloads.
 Only confirmed exit releases the permit and identity charge exactly once.
 A fulfilled termination acknowledgment counts only when it confirms exit;
@@ -235,7 +255,12 @@ a rejection never does. If the worker never exits, its permit and identity
 remain charged indefinitely, but its invocation and session slot do not.
 At most two such watchers can exist because each owns a global permit.
 At detach, offer exactly `Extraction worker detached; capacity remains charged until exit.\n`
-once per watcher to the existing diagnostic port (stderr in production).
+once per watcher to the admission owner's own process-wide diagnostic sink.
+Create this sink at process start and wire it to process stderr in both stdio
+and HTTP compositions; retain it after any originating session closes.
+HTTP currently passes `undefined` at `src/http/handler.ts:454` and navigation's
+default at `src/navigation.ts:222` is a no-op, so a session diagnostic port is
+not sufficient. The owner/exit watcher must retain the process sink directly.
 On its eventual confirmed exit and permit release, offer exactly
 `Detached extraction worker exited; capacity released.\n` once for that
 watcher. These are fixed constants, without paths, IDs, names, counts,
@@ -286,7 +311,7 @@ fields: `E(code) = {isError:true,content:[{type:"text",text:code}]}`.
 | Condition | Exact controller result | Content work for that caller |
 | --- | --- | --- |
 | Four live waiting and no immediate eligible grant | `E("SERVER_BUSY")` | None; no retry or retry timer |
-| Identity holds a detached permit, or already has a live waiter | `E("SERVER_BUSY")` immediately | None; no enqueue or retry |
+| Identity holds a detached permit, already has a live waiter, or all global permits are detached | `E("SERVER_BUSY")` immediately | None; no enqueue or retry |
 | Existing live waiter when its identity detaches | `E("SERVER_BUSY")` immediately | None; removed from queue |
 | Queued invocation reaches its deadline | `E("REQUEST_TIMEOUT")` | None; removed from queue |
 | Queued invocation cancelled or session closed | `E("ACCESS_DENIED")` | None; removed from queue |
@@ -305,15 +330,17 @@ any admission refusal; a later client invocation is a new admission with
 fresh authorization. Existing download retries after successful admission
 retain their contract. Size limits and worker error/exit retain `LIMIT_EXCEEDED`.
 
-The README `kdrive_read` guidance and its registered tool description must
-both include: "SERVER_BUSY is a transient admission refusal before source
+The README `kdrive_read` guidance, its registered tool description and
+`docs/mcp-client-compatibility.md` under `## Parallel tool calls` (BR-387
+surface, current lines 67–71) must all include: "SERVER_BUSY is a transient admission refusal before source
 work, including extraction queue saturation, an identity's waiting limit or
 a detached worker holding its permit. The server does not automatically retry;
 a later client invocation requires fresh admission and authorization. Capacity
 may remain unavailable until a stuck worker exits or the process restarts."
 Transient describes capacity rather than a permanent size/content limit; it
-promises neither recovery time nor success on retry. Verify both surfaces
-with AC-12; retain the existing per-session retry guidance.
+promises neither recovery time nor success on retry. Verify all three surfaces
+with AC-12; qualify existing retry-after-earlier-work guidance with the same
+detached-capacity caveat on all three surfaces. BR-387 is unchanged.
 
 ## Acceptance criteria
 
@@ -362,7 +389,8 @@ encoding:"utf-8"})` for `{file_id:3,format:"text"}`.
   returns exactly `E("REQUEST_TIMEOUT")`, leaves the queue and never
   starts content, even after a permit is freed. In a second row, grant at
   t=9,000 and stall its body read: the same result occurs at t=10,000 with
-  its read signal aborted, one body close and no worker. In a third row,
+  its read signal aborted, one body close and no worker; a queued third caller
+  starts once at t=10,000. In a third row,
   create its worker at t=9,000 with `extractTimeoutMs=500`: terminate and
   return that error at t=9,500; with `extractTimeoutMs=5000`, at t=10,000.
   Verified by `TestBR425_v1_AC04_queue_and_work_share_invocation_deadline`
@@ -408,8 +436,9 @@ encoding:"utf-8"})` for `{file_id:3,format:"text"}`.
   | `worker-error` | Worker emits `error` after starting | `E("LIMIT_EXCEEDED")` |
   | `worker-construction` | Worker factory throws a generic canary Error | `E("ACCESS_DENIED")`, existing generic normalization |
   | `invalid-output` | Started worker sends an invalid result envelope | `E("CONTENT_UNAVAILABLE")` |
-  | `projection-error` | Four-character `safe`, requested offset 5 | `E("INVALID_RANGE")` |
+  | `projection-error` | Four-character `safe`, requested offset 5 with matching `etag:'"version-1"'` | `E("INVALID_RANGE")` |
   | `final-denial` | Policy revoked after worker success | `E("ACCESS_DENIED")` |
+  | `final-auth-stalled` | Worker has exited; final authorization remains pending at t=10,000 | `E("REQUEST_TIMEOUT")`; abandon final authorization, release once and start the queued third caller at t=10,000; late success/failure cannot publish or release again |
   | `timeout` | Worker reaches `extractTimeoutMs` before invocation expiry | `E("REQUEST_TIMEOUT")` |
   | `invocation-timeout` | Worker remains pending at invocation expiry | `E("REQUEST_TIMEOUT")` |
   | `cancel` | Active worker's invocation is aborted | `E("ACCESS_DENIED")` |
@@ -454,8 +483,9 @@ encoding:"utf-8"})` for `{file_id:3,format:"text"}`.
   | `termination-rejection-final-auth-deadline` | Termination rejects at t=1,000; final authorization stays pending through t=10,000 | Exactly `E("REQUEST_TIMEOUT")` at t=10,000, session slot released; late authorization success/failure cannot publish; permit remains charged until exit |
   | `detach-removes-existing-waiter` | A1 owns a permit and A2 waits in another session; A1 detaches while A2 is live | A2 immediately returns `E("SERVER_BUSY")`, leaves the queue with zero content starts, and never restarts after A1 exits |
   | `detach-diagnostics` | Each detached row above, with canary paths, IDs, names, errors and payloads; later confirm exit and inject duplicate events | Exactly one offer of the fixed detach line, then exactly one offer of the fixed release line; no other text or audit event, no canary; ordinary exit and immediate admission refusals offer neither line |
+  | `http-process-stderr` | Through the real HTTP server/session composition, detach a started worker, close its originating session and later confirm exit | Exactly the fixed detach line and fixed release line reach the process stderr port, once each, despite session close; no canary or audit event; verified in `tests/http/extraction-admission.test.ts` under the same AC-08 test name |
   | `diagnostic-failure` | Repeat detach/release with a diagnostic port that throws, reenters or never acknowledges | Each line is attempted once; settlement and release keep their original timing/results without waiting, retry or unhandled failure |
-  | `two-stuck-workers` | A and B detach and remain alive; a new distinct identity C requests extraction | A/B requests refuse `SERVER_BUSY` immediately; C can wait but starts no content and reaches its own `REQUEST_TIMEOUT`; two detach lines, no release lines until explicit worker teardown; no permit is recycled early |
+  | `two-stuck-workers` | A and B detach and remain alive; skip B's release at t=10,001 in this row; C is already queued and a new distinct identity D requests extraction | A/B and D requests refuse `SERVER_BUSY` immediately, without content or queue entry; C retains its own deadline and starts no content until exit frees capacity; two detach lines, no release lines until explicit worker teardown; no permit is recycled early |
   | `stdio-stuck-worker` | The shared stdio/fallback identity's worker detaches and remains alive | Every later stdio/fallback extraction refuses `SERVER_BUSY` immediately despite the free second permit; metadata still runs; one detach line, no release line until explicit worker teardown |
 
 - **AC-09** (BR-424 v1, BR-120, BR-109) — Given a full queue and canary
@@ -504,7 +534,7 @@ encoding:"utf-8"})` for `{file_id:3,format:"text"}`.
   the production composition, When extraction demand spans their sessions,
   Then each identity holds at most one permit, including detached ownership.
   Verified by `TestBR423_v1_AC11_identity_cap_and_oldest_eligible_waiter` in
-  `tests/extraction-admission.test.ts`, with these exact rows:
+  `tests/extraction-admission-identity.test.ts`, with these exact rows:
 
   | Row | Given / When | Then |
   | --- | --- | --- |
@@ -518,13 +548,14 @@ encoding:"utf-8"})` for `{file_id:3,format:"text"}`.
   | `insecure-http` | Two insecure HTTP sessions request extraction | They share one insecure identity and serialize |
 
   Repeat the identity binding rows through HTTP server/session construction
-  and stdio server composition, not only injected semaphore keys. No tool
+  in `tests/http/extraction-admission.test.ts` and stdio server composition, not only injected semaphore keys. No tool
   argument can select a different identity. AC-08 verifies detached ownership.
-- **AC-12** (BR-424 v1) — Given README text read from the working tree and
-  the actual `kdrive_read` description returned by tool listing, When the
-  documentation contract is checked, Then both contain the transient queue
+- **AC-12** (BR-424 v1; BR-387 unchanged) — Given README text and
+  `docs/mcp-client-compatibility.md` lines 67–71 (`## Parallel tool calls`)
+  read from the working tree and the actual `kdrive_read` description returned by tool listing, When the
+  documentation contract is checked, Then all three surfaces contain the transient queue
   saturation, no automatic retry, and fresh admission/authorization wording
-  above, including the identity/detached refusal and recovery caveat; neither
+  above, including the identity/detached refusal and recovery caveat; no surface
   assigns extraction queue saturation to `LIMIT_EXCEEDED`.
   Verified by `TestBR424_v1_AC12_docs_explain_transient_SERVER_BUSY` in
   `tests/extraction-admission-docs.test.ts`. Follow
@@ -555,7 +586,7 @@ encoding:"utf-8"})` for `{file_id:3,format:"text"}`.
    `runExtraction`, `createExtractionWorker`, source allocations/copies,
    controller/runtime factories, trusted identity propagation and close paths
    across `src/` and `tests/`. Add the required README and tool-description
-   wording with AC-12; this assignment only specifies those future edits.
+   and compatibility wording with AC-12; this assignment tests those future edits.
    Ensure every production extraction shares one owner and no nested
    acquisition, direct-worker path or test-only injection bypasses it.
    Run the affected extraction, read, invocation-queue and HTTP/session
@@ -569,9 +600,10 @@ encoding:"utf-8"})` for `{file_id:3,format:"text"}`.
    PR before release. No real provider acceptance or new manual operator
    is needed for this process-local invariant.
 
-No test or gate is run in this spec-only, no-Docker assignment; document
-content checks are not `make check` or CI. The supplied Reviews 1–2 and Decision 1 are recorded below; no new review, approval or token
-counter is claimed. Review/usage evidence belongs in the ticket/PR when
+The supplied Reviews 1–3 and Decisions 1–2 are recorded below; no new
+review, approval or token counter is claimed. Tests first is AGENTS.md §3's
+standard next step. Host checks under the no-Docker constraint are not
+`make check` or CI. Review/usage evidence belongs in the ticket/PR when
 those phases occur, not in a new per-run repository file.
 
 ## Decisions
@@ -608,13 +640,19 @@ those phases occur, not in a new per-run repository file.
   running invocation deadline for queue waiting; a fresh deadline at grant
   would extend existing work bounds. Retain the worker-specific timeout's
   current start and cap. Choose existing `SERVER_BUSY` for aggregate queue
-  saturation, a second waiter of an identity and a detached charged identity:
+  saturation, a second waiter of an identity, a detached charged identity
+  and all global permits held by detached workers:
   all refuse before source work, matching the existing transient admission
   meaning. `LIMIT_EXCEEDED` remains the size/worker failure code; overloading
   it for queue capacity is rejected. Require README and tool-description
-  guidance (AC-12): no server retry, fresh admission/authorization on a later
+  and MCP compatibility guidance (AC-12, BR-387 unchanged): no server retry, fresh admission/authorization on a later
   client call, and no recovery-time promise. The two fixed lifecycle
   diagnostics signal detached capacity to operators without caller data.
+  Refuse new callers immediately when every permit is detached: waiting for
+  REQUEST_TIMEOUT would retain their session slots with no usable capacity.
+  Existing waiters retain their own deadlines. The process owner creates and
+  retains its own stderr sink in both transports; reusing HTTP's absent
+  session diagnostic port would silently lose the capacity-loss signal.
 - **D-4 — Aggregate ownership with a bounded settlement exception.**
   BR-423–BR-426 add process-wide admission. BR-117's per-invocation ceilings
   and BR-384's pre-invocation queue remain unchanged. BR-118 v2 remains the
@@ -653,7 +691,11 @@ those phases occur, not in a new per-run repository file.
   10 s. Permanently stuck workers reduce capacity until process restart:
   two halt all extraction, and one blocks all stdio/fallback extraction because
   it shares a single identity. Charged identities get immediate `SERVER_BUSY`;
-  other identities may queue and time out. The fixed detach diagnostic is the
+  when all permits are detached, new callers of every identity also refuse
+  immediately. Existing distinct-identity waiters retain their deadlines.
+  HTTP currently supplies no session diagnostic port, so AC-08 must exercise
+  the real HTTP composition and its process-owned stderr sink after session
+  close. The fixed detach diagnostic is the
   operator signal; the fixed release diagnostic signals eventual recovery.
   Both are best effort and blocked stderr can prevent delivery. Other tools
   still run; no automatic restart or process-crash recovery guarantee is added.
@@ -668,8 +710,7 @@ those phases occur, not in a new per-run repository file.
 ## Open questions
 
 None. Limits, queue behavior, timing, cancellation and observability are
-resolved by D-1–D-4 for independent review; no owner decision is required to
-complete this draft.
+resolved by D-1–D-4 and the supplied review dispositions.
 
 ## Stress-test
 
@@ -678,7 +719,7 @@ complete this draft.
 The owner supplied this review for this revision; the entries below record
 its verdict and the disposition of every finding, not a new review or an
 approval of the revised head. Reviewer model/effort and token counters were
-not supplied (unknown); no usage is inferred. This revision remains draft v1.
+not supplied (unknown); no usage is inferred. That revision was draft v1.
 
 ### 47d-spec-review-1-reviewer — verdict: changes
 
@@ -716,7 +757,7 @@ The owner supplied `47d-spec-review-2-reviewer` and
 entries record supplied findings and decisions, not a new review or approval.
 Reviewer model/effort and token counters were not supplied (unknown).
 Decision-pass model: Fable 5.2 per PROJECT.md; actual reported model/effort
-and usage remain unknown. No forge publication is performed. F-040 stays draft v1.
+and usage remain unknown. No forge publication is performed. That revision stayed draft v1.
 The seven dispositions below supersede conflicting Review 1 choices, including
 its deferred BR-118 record and its LIMIT_EXCEEDED admission code/test name.
 
@@ -751,3 +792,38 @@ its deferred BR-118 record and its LIMIT_EXCEEDED admission code/test name.
    and is retryable by a later client call. Use it for queue/identity capacity,
    synchronize BRs, ACs, test names and AC-12 documentation requirements, and
    correct Risks; LIMIT_EXCEEDED remains the size/worker failure code.
+
+
+### 47d-spec-review-3-reviewer — verdict: approve, with minors
+
+- **R3-1 — Minor — compatibility retry caveat. Retained, fixed.**
+  AC-12 adds `docs/mcp-client-compatibility.md:67–71`, under `## Parallel tool
+  calls`, as the third surface requiring the detached-capacity caveat.
+  Earlier call completion alone does not prove that a detached permit is
+  reusable. BR-387 remains unchanged. Merged with Decision 2 F-3.
+- **R3-2 — Minor — stuck-worker timeline and identity. Retained, fixed.**
+  AC-08 names the new identity D, preserving C as the queued call, and
+  explicitly skips B's t=10,001 release in `two-stuck-workers`.
+
+### 47d-spec-decision-2-fable — verdict: changes, one major
+
+- **F-1 — Major — absent HTTP diagnostic port. Retained, fixed.**
+  The process-wide admission owner/exit watcher owns a diagnostic sink,
+  created at process start and wired to process stderr in both stdio and
+  HTTP compositions, retained after session close. Contract, BR-426 and
+  Risks name HTTP's current absent port/no-op default; AC-08 adds the real
+  HTTP composition row asserting both fixed lines on the stderr port.
+- **F-2 — Permit reuse after abandoned work. Retained, fixed.**
+  AC-04 `body` starts a queued third caller once at t=10,000; AC-07 adds
+  `final-auth-stalled` with reuse at the deadline and suppressed late results.
+- **F-3 — Third documentation surface. Retained, fixed.**
+  Merged with R3-1 in AC-12 and the required wording; BR-387 is unchanged.
+- **F-4 — All capacity detached. Retained, fixed.**
+  D-3 and BR-424 refuse new callers immediately with SERVER_BUSY when all
+  permits belong to detached workers. AC-08 `two-stuck-workers` asserts
+  D's immediate refusal instead of retaining its slot until REQUEST_TIMEOUT.
+
+These verdicts were supplied by the owner, not generated in this assignment.
+No corrected-head approval, forge publication or actual-main acceptance is
+claimed. Actual reviewer model/effort and per-agent token counters were not
+supplied; no retrospective attribution is inferred.

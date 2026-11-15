@@ -125,7 +125,7 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
   strong descriptor). Specification frozen; implementation and acceptance
   are pending.
 
-- #47 lot D / F-040 v1 (draft; pending acceptance): propose two process-wide
+- #47 lot D / F-040 v1 (frozen; pending acceptance): specify two process-wide
   `kdrive_read` extractions, admitted before source buffering, and at most
   four waiters, served by oldest eligible identity, with one active permit
   and one live waiter per identity. Queue/identity refusal uses `SERVER_BUSY` without automatic
@@ -134,10 +134,12 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
   within its deadline; a detached watcher retains the permit/identity until
   worker exit (pending BR-118 v3; v2 stays active). Final authorization is
   preserved. Detached identities refuse immediately with `SERVER_BUSY`; fixed
-  payload-free detach/release diagnostics signal capacity loss/recovery.
-  Permanently stuck workers reduce capacity until restart. README/tool guidance
+  payload-free detach/release diagnostics use a process-owned stderr sink in
+  stdio and HTTP, retained after session close, to signal capacity loss/recovery.
+  When all permits are detached, every new extraction caller refuses immediately.
+  Permanently stuck workers reduce capacity until restart. README/tool/compatibility guidance
   will explain transient `SERVER_BUSY` without promising retry success.
-  This bounds concurrent pipelines, not total memory. Revised review, freeze,
+  This bounds concurrent pipelines, not total memory. Specification frozen;
   implementation and acceptance are pending.
 
 ## [0.6.0-beta.1] - 2026-11-13
