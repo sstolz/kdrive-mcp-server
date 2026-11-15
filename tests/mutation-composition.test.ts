@@ -2439,3 +2439,117 @@ describe("F-039 production shutdown ordering", () => {
     },
   );
 });
+
+// F-041 AC-09: BR-257 still refuses after fresh received-share evidence.
+describe("F-041 received-share controls", () => {
+  it.each(
+    ["write", "share"].flatMap((mode) =>
+      ["trash", "rename", "move"].map((kind) => ({ mode, kind })),
+    ),
+  )(
+    "TestBR278_v2_AC09_received_share_refused_without_root_reads $mode $kind",
+    async ({ mode, kind }) => {
+      const OWNER = 202;
+      const root = {
+        id: 500,
+        drive_id: OWNER,
+        parent_id: 77,
+        type: "dir",
+        name: "team",
+        path: "/Shared/team",
+        status: null,
+        capabilities: {
+          can_read: true,
+          can_write: true,
+          can_rename: true,
+          can_move: true,
+        },
+      };
+      const f = await kdriveFixture({ shared: [root] });
+      cleanup.push(() => f.close());
+      f.drive.overrides.push((r) => {
+        if (r.path === "/2/drive/init")
+          return success({
+            drives: [
+              { id: DRIVE, role: "admin" },
+              { id: OWNER, role: "external" },
+            ],
+          });
+        if (r.path === "/3/drive/202/files/500")
+          return success({ ...root, parents: [] });
+        if (r.path === "/3/drive/202/files/500/files")
+          return success([], { has_more: false, cursor: null });
+        return undefined;
+      });
+      const config = await configuration({
+        KDRIVE_MCP_MODE: mode,
+        KDRIVE_MCP_ROOTS: "101:1,101:40",
+        KDRIVE_MCP_SHARED_WITH_ME: "1",
+        KDRIVE_MCP_SHARED_WRITE: "1",
+      });
+      const adapter = await adapterFor(f);
+      const m = memory();
+      const mutator = vi.fn<Mutator>(() => Promise.resolve(ok()));
+      const gate = gateFor(m.sink, {
+        trash: mutator,
+        rename: mutator,
+        move: mutator,
+      });
+      const c = createNavigationController(
+        config,
+        gatedDependencies(adapter.dependencies, gate),
+        undefined,
+        { gate },
+      );
+      const shared = () =>
+        f.apiRequests().filter((r) => r.path.endsWith("shared_with_me")).length;
+      expect(
+        (await c.invoke("kdrive_info", { drive_id: OWNER, file_id: 500 }))
+          .isError,
+      ).toBeUndefined();
+      const afterRead = shared();
+      expect(afterRead).toBeGreaterThan(0);
+      const start = f.apiRequests().length;
+      const result = await c.mutate(
+        `kdrive_${kind}`,
+        {
+          kind,
+          target: { driveId: OWNER, id: 500 },
+          ...(kind === "rename" ? { name: "x" } : {}),
+          ...(kind === "move"
+            ? { destination: { driveId: DRIVE, id: 1 } }
+            : {}),
+        },
+        { kind: "stdio" },
+      );
+      expect(shared()).toBeGreaterThan(afterRead);
+      expect(result).toEqual({
+        ok: true,
+        value: { result: "denied", op: OP, code: "ACCESS_DENIED", attempts: 0 },
+      });
+      expect(m.records().map((r) => r.event)).toEqual(["denied"]);
+      expect(mutator).not.toHaveBeenCalled();
+      expect(
+        f
+          .apiRequests()
+          .slice(start)
+          .filter((r) => r.path === "/3/drive/101/files/40"),
+      ).toEqual([]);
+      // Move may inspect its destination; that is not a root-ancestry read.
+      expect(
+        f
+          .apiRequests()
+          .slice(start)
+          .filter((r) => r.path === "/3/drive/101/files/1"),
+      ).toHaveLength(kind === "move" ? 1 : 0);
+      expect(
+        f
+          .apiRequests()
+          .slice(start)
+          .filter((r) => r.method !== "GET"),
+      ).toEqual([]);
+      c.close();
+      await gate.close();
+    },
+  );
+});

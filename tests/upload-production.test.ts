@@ -600,3 +600,35 @@ describe("AC-11 audit records hold IDs only", () => {
     expect(c.run.stderr()).not.toContain("SECRETMARK");
   });
 });
+
+// F-041 AC-09: uploading beneath a protected source ancestor is still allowed.
+it.each(
+  ["write", "share"].flatMap((mode) =>
+    [10, 11].map((parent) => ({ mode, parent })),
+  ),
+)(
+  "TestBR278_v2_AC09_create_upload_and_file_mutations_unchanged $mode parent=$parent",
+  async ({ mode, parent }) => {
+    const c = await compose({
+      nodes: [dir(10, 1, "A"), dir(11, 10, "B"), dir(40, 11, "R")],
+      env: { KDRIVE_MCP_MODE: mode, KDRIVE_MCP_ROOTS: "101:1,101:40" },
+    });
+    const rootReads: Seen[] = [];
+    c.f.drive.overrides.unshift((r) => {
+      if (r.path !== "/3/drive/101/files/40") return undefined;
+      rootReads.push(r);
+      return { status: 404, json: { result: "error" } };
+    });
+    const result = await c.raw({ parent_id: parent, name: "n", text: "abc" });
+    expect(result.isError).toBe(false);
+    const content = result.content as { type: string; text: string }[];
+    expect(JSON.parse(content[0]!.text)).toMatchObject({
+      result: "succeeded",
+      attempts: 1,
+      status: 200,
+    });
+    expect(c.writes()).toHaveLength(1);
+    expect(c.records().map((r) => r.event)).toEqual(["intent", "outcome"]);
+    expect(rootReads).toEqual([]);
+  },
+);
