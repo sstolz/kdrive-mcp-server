@@ -137,7 +137,7 @@ Owner decisions that set the parameters above, with their date and source.
   committed, logged or pasted. The environment allows `auth.openai.com` and
   `chatgpt.com` for this.
   For #46, the owner temporarily extended D-11 so the Codex CLI authored the
-  implementation; the orchestrator ran `make check`, committed, and strong-tier
+  implementation; the orchestrator ran `make check` and committed; strong-tier
   review and the Fable decision pass still applied.
   - **Uses.** (a) A cross-vendor review: an extra read-only round
     (`codex exec -s read-only` or `codex exec review`) on a spec or a diff,
