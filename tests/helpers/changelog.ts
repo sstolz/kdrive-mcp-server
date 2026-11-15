@@ -14,10 +14,12 @@ export function changelogTicketSection(
   ticket: string,
   fixedMarker: string,
   addedMarker: string,
+  options: { fixedPrefix?: string } = {},
 ): string {
-  // BR-387 v2: an empty Added marker for #16 selects Fixed-only validation
-  // with the ticket bullet prefix at line start and no extra text marker.
-  const fixedOnly = ticket === "#16" && addedMarker === "";
+  // BR-387 v2: a Fixed prefix selects Fixed-only validation: the Fixed bullet
+  // starts with the prefix and no Added line is required.
+  const fixedPrefix = options.fixedPrefix;
+  const fixedOnly = fixedPrefix !== undefined;
   const cites = new RegExp(`${ticket}\\b`, "u");
   const sections = changelog
     .split(/^(?=## )/mu)
@@ -46,12 +48,13 @@ export function changelogTicketSection(
       .some(
         (entry) =>
           cites.test(entry) &&
-          (fixedOnly
-            ? entry.startsWith(`- ${ticket} `)
-            : entry.includes(marker)),
+          (fixedOnly ? entry.startsWith(marker) : entry.includes(marker)),
       );
   };
-  check(holds("Fixed", fixedMarker), `missing ${ticket} Fixed line`);
+  check(
+    holds("Fixed", fixedPrefix ?? fixedMarker),
+    `missing ${ticket} Fixed line`,
+  );
   if (!fixedOnly)
     check(holds("Added", addedMarker), `missing ${ticket} Added line`);
   return target?.heading ?? "";

@@ -555,15 +555,16 @@ describe("F-026 bounded invocation queue (controller)", () => {
   });
 });
 
-// BR-387 v2 uses the shared parser for both real and synthetic documents.
-// An empty Added marker still requires an Added entry in the existing parser;
-// these tests require the Fixed-only mode specified by F-043 instead.
+// BR-387 v2 uses the shared parser for both real and synthetic documents,
+// in Fixed-only mode: the Fixed bullet starts with `- #16 ` and no Added line
+// is required.
 function queueChangelogSection(changelog: string): string {
   return changelogTicketSection(
     currentRepositoryChangelog(changelog),
     "#16",
     "- #16 ",
     "",
+    { fixedPrefix: "- #16 " },
   );
 }
 
