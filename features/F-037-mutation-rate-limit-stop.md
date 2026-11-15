@@ -353,9 +353,8 @@ local transport double, no socket or external provider is involved.
     authorization. An uncertain result must not be re-invoked without first
     verifying the item state; it is never automatically replayed.
   - `BACKLOG.md` contains the exact residual-window follow-up line in Risks;
-    BR-248, BR-249, BR-250 and BR-268 v2 are active after acceptance on
-    main `8b92e07` (#47 comment `6894142807`), with v1 superseded
-    in their version headings, README table and spec index.
+    BR-248, BR-249, BR-250 and BR-268 v2 remain pending acceptance with
+    v1 active in their frontmatter, README table and spec index.
 
 ## Test plan
 
@@ -426,8 +425,7 @@ new review, passing product test, freeze or CI result is claimed here.
 - **D-3 — Keep boundaries and public schemas.** Version BR-248, BR-249,
   BR-250 and BR-268 to v2, preserving their v1 text, examples, evidence and
   active status until acceptance. Frontmatter stays `status: active`; the
-  v2 blocks, README table and spec index now mark v2 active after acceptance
-  on main `8b92e07` (#47 comment `6894142807`).
+  v2 blocks, README table and spec index mark v2 pending acceptance.
   BR-249 v2 states the single-attempt deadline interpretation (D-5) and
   replaces its second-attempt example. BR-268 v2 retains bounded header
   parsing and replaces its gate-level wait example with terminal 429 cases.
@@ -499,12 +497,11 @@ not supplied (unknown); no usage is inferred.
 ### 47a-spec-review-1-reviewer — verdict: changes
 
 1. **Major — active v1 frontmatter. Retained, fixed in this revision.**
-   BR-248 and BR-250 frontmatter is `status: active`; v2 is now active
-   in the version block, README table and spec index after acceptance on
-   main `8b92e07` (#47 comment `6894142807`).
+   BR-248 and BR-250 frontmatter is `status: active`; only v2 is pending
+   in the version block, README table and spec index.
 2. **Major — stale BR-249/BR-268 examples. Retained, fixed in this revision.**
-   Added v2 blocks (now accepted), replacement examples and named tests while
-   preserving v1 verbatim. Both versions are listed in Scope,
+   Added pending v2 blocks, replacement examples and named tests while
+   preserving active v1 verbatim. Both versions are listed in Scope,
    Business rules, README and spec index. D-5 explicitly keeps the
    60,000 ms deadline as a redundant ceiling under the 30,000 ms sole
    attempt cap; AC-06 covers timeout and the former second-attempt case.
