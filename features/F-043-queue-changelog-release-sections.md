@@ -155,11 +155,7 @@ in `tests/dependency-audit.test.ts`, then `make check`.
 
 ## Stress-test
 
-The entries below record supplied findings and their dispositions. Earlier
-revisions remained draft v1; the supplied freeze instruction and retained
-corrections below establish frozen v1 on 2026-11-15, from reviewed head
-`2b81164b2c99a22747e076b94a1f45ec279a7780`. Implementation and acceptance remain
-pending. Tests first follows AGENTS.md §3.
+Frozen v1 on 2026-11-15 from reviewed head `2b81164`.
 
 ### 67-spec-review-1-reviewer — verdict: changes
 
