@@ -86,7 +86,7 @@ override the current Docker-only development contract.
 | F-038 | #47 lot B | `features/F-038-stream-budget-and-weak-etags.md`      | Done v1, accepted on main 2ae303c (2026-11-15); BR-070 v4, BR-205 v2 and BR-384 v2 active; D-1 preserves existing operation charging points; no new BR ID or ADR                                                                                                                                                                                         |
 | F-039 | #47 lot C | `features/F-039-bounded-audit-sink.md`                | Done v1, accepted on main 8bc1780 (2026-11-15); BR-070 v5 and BR-240, BR-241, BR-254 and BR-259 v2 active; no new BR ID or ADR                                                                                                                                                                                                                           |
 | F-040 | #47 lot D | `features/F-040-process-wide-extraction-admission.md` | Done v1, accepted on main 67c101a (2026-11-15); BR-423–BR-426 v1 and BR-118 v3 active; no ADR                                                                                                                                                                                                                                                            |
-| F-041 | #47 lot E | `features/F-041-configured-root-ancestors.md`         | Frozen v1 by explicit instruction; Reviews 1–2 / Decision 1 dispositioned; no corrected-head approval claimed; BR-277/BR-278 v2 pending with v1 active; BR-427 v1 pending; no ADR; R-17-2 remediation specified, not accepted                                                                                                                            |
+| F-041 | #47 lot E | `features/F-041-configured-root-ancestors.md`         | Done v1, accepted on main 448a48f (2026-11-15); BR-277 and BR-278 v2 and BR-427 v1 active; no ADR                                                                                                                                                                                                                                                        |
 
 Version history: [v1 immutable snapshot](../features/history/F-001-v1.md),
 [v2 immutable snapshot](../features/history/F-001-v2.md),
@@ -138,15 +138,7 @@ BR-014 and BR-015 to v2 in its [frozen quality-gate contract](../features/F-011-
 
 #47 lot D allocates F-040 / BR-423–BR-426 v1 and versions BR-118 to v3 in its [process-wide extraction admission contract](../features/F-040-process-wide-extraction-admission.md). All five versions were accepted on actual main `67c101a` on 2026-11-15 (#47 comment `6897680463`) and are active. Its failed/overdue-termination exception is recorded in BR-118 v3. No ADR is allocated. Next free IDs: F-041, BR-427, ADR-013 (BR-376 and BR-377 are withdrawn).
 
-#47 lot E allocates F-041 and BR-427 v1 and versions BR-277/BR-278 to v2 in the
-[frozen ancestor-protection contract](../features/F-041-configured-root-ancestors.md).
-The v1 rules remain active, all proposed clauses are pending acceptance,
-and R-17-2 remains present. Reviews 1–2 and Decision 1 are dispositioned; v1 is frozen from reviewed
-base `75c0cea` by explicit instruction, with no corrected-head approval claimed. Lot D / PR #58 is merged
-as `67c101a`; the local `origin/main` ID recheck found no collision with
-F-041 or BR-427. Current next free IDs: **F-042, BR-428, ADR-013**.
-Freeze allocations were rechecked locally; recheck main before the PR;
-no network verification was authorized in this revision.
+#47 lot E allocates F-041 / BR-427 v1 and versions BR-277 and BR-278 to v2 in its [ancestor-protection contract](../features/F-041-configured-root-ancestors.md). All three versions were accepted on actual main `448a48f` on 2026-11-15 (#47 comment `6898895634`) and are active. R-17-2's known-ancestor bypass is addressed; the external-mutation check-then-act window remains. No ADR is allocated. Next free IDs: **F-042, BR-428, ADR-013** (BR-376 and BR-377 are withdrawn).
 
 #14 was frozen after independent review and autonomous freeze; these
 allocations were accepted on actual main `7b046a0`. ADR-001–003 were verified on both actual
