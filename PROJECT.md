@@ -22,8 +22,10 @@ to this repository lives here.
 - **Model tiers:** strong = Opus 5.5, effort high, for every iterative spec and
   code review round, through the reviewer tool
   [`.claude/agents/reviewer.md`](.claude/agents/reviewer.md) (read-only; narrow
-  diff-only briefs when possible). Strongest = Fable 5.2, only for the decision
-  passes of security-sensitive tickets and the milestone global pass (D-3).
+  diff-only briefs when possible). Strongest = Fable 5.2, for the decision
+  passes of security-sensitive tickets, the milestone global pass and complex
+  work (D-3); the per-milestone plan is in the archive's
+  `docs/github-backlog.md` ("Review models").
   Light and standard are picked per AGENTS.md §5.
 - **Authoring:** the Codex CLI authors specs, implementations and records; the
   orchestrator runs the gate, commits, pushes and merges (D-11).
@@ -32,8 +34,9 @@ to this repository lives here.
 ## Toolchain rules (Docker-only)
 
 Everything runs in the dev Compose service through the Makefile (GNU Make 3.81
-compatible). Never install host tools, change Docker engine or socket
-permissions, or remove a volume or data without authorization. Keep the dev
+compatible). Never install host tools. Never change Docker engine or socket
+permissions to get around a restriction. Never remove a volume or data
+without authorization. Keep the dev
 containers separate from the production image. Check `docker info` before each
 gate; in a cloud container start the daemon by hand when it fails
 (`learnings.md`, 2026-11-10). F-001 v2 records this contract.
@@ -60,8 +63,9 @@ summarised without identifiers.
   from a clean root commit (D-9). In records dated before 2026-11-12, `#N` and
   "archive issue N" refer to the archive; later records cite this repository.
 - Archive tickets 1 and 2 ran before CI existed (independent approval plus
-  local checks, never called green CI). One direct commit initialized `main`;
-  that exception is used up.
+  local checks, never called green CI, granting no product waiver); CI is
+  mandatory from archive ticket 3 onward. One direct commit initialized
+  `main`; that exception is used up.
 
 ## Decisions log
 
@@ -89,7 +93,8 @@ quote anyone's words.
   `docs/observations/`, decision proof in tickets and PRs, no per-run files in
   this repository (AGENTS.md §9).
 - **D-7 — 2026-11-11 — Diff-only threshold** of 50k sub-agent tokens, from
-  measured diff-only rounds of 17–38k (`learnings.md`, 2026-11-05).
+  measured diff-only rounds of 17–38k (`learnings.md`, 2026-11-05); the owner
+  may change it.
 - **D-9 — 2026-11-12 — Development in this repository.** The archive is
   frozen; its open tickets were recreated here (#2–#8). No `runs/` directory
   here.
@@ -100,10 +105,16 @@ quote anyone's words.
   dedicated worktree, with writes limited to it. The orchestrator writes the
   briefs, runs the gate, commits, pushes, publishes evidence and merges; Codex
   never pushes, merges, comments on the forge or changes the environment.
-  Reviews stay with the strong and strongest tiers; an optional Codex review
-  (`<ticket>-<act>-<round>-codex`) never counts toward the round limit or
+  Codex output is reviewed and checked like any author's. Reviews stay with
+  the strong and strongest tiers. An optional Codex review, for
+  security-sensitive tickets or on owner request, uses the identifier
+  `<ticket>-<act>-<round>-codex` and is posted verbatim with the Codex
+  version, model and effort (`unknown` if not reported); its findings are
+  accepted, rejected with a reason, or sent to the owner, and accepted ones go
+  to the next strong-tier round. It never counts toward the round limit or
   replaces a strong-tier approval. Prompts follow the public-content rule.
-  Codex usage counts on the owner's plan, not on the sub-agent budget. Setup:
+  Codex usage counts on the owner's plan, not on the sub-agent budget; the
+  orchestrator notes the tokens Codex reports per ticket. Setup:
   [docs/development.md](docs/development.md#codex-cli).
 
 D-8 (Fable 5.2) is folded into D-3.

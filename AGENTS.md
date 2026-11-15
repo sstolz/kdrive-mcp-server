@@ -58,9 +58,10 @@ Pick the path by impact, not by file type:
 - **Full path**: for product behaviour, security, public contracts, or a change
   to the build or CI contract. Spec, BRs, ACs, spec review, freeze, tests first.
 - **Light full path**: for a change limited to tests, checks or docs that must
-  still version a BR. A short spec, one strong-tier spec review before freeze,
-  tests first, and one code review; no decision pass unless the ticket is
-  security-sensitive.
+  still version a BR. A short spec, strong-tier spec review rounds per §3
+  until `approve`, freeze, tests first, then code review rounds per §3 until
+  `approve`; the reviews check what a full-path review checks (§5). No
+  decision pass unless the ticket is security-sensitive.
 - **Short path**: for docs, admin work, editorial fixes, and verified mechanical
   changes that keep behaviour and contracts intact. There is no spec, no BR, no
   freeze, and no unit test for prose.
