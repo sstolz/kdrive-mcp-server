@@ -1,5 +1,4 @@
-// Shared existing BR-321 checks. F-043's Fixed-only mode is not implemented:
-// changelogTicketSection still requires both Fixed and Added entries.
+// Shared BR-321 and BR-387 v2 changelog checks.
 function check(condition: unknown, message: string): void {
   if (!condition) throw new Error(message);
 }
@@ -16,6 +15,9 @@ export function changelogTicketSection(
   fixedMarker: string,
   addedMarker: string,
 ): string {
+  // BR-387 v2: an empty Added marker for #16 selects Fixed-only validation
+  // with the ticket bullet prefix at line start and no extra text marker.
+  const fixedOnly = ticket === "#16" && addedMarker === "";
   const cites = new RegExp(`${ticket}\\b`, "u");
   const sections = changelog
     .split(/^(?=## )/mu)
@@ -41,10 +43,17 @@ export function changelogTicketSection(
       ).exec(target?.body ?? "")?.[1] ?? "";
     return body
       .split(/^(?=- )/mu)
-      .some((entry) => cites.test(entry) && entry.includes(marker));
+      .some(
+        (entry) =>
+          cites.test(entry) &&
+          (fixedOnly
+            ? entry.startsWith(`- ${ticket} `)
+            : entry.includes(marker)),
+      );
   };
   check(holds("Fixed", fixedMarker), `missing ${ticket} Fixed line`);
-  check(holds("Added", addedMarker), `missing ${ticket} Added line`);
+  if (!fixedOnly)
+    check(holds("Added", addedMarker), `missing ${ticket} Added line`);
   return target?.heading ?? "";
 }
 
