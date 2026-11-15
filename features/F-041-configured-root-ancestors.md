@@ -12,11 +12,13 @@ Author: Codex (model and effort unknown), spec phase, 2026-11-15.
 Base: branch `fix/47-e-root-ancestor`, supplied main
 `27ebcf19c02a9c136aa19954404a309f30559178`.
 IDs: F-041; BR-277 v2, BR-278 v2 and new BR-427 v1; AC-01–AC-10.
-No ADR. The owner reserves F-040, BR-423–BR-426 and BR-118 v3 for
-lot D / PR #58 (not yet merged); this lot does not edit those records.
-Next free IDs after these reservations: F-042, BR-428, ADR-013.
+No ADR. Lot D / PR #58 is merged as `67c101a`, with frozen F-040 v1,
+BR-423–BR-426 v1 and BR-118 v3 pending acceptance (BR-118 v2 stays active).
+The 2026-11-15 ID recheck against local `origin/main` at `67c101a` found
+no collision: main allocates through F-040, BR-426 and ADR-012; this lot
+adds F-041 and BR-427. Next free IDs: F-042, BR-428, ADR-013.
 Recheck current main and concurrent allocations before freeze and PR creation;
-no network check is authorized in this authoring assignment.
+no network check is authorized in this revision.
 
 ## Context
 
@@ -101,8 +103,13 @@ Keep the early direct `(driveId, target.id)` comparison against configured
 root pairs, including ID 1, without needing a root metadata read to refuse.
 For another source, retain normal mode, scope, evidence and deny checks.
 Only a live directory source of `trash`, `rename` or `move` needs the new
-negative ancestry proof, before execution/intent. A file cannot contain a
-root. An otherwise unauthorized call need not perform extra inspections.
+negative ancestry proof. Place it after `authorize(source)` and the source
+`dir` type check, before destination effects, execution or intent, in
+`src/policy/index.ts` (`effects`; review-base lines 431–439). A file cannot
+contain a root. An otherwise unauthorized call need not perform extra
+inspections. Received-share sources come from drives that are not configured,
+so no configured root can match; BR-257 refuses those mutations before any
+configured-root read. This check does not qualify received-share writes.
 
 For each configured root in the source drive, use its resolved folder ID,
 never its configuration-time path. Inspect that exact ID at location `live`
@@ -272,8 +279,8 @@ correlation, IDs and unchanged kind-specific values follow F-017/F-018.
   When root 40 moves under 30 between calls, Then operations on 30 yield
   D, and on former parent 11 yield S if no other root remains below it;
   root 40 itself still yields D. A new ID at the former root path does not
-  change that outcome. Assert fresh root GETs in every non-direct-root
-  invocation and current parent evidence; no preflight-path match or
+  change that outcome. Assert fresh root GETs in every folder trash/rename/move invocation whose
+  source is not a configured root, and assert current parent evidence; no preflight-path match or
   cross-invocation cache. Verified by
   `TestBR427_AC07_renamed_and_moved_roots_use_current_id_ancestry`
   in `tests/mutation-production.test.ts`.
@@ -291,7 +298,8 @@ correlation, IDs and unchanged kind-specific values follow F-017/F-018.
   settles without intent or mutation; late evidence cannot execute.
   Verified by `TestBR427_AC08_root_reads_share_existing_invocation_bounds`
   in `tests/invocation-queue.test.ts`: an admitted run returns exactly
-  `{result:"failed",op:O,code:"REQUEST_TIMEOUT",attempts:0}` at 10,000 ms,
+  `{result:"failed",op:O,code:"REQUEST_TIMEOUT",attempts:0}` at the
+  BR-070 v5 invocation deadline (the existing navigation deadline constant),
   or `{result:"failed",op:O,code:"CANCELLED",attempts:0}` on cancellation,
   with zero audit records and zero mutation requests. The tool wraps this
   gate JSON with `isError:true`; the pre-intent interruption precedence in
@@ -302,7 +310,12 @@ correlation, IDs and unchanged kind-specific values follow F-017/F-018.
   `copy` operation, Then policy `check` remains
   `{allowed:false,code:"INVALID_OPERATION"}` with no root reads. Given
   permitted restore evidence, Then `check` remains `{allowed:true}`
-  with no additional root reads.
+  with no additional root reads. Given a received-share folder source from
+  an unconfigured drive, with `sharedWithMe=true` and `sharedWrite=true`,
+  When trash, rename or move is requested, Then BR-257 still yields D
+  after a fresh complete `shared_with_me` list, with zero configured-root
+  reads. Verified by `TestBR278_v2_AC09_received_share_refused_without_root_reads`
+  in `tests/mutation-composition.test.ts`.
   Read mode still exposes no mutation tools and refuses direct structural
   policy requests with `{allowed:false,code:"LEVEL_REQUIRED"}`.
   Verified by `TestBR278_v2_AC09_other_operations_and_read_mode_unchanged`
@@ -393,8 +406,9 @@ no retrospective attribution or total is inferred.
   limit rather than claiming the entire class eliminated.
 - Case/Unicode inconsistencies from a provider refuse rather than being
   repaired. Consistent external changes still follow the configured ID.
-- Concurrent lot D records require allocation reconciliation before freeze
-  and PR creation; its unpublished files and review state are not inferred.
+- Lot D / PR #58 is merged as `67c101a`; the local ID recheck found no
+  collision. Concurrent allocations still require rechecking before freeze
+  and PR creation; no remote freshness or lot-D acceptance is inferred.
 
 ## Open questions
 
@@ -403,4 +417,39 @@ R-17-2 status are resolved by D-2–D-6; overlap policy is the owner's D-1.
 
 ## Stress-test
 
-Not reviewed.
+### Review 1 dispositions
+
+The owner supplied this review for this revision; the entries below record
+its verdict and the disposition of every finding, not a new review or an
+approval of the revised head. Reviewer model/effort and token counters were
+not supplied (unknown); no usage is inferred. This revision remains draft v1.
+
+### 47e-spec-review-1-reviewer — verdict: changes
+
+1. **Major — pending-rule counts. Retained, fixed in this revision.**
+   Kept main's distinction between rules and pending versions in the BR
+   index. Verified the files: 412 active, eight superseded and five pending
+   rules (BR-423–BR-427), plus three pending versions of active rules
+   (BR-118 v3, BR-277 v2, BR-278 v2): eight pending versions in total,
+   across 425 allocated rule IDs. Existing accepted definitions stay active.
+2. **Major — lot-D allocation and next IDs. Retained, fixed in this revision.**
+   The spec index retains main's F-040 record and adds F-041, with current
+   next free IDs F-042, BR-428 and ADR-013. Both lots' pending records remain.
+3. **Minor — merged lot-D base. Retained, fixed in this revision.**
+   Recorded PR #58 merged as `67c101a` and the collision-free local
+   `origin/main` ID recheck; no network freshness or acceptance is claimed.
+4. **Minor — received-share refusal. Retained, fixed in this revision.**
+   Recorded unconfigured source drives, no matching configured root and
+   BR-257's prior refusal. Added an AC-09 received-share row with zero
+   configured-root reads and a named production-composition test.
+5. **Minor — fresh-read assertion scope. Retained, fixed in this revision.**
+   AC-07 now requires fresh reads for every folder trash/rename/move
+   invocation whose source is not a configured root.
+6. **Minor — check placement. Retained, fixed in this revision.**
+   Pinned the check after source authorization and the directory type
+   check, before destination effects, execution and intent in `effects`.
+7. **Minor — invocation deadline reference. Retained, fixed in this revision.**
+   AC-08 cites the BR-070 v5 invocation deadline constant instead of
+   duplicating a numeric duration.
+
+No new review, freeze, acceptance or forge publication is performed here.

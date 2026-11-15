@@ -1,5 +1,34 @@
 # Capability map
 
+## Provisional — process-wide extraction admission
+
+[F-040 frozen v1](features/F-040-process-wide-extraction-admission.md)
+(#47 lot D), [BR-423 v1](business-rules/BR-423.md),
+[BR-424 v1](business-rules/BR-424.md), [BR-425 v1](business-rules/BR-425.md),
+[BR-426 v1](business-rules/BR-426.md) and pending [BR-118 v3](business-rules/BR-118.md)
+(v2 remains active): frozen admission contract for all `kdrive_read` formats uses two
+process-wide permits before source buffering, at most one permit and one live
+waiter per identity, and four waiters globally, serving the oldest eligible
+waiter. Queue/identity saturation returns `SERVER_BUSY` without automatic retry;
+waiting spends the invocation deadline, with `REQUEST_TIMEOUT` on expiry and
+`ACCESS_DENIED` on cancel/close. Failed/overdue worker termination releases the
+session slot by its deadline; a detached watcher keeps the permit and identity
+charged until exit. That identity's existing waiter and later extraction calls
+refuse immediately with `SERVER_BUSY` (earlier liveness causes still prevail).
+Live termination rejection preserves final authorization before
+`CONTENT_UNAVAILABLE`; expiry uses `REQUEST_TIMEOUT`, earlier cancel/close
+keeps `ACCESS_DENIED`. A process-owned stderr sink in both transports, retained after session close,
+offers fixed payload-free detach/release diagnostics to signal
+lost/recovered capacity; permanently stuck workers reduce capacity until restart
+(two cause immediate refusal for every new extraction caller, one blocks the
+shared stdio identity). README/tool/compatibility
+wording will explain transient `SERVER_BUSY` and its recovery limits. Raw
+and resource reads retain their contracts. This limits concurrent pipelines,
+not total process memory. Reviews 1–3 and Decisions 1–2 are dispositioned; v1 is frozen at the explicit
+owner instruction, with no corrected-head approval claimed. Implementation
+and acceptance remain pending.
+Lot C's accepted F-039 contract and active rule versions remain separate.
+
 ## Provisional — configured-root ancestor protection
 
 [F-041 v1](features/F-041-configured-root-ancestors.md) (#47 lot E),
@@ -12,8 +41,8 @@ Root rename/move outside this server does not make configuration-time paths
 authoritative; current evidence is required. Destination-side ancestry and
 copy/upload/create contracts are unchanged, and overlapping roots remain
 configurable. Visibility and check-then-act limits remain explicit.
-Draft, not reviewed or frozen; implementation and actual-main acceptance
-pending. Existing BR-277/BR-278 v1 remain active; R-17-2 is not yet resolved.
+Draft v1; Review 1 dispositioned, revised-head approval and freeze pending;
+implementation and actual-main acceptance pending. Existing BR-277/BR-278 v1 remain active; R-17-2 is not yet resolved.
 
 ## Accepted — bounded audit waits and shutdown
 

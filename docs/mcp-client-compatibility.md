@@ -68,12 +68,23 @@ time, in arrival order:
 - a call that finds 4 calls already waiting, or that waits 12 seconds, gets
   `SERVER_BUSY`;
 - `SERVER_BUSY` means the call was refused before any kDrive request, so it is
-  safe to retry, writes included, once an earlier call has completed;
+  safe to retry, writes included; for extraction, completion of an earlier
+  call does not guarantee that a detached worker has released its permit;
 - each call's own 10-second deadline and request budgets start only when it
   runs, so waiting does not shorten them.
 
-Sessions never wait for each other: each stdio process and each HTTP session
-has its own queue.
+Each HTTP session has its own invocation queue. Within a process, `kdrive_read`
+also shares two extraction permits and four waiting places across sessions,
+with at most one active permit and one waiter per identity. It serves the oldest
+eligible waiter. This extraction waiting spends the running invocation's
+10-second deadline. All stdio and identity-free embedded controllers share one
+identity; insecure HTTP uses a separate shared identity.
+
+SERVER_BUSY is a transient admission refusal before source work, including
+extraction queue saturation, an identity's waiting limit or a detached worker
+holding its permit. The server does not automatically retry; a later client
+invocation requires fresh admission and authorization. Capacity may remain
+unavailable until a stuck worker exits or the process restarts.
 
 ## Rate-limited mutations
 

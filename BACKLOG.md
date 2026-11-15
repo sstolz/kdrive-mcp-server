@@ -4,6 +4,8 @@ Planned delivery tickets live in the GitHub backlog (archive `docs/github-backlo
 Record newly observed out-of-scope work below as one line per item:
 `YYYY-MM-DD — observation — location — why it matters`.
 
+- 2026-11-15 — Consider starting worker termination a short grace before the invocation deadline so deadline-reaching extractions do not detach (47d-code-review-1 #1, 47d-code-decision-1-fable) — F-040 AC-04 `worker-remaining` — Requires a new F-040 version because the frozen criterion pins settlement exactly at the invocation deadline (t=10,000 ms).
+
 - 2026-11-15 — `read<T>(port)` accepts any port (#47 lot B code decision `47b-code-decision-1-fable`) — src/content.ts:62; src/navigation.ts:465 — A future caller could route a request-issuing call through the uncharged path; narrow it to an already-open body or document the invariant.
 
 - 2026-11-15 — A body resolving synchronously in 1-byte chunks can loop up to 8 MiB iterations without yielding (#47 lot B code decision `47b-code-decision-1-fable`) — src/content.ts; src/navigation.ts — The deadline holds, but cancellation is delivered late; production transport yields on I/O. Consider a periodic macrotask yield; F-038 forbids a fragment cap.
@@ -81,3 +83,4 @@ Record newly observed out-of-scope work below as one line per item:
 - 2026-11-14 — SPEC.md §8 lists the OAuth variables but not `OAUTH_ALLOWED_CLIENT_ID_ORIGINS` (F-028) — SPEC.md — add it when the records are synchronized after acceptance.
 - 2026-11-14 — A `101` response with `Upgrade` and `Connection: upgrade` makes Node destroy the socket without an error, so a CIMD fetch holds its slot until the 5,000 ms timeout (bounded by the deadline; found by 26-code-decision-1-fable) — src/auth/proxy/client-metadata-fetch.ts — fail such a fetch at once as `status` 101 in a later F-033 version.
 - 2026-11-15 — The HTTP server's default `maxHeadersCount` and header-size limits are not configured explicitly (#46 code decision `46-code-decision-1-fable`, finding 2) — src/http/server.ts — consider pinning them in a later hardening ticket.
+- 2026-11-15 — Async EPIPE on a closed process stderr would surface as an unhandled stream error (47d-code-decision-1-fable) — src/extraction-admission.ts:30, same pattern as src/stdio.ts:35 — consider a process-level stderr error listener.
