@@ -321,6 +321,64 @@ it.each(admissionRoutes)(
   },
 );
 
+it.each(["peer", "global"] as const)(
+  "BR-162 v3 AC-14 refusal precedes body reading for %s",
+  async (window) => {
+    for (const [route, peerLimit, seconds, globalLimit] of admissionRoutes) {
+      if (!["register", "consent", "token"].includes(route)) continue;
+      const f = await httpFixture();
+      try {
+        const limit = window === "peer" ? peerLimit : globalLimit;
+        for (let i = 0; i < limit; i++)
+          expect(
+            (
+              await admissionRequest(
+                f,
+                route,
+                window === "peer" ? "192.0.2.1" : distinctPeer(i),
+              )
+            ).status,
+          ).not.toBe(429);
+        const before = spies[route].mock.calls.length;
+        let pulled = 0;
+        const stream = new ReadableStream<Uint8Array>(
+          {
+            pull() {
+              pulled++;
+              return new Promise<void>(() => undefined);
+            },
+          },
+          { highWaterMark: 0 },
+        );
+        const response = await f.handler.handle(
+          new Request("http://placeholder.invalid/", {
+            method: "POST",
+            headers: {
+              host: "mcp.test",
+              "content-type":
+                route === "register"
+                  ? "application/json"
+                  : "application/x-www-form-urlencoded",
+            },
+            body: stream,
+            duplex: "half",
+          } as RequestInit),
+          `/mcp/oauth/${route}`,
+          window === "peer" ? "192.0.2.1" : distinctPeer(limit),
+        );
+        expect(response.status).toBe(429);
+        expect(pulled).toBe(0);
+        expect(retry(response)).toBe(seconds);
+        await expectError(response, 429, "rate_limited");
+        expect(spies[route]).toHaveBeenCalledTimes(before);
+        expect(f.events("request_refused").at(-1)?.fields.window).toBe(window);
+      } finally {
+        await f.handler.close();
+      }
+    }
+  },
+);
+
 it.each(admissionRoutes.map((row) => [row[0], row[3], row[2]] as const))(
   "BR-162 v3 AC-15 the global ceiling of %s is %i per %i seconds",
   async (route, limit, seconds) => {

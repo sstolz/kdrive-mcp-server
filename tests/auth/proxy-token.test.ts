@@ -495,11 +495,29 @@ async function redirectProfile(
     kind === "CIMD"
       ? { clientId: CIMD_URL, method: "none", redirect }
       : { ...(await h.register({ redirect_uris: uris })), redirect };
-  const done = await h.login(client);
+  const verifier = "v".repeat(43);
+  const flow = await h.approve(client, verifier);
   // A later document cannot change the snapshot bound to this code.
   metadata.serve.set(CIMD_URL, {
-    body: cimdDocument(CIMD_URL, { redirect_uris: [LOOPBACK] }),
+    body: cimdDocument(CIMD_URL, {
+      redirect_uris: profile === "single" ? [CLAUDE, LOOPBACK] : [CLAUDE],
+    }),
   });
+  if (kind === "CIMD" && profile !== "variable loopback") {
+    expect(metadata.calls).toEqual([CIMD_URL]);
+    h.clock.advance(300 * SECOND);
+    expect(
+      (
+        await h.proxy.authorize({
+          query: h.authorizeQuery(client, "c".repeat(43)),
+        })
+      ).status,
+    ).toBe(200);
+    expect(metadata.calls).toEqual([CIMD_URL, CIMD_URL]);
+  }
+  const code = location(await h.callback(flow)).searchParams.get("code") ?? "";
+  expect(code).not.toBe("");
+  const done = { code, verifier, client, redirect };
   const value =
     supplied === "omitted"
       ? undefined
