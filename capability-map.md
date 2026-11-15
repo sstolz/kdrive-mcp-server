@@ -5,11 +5,12 @@
 [F-038 v1](features/F-038-stream-budget-and-weak-etags.md) (#47 lot B),
 [BR-070 v4](business-rules/BR-070.md),
 [BR-205 v2](business-rules/BR-205.md) and
-[BR-384 v2](business-rules/BR-384.md): proposed body reads consume byte
+[BR-384 v2](business-rules/BR-384.md): frozen specification: body reads consume byte
 and time bounds without spending the 512 upstream-operation budget; weak
 `W/` validators follow the existing absent-validator refusal in describe/open.
-Current accepted rule versions remain active. Draft with Review 1 dispositions;
-not frozen, implemented or accepted. F-038 D-1 preserves the existing
+Current accepted rule versions remain active. Frozen v1 on 2026-11-15 after
+the supplied Review 2 and decision-pass approvals; implementation and
+acceptance are pending. F-038 D-1 preserves the existing
 operation charging points; counting every physical HTTP request is out of scope.
 This adds no ability to read content without a qualifying validator.
 

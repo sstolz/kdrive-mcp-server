@@ -2,7 +2,7 @@
 id: F-038
 title: Separate stream reads from operation budgets and refuse weak validators
 ticket: "#47"
-status: draft
+status: frozen
 version: 1
 ---
 
@@ -13,8 +13,19 @@ Base: branch `fix/47-b-stream-budget`, main
 `2f80ff87e3aea98968d65c56a8337a38ae130a78`.
 IDs: F-038; BR-070 v4, BR-205 v2 and BR-384 v2; AC-01–AC-09.
 No new BR ID or ADR. Next free IDs checked in the supplied main checkout:
-F-038, BR-423, ADR-013. Recheck on main before freeze and before the PR;
-no remote check was performed.
+F-038, BR-423, ADR-013 at authoring. Freeze recheck on 2026-11-15:
+local main `7fdc7b3` is stale (next IDs F-023, BR-341, ADR-010);
+cached `origin/main` at `2f80ff8` confirms F-038, BR-423, ADR-013 free;
+the supplied implementation head `353c75e` already allocates F-038 and
+has next free IDs F-039, BR-423, ADR-013. No IDs are added or reused.
+Recheck against current main before the PR; no network check is authorized.
+
+Frozen v1 on 2026-11-15 at the owner's explicit instruction, from reviewed
+base `353c75e`, with the supplied approvals `47b-spec-review-2-reviewer`
+and `47b-spec-decision-1-fable` and all their minor corrections below.
+This uncommitted freeze revision has no new SHA. Implementation, code
+review, CI and actual-main acceptance remain pending. Review token totals
+and reviewer effort were not supplied; no retrospective usage is inferred.
 
 ## Context
 
@@ -32,7 +43,7 @@ provider validator into a strong-looking `"kd1-…"` value. Hashing a weak
 validator does not establish byte identity. The owner requires a value
 starting with the case-sensitive prefix `W/` to follow exactly the absent
 validator path. The owner reports a live download without an ETag; this
-draft does not independently establish a provider-wide observation or add
+specification does not independently establish a provider-wide observation or add
 a fallback version scheme. Existing no-ETag refusals remain intentional.
 
 ## Scope
@@ -55,9 +66,9 @@ a fallback version scheme. Existing no-ETag refusals remain intentional.
   transport-wide counter of every physical HTTP request, including
   metadata/probe/redirect hops (D-1). This is a BACKLOG-worthy follow-up
   requiring a separate transport/accounting contract.
-- Source/test edits, Docker, network, commits, review, freeze, implementation,
-  acceptance and release in this authoring step. The owner explicitly
-  authorized Codex as author; later phases retain the repository's reviews.
+- Production source edits, Docker, network, commits, implementation,
+  acceptance and release in this two-step assignment. The owner authorizes
+  this freeze revision followed by tests only; later phases retain reviews.
 
 ## Business rules
 
@@ -99,6 +110,10 @@ limit and retry attempt/wait bounds stay unchanged. Reaching 512 operations
 does not itself forbid consuming a body already opened by an admitted
 operation; any subsequent required authorization operation still needs
 budget and may refuse publication.
+
+Only consumption of an already-open response body is exempt. Any body
+read that issues or resumes an upstream request is a charged operation at
+the existing admission boundary, including its admitted retry attempts.
 
 Data reads and the `read(1)` EOF probe instead use a deadline/cancellation
 guard without charging an operation. Check liveness before starting and
@@ -202,6 +217,12 @@ the existing local double. No live provider or real write is required.
   in `tests/read-boundaries.test.ts` and
   `TestBR070_v4_AC03_stream_byte_evidence_remains_bounded` in
   `tests/download-boundaries.test.ts` (one test iterates the four rows).
+  Given a data read or the final EOF probe rejecting with `ReadFailure(503)`,
+  Then return exactly `E("READ_UNAVAILABLE")`, close exactly once and never
+  retry: one `describe`, one `open`, and respectively one or two body reads.
+  Verified by `TestBR070_v4_AC03_rejected_data_and_EOF_are_not_retried`
+  in `tests/download-boundaries.test.ts` (rows `data`, `EOF`). This strengthens
+  the existing body-rejection row that asserts only `isError`.
 - **AC-04** (BR-070 v4, BR-384 v2, BR-089) — Given AC-02 with the first
   read pending, or 600 bytes consumed and the EOF probe pending, When
   fake monotonic time reaches 10,000 ms from slot acquisition, Then
@@ -293,9 +314,11 @@ the existing local double. No live provider or real write is required.
    close the other lots. Synchronize accepted markers in the next reviewed
    PR before release.
 
-This revision step runs no product tests or Docker gate and claims no CI,
-new review, freeze or acceptance. The supplied review's dispositions are
-recorded below. No source/test edits or commits are made.
+The owner authorizes the documentation freeze followed by tests first,
+without source edits, Docker, network or commits. Local checks use available
+host dependencies only under this override; they are not the Docker gate
+or CI. Supplied review dispositions are recorded below; no new independent
+review or acceptance is claimed.
 
 ## Decisions
 
@@ -306,6 +329,8 @@ recorded below. No source/test edits or commits are made.
   adapter operation can include several requests (e.g. `describe` metadata
   plus probe, or a storage redirect). This repair does not introduce an
   exact 512-physical-HTTP-hop cap that the current code does not implement.
+  A body read that issues or resumes an upstream request remains charged;
+  only consumption of an already-open response is exempt.
   BR-207 separately continues counting preflight requests. The owner resolved
   OQ-1 in this revision by selecting the existing charging points; counting
   every physical HTTP request is a separate, out-of-scope follow-up.
@@ -336,6 +361,15 @@ recorded below. No source/test edits or commits are made.
   Identify body reads explicitly; do not use the retry flag as accounting.
 - The 8 MiB success test must use `kdrive_read` with a small text output;
   an 8 MiB raw JSON response violates existing output limits independently.
+- `ETAG_SYNTAX` at `src/kdrive/adapter.ts:61` currently admits `W/"x"`.
+  A weak-validator file that reads today will intentionally be refused:
+  `VERSION_UNAVAILABLE` at describe, or `CONTENT_UNAVAILABLE` at open
+  after a strong descriptor. This is a compatibility change, not merely
+  preservation of the existing absent-validator refusal.
+- Complete sources up to 8 MiB now reach the extraction worker, bounded
+  by `src/navigation.ts:534` (the smaller of extraction timeout and remaining
+  invocation time), plus existing extraction/output budgets. The code pass
+  checks at least one non-text format at the cap.
 - Weak and absent validators still prevent content access; this fix does
   not make the owner's no-ETag live response readable. A weak `open` after
   a strong descriptor must not silently fall back or publish mixed bytes.
@@ -346,6 +380,8 @@ recorded below. No source/test edits or commits are made.
 
 ## Open questions
 
+None (OQ-1 resolved by D-1).
+
 ## Stress-test
 
 ### Review 1 dispositions
@@ -353,7 +389,7 @@ recorded below. No source/test edits or commits are made.
 The owner supplied this review for this revision; the entries below record
 its verdict and the disposition of every finding, not a new review or an
 approval of the revised head. Reviewer model/effort and token counters were
-not supplied (unknown); no usage is inferred. Status remains draft v1.
+not supplied (unknown); no usage is inferred. That revision was draft v1.
 
 ### 47b-spec-review-1-reviewer — verdict: changes
 
@@ -371,3 +407,36 @@ not supplied (unknown); no usage is inferred. Status remains draft v1.
    fixtures and their authorization call path; no tests were run.
 4. **Minor — BR-070 History formatting. Retained, fixed in this revision.**
    Removed the blank line separating the v4 entry from the History list.
+
+
+### 47b-spec-review-2-reviewer — verdict: approve, ready for freeze
+
+5. **Minor — empty Open questions. Retained, fixed in this revision.**
+   The section states “None (OQ-1 resolved by D-1).”
+6. **Minor — physical HTTP request counter follow-up. Retained, fixed.**
+   Added a dated BACKLOG entry pointing to F-038 D-1; this remains outside
+   the frozen scope.
+
+### 47b-spec-decision-1-fable — verdict: approve, with minors
+
+7. **Minor — review records, status and IDs. Retained, fixed.**
+   Recorded both supplied approvals and every disposition, froze v1, and
+   synchronized spec index, capability map and BR README. The freeze note
+   records the local-main recheck, stale-ref limitation and current-head IDs.
+8. **Minor — body-triggered upstream requests. Retained, fixed.**
+   Accounting and D-1 explicitly charge any read that issues or resumes
+   an upstream request; only already-open response consumption is exempt.
+9. **Minor — weak-validator compatibility change. Retained, fixed.**
+   Risks and CHANGELOG name the intended refusal of files readable today
+   with weak validators admitted by the existing ETAG_SYNTAX.
+10. **Minor — rejected data/EOF reads. Retained, fixed.**
+    AC-03 names both rejection rows, exact READ_UNAVAILABLE result, one
+    close and no retry, including the exact describe/open/read counts.
+11. **Minor — extraction worker exposure at the cap. Retained, fixed.**
+    Risks names complete sources up to 8 MiB, the existing navigation
+    deadline bound and the required non-text-at-cap code-pass check.
+
+The review identifiers and verdicts above are supplied by the owner, not
+new agent reviews. Decision-pass model: Fable 5.2 per PROJECT.md; actual
+reported model/effort and per-agent token counters: unknown/not supplied.
+No forge publication is performed under the no-network instruction.

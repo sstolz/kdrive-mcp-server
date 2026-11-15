@@ -937,7 +937,8 @@ in F-037.
 ## Pending — stream operation budgets and weak validators
 
 [F-038 v1](../features/F-038-stream-budget-and-weak-etags.md) (#47 lot B)
-is draft with Review 1 dispositions. It prepares three pending versions, no new BR ID.
+is frozen v1 (2026-11-15), after the supplied Review 2 and decision-pass
+approvals. It prepares three pending versions, no new BR ID.
 Current definitions and acceptance evidence remain unchanged and active.
 BR-088 keeps its retry rule; the obsolete fragment-budget assertion is
 replaced in the planned tests. BR-206 continues using BR-205 normalization;
