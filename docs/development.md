@@ -728,6 +728,17 @@ Upgrade path: the owner replaces the `SONAR_TOKEN` and `SONAR_PR_TOKEN` secrets
 with a user token holding Browse (and Execute Analysis) on the project; this
 needs no code change.
 
+## Codex CLI
+
+The Codex CLI (`@openai/codex`) is installed by the cloud environment's setup
+script and runs signed in with the owner's ChatGPT plan through device login
+(`codex login --device-auth`): the owner enters the code; the token stays in
+the session container (`~/.codex/auth.json`) and is never committed, logged or
+pasted. The environment allows `auth.openai.com` and `chatgpt.com` for this.
+Authoring runs use `codex exec -s workspace-write -C <worktree>`; an optional
+review uses `codex exec -s read-only`. Roles and limits are in
+[PROJECT.md](../PROJECT.md) (D-11).
+
 ## Licensing and contribution
 
 The [read API evidence dossier](kdrive-read-evidence.md) separates historical

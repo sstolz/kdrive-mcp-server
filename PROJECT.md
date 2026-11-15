@@ -1,161 +1,109 @@
 # PROJECT.md — project parameters
 
-This file sets the parameters that [AGENTS.md](AGENTS.md) leaves to the
-project, and records the owner decisions behind them. AGENTS.md stays a
-portable method; everything specific to this repository lives here.
+The parameters that [AGENTS.md](AGENTS.md) leaves to the project, and the owner
+decisions behind them. AGENTS.md stays a portable method; everything specific
+to this repository lives here.
 
 ## Parameters
 
-| Parameter                        | Value                                                                                                                                                                                    |
-| -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Conversation language            | French                                                                                                                                                                                   |
-| Artifact language                | English, unless the user explicitly asks otherwise                                                                                                                                       |
-| Main branch                      | `main`                                                                                                                                                                                   |
-| Forge and tickets                | GitHub issues and pull requests of `sstolz/kdrive-mcp-server`                                                                                                                            |
-| Label taxonomy                   | GitHub default type labels plus `chore` and `research`, and `area/*` labels, see [docs/issue-labels.md](docs/issue-labels.md)                                                            |
-| Local gate (full path)           | `make check` (lint, format, typecheck, build, tests, package verification)                                                                                                               |
-| Local gate (short path)          | `make format-check` plus the content and link checks the change needs                                                                                                                    |
-| Freeze mode                      | autonomous (decision D-1)                                                                                                                                                                |
-| In-scope corrections             | continue without asking the owner (decision D-2), within the round limit of AGENTS.md §3                                                                                                 |
-| Soft token budget per ticket     | 600k sub-agent tokens (decision D-3)                                                                                                                                                     |
-| Diff-only confirmation threshold | 50k sub-agent tokens per round (decision D-7)                                                                                                                                            |
-| Model tier: strong               | Opus 5.5, effort high — every iterative spec and code review round (decision D-3)                                                                                                        |
-| Model tier: strongest            | Fable 5.2 — decision passes and the milestone global pass (decisions D-3, D-8); the per-milestone plan is in docs/github-backlog.md (archive `docs/github-backlog.md`) ("Review models") |
-| Cross-vendor reviewer            | Codex CLI on the owner's ChatGPT plan — optional extra review round and mechanical tasks (decision D-11)                                                                                 |
-| Model tiers: light, standard     | not fixed; the orchestrator picks per AGENTS.md §5                                                                                                                                       |
-| Reviewer tool                    | [`.claude/agents/reviewer.md`](.claude/agents/reviewer.md) (strong tier, read-only); use it for every strong-tier review round with a narrow diff-only brief when possible               |
-| Toolchain                        | Docker-only (decision D-4)                                                                                                                                                               |
-| Companion records repository     | none                                                                                                                                                                                     |
+- **Languages:** conversation in French; artifacts in English unless the user
+  asks otherwise.
+- **Main branch and forge:** `main`; GitHub issues and pull requests of
+  `sstolz/kdrive-mcp-server`.
+- **Labels:** GitHub default type labels plus `chore`, `research` and `area/*`
+  ([docs/issue-labels.md](docs/issue-labels.md)) (D-10).
+- **Local gate:** `make check` on the full path (lint, format, typecheck, build,
+  tests, package verification); `make format-check` plus the needed content and
+  link checks on the short path.
+- **Freeze mode:** autonomous (D-1). In-scope corrections continue without
+  asking the owner, within the AGENTS.md §3 round limit (D-2).
+- **Token budget:** 600k sub-agent tokens per ticket, soft (D-3); diff-only
+  confirmation threshold 50k per round (D-7).
+- **Model tiers:** strong = Opus 5.5, effort high, for every iterative spec and
+  code review round, through the reviewer tool
+  [`.claude/agents/reviewer.md`](.claude/agents/reviewer.md) (read-only; narrow
+  diff-only briefs when possible). Strongest = Fable 5.2, only for the decision
+  passes of security-sensitive tickets and the milestone global pass (D-3).
+  Light and standard are picked per AGENTS.md §5.
+- **Authoring:** the Codex CLI authors specs, implementations and records; the
+  orchestrator runs the gate, commits, pushes and merges (D-11).
+- **Toolchain:** Docker-only (D-4). Companion records repository: none.
 
 ## Toolchain rules (Docker-only)
 
-Everything runs inside the dev Compose service, driven by a Makefile (GNU Make
-3.81 compatible): install, Node/npm, TypeScript, lint, format, tests, build,
-packing, and fixture Git operations.
+Everything runs in the dev Compose service through the Makefile (GNU Make 3.81
+compatible). Never install host tools, change Docker engine or socket
+permissions, or remove a volume or data without authorization. Keep the dev
+containers separate from the production image. Check `docker info` before each
+gate; in a cloud container start the daemon by hand when it fails
+(`learnings.md`, 2026-11-10). F-001 v2 records this contract.
 
-- Never install host tools.
-- Never change Docker engine or socket permissions to get around a restriction.
-- Keep the dev containers separate from the production image.
-- Never remove a volume or any data without authorization.
-- Check `docker info` before each gate; in a cloud container, start the daemon
-  by hand when it fails (see `learnings.md`, 2026-11-10).
-- F-001 v2 records this contract change.
+## Transitional deviation
 
-## Transitional deviations
-
-- **Reviewer publication (2026-11-11, #92).** AGENTS.md §9 has the reviewer publish its own
-  verdict. The reviewer tool above has no forge write access, so until it does,
-  the orchestrator posts the reviewer's report verbatim and unedited on the PR,
-  under the reviewer's evidence identifier, and adds nothing to it. Exit condition: the reviewer tool
-  gains forge write access.
-
-## Repository and ticket numbering
-
-Development moved on 2026-11-12 (decision D-9) from the private repository,
-now `sstolz/kdrive-mcp-server-archive`, to this repository, which started
-from a single clean root commit. Ticket numbers restarted at #1 here. In
-records dated before 2026-11-12, a bare `#N` and "archive issue N" refer to
-the archive; this repository's tickets are cited as `#N` from #1 onward in
-records dated 2026-11-12 or later. The archive keeps the full history, the
-evidence files (`runs/`) and the closed tickets; it is private.
+- **Reviewer publication (2026-11-11).** The reviewer tool has no forge write
+  access, so the orchestrator posts its report verbatim on the PR under the
+  reviewer's evidence identifier, adding nothing. Exit: the tool gains forge
+  write access.
 
 ## Public-content rule
 
-This repository is meant to be public. Commit messages, issues, pull requests,
-review records and tracked files carry no session links, e-mail addresses
-other than GitHub `noreply` ones, personal names, organisation domains,
-private hostnames or links to private repositories (decision D-9). Evidence
-from private systems is summarised without identifiers.
+This repository is public. Commits, issues, pull requests, review records and
+tracked files carry no session links, e-mail addresses other than GitHub
+`noreply` ones, personal names, organisation domains, private hostnames or
+links to private repositories (D-9). Evidence from private systems is
+summarised without identifiers.
 
 ## History
 
-- **CI bootstrap.** Archive tickets 1 and 2 were docs and admin work done before CI
-  existed. For them, an independent `approve` plus successful local document,
-  link and content checks stood in for CI. This granted no product waiver and
-  is never called "green CI". CI is mandatory from archive ticket 3 onward.
-- **README-only exception.** One direct commit to `main` initialized the empty
-  repository. That exception is used up and authorizes no further direct-main
-  operation.
+- Development moved on 2026-11-12 from a private repository (the archive, with
+  the closed tickets and the `runs/` evidence files) to this one, which started
+  from a clean root commit (D-9). In records dated before 2026-11-12, `#N` and
+  "archive issue N" refer to the archive; later records cite this repository.
+- Archive tickets 1 and 2 ran before CI existed (independent approval plus
+  local checks, never called green CI). One direct commit initialized `main`;
+  that exception is used up.
 
 ## Decisions log
 
-Owner decisions that set the parameters above, with their date and source.
-Entries state the decision; they do not quote anyone's words.
+Owner decisions, with their date. Entries state the decision; they do not
+quote anyone's words.
 
-- **D-1 — 2026-11-01 — Autonomous freeze.** The owner removed the human freeze
-  step for this project. The human freeze stays in AGENTS.md §2 as the
-  default mode; this project uses the autonomous mode.
-- **D-2 — 2026-11-02 — Autonomous in-scope corrections.** Routine corrections
-  within the approved ticket scope continue without asking the owner,
-  regardless of review rounds, bounded by the
-  AGENTS.md §3 round limit and the D-3 budget; every
-  corrected head still needs the local gate, CI and a fresh independent review.
-  Unresolved product or contract decisions still go to the owner.
-- **D-3 — 2026-11-03 — Review models and token economy.** Recorded in #50 and
-  docs/github-backlog.md (archive `docs/github-backlog.md`) ("Review models"): Opus 5.5
-  effort high for iterative rounds; one Fable 5.1 decision pass on the spec and
-  one on the code for security-sensitive tickets, each after an Opus approval;
-  one global Fable pass per milestone; a fresh author per phase; per-ticket
-  token records at freeze and closure; a 600k soft budget with stop-and-report.
-- **D-4 — 2026-11-01 — Docker-only development.** Recorded in F-001 v2 and
-  `learnings.md` (2026-11-01).
-- **D-5 — 2026-11-11 — Portable method.** Recorded in #92: AGENTS.md holds the
-  method only, with no reference to this product or to any agent vendor, model
-  or tool; this file holds the parameters and the decisions.
-- **D-6 — 2026-11-11 — Evidence location in multi-user work.** Recorded in the
-  #92 comment of 2026-11-11 (archive issue 92):
-  durable knowledge in `docs/observations/`, decision proof in tickets and PRs,
-  no per-run files in the product repository (AGENTS.md §9).
-- **D-7 — 2026-11-11 — Diff-only threshold.** #92 asks for a small token
-  threshold below which a diff-only confirmation round does not count toward
-  the round limit. The orchestrator set it at 50k sub-agent tokens: diff-only
-  rounds of the reviewer tool measured about 17–38k (`learnings.md`,
-  2026-11-05). The owner may change it.
-- **D-8 — 2026-11-11 — Strongest tier on Fable 5.2.** Recorded in #101. The
-  owner moved the strongest tier from Fable 5.1 to Fable 5.2; the rest of
-  D-3 is unchanged. The milestone 0.4 global pass was already
-  served by Fable 5.2 (#100 comment of 2026-11-11).
-- **D-9 — 2026-11-12 — Development in this repository.** The owner moved
-  development to this repository (switch ticket #1). The archive is frozen;
-  its open tickets were recreated here
-  (#2–#8) with neutral text and closed there as moved. The `runs/`
-  transitional deviation ends: this repository holds no `runs/` directory.
-  The public-export tooling was removed (owner go, 2026-11-12). The rule
-  against session links and private data comes from the 0.6 beta decision of
-  2026-11-11 (archive issue 106).
-- **D-10 — 2026-11-12 — Labels.** Owner request to follow common practice:
-  GitHub's default type labels plus `chore` and `research`, and `area/*`
-  domain labels sharing one colour, each with a description
+- **D-1 — 2026-11-01 — Autonomous freeze.** No human freeze step for this
+  project; AGENTS.md §2 keeps the human mode as the default.
+- **D-2 — 2026-11-02 — Autonomous in-scope corrections.** Within the ticket
+  scope, bounded by the round limit and the budget; every corrected head still
+  needs the gate, CI and a fresh review. Product or contract decisions go to
+  the owner.
+- **D-3 — 2026-11-03, updated 2026-11-11 — Review models and token economy.**
+  Strong tier for iterative rounds; one strongest-tier decision pass on the
+  spec and one on the code for security-sensitive tickets only, each after a
+  strong-tier approval; one strongest-tier global pass per milestone; a fresh
+  author per phase; token records at freeze and closure; the 600k soft budget
+  with stop-and-report. The strongest tier moved from Fable 5.1 to Fable 5.2
+  on 2026-11-11.
+- **D-4 — 2026-11-01 — Docker-only development** (F-001 v2).
+- **D-5 — 2026-11-11 — Portable method.** AGENTS.md names no product, vendor,
+  model or tool; this file holds the parameters and decisions. `CLAUDE.md`
+  only imports both files.
+- **D-6 — 2026-11-11 — Evidence location.** Durable knowledge in
+  `docs/observations/`, decision proof in tickets and PRs, no per-run files in
+  this repository (AGENTS.md §9).
+- **D-7 — 2026-11-11 — Diff-only threshold** of 50k sub-agent tokens, from
+  measured diff-only rounds of 17–38k (`learnings.md`, 2026-11-05).
+- **D-9 — 2026-11-12 — Development in this repository.** The archive is
+  frozen; its open tickets were recreated here (#2–#8). No `runs/` directory
+  here.
+- **D-10 — 2026-11-12 — Labels** follow common practice
   ([docs/issue-labels.md](docs/issue-labels.md)).
-- **D-11 — 2026-11-15 — Codex as a cross-vendor reviewer and helper.** The
-  owner chose to use the Codex CLI. The Codex CLI
-  (`@openai/codex`, installed by the `kdrive-mcp-server` cloud environment's
-  setup script) runs signed in with the owner's ChatGPT plan through device
-  login (`codex login --device-auth`); the owner enters the code, the token
-  lives only in the session container (`~/.codex/auth.json`) and is never
-  committed, logged or pasted. The environment allows `auth.openai.com` and
-  `chatgpt.com` for this.
-  - **Uses.** (a) A cross-vendor review: an extra read-only round
-    (`codex exec -s read-only` or `codex exec review`) on a spec or a diff,
-    for security-sensitive tickets or when the owner asks; it complements and
-    never replaces the strong-tier rounds, the strongest-tier decision passes,
-    the tests or CI. (b) Mechanical tasks (refactors, repetitive tests, lint
-    fixes) in a dedicated worktree, with writes limited to that worktree
-    (`-s workspace-write`, `--cd <worktree>`); its output is reviewed and
-    checked like any author's. Exception to (b): for #46, the owner
-    temporarily extended D-11 so the Codex CLI authored the implementation;
-    the orchestrator ran `make check` and committed; strong-tier review and
-    the Fable decision pass still applied.
-  - **Evidence.** A Codex review uses the identifier
-    `<ticket>-<act>-<round>-codex` and is posted verbatim by the orchestrator
-    like the reviewer tool's reports, with the Codex version, model and
-    reasoning effort (`unknown` if not reported). Its findings are weighed
-    like any reviewer's: accepted, rejected with a reason, or sent to the
-    owner. A Codex round does not count toward the round limit of AGENTS.md
-    §3 and its approval never stands in for the strong-tier approval; its
-    accepted findings go to the next strong-tier round.
-  - **Limits.** Prompts follow the public-content rule: no secrets, tokens,
-    private data or session links. Codex never pushes, merges, comments on the
-    forge or changes the environment; the orchestrator does those. Its usage
-    counts on the owner's plan quotas and is not part of the sub-agent token
-    budget; the orchestrator notes the tokens Codex reports per ticket.
+- **D-11 — 2026-11-15 — Codex CLI as author.** The Codex CLI, on the owner's
+  ChatGPT plan, authors specs, implementations, review fixes and records in a
+  dedicated worktree, with writes limited to it. The orchestrator writes the
+  briefs, runs the gate, commits, pushes, publishes evidence and merges; Codex
+  never pushes, merges, comments on the forge or changes the environment.
+  Reviews stay with the strong and strongest tiers; an optional Codex review
+  (`<ticket>-<act>-<round>-codex`) never counts toward the round limit or
+  replaces a strong-tier approval. Prompts follow the public-content rule.
+  Codex usage counts on the owner's plan, not on the sub-agent budget. Setup:
+  [docs/development.md](docs/development.md#codex-cli).
+
+D-8 (Fable 5.2) is folded into D-3.
