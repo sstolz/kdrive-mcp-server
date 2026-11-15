@@ -2,7 +2,7 @@
 id: F-036
 title: Refused authorization-code redemption events restored
 ticket: "#49"
-status: draft
+status: frozen
 version: 1
 ---
 
@@ -182,21 +182,58 @@ code-refusal request.
   refresh token still works. Verified by
   `BR-137 v3 AC-04 concurrent redemptions consume and revoke only on matching requests`
   in `tests/auth/proxy-token.test.ts`.
-- **AC-05** (BR-137 v3, BR-298 v2) — Given otherwise valid requests,
+- **AC-05** (BR-137 v3, BR-298 v2, BR-299 v2) — Given otherwise valid requests,
   When the code is absent, empty or unknown, Then each returns 400
   `invalid_grant` and `[G]`. Given fresh and consumed codes with both a
   binding mismatch and resource mismatch, Then step (3) wins: 400
   `invalid_grant` and `[G]`; with only a resource mismatch, step (4) wins:
-  400 `invalid_target` and `[T]`. Given expired codes with both mismatches,
-  Then step (2) wins: 400 `invalid_grant` and `[G]`. Repeat a fresh-code
+  400 `invalid_target` and `[T]`. Given an expired code, in fresh and
+  consumed variants, with only a resource mismatch, Then step (2) wins
+  over step (4): 400 `invalid_grant` and `[G]`, not `[T]`. Repeat a fresh-code
   wrong-verifier attempt twice: each logs `[G]`, and a subsequent correct
   request succeeds. All these refusals leave code/family state unchanged
   (apart from the existing in-memory client last use) and commit nothing
   under a recording store; include expired unconsumed codes and both
-  no-family replay cases. Verified by
+  no-family replay cases. Given a valid first redemption at step (6), When
+  `failCommit` is enabled after setup, Then the response is 503
+  `temporarily_unavailable` and the whole event array is exactly:
+
+  ```ts
+  [
+    {
+      name: "store_write_failed",
+      fields: { handler: "token", store: "families" },
+    },
+    {
+      name: "token_refused",
+      fields: { handler: "token", error: "temporarily_unavailable", status: 503 },
+    },
+  ]
+  ```
+
+  Given a matching replay at step (5) with a remaining family, When
+  `failCommit` is enabled after successful redemption, Then the response
+  is 503 `temporarily_unavailable` and the whole event array is exactly:
+
+  ```ts
+  [
+    R,
+    {
+      name: "store_write_failed",
+      fields: { handler: "token", store: "families" },
+    },
+    {
+      name: "token_refused",
+      fields: { handler: "token", error: "temporarily_unavailable", status: 503 },
+    },
+  ]
+  ```
+
+  Neither failed-commit case logs a 400 `G`. Verified by
   `BR-137 v3 AC-05 missing codes and competing failures log the first refusal`
   in `tests/auth/proxy-token.test.ts` and
-  `BR-298 BR-137 v3 AC-05 restored refusal events write no state`
+  `BR-298 BR-137 v3 AC-05 restored refusal events write no state` and
+  `BR-299 BR-137 v3 AC-05 failed code commits log exactly one refusal`
   in `tests/auth/proxy-persistence.test.ts`.
 - **AC-06** (BR-137 v3, BR-143 v4, BR-167 v3) — Given synthetic
   recognizable request values and a capturing logger, When every table
@@ -262,7 +299,9 @@ implementation phase. This draft makes no passing-test or CI claim.
 ## Risks
 
 - A shared refusal helper can double-log matching replay or 503 failures;
-  exact whole-array assertions and existing failure regressions guard this.
+  AC-02's matching-replay and AC-05's two explicit `failCommit` whole-array
+  assertions guard this. Existing BR-299 regressions check responses and
+  state, not these exact event arrays; the reuse case covers refresh reuse.
 - A broad empty-log replacement can hide a success regression or count a
   following refresh refusal. Capture each request separately; successful
   redemptions still assert `[]` under the bounded fixtures.
@@ -279,5 +318,15 @@ None. The draft chooses the existing event shape without `reason` (D-1).
 
 ## Stress-test
 
-Not reviewed. Independent strong-tier review and the strongest-tier decision
-pass remain required before freeze; no approval or freeze is claimed.
+- **Round 1 — `49-spec-review-1-reviewer`: approve with two minors.**
+  Retained both: clarify the BR-299 503 exception so BR-137's 400 wording
+  does not contradict store-failure handling; name BR-162 v3 as the
+  log-volume bound so the risk cites the existing admission rule. Fixed
+  in `3c79f16`.
+- **Decision pass — `49-spec-decision-1-fable`: approve with three minors.**
+  Retained all three: add AC-05's two `failCommit` whole-array assertions
+  and correct the risk claim because existing regressions do not assert
+  those logs; use expired fresh and consumed codes with only a resource
+  mismatch to distinguish step (2) from step (4); record both reviews here
+  so the stress-test reflects their verdicts and dispositions. Fixed in
+  this revision. No freeze is claimed.

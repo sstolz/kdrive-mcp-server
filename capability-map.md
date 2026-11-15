@@ -3,7 +3,7 @@
 ## Provisional — refused authorization-code redemption events restored
 
 [F-036 v1](features/F-036-refused-code-event.md) (#49),
-[BR-137 v3](business-rules/BR-137.md), draft and pending acceptance: in
+[BR-137 v3](business-rules/BR-137.md), frozen and pending acceptance: in
 `proxy` mode every refused code redemption emits exactly one `token_refused`
 with only `handler`, OAuth `error` and `status`, without a `reason` or request
 value. Binding checks, responses and state handling stay as in v2, including
