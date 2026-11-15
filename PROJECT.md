@@ -21,6 +21,7 @@ portable method; everything specific to this repository lives here.
 | Diff-only confirmation threshold | 50k sub-agent tokens per round (decision D-7)                                                                                                                                            |
 | Model tier: strong               | Opus 5.5, effort high — every iterative spec and code review round (decision D-3)                                                                                                        |
 | Model tier: strongest            | Fable 5.2 — decision passes and the milestone global pass (decisions D-3, D-8); the per-milestone plan is in docs/github-backlog.md (archive `docs/github-backlog.md`) ("Review models") |
+| Cross-vendor reviewer            | Codex CLI on the owner's ChatGPT plan — optional extra review round and mechanical tasks (decision D-11)                                                                                 |
 | Model tiers: light, standard     | not fixed; the orchestrator picks per AGENTS.md §5                                                                                                                                       |
 | Reviewer tool                    | [`.claude/agents/reviewer.md`](.claude/agents/reviewer.md) (strong tier, read-only); use it for every strong-tier review round with a narrow diff-only brief when possible               |
 | Toolchain                        | Docker-only (decision D-4)                                                                                                                                                               |
@@ -127,3 +128,29 @@ Owner decisions that set the parameters above, with their date and source.
   GitHub's default type labels plus `chore` and `research`, and `area/*`
   domain labels sharing one colour, each with a description
   ([docs/issue-labels.md](docs/issue-labels.md)).
+- **D-11 — 2026-11-15 — Codex as a cross-vendor reviewer and helper.** Owner's
+  words: “je veux utiliser codex sur son abonnement”. The Codex CLI
+  (`@openai/codex`, installed by the `kdrive-mcp-server` cloud environment's
+  setup script) runs signed in with the owner's ChatGPT plan through device
+  login (`codex login --device-auth`); the owner enters the code, the token
+  lives only in the session container (`~/.codex/auth.json`) and is never
+  committed, logged or pasted. The environment allows `auth.openai.com` and
+  `chatgpt.com` for this.
+  - **Uses.** (a) A cross-vendor review: an extra read-only round
+    (`codex exec -s read-only` or `codex exec review`) on a spec or a diff,
+    for security-sensitive tickets or when the owner asks; it complements and
+    never replaces the strong-tier rounds, the strongest-tier decision passes,
+    the tests or CI. (b) Mechanical tasks (refactors, repetitive tests, lint
+    fixes) in a dedicated worktree, with writes limited to that worktree
+    (`-s workspace-write`, `--cd <worktree>`); its output is reviewed and
+    checked like any author's.
+  - **Evidence.** A Codex review uses the identifier
+    `<ticket>-<act>-<round>-codex` and is posted verbatim by the orchestrator
+    like the reviewer tool's reports, with the Codex version and model. Its
+    findings are weighed like any reviewer's: accepted, rejected with a
+    reason, or sent to the owner.
+  - **Limits.** Prompts follow the public-content rule: no secrets, tokens,
+    private data or session links. Codex never pushes, merges, comments on the
+    forge or changes the environment; the orchestrator does those. Its usage
+    counts on the owner's plan quotas and is not part of the sub-agent token
+    budget; the orchestrator notes the tokens Codex reports per ticket.
