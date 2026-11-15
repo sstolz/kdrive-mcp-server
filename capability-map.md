@@ -5,9 +5,10 @@
 [F-035 v1](features/F-035-oauth-proxy-hardening.md) (#46), BR-421 and BR-422
 v1 with BR-023 v4, BR-024 v5, BR-131 v2, BR-133 v2, BR-137 v2, BR-162 v3,
 BR-167 v3, BR-184 v3 and BR-186 v2, ready for freeze and pending acceptance:
-in `proxy` mode an invalid token request no longer burns an authorization code or revokes its refresh
-family; concurrent logins on a cold or rotated upstream key set share one key
-fetch and reject ID tokens that expire while verification waits; upstream
+in `proxy` mode an invalid token request no longer burns an authorization code
+or revokes its refresh family; concurrent logins on a cold or rotated upstream
+key set share one key fetch and reject ID tokens that expire while verification
+waits; upstream
 requests abort on every early exit without waiting for cancellation; and
 the unauthenticated OAuth routes admit each client peer separately under a
 global ceiling, the client being the socket address or, behind a proxy listed

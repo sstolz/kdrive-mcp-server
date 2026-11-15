@@ -2,7 +2,7 @@
 id: F-035
 title: OAuth proxy admission and grant handling hardened
 ticket: "#46"
-status: ready-for-freeze
+status: frozen
 version: 1
 ---
 
@@ -159,9 +159,10 @@ server behind a reverse proxy.
   of its own, even if a `kid` still matches nothing. When a fetch is needed
   and none is in flight, a fetch starts only if no fetch started in the last
   60 s; otherwise the request uses the cache as it is, and an empty cache
-  rejects the ID token. A fetch's start is the clock reading of the request
-  that starts it; the 60 s throttle and the 3,600 s lifetime of the key set it
-  stores both count from it. A fetch that rejects, or answers other than 200,
+  rejects the ID token. A fetch's start is the reading taken when the
+  callback starts verification; the 60 s throttle and the 3,600 s lifetime
+  of the key set it stores both count from it. A fetch that rejects, or
+  answers other than 200,
   leaves the cache as it was, for the request that started it and for every
   request awaiting it. A request whose cache was empty and whose `kid` still
   matches nothing after the fetch it started or awaited starts no second
@@ -289,7 +290,6 @@ server behind a reverse proxy.
   replaces this variable by its empty default, and the environment then
   loads with an empty `httpTrustedProxies`; with the value `192.0.2.0/24`
   it loads with that one entry. Verified by: AC-21.
-
 - **BR-186 v2** (F-013) — v1 holds, except that required
   installation-specific Compose values are `${NAME:?…}` variables; an
   optional one may be `${NAME:-}` with an empty default. The header comment
@@ -662,9 +662,11 @@ assertions; its substitution also replaces `${NAME:-}` by its empty default
   binding mismatch (no new event is needed for the fix; it would add a
   high-volume signal under attack). Such mismatches log nothing.
   The token endpoint accepts omitted `redirect_uri` only for an exact
-  single registered URI at authorization. OAuth 2.0 §4.1.3 requires an
-  exact match when the authorization request included it; OAuth 2.1 §10.2
-  drops the token parameter. This is a deliberate compatibility profile:
+  single registered URI at authorization. Accepting omission deliberately
+  departs from RFC 6749 §4.1.3, which requires `redirect_uri` to be present
+  and identical when the authorization request included it, following
+  OAuth 2.1 §10.2, which drops the token parameter. In this compatibility
+  profile:
   supplied values keep the 2.0 exact-match check, while omission is safe
   with a single possible registered destination and valid client/PKCE
   bindings. Multiple destinations and variable loopback ports still need
@@ -720,10 +722,9 @@ assertions; its substitution also replaces `${NAME:-}` by its empty default
   abusive peer consumes only its own per-peer allowance; clients sharing
   that peer share the lockout, and global ceilings remain shared. The global
   ceilings keep the stores of BR-142 v3 below their bounds, updating
-  F-012 D-7's arithmetic: 60 authorize or consent requests per fixed minute
-  allow a conservative bound of 660
-  pending consents or flows across 600 s (11 intersecting windows, bound
-  1,000 each). For example, one at `T`, 59 just before `T + 60` s and 60
+  F-012 D-7's arithmetic: at most 11 fixed windows of 60 intersect a 600 s
+  lifetime, so at most 660 live entries, below each store's 1,000. For
+  example, one at `T`, 59 just before `T + 60` s and 60
   at each boundary through `T + 600` s leave 659 live entries when the
   first expires. Thus the former 600 bound was too low. At 60 registrations
   per hourly window, cycling 1,000 clients takes at least 16 hours from
@@ -782,7 +783,6 @@ assertions; its substitution also replaces `${NAME:-}` by its empty default
 - **D-8 — No ADR.** The setting is additive and empty by default, the
   windows live in memory, nothing is persisted and the choice is reversed
   by a new version of BR-162 and BR-422.
-
 - **D-9 — The Compose example offers the setting, empty by default
   (owner decision Q-1 (c), 2026-11-15).** Per-peer admission behind Traefik
   requires listing its exact proxy address(es), or a dedicated,
@@ -860,7 +860,6 @@ decisions Q-1 (c), Q-2):
   a minute with 60 per peer, so its table bound is 2,399: BR-162 v3, AC-17,
   D-5, D-7, D-10.
 
-
 Cross-vendor review (`46-spec-review-2-codex`, changes):
 
 - **1 — retained.** D-9 and AC-20 require exact proxy addresses or a
@@ -907,3 +906,19 @@ Spec decision pass (`46-spec-decision-1-fable`, approve with minors):
   case and requires only abort for a native bodyless opaque redirect.
 - **6 — retained.** D-1 explicitly rejects a new live-code binding-mismatch
   event; BR-137 v2 and AC-01 retain no logging for those failures.
+
+Spec review 3 (`46-spec-review-3-reviewer`, approve; ready to freeze):
+
+- **Minor 1 — retained.** The F-035 capability-map entry is rewrapped to
+  at most 80 columns.
+- **Minor 2 — retained.** D-1 states that accepting omitted `redirect_uri`
+  deliberately departs from RFC 6749 §4.1.3, which requires presence and
+  identity when included at authorization, following OAuth 2.1 §10.2.
+- **Minor 3 — retained.** BR-133 v2 names the reading taken when the
+  callback starts verification as the origin of both the 60 s throttle
+  and the 3,600 s cache lifetime; the rule record uses identical wording.
+- **Minor 4 — retained.** D-5 states the bound: at most 11 fixed windows
+  of 60 intersect a 600 s lifetime, so at most 660 live entries, below
+  each store's 1,000.
+- **Minor 5 — retained.** Stray blank lines inside the business-rules
+  list, between D-8 and D-9, and before the Cross-vendor review are removed.
