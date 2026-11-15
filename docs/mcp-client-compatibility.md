@@ -74,3 +74,14 @@ time, in arrival order:
 
 Sessions never wait for each other: each stdio process and each HTTP session
 has its own queue.
+
+## Rate-limited mutations
+
+Each mutation run makes at most one upstream attempt. A valid HTTP 429 returns
+`failed` / `RATE_LIMITED`, status 429, attempts 1, without an automatic retry or
+a `Retry-After` wait. A client may explicitly re-invoke a `RATE_LIMITED` mutation
+after a pause; every new invocation requires fresh admission and full
+authorization and has its own audit records.
+
+An `uncertain` result must not be re-invoked without first verifying the item's
+state with a read tool. An uncertain write is never automatically replayed.

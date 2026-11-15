@@ -4,7 +4,7 @@ Planned delivery tickets live in the GitHub backlog (archive `docs/github-backlo
 Record newly observed out-of-scope work below as one line per item:
 `YYYY-MM-DD — observation — location — why it matters`.
 
-No additional out-of-scope observations have been recorded in this baseline.
+- 2026-11-15 — F-037 (#47 lot A) leaves the first-attempt authorization window: intent append up to 5,000 ms plus transport queue, DNS and TLS within the 30,000 ms attempt timer — src/mutation-gate.ts; SECURITY.md — A target or ancestor may move after policy validation and before the first write; track a separate authorization/precondition design, since stopping 429 retries does not make authorization atomic.
 
 - 2026-11-01 — Dev-only minimatch <11.0.1 advisory GHSA-g3hv-75wg-m249 propagates 10 moderate audit findings through pinned ESLint/typescript-eslint; package-lock.json — Track an upstream-compatible update; forced major override/downgrade would change the frozen tooling contract. https://github.com/advisories/GHSA-g3hv-75wg-m249
 - 2026-11-01 — The trusted-main-only Sonar upload detected configuration profile violations after successful PR gates and merge (runs/4-sonar-findings-1.md) — eslint.config.mjs and scripts/sonar.ts — Consider future local rule alignment to detect applicable findings earlier while preserving the official trusted-main-only upload guard; a new lint dependency or CI gate is outside #31.

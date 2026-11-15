@@ -109,6 +109,12 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
   and `status`. Validation order, responses and state handling stay unchanged,
   including family revocation on a matching replay; no `reason` field is added.
 
+- #47 lot A / F-037 v1 (pending acceptance): the first
+  valid upstream 429 ends a mutation as `failed` / `RATE_LIMITED`, without
+  an automatic retry using stale authorization. A new client invocation
+  performs fresh admission and authorization with its own audit records;
+  uncertain writes are never automatically replayed.
+
 ## [0.6.0-beta.1] - 2026-11-13
 
 ### Added

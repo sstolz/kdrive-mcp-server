@@ -9,9 +9,11 @@ import {
   NotSent,
   UNCERTAIN_MESSAGE,
   createMutationGate,
+  type GateResult,
   type Mutator,
 } from "../src/mutation-gate.js";
 import { createKdriveAdapter } from "../src/kdrive/index.js";
+import { createMutators } from "../src/kdrive/mutators.js";
 import { mutationRoutes } from "../src/kdrive/routes.js";
 import { createTransport, MUTATION_UNKNOWN } from "../src/kdrive/transport.js";
 import type { Operation } from "../src/policy/operation.js";
@@ -510,27 +512,79 @@ describe("AC-12 bodies, checks and F-016 classification", () => {
       attempts: 1,
     });
   });
-  it.each([
-    ["2", 2000],
-    ["2".padStart(33, "0"), 1000],
-  ])(
-    "TestBR268_a_429_with_Retry_After_%s_is_retried_after_%i_ms",
-    async (retryAfter, wait) => {
-      let n = 0;
-      const at: number[] = [];
-      const s = await server(() => {
-        at.push(performance.now());
-        return ++n === 1
-          ? response(429, "", { "Retry-After": retryAfter })
-          : okBody("trash");
+  it.each(["2", "2".padStart(32, "0"), "2".padStart(33, "0")])(
+    "TestBR268_v2_TestBR248_v2_AC08_bounded_retry_after_%s_never_replays",
+    async (retryAfter) => {
+      const replies = [
+        response(429, "private upstream body", { "Retry-After": retryAfter }),
+        okBody("trash"),
+      ];
+      const s = await server(() => replies.shift()!);
+      const transport = createTransport({
+        token: CANARY,
+        lookup: s.lookup,
+        connect: s.connect,
       });
-      const result = await gateWith(adapter(s).mutators).run(
-        ...(OPS.trash as [string, Operation]),
-      );
-      expect(result).toMatchObject({ result: "succeeded", attempts: 2 });
-      expect((at[1] ?? 0) - (at[0] ?? 0)).toBeGreaterThanOrEqual(wait - 50);
-      expect((at[1] ?? 0) - (at[0] ?? 0)).toBeLessThan(wait + 900);
+      const raw: unknown[] = [];
+      const mutators = createMutators(async (route, body, signal) => {
+        const reply = await transport.mutate(route, body, signal);
+        raw.push(reply);
+        return reply;
+      });
+      // Keep loopback I/O real while freezing the gate's elapsed time and waits.
+      vi.useFakeTimers({
+        toFake: ["setTimeout", "clearTimeout", "performance"],
+      });
+      const g = gateWith(mutators);
+      let result: GateResult | undefined;
+      const pending = g
+        .run(...(OPS.trash as [string, Operation]))
+        .then((value) => {
+          result = value;
+        });
+      for (let i = 0; i < 2000 && result === undefined; i++)
+        await new Promise((resolve) => setImmediate(resolve));
+      expect(raw).toEqual([
+        { status: 429, ...(retryAfter.length <= 32 ? { retryAfter } : {}) },
+      ]);
+      const expected = {
+        result: "failed",
+        op: "0".repeat(32),
+        code: "RATE_LIMITED",
+        attempts: 1,
+        status: 429,
+      };
+      expect(result).toEqual(expected);
+      await pending;
+      const base = {
+        v: 1,
+        ts: "2026-11-10T10:00:00.000Z",
+        op: "0".repeat(32),
+        identity: { kind: "stdio" },
+        tool: "kdrive_trash",
+        kind: "trash",
+        drive: D,
+        ids: { target: 41 },
+      };
+      const records = [
+        { ...base, event: "intent" },
+        {
+          ...base,
+          event: "outcome",
+          result: "failed",
+          attempts: 1,
+          ms: 0,
+          status: 429,
+          code: "RATE_LIMITED",
+        },
+      ];
+      expect(g.lines.map((line): unknown => JSON.parse(line))).toEqual(records);
+      await vi.advanceTimersByTimeAsync(60_001);
+      expect(result).toEqual(expected);
+      expect(g.lines.map((line): unknown => JSON.parse(line))).toEqual(records);
+      expect(s.requests).toHaveLength(1);
+      expect(s.requests[0]?.method).toBe("DELETE");
+      expect(replies).toEqual([okBody("trash")]);
     },
-    15_000,
   );
 });

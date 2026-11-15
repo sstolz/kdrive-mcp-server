@@ -181,7 +181,11 @@ Write tools (`write` and `share` modes only):
 | `kdrive_restore`       | Restore a trashed item to its former parent.                     |
 | `kdrive_upload`        | Upload `text` or `base64` content, new file or in-place replace. |
 
-Each write returns `succeeded`, `failed`, `uncertain` or `denied`. After
+Each write returns `succeeded`, `failed`, `uncertain` or `denied` and makes at
+most one upstream attempt. A valid HTTP 429 returns `failed` / `RATE_LIMITED`
+without an automatic retry or a `Retry-After` wait. You may explicitly invoke
+it again after a pause; each new invocation requires fresh admission and full
+authorization. After
 `uncertain`, check the item with a read tool before trying again: the server
 never replays an uncertain write.
 
