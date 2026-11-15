@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import {
+  AUDIT_APPEND_TIMEOUT_MS,
   AUDIT_RECORD_MAX_BYTES,
   serializeAuditRecord,
   type AuditCode,
@@ -35,7 +36,6 @@ export const OUTCOME_UNRECORDED_DIAGNOSTIC =
 const MAX_ATTEMPTS = 1;
 const RUN_MS = 60_000;
 const ATTEMPT_MS = 30_000;
-const SLOW_INTENT_MS = 5000;
 const ISS_BYTES = 4096;
 const SUB_BYTES = 1024;
 const REJECTED = new Set([
@@ -110,7 +110,8 @@ export interface MutationGate {
   run(request: GateRun): Promise<GateResult>;
   /** BR-256: the policy `execute` dependency. */
   execute(operation: Operation): Promise<unknown>;
-  close(): Promise<void>;
+  readonly hasCommitted?: boolean;
+  close(shutdownDeadline?: number): Promise<void>;
 }
 
 interface RunState {
@@ -291,9 +292,24 @@ export function createMutationGate(options: MutationGateOptions): MutationGate {
     if (typeof mutator === "function") mutators.set(kind, mutator);
   const storage = new AsyncLocalStorage<RunState>();
   const inflight = new Set<Promise<GateResult>>();
+  const states = new Set<RunState>();
+  let closing: Promise<void> | undefined;
+  let shutdownDeadline: number | undefined;
   let closed = false,
     diagnosed = false;
   const ts = () => options.clock().toISOString();
+  function diagnose() {
+    if (diagnosed) return;
+    diagnosed = true;
+    try {
+      options.diagnostic(OUTCOME_UNRECORDED_DIAGNOSTIC);
+    } catch {
+      // Best effort only: diagnostic failure must never replace a gate result.
+    }
+  }
+  sink?.onLatch?.(diagnose);
+  const hasCommitted = () =>
+    [...states].some((state) => state.execution !== undefined);
 
   function cancelled(state: RunState): boolean {
     return state.cancellation?.aborted === true;
@@ -428,10 +444,7 @@ export function createMutationGate(options: MutationGateOptions): MutationGate {
     } catch {
       unrecorded = true;
       sink?.latch();
-      if (!diagnosed) {
-        diagnosed = true;
-        options.diagnostic(OUTCOME_UNRECORDED_DIAGNOSTIC);
-      }
+      diagnose();
     }
     return {
       result: outcome.result,
@@ -459,7 +472,7 @@ export function createMutationGate(options: MutationGateOptions): MutationGate {
       };
     }
     const resolvedAt = now();
-    if (resolvedAt - started > SLOW_INTENT_MS)
+    if (resolvedAt - started >= AUDIT_APPEND_TIMEOUT_MS)
       return finish(state, base, resolvedAt, {
         result: "failed",
         attempts: 0,
@@ -506,12 +519,14 @@ export function createMutationGate(options: MutationGateOptions): MutationGate {
     async run(request: GateRun): Promise<GateResult> {
       const admitted = admit(request);
       if ("result" in admitted) return admitted;
+      states.add(admitted);
       const task = decide(admitted, (op) => request.dispatch(op));
       inflight.add(task);
       try {
         return await task;
       } finally {
         inflight.delete(task);
+        states.delete(admitted);
       }
     },
     execute(value: Operation): Promise<unknown> {
@@ -533,10 +548,25 @@ export function createMutationGate(options: MutationGateOptions): MutationGate {
       state.execution = commit(state);
       return state.execution;
     },
-    async close() {
+    get hasCommitted() {
+      return hasCommitted();
+    },
+    close(deadline?: number) {
       closed = true;
-      while (inflight.size) await Promise.allSettled([...inflight]);
-      await sink?.close();
+      if (deadline !== undefined && !hasCommitted()) {
+        shutdownDeadline = Math.min(shutdownDeadline ?? Infinity, deadline);
+        sink?.shortenDeadline?.(shutdownDeadline);
+      }
+      closing ??= (async () => {
+        while (inflight.size) await Promise.allSettled([...inflight]);
+        try {
+          await sink?.close(shutdownDeadline);
+        } catch {
+          sink?.latch();
+          diagnose();
+        }
+      })();
+      return closing;
     },
   });
 }
