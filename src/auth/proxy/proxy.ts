@@ -166,6 +166,8 @@ interface Client {
 interface PendingRequest {
   clientId: string;
   redirectUri: string;
+  /** BR-137 v2: exact single registered URI in the authorization snapshot. */
+  redirectOmittable: boolean;
   state: string | undefined;
   codeChallenge: string;
   resource: string;
@@ -271,11 +273,21 @@ function sameRequest(left: PendingRequest, right: PendingRequest): boolean {
   return (
     left.clientId === right.clientId &&
     left.redirectUri === right.redirectUri &&
+    left.redirectOmittable === right.redirectOmittable &&
     left.state === right.state &&
     left.codeChallenge === right.codeChallenge &&
     left.resource === right.resource &&
     grants(left) === grants(right)
   );
+}
+
+function codeRedirectMatches(
+  request: PendingRequest,
+  supplied: string | null,
+): boolean {
+  return supplied === null
+    ? request.redirectOmittable
+    : supplied === request.redirectUri;
 }
 
 function hasRepetition(params: URLSearchParams): boolean {
@@ -479,6 +491,7 @@ export function createOAuthProxy(options: OAuthProxyOptions): OAuthProxy {
   let lastDiscovery: number | undefined;
   let discovering: Promise<Discovery | undefined> | undefined;
   let jwks: { keys: JWK[]; fetched: number } | undefined;
+  let fetchingJwks: Promise<void> | undefined;
   let lastJwksFetch: number | undefined;
 
   const now = () => clock().getTime();
@@ -942,6 +955,7 @@ export function createOAuthProxy(options: OAuthProxyOptions): OAuthProxy {
     return admit(query, cookie, redirectUri, language, {
       id: client.id,
       name: client.name,
+      redirectUris: client.redirectUris,
       touch: (time) => {
         client.lastUse = time;
       },
@@ -1019,6 +1033,7 @@ export function createOAuthProxy(options: OAuthProxyOptions): OAuthProxy {
     return admit(query, cookie, redirectUri, language, {
       id: clientId,
       name: resolved.name,
+      redirectUris: resolved.redirectUris,
       cimd: {
         grants: [...resolved.grantTypes],
         host: new URL(clientId).hostname,
@@ -1036,6 +1051,7 @@ export function createOAuthProxy(options: OAuthProxyOptions): OAuthProxy {
     client: {
       id: string;
       name: string | undefined;
+      redirectUris: readonly string[];
       touch?: (time: number) => void;
       cimd?: { grants: Grant[]; host: string; loopback: boolean };
     },
@@ -1046,6 +1062,9 @@ export function createOAuthProxy(options: OAuthProxyOptions): OAuthProxy {
     const request: PendingRequest = {
       clientId: client.id,
       redirectUri,
+      redirectOmittable:
+        client.redirectUris.length === 1 &&
+        client.redirectUris[0] === redirectUri,
       state: stateOk && state !== null ? state : undefined,
       codeChallenge: challenge ?? "",
       resource: query.get("resource") ?? "",
@@ -1418,17 +1437,27 @@ export function createOAuthProxy(options: OAuthProxyOptions): OAuthProxy {
     kid: unknown,
     time: number,
   ): Promise<JWK[]> {
-    // BR-133: a cache is never used after 3,600 s, even if the refetch fails.
+    // BR-133 v2: matching cached keys need not wait for a rotation fetch.
     if (jwks && time >= jwks.fetched + JWKS_TTL) jwks = undefined;
-    if (!jwks && mayFetchJwks(time)) await fetchJwks(found, time);
-    const keys = () => jwks?.keys ?? [];
-    if (
-      typeof kid === "string" &&
-      !hasMatchingKey(keys(), alg, kid) &&
-      mayFetchJwks(time)
-    )
-      await fetchJwks(found, time);
-    return keys();
+    const needsFetch =
+      !jwks ||
+      (typeof kid === "string" && !hasMatchingKey(jwks.keys, alg, kid));
+    if (needsFetch) await sharedJwks(found, time);
+    return jwks?.keys ?? [];
+  }
+
+  async function sharedJwks(found: Discovery, time: number): Promise<void> {
+    if (fetchingJwks) {
+      await fetchingJwks;
+      return;
+    }
+    if (!mayFetchJwks(time)) return;
+    fetchingJwks = fetchJwks(found, time);
+    try {
+      await fetchingJwks;
+    } finally {
+      fetchingJwks = undefined;
+    }
   }
 
   async function verifyIdToken(
@@ -1456,7 +1485,7 @@ export function createOAuthProxy(options: OAuthProxyOptions): OAuthProxy {
     const multiple = Array.isArray(aud) && aud.length > 1;
     const azpOk =
       payload.azp === undefined ? !multiple : payload.azp === client;
-    const seconds = time / SECOND;
+    const seconds = now() / SECOND;
     const sub = payload.sub;
     if (
       payload.iss !== upstreamIssuer ||
@@ -1776,27 +1805,28 @@ export function createOAuthProxy(options: OAuthProxyOptions): OAuthProxy {
   ): Promise<ProxyResponse> {
     const value = form.get("code");
     const code = value === null ? undefined : codes.get(value);
-    if (!code) return Promise.resolve(tokenError(400, "invalid_grant"));
+    if (!code)
+      return Promise.resolve(tokenJson(400, { error: "invalid_grant" }));
+    if (time >= code.created + CODE_TTL)
+      return Promise.resolve(tokenJson(400, { error: "invalid_grant" }));
+    const verifierValue = form.get("code_verifier") ?? "";
+    if (
+      code.request.clientId !== client.id ||
+      !codeRedirectMatches(code.request, form.get("redirect_uri")) ||
+      !VERIFIER.test(verifierValue) ||
+      sha256(verifierValue).toString("base64url") !== code.request.codeChallenge
+    )
+      return Promise.resolve(tokenJson(400, { error: "invalid_grant" }));
+    const resource = form.get("resource");
+    if (resource !== null && resource !== code.request.resource)
+      return Promise.resolve(tokenJson(400, { error: "invalid_target" }));
     if (code.consumed) {
       const family =
         code.familyId === undefined ? undefined : families.get(code.familyId);
       if (family) return Promise.resolve(revoke(family, time));
-      return Promise.resolve(tokenError(400, "invalid_grant"));
+      return Promise.resolve(tokenJson(400, { error: "invalid_grant" }));
     }
     code.consumed = true;
-    if (time >= code.created + CODE_TTL)
-      return Promise.resolve(tokenError(400, "invalid_grant"));
-    const verifierValue = form.get("code_verifier") ?? "";
-    if (
-      code.request.clientId !== client.id ||
-      form.get("redirect_uri") !== code.request.redirectUri ||
-      !VERIFIER.test(verifierValue) ||
-      sha256(verifierValue).toString("base64url") !== code.request.codeChallenge
-    )
-      return Promise.resolve(tokenError(400, "invalid_grant"));
-    const resource = form.get("resource");
-    if (resource !== null && resource !== code.request.resource)
-      return Promise.resolve(tokenError(400, "invalid_target"));
     const change = begin(time);
     touch(change, client, time);
     let refreshToken: string | undefined;
