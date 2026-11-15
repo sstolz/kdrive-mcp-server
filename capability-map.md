@@ -7,11 +7,16 @@
 [BR-241 v2](business-rules/BR-241.md), [BR-254 v2](business-rules/BR-254.md)
 and [BR-259 v2](business-rules/BR-259.md): proposed 5,000 ms append budgets
 including queue time for stderr and files, immediate rejection on stream
-errors, permanent failure until restart, and bounded sink/gate shutdown.
+errors, permanent failure until restart, and bounded sink/gate shutdown. The proposal shares stdio's 1,000 ms
+allowance with non-committed appends, removes the production exit helper's
+flush wait, and offers the same fixed diagnostic once on any first latch.
+Synchronous fd 2 blockage and libuv file-operation teardown stalls remain
+unbounded; a bounded child-pipe runtime test is planned, not executed.
 Intent failure sends no mutation; outcome failure preserves the upstream
 classification with `audit:"outcome_unrecorded"`. No new event or configuration.
-Not reviewed, implemented or accepted; existing accepted versions remain
-active. Acceptance evidence will be recorded in #47 on the actual main SHA.
+Supplied review-2 and decision-1 findings are dispositioned in the draft;
+the revised draft awaits fresh review and is not implemented or accepted.
+Existing accepted versions remain active. Acceptance evidence will be recorded in #47 on the actual main SHA.
 
 ## Accepted — fragmented reads and defensive validator handling
 

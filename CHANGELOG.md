@@ -130,7 +130,13 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
   waiting for a callback, refuse later writes until restart, and bound audit
   shutdown drain/release. Intent failure prevents dispatch; outcome failure
   preserves the upstream result with `audit:"outcome_unrecorded"` and the
-  existing fixed diagnostic. No implementation or acceptance is claimed.
+  existing fixed diagnostic, now offered once on any first failure latch.
+  Share the 1,000 ms stdio shutdown allowance with non-committed appends
+  and remove the production exit helper's stdout/stderr flush wait, accepting
+  possible buffered-output loss. Synchronous fd 2 blockage and libuv file
+  operations stuck during OS teardown remain unbounded and documented; a
+  bounded unread-pipe child test is planned as runtime evidence. No
+  implementation or acceptance is claimed.
 
 ## [0.6.0-beta.1] - 2026-11-13
 
