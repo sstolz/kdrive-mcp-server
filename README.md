@@ -46,15 +46,12 @@ official server has them.
 It speaks standard MCP, so any compatible client can use it; only claude.ai
 has been verified end to end so far.
 
-**Status:** beta `0.6.0-beta.2` is prepared ([VERSION](VERSION)) and is to be
-published through the gated release workflow
-([docs/publishing.md](docs/publishing.md)). `0.6.0-beta.1` remains the currently
-published beta until the post-publication records are updated: the container
-image is `ghcr.io/sstolz/kdrive-mcp-server:0.6.0-beta.1`
-(`linux/amd64` and `linux/arm64`; pin it by digest), and the npm package is
-`@sstolz/kdrive-mcp-server@beta`. The published beta predates the later changes
-listed under `0.6.0-beta.2` in [CHANGELOG.md](CHANGELOG.md); build the image or
-the package from this repository to get them.
+**Status:** beta `0.6.0-beta.2` ([VERSION](VERSION)) is published through
+the gated release workflow ([docs/publishing.md](docs/publishing.md)): the
+container image is `ghcr.io/sstolz/kdrive-mcp-server:0.6.0-beta.2`
+(`linux/amd64` and `linux/arm64`; pin it by digest, `sha256:6e561933d78e1443db3b67356d6d081362531158c77cd8a47fe895e1a5d5a866` for
+this release), and the npm package is `@sstolz/kdrive-mcp-server@beta`.
+Changes are listed in [CHANGELOG.md](CHANGELOG.md).
 
 <a id="quick-start"></a>
 
@@ -82,8 +79,8 @@ Read the published image's digest, then pull it by digest: a beta never gets
 `latest`, and tags can be overwritten.
 
 ```sh
-docker buildx imagetools inspect ghcr.io/sstolz/kdrive-mcp-server:0.6.0-beta.1
-docker pull 'ghcr.io/sstolz/kdrive-mcp-server:0.6.0-beta.1@sha256:<digest>'
+docker buildx imagetools inspect ghcr.io/sstolz/kdrive-mcp-server:0.6.0-beta.2
+docker pull 'ghcr.io/sstolz/kdrive-mcp-server:0.6.0-beta.2@sha256:<digest>'
 ```
 
 The examples below use the version tag for readability; replace it with the
@@ -112,7 +109,7 @@ docker run -i --rm \
   -e KDRIVE_MCP_ROOTS=123456:/Documents \
   -e KDRIVE_TOKEN_FILE=/run/secrets/kdrive-token \
   -v /home/you/.config/kdrive/token:/run/secrets/kdrive-token:ro \
-  ghcr.io/sstolz/kdrive-mcp-server:0.6.0-beta.1
+  ghcr.io/sstolz/kdrive-mcp-server:0.6.0-beta.2
 ```
 
 The image starts `node /app/dist/cli.js`; stdio is the default transport, so
@@ -251,7 +248,7 @@ claude mcp add kdrive --scope user -- docker run -i --rm \
   -e KDRIVE_MCP_ROOTS=123456:/Documents \
   -e KDRIVE_TOKEN_FILE=/run/secrets/kdrive-token \
   -v /home/you/.config/kdrive/token:/run/secrets/kdrive-token:ro \
-  ghcr.io/sstolz/kdrive-mcp-server:0.6.0-beta.1
+  ghcr.io/sstolz/kdrive-mcp-server:0.6.0-beta.2
 ```
 
 **Claude Desktop** and most desktop clients (example): add the server under
@@ -278,7 +275,7 @@ then restart the client:
         "KDRIVE_TOKEN_FILE=/run/secrets/kdrive-token",
         "-v",
         "/home/you/.config/kdrive/token:/run/secrets/kdrive-token:ro",
-        "ghcr.io/sstolz/kdrive-mcp-server:0.6.0-beta.1"
+        "ghcr.io/sstolz/kdrive-mcp-server:0.6.0-beta.2"
       ]
     }
   }

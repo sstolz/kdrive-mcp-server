@@ -26,19 +26,12 @@ share tool yet (#20).
 
 There are two ways to get the runtime image:
 
-- **Published beta.** `0.6.0-beta.1` is published on GHCR as
-  `ghcr.io/sstolz/kdrive-mcp-server:0.6.0-beta.1`, for `linux/amd64` and
+- **Published beta.** `0.6.0-beta.2` is published on GHCR as
+  `ghcr.io/sstolz/kdrive-mcp-server:0.6.0-beta.2`, for `linux/amd64` and
   `linux/arm64`. A beta never gets the `latest` tag, and image tags can be
   overwritten, so pin the image by its digest
-  ([publishing](publishing.md#versions), and step 1 below). The beta predates
-  the changes listed under Unreleased in the [changelog](../CHANGELOG.md):
-  among them the bounded queue for parallel tool calls (#16), Client ID
-  Metadata Documents with `OAUTH_ALLOWED_CLIENT_ID_ORIGINS` (#3), the
-  redesigned and translated consent pages (#23, #31) and the consent
-  double-click fix (#33). The beta does not know
-  `OAUTH_ALLOWED_CLIENT_ID_ORIGINS` and refuses to start with
-  `[UNKNOWN_SETTING]` when it is set, even empty, so leave it out of the
-  environment with that image.
+  ([publishing](publishing.md#versions), and step 1 below); for this release
+  it is `sha256:6e561933d78e1443db3b67356d6d081362531158c77cd8a47fe895e1a5d5a866`.
 - **Build from source.** `make image` builds the image from a checkout of
   `main`, with every merged change ([Build](#build)). A local build loads the
   image into the local engine only; nothing is published to a registry by
@@ -298,7 +291,7 @@ to `compose.yaml`; they hold no secret value):
 
 | Variable                      | Role                                                                   | Required?                    | Example                                                         |
 | ----------------------------- | ---------------------------------------------------------------------- | ---------------------------- | --------------------------------------------------------------- |
-| `KDRIVE_MCP_IMAGE`            | Runtime image: the published beta pinned by digest, or your local tag. | Yes                          | `ghcr.io/sstolz/kdrive-mcp-server:0.6.0-beta.1@sha256:<digest>` |
+| `KDRIVE_MCP_IMAGE`            | Runtime image: the published beta pinned by digest, or your local tag. | Yes                          | `ghcr.io/sstolz/kdrive-mcp-server:0.6.0-beta.2@sha256:<digest>` |
 | `MCP_PUBLIC_URL`              | Passed to the server (see above).                                      | Yes                          | `https://mcp.example.com/mcp`                                   |
 | `MCP_HOSTNAME`                | Host name of the Traefik rule; the host of `MCP_PUBLIC_URL`.           | Yes                          | `mcp.example.com`                                               |
 | `KDRIVE_ID`                   | Passed to the server (see above).                                      | Yes                          | `123456`                                                        |
@@ -344,8 +337,8 @@ Either pull the published beta, or build from source (see
 image, then pull it by that digest:
 
 ```sh
-docker buildx imagetools inspect ghcr.io/sstolz/kdrive-mcp-server:0.6.0-beta.1
-docker pull ghcr.io/sstolz/kdrive-mcp-server:0.6.0-beta.1@sha256:<digest>
+docker buildx imagetools inspect ghcr.io/sstolz/kdrive-mcp-server:0.6.0-beta.2
+docker pull ghcr.io/sstolz/kdrive-mcp-server:0.6.0-beta.2@sha256:<digest>
 ```
 
 `<digest>` is the hexadecimal value after `sha256:` on the `Digest:` line of
@@ -458,7 +451,7 @@ sudo chmod 0400 secrets/kdrive-token secrets/upstream-client-secret secrets/sign
 [`examples/compose.yaml`](../examples/compose.yaml) is the single Compose
 example of this project; this step starts from it and explains it. Copy
 it into the deployment directory as `compose.yaml`, from your checkout or
-from the repository at the tag that matches your image (`v0.6.0-beta.1` for
+from the repository at the tag that matches your image (`v0.6.0-beta.2` for
 the published beta). What it contains:
 
 - **Service hardening.** UID/GID 1000, a read-only root file system, no
@@ -491,7 +484,7 @@ values below are fake; for the Infomaniak issuer, see the
 
 ```sh
 # Published beta pinned by digest (step 1), or kdrive-mcp-server:runtime-amd64
-KDRIVE_MCP_IMAGE=ghcr.io/sstolz/kdrive-mcp-server:0.6.0-beta.1@sha256:<digest>
+KDRIVE_MCP_IMAGE=ghcr.io/sstolz/kdrive-mcp-server:0.6.0-beta.2@sha256:<digest>
 MCP_PUBLIC_URL=https://mcp.example.com/mcp
 MCP_HOSTNAME=mcp.example.com
 KDRIVE_ID=123456
