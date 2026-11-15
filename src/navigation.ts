@@ -39,6 +39,7 @@ import {
   mutationToolNames,
   uploadContent,
   UNCERTAIN_SENTENCE,
+  mutationResultGuidance,
 } from "./mutation-tools.js";
 import {
   ContentFailure,
@@ -54,12 +55,50 @@ export const navigationNotice =
 const extractionAdmissionNotice =
   "SERVER_BUSY is a transient admission refusal before source work, including extraction queue saturation, an identity's waiting limit or a detached worker holding its permit. The server does not automatically retry; a later client invocation requires fresh admission and authorization. Capacity may remain unavailable until a stuck worker exits or the process restarts.";
 const identifier = z.number().int().min(1).max(Number.MAX_SAFE_INTEGER);
-const drive = { drive_id: identifier.optional() };
-const paging = {
-  cursor: z.string().optional(),
-  type: z.enum(["file", "dir"]).optional(),
+const drive = {
+  drive_id: identifier
+    .optional()
+    .describe(
+      `Drive ID, integer 1..${String(Number.MAX_SAFE_INTEGER)}. Omit to use the configured default drive; for a received item use its owner drive_id.`,
+    ),
 };
-const scoped = { ...drive, ...paging, folder_id: identifier.optional() };
+const paging = {
+  cursor: z
+    .string()
+    .optional()
+    .describe(
+      "Opaque next_cursor from this tool. Omit for the first page; otherwise keep the same arguments and session. Single-use, expires 300000 ms after traversal starts and may be evicted; invalid, expired or changed bindings return INVALID_CURSOR. Do not construct or edit it.",
+    ),
+  type: z
+    .enum(["file", "dir"])
+    .optional()
+    .describe("Item type filter: file or dir. Omit to include both."),
+};
+const scoped = {
+  ...drive,
+  ...paging,
+  folder_id: identifier
+    .optional()
+    .describe(
+      `Folder scope ID, integer 1..${String(Number.MAX_SAFE_INTEGER)}. Omit to use configured roots in the selected drive; received-drive navigation requires an explicit authorized folder.`,
+    ),
+};
+const configuredScope = {
+  ...scoped,
+  drive_id: identifier
+    .optional()
+    .describe(
+      `Configured drive ID, integer 1..${String(Number.MAX_SAFE_INTEGER)}. Omit to use the configured default drive. Received-share drives are refused.`,
+    ),
+  folder_id: identifier
+    .optional()
+    .describe(
+      `Folder scope ID, integer 1..${String(Number.MAX_SAFE_INTEGER)}. The folder must be authorized and in a configured drive. Omit to use configured roots in the selected drive. Received-share drives are refused even with an explicit folder.`,
+    ),
+};
+const contentFile = identifier.describe(
+  `File ID to read, integer 1..${String(Number.MAX_SAFE_INTEGER)}, in drive_id; folders have no file content.`,
+);
 const canonicalPath = z.string().refine((value) => {
   try {
     path(value);
@@ -69,40 +108,96 @@ const canonicalPath = z.string().refine((value) => {
   }
 });
 const schemas = {
-  kdrive_list_drives: z.strictObject(drive),
+  kdrive_list_drives: z.strictObject({
+    drive_id: identifier
+      .optional()
+      .describe(
+        `Configured drive ID, integer 1..${String(Number.MAX_SAFE_INTEGER)}. Omit to list all configured drives with readable roots.`,
+      ),
+  }),
   kdrive_list: z.strictObject({
     ...drive,
     ...paging,
-    folder_id: identifier,
+    folder_id: identifier.describe(
+      `Folder ID whose direct children are listed, integer 1..${String(Number.MAX_SAFE_INTEGER)}. The folder must be authorized.`,
+    ),
   }),
   kdrive_search: z.strictObject({
     ...scoped,
     query: z
       .string()
-      .refine((s) => s.length > 0 && Buffer.byteLength(s) <= 4096),
+      .refine((s) => s.length > 0 && Buffer.byteLength(s) <= 4096)
+      .describe(
+        "Search query passed to kDrive, nonempty and at most 4096 UTF-8 bytes. No server-side trimming or query-language interpretation.",
+      ),
   }),
-  kdrive_recents: z.strictObject(scoped),
-  kdrive_my_shared: z.strictObject(scoped),
-  kdrive_shared_with_me: z.strictObject({ ...drive, ...paging }),
-  kdrive_info: z.strictObject({ ...drive, file_id: identifier }),
+  kdrive_recents: z.strictObject(configuredScope),
+  kdrive_my_shared: z.strictObject(configuredScope),
+  kdrive_shared_with_me: z.strictObject({
+    ...drive,
+    ...paging,
+    drive_id: identifier
+      .optional()
+      .describe(
+        `Owner drive ID filter, integer 1..${String(Number.MAX_SAFE_INTEGER)}. Omit to discover authorized received-share roots across owner drives.`,
+      ),
+  }),
+  kdrive_info: z.strictObject({
+    ...drive,
+    file_id: identifier.describe(
+      `File or folder ID for metadata, integer 1..${String(Number.MAX_SAFE_INTEGER)}, in drive_id.`,
+    ),
+  }),
   kdrive_read: z
     .strictObject({
       ...drive,
-      file_id: identifier,
-      format: z.enum(["text", "pdf", "image"]),
-      offset: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
-      length: identifier.optional(),
-      etag: z.string().refine(strongETag).optional(),
+      file_id: contentFile,
+      format: z
+        .enum(["text", "pdf", "image"])
+        .describe(
+          "Required representation: text for decoded text, pdf for selected PDF-page text, or image for a PNG preview. encoding is text-only; pages is pdf-only. image forbids offset, length, encoding and pages, even offset 0.",
+        ),
+      offset: z
+        .number()
+        .int()
+        .min(0)
+        .max(Number.MAX_SAFE_INTEGER)
+        .optional()
+        .describe(
+          `Zero-based Unicode code-point offset into decoded text or concatenated selected PDF-page text, integer 0..${String(Number.MAX_SAFE_INTEGER)}; default 0. A non-zero offset requires etag. Not allowed for image. Resume with next_offset and unchanged format, encoding and pages.`,
+        ),
+      length: identifier
+        .optional()
+        .describe(
+          `Maximum Unicode code points to return, integer 1..${String(Number.MAX_SAFE_INTEGER)}. Omit to return as much remaining text as fits the serialized-output budgets; remaining text and those budgets can reduce any requested length. Not allowed for image.`,
+        ),
+      etag: z
+        .string()
+        .refine(strongETag)
+        .optional()
+        .describe(
+          "Exact quoted strong etag from an earlier result; required for a non-zero offset, optional at offset 0 and for image. Contains 1..254 printable ASCII characters inside quotes, excluding space and double quote; weak W/ tags are invalid. A different current version returns VERSION_CHANGED.",
+        ),
       encoding: z
         .enum(["utf-8", "utf-16le", "utf-16be", "windows-1252"])
-        .optional(),
+        .optional()
+        .describe(
+          "Text encoding: utf-8, utf-16le, utf-16be or windows-1252; allowed only for format text. Omit to use the BOM encoding, or utf-8 without a BOM. An explicit encoding conflicting with the BOM returns INVALID_ENCODING; decoding is strict.",
+        ),
       pages: z
-        .array(identifier)
+        .array(
+          identifier.describe(
+            `One-based PDF page number, integer 1..${String(Number.MAX_SAFE_INTEGER)}, within the document's page count; values must increase strictly in the pages array.`,
+          ),
+        )
         .min(1)
         .max(10)
         // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- F-011: pre-existing assertion on a value checked earlier in the same flow; removing it is deferred to keep reviewed control flow unchanged (BACKLOG.md)
         .refine((p) => p.every((n, i) => i === 0 || n > p[i - 1]!))
-        .optional(),
+        .optional()
+        .describe(
+          `PDF page numbers, allowed only for format pdf. Supply 1..10 strictly increasing unique integers, each 1..${String(Number.MAX_SAFE_INTEGER)} and within the document's page count; default [1]. Keep the same selection when continuing with offset and etag.`,
+        ),
     })
     .refine(
       (a) =>
@@ -119,20 +214,64 @@ const schemas = {
   kdrive_download: z
     .strictObject({
       ...drive,
-      file_id: identifier,
+      file_id: contentFile,
       offset_bytes: z
         .number()
         .int()
         .min(0)
         .max(Number.MAX_SAFE_INTEGER)
-        .optional(),
-      length_bytes: identifier.optional(),
-      etag: z.string().refine(strongETag).optional(),
+        .optional()
+        .describe(
+          `Zero-based byte offset into the raw file, integer 0..${String(Number.MAX_SAFE_INTEGER)}; default 0. A non-zero offset_bytes requires etag. Resume with next_offset_bytes and the returned etag.`,
+        ),
+      length_bytes: identifier
+        .optional()
+        .describe(
+          `Maximum raw bytes to return before base64 encoding, integer 1..${String(Number.MAX_SAFE_INTEGER)}. Omit to use the configured maxReadBytes; a larger value returns LIMIT_EXCEEDED. Remaining bytes and serialized-output budgets can reduce the returned chunk.`,
+        ),
+      etag: z
+        .string()
+        .refine(strongETag)
+        .optional()
+        .describe(
+          "Exact quoted strong etag from an earlier result; required for non-zero offset_bytes, optional at offset_bytes 0. Contains 1..254 printable ASCII characters inside quotes, excluding space and double quote; weak W/ tags are invalid. A different current version returns VERSION_CHANGED.",
+        ),
     })
     .refine((args) => !(args.offset_bytes && args.etag === undefined)),
-  kdrive_resolve_path: z.strictObject({ ...drive, path: canonicalPath }),
+  kdrive_resolve_path: z.strictObject({
+    ...drive,
+    path: canonicalPath.describe(
+      "Exact absolute path in the selected drive, at most 4096 UTF-8 bytes and 64 components; / is valid. Use / separators; no empty, . or .. components, trailing slash except /, backslash, U+0000..U+001F or U+007F. Case and Unicode spelling are preserved; no URL decoding or normalization.",
+    ),
+  }),
 };
 type ToolName = keyof typeof schemas;
+/** F-042 BR-428: fixed purpose and continuation text for tools/list. */
+const navigationPurposes: Readonly<Record<ToolName, string>> = {
+  kdrive_list_drives:
+    "Lists configured drives with readable roots. Returns JSON drives with drive_id, name and roots; use these IDs in navigation tools. No cursor.",
+  kdrive_list:
+    "Lists authorized direct children of folder_id, optionally filtered by type.",
+  kdrive_search:
+    "Searches authorized items by query within folder_id or the configured roots of the selected drive, optionally filtered by type.",
+  kdrive_recents:
+    "Lists recent authorized items within folder_id or the configured roots of the selected drive, optionally filtered by type.",
+  kdrive_my_shared:
+    "Lists items shared by the current user within folder_id or the configured roots of the selected drive, optionally filtered by type.",
+  kdrive_shared_with_me:
+    "Discovers authorized received-share roots, optionally filtered by owner drive and type. Use each item's drive_id and id for subsequent calls.",
+  kdrive_info:
+    "Gets authorized metadata for a file or folder. Returns JSON item with its IDs, name, path and type; use kdrive_read or kdrive_download for file content. No cursor.",
+  kdrive_resolve_path:
+    "Resolves an exact absolute path within an authorized root. Returns JSON item with its IDs, name, path and type; use its id as file_id or folder_id. No cursor.",
+  kdrive_download:
+    "Reads a bounded raw file chunk. Returns JSON with base64 data, etag, bytes_read and has_more; when has_more is true, pass next_offset_bytes as offset_bytes with the returned etag and the same drive_id and file_id.",
+  kdrive_read:
+    "Reads a file as text, PDF text or a PNG preview of a supported image. Text/PDF returns JSON with text, etag, characters_read and has_more; when has_more is true, pass next_offset as offset with the returned etag and the same file, format, encoding and pages selection. Offsets count Unicode code points. PDF defaults to page 1; choose other pages explicitly. Image returns JSON metadata and an MCP image, without continuation. For raw bytes use kdrive_download.",
+};
+const continuationGuidance =
+  "Returns JSON with items and has_more; when has_more is true, pass next_cursor as cursor with the same tool and arguments in this session, even if items is empty.";
+
 const messages = new Set([
   "ACCESS_DENIED",
   "PAGINATION_UNAVAILABLE",
@@ -898,7 +1037,7 @@ export function createNavigationServer(
     server.registerTool(
       name,
       {
-        description: `${name}. ${navigationNotice}${name === "kdrive_read" ? " " + extractionAdmissionNotice : ""}`,
+        description: `${name}. ${navigationPurposes[name]} ${navigationNotice}${pagedTools.has(name) ? " " + continuationGuidance : ""}${name === "kdrive_read" ? " " + extractionAdmissionNotice : ""}`,
         inputSchema: schemas[name],
         annotations,
       },
@@ -912,7 +1051,7 @@ export function createNavigationServer(
       server.registerTool(
         name,
         {
-          description: `${name}. ${mutationSentences[name]} ${UNCERTAIN_SENTENCE} ${navigationNotice}`,
+          description: `${name}. ${mutationSentences[name]} ${navigationNotice} ${mutationResultGuidance} ${UNCERTAIN_SENTENCE}`,
           inputSchema: mutationSchemas[name],
           annotations: mutationAnnotations(name),
         },

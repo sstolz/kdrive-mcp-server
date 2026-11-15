@@ -12,18 +12,35 @@ const wellFormed = (value: string) => !LONE_SURROGATE.test(value);
  * whitespace, well-formed UTF-16, in Unicode NFC (kDrive rewrote a decomposed
  * name, F-018 D-18-12). Shared by create_folder, rename and upload.
  */
-const component = z.string().refine((value) => {
-  if (/^\s|\s$/u.test(value) || !wellFormed(value)) return false;
-  try {
-    componentName(value);
-  } catch {
-    return false;
-  }
-  // After the 4,096-byte bound: NFC normalization is superlinear on long
-  // combining-mark runs, so it only ever sees a bounded name.
-  return value === value.normalize("NFC");
-});
-const drive = { drive_id: identifier.optional() };
+const component = z
+  .string()
+  .refine((value) => {
+    if (/^\s|\s$/u.test(value) || !wellFormed(value)) return false;
+    try {
+      componentName(value);
+    } catch {
+      return false;
+    }
+    // After the 4,096-byte bound: NFC normalization is superlinear on long
+    // combining-mark runs, so it only ever sees a bounded name.
+    return value === value.normalize("NFC");
+  })
+  .describe(
+    "Single name component in Unicode NFC with well-formed UTF-16, 1..4096 UTF-8 bytes. No leading/trailing whitespace, /, backslash, U+0000..U+001F or U+007F; cannot equal a single dot or two dots. Names are case-sensitive; the resulting full path is also checked.",
+  );
+const drive = {
+  drive_id: identifier
+    .optional()
+    .describe(
+      `Drive ID, integer 1..${String(Number.MAX_SAFE_INTEGER)}. Omit to use the configured default drive. Received-share writes are refused.`,
+    ),
+};
+const parentFolder = identifier.describe(
+  `Authorized parent folder ID, integer 1..${String(Number.MAX_SAFE_INTEGER)}, in drive_id.`,
+);
+const mutationFile = identifier.describe(
+  `File or folder ID to mutate, integer 1..${String(Number.MAX_SAFE_INTEGER)}, in drive_id.`,
+);
 
 /** F-018 BR-280: the decoded content bound, in bytes. */
 export const UPLOAD_MAX_BYTES = 524_288;
@@ -34,12 +51,31 @@ export const OVERWRITE_SENTENCE =
 const uploadSchema = z
   .strictObject({
     ...drive,
-    parent_id: identifier,
+    parent_id: parentFolder,
     name: component,
-    text: z.string().optional(),
-    base64: z.string().optional(),
-    overwrite: z.boolean().optional().describe(OVERWRITE_SENTENCE),
-    file_id: identifier.optional(),
+    text: z
+      .string()
+      .optional()
+      .describe(
+        `File content encoded as UTF-8. Supply exactly one of text or base64; empty content is allowed. No unpaired UTF-16 surrogates; encoded content must be at most ${String(UPLOAD_MAX_BYTES)} bytes. Escaped JSON can exceed transport limits; prefer base64 for large or non-ASCII content.`,
+      ),
+    base64: z
+      .string()
+      .optional()
+      .describe(
+        `Canonical padded RFC 4648 base64 file content, with no whitespace or URL-safe alphabet and with zero pad bits. Supply exactly one of text or base64; empty content is allowed. Decoded content must be at most ${String(UPLOAD_MAX_BYTES)} bytes.`,
+      ),
+    overwrite: z
+      .boolean()
+      .optional()
+      .describe(
+        `${OVERWRITE_SENTENCE} Supply file_id exactly when true; otherwise omit file_id.`,
+      ),
+    file_id: identifier
+      .optional()
+      .describe(
+        `Existing file ID, integer 1..${String(Number.MAX_SAFE_INTEGER)}. Required exactly when overwrite is true; otherwise omit. Must identify the file named name in parent_id of drive_id.`,
+      ),
   })
   .refine(
     (args) =>
@@ -51,21 +87,28 @@ const uploadSchema = z
 export const mutationSchemas = {
   kdrive_create_folder: z.strictObject({
     ...drive,
-    parent_id: identifier,
+    parent_id: parentFolder,
     name: component,
   }),
   kdrive_rename: z.strictObject({
     ...drive,
-    file_id: identifier,
+    file_id: mutationFile,
     name: component,
   }),
   kdrive_move: z.strictObject({
     ...drive,
-    file_id: identifier,
-    destination_folder_id: identifier,
+    file_id: mutationFile,
+    destination_folder_id: identifier.describe(
+      `Destination folder ID in the same drive_id, integer 1..${String(Number.MAX_SAFE_INTEGER)}. The destination and resulting path must be authorized.`,
+    ),
   }),
-  kdrive_trash: z.strictObject({ ...drive, file_id: identifier }),
-  kdrive_restore: z.strictObject({ ...drive, file_id: identifier }),
+  kdrive_trash: z.strictObject({ ...drive, file_id: mutationFile }),
+  kdrive_restore: z.strictObject({
+    ...drive,
+    file_id: identifier.describe(
+      `Trashed file or folder ID to restore, integer 1..${String(Number.MAX_SAFE_INTEGER)}, in drive_id.`,
+    ),
+  }),
   kdrive_upload: uploadSchema,
 };
 export type MutationToolName = keyof typeof mutationSchemas;
@@ -75,6 +118,10 @@ export const mutationToolNames = Object.freeze(
 export function isMutationTool(name: string): name is MutationToolName {
   return Object.hasOwn(mutationSchemas, name);
 }
+
+/** F-042 BR-428: gate results and pre-gate refusals in tools/list. */
+export const mutationResultGuidance =
+  "On gate completion, returns a JSON operation result with result and attempts, plus applicable op, code, status, value, audit or message fields; no continuation cursor. Refusals before the gate return error text, not a JSON operation result: direct controller calls use bare error codes; SDK argument validation produces detailed error text, sanitized to INVALID_ARGUMENTS over stdio.";
 
 /** BR-263: the uncertain-result sentence of every mutation tool. */
 export const UNCERTAIN_SENTENCE =
