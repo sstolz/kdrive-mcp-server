@@ -15,6 +15,22 @@ rename, move, trash, restore and upload. Every call goes through a policy
 (configured roots, deny patterns, received-share rules) and every write is
 recorded in an audit log before and after it is sent.
 
+**Why this server.** Infomaniak publishes its own kDrive MCP server
+(`@infomaniak/mcp-server-kdrive`, checked at version 1.2.0). It runs over
+stdio only, so a remote client such as claude.ai cannot reach it, and it has
+no tool to:
+
+- read a file as text (`kdrive_read`: text files, PDF text, or a PNG preview
+  of an image);
+- find an item by its path (`kdrive_resolve_path`);
+- list the available drives (`kdrive_list_drives`);
+- list the items you shared (`kdrive_my_shared`).
+
+This server adds authenticated HTTP behind an OAuth proxy, those tools, and
+guardrails: configured roots, deny patterns and a write audit log. Share
+tools are not available yet (`share` mode registers none, #20); the official
+server has them.
+
 **Status:** beta `0.6.0-beta.1` ([VERSION](VERSION)). The container image is
 published on GHCR as `ghcr.io/sstolz/kdrive-mcp-server:0.6.0-beta.1`
 (`linux/amd64` and `linux/arm64`; pin it by digest), and the npm package as
