@@ -18,8 +18,9 @@ stale. The supplied base and working tree allocate through F-041, BR-427
 and ADR-012. Next free IDs after this draft: F-043, BR-431, ADR-013.
 Recheck current main before freeze.
 
-This assignment produces a draft and pending records only: no review, freeze,
-implementation, tests, Docker, network, commits, PR or acceptance. It uses the
+This assignment revises a draft and pending records after the supplied review:
+no new review, freeze, implementation, tests, Docker, network, commits, PR or
+acceptance. It uses the
 full path because published tool guidance is a client contract. The direct
 spec-author assignment is the author phase; independent review remains a
 separate fresh-context phase. No token counters are exposed for this phase;
@@ -147,7 +148,7 @@ labels only, not literal output or required implementation identifiers.
 - **U** (all mutations, unchanged `UNCERTAIN_SENTENCE`):
   `If the result is uncertain, verify the item's state with a read tool before any new attempt.`
 - **R** (all mutations):
-  `On gate completion, returns a JSON operation result with result, op and attempts, plus applicable status, code or value fields; no continuation cursor.`
+  `On gate completion, returns a JSON operation result with result and attempts, plus applicable op, code, status, value, audit or message fields; no continuation cursor.`
 
 For ordinary read/navigation tools: `<name>. P N`.
 For the five paged tools: `<name>. P C N`.
@@ -213,7 +214,7 @@ All ID and range bounds below are inclusive decimal integers.
 | P | `PDF page numbers, allowed only for format pdf. Supply 1..10 strictly increasing unique integers, each 1..9007199254740991 and within the document's page count; default [1]. Keep the same selection when continuing with offset and etag.` |
 | PI | `One-based PDF page number, integer 1..9007199254740991, within the document's page count; values must increase strictly in the pages array.` |
 | OB | `Zero-based byte offset into the raw file, integer 0..9007199254740991; default 0. A non-zero offset_bytes requires etag. Resume with next_offset_bytes and the returned etag.` |
-| LB | `Maximum raw bytes to return before base64 encoding, integer 1..9007199254740991. Omit to use configured maxReadBytes; remaining bytes, maxReadBytes and serialized-output budgets can reduce the returned chunk.` |
+| LB | `Maximum raw bytes to return before base64 encoding, integer 1..9007199254740991. Omit to use the configured maxReadBytes; a larger value returns LIMIT_EXCEEDED. Remaining bytes and serialized-output budgets can reduce the returned chunk.` |
 | EB | `Exact quoted strong etag from an earlier result; required for non-zero offset_bytes, optional at offset_bytes 0. Contains 1..254 printable ASCII characters inside quotes, excluding space and double quote; weak W/ tags are invalid. A different current version returns VERSION_CHANGED.` |
 | PATH | `Exact absolute path in the selected drive, at most 4096 UTF-8 bytes and 64 components; / is valid. Use / separators; no empty, . or .. components, trailing slash except /, backslash, U+0000..U+001F or U+007F. Case and Unicode spelling are preserved; no URL decoding or normalization.` |
 | PAR | `Authorized parent folder ID, integer 1..9007199254740991, in drive_id.` |
@@ -279,7 +280,10 @@ map. Helper code may compose those literals exactly as specified above.
 - **AC-01** (BR-428) — Given servers in read, write and share modes, When
   `client.listTools()` runs, Then read returns exactly the ten read/navigation
   names and write/share exactly all 16 names; every tool description equals
-  the catalog composition, not just a nonempty string. Zero provider calls.
+  the catalog composition, not just a nonempty string. Every mutation's R
+  names result and attempts as guaranteed fields and op, code, status, value,
+  audit and message as applicable fields, with no continuation cursor.
+  Zero provider calls.
   Verified by `TestBR428_AC01_all_registered_tool_descriptions`.
 - **AC-02** (BR-429) — Given those listings, When each input property and
   `pages.items` is inspected, Then all 38 read-mode and 58 mutation-enabled
@@ -295,13 +299,22 @@ map. Helper code may compose those literals exactly as specified above.
 - **AC-03** (BR-428, unchanged BR-068/BR-263/BR-283/BR-424) — Given all
   16 published descriptions, When mandatory text is checked, Then N occurs
   exactly once on each tool, A exactly once on read, U exactly once on each
-  mutation, all existing mutation P sentences remain verbatim, and OW starts
-  with the exact existing `OVERWRITE_SENTENCE`. Session instructions remain
+  mutation, R exactly once on each mutation, all existing mutation P sentences
+  remain verbatim, and OW starts with the exact existing `OVERWRITE_SENTENCE`.
+  Session instructions remain
   N. Verified by `TestBR428_AC03_existing_notices_and_sentences_preserved`;
   retain the existing `TestBR263_each_description_holds_its_fixed_sentences`,
   `TestBR263_v2_create_and_rename_descriptions_hold_the_NFC_sentence`,
   `TestBR283_description_and_overwrite_sentence` and
   `TestBR283_v2_upload_description_holds_the_NFC_sentence` unchanged.
+  Given synthetic gate admission refusals and completed mutation outcomes,
+  When their JSON results are compared with R, Then a refusal is exactly
+  `{result:"failed",code,attempts:0}` without op, completed outcomes include
+  op and applicable code/status/value, an unrecorded outcome includes
+  `audit:"outcome_unrecorded"`, and an uncertain outcome includes message;
+  none has a continuation cursor. Reuse existing mutation fixtures, including
+  an uncertain outcome whose audit append fails to cover both fields together.
+  Verified by `TestBR428_AC03_mutation_result_fields_match_guidance`.
 - **AC-04** (BR-428) — Given paged/text/download/image synthetic results,
   When a client follows the published guidance, Then an empty nonterminal
   page still continues using `next_cursor`; `A😀B` in one-code-point reads
@@ -346,8 +359,15 @@ map. Helper code may compose those literals exactly as specified above.
   LIMIT_EXCEEDED; malformed base64 and lone-surrogate text return
   INVALID_ARGUMENTS before the byte limit. Defaults: PDF selects [1]; text
   uses its BOM or UTF-8 without a BOM; explicit conflicting BOM refuses;
-  omitted length and length 262144 agree under the same output budget;
-  omitted length_bytes and configured maxReadBytes agree. Verify DC/DS
+  omitted length, length 262144 and length 262145 yield identical successful
+  results for the same text fixture longer than 262144 Unicode code points
+  under the same source and serialized-output budgets. Output budgets may
+  reduce all three chunks below 262144; do not assert a full-cap wire result.
+  This characterizes the literal cap in `src/extraction.ts:readResult`
+  (`Math.min(args.length ?? 262144, 262144)`). Omitted length_bytes and
+  configured maxReadBytes agree; length_bytes = maxReadBytes + 1 returns
+  LIMIT_EXCEEDED before policy/content work, with zero provider calls,
+  rather than returning a clamped chunk. Verify DC/DS
   omission visits all eligible drives, D/DW omission uses the default, FS
   omission uses configured roots and omitted type includes both types.
   Cursor tests characterize returned single-use tokens, changed bindings,
@@ -392,7 +412,11 @@ map. Helper code may compose those literals exactly as specified above.
    `UPLOAD_MAX_BYTES` for numeric text; preserve the existing comma-formatted
    upload sentence (524,288). Other current bounds are literals rather than
    exported shared constants: pin them against published schema keywords and
-   actual boundary behavior. Do not rewrite validation expressions to create
+   actual boundary behavior. In AC-06, compare omitted length, 262144 and
+   262145 on the same text fixture longer than 262144 code points within
+   source budgets, using identical output budgets and the existing
+   `readResult` projection. Also assert the maxReadBytes + 1 refusal before
+   policy/content work. Do not rewrite validation expressions to create
    a constants framework in this text-only ticket. Documentation defaults
    describe runtime omission; they are not new schema defaults.
 4. Run the targeted description, navigation stdio, pagination, download, read,
@@ -428,7 +452,8 @@ map. Helper code may compose those literals exactly as specified above.
   validation constants where available and use boundary checks where they
   are not. A validation refactor and external documentation generator are
   unnecessary for this reversible metadata change; no ADR is needed.
-- **D-6 — Draft phase boundary.** Keep status draft and stress-test unreviewed.
+- **D-6 — Draft phase boundary.** Keep status draft and record the supplied
+  review's dispositions; approval of the revised draft remains pending.
   The assignment's no-Docker/no-network/no-commit constraints preclude the
   usual gate/forge steps here; those remain later full-path obligations.
   No alternative host application gate is claimed.
@@ -454,8 +479,40 @@ map. Helper code may compose those literals exactly as specified above.
 ## Open questions
 
 None. Coverage, wording, SDK attachment, constants, compactness and phase
-boundaries are resolved in D-1–D-6; independent review remains pending.
+boundaries are resolved in D-1–D-6; independent review of the revised draft
+remains pending.
 
 ## Stress-test
 
-Not reviewed.
+### Review 1 dispositions
+
+The supplied review is recorded below with the disposition of every finding,
+not a new review or an approval of the revised head. Reviewer model/effort and
+token counters were not supplied (unknown); no usage is inferred. This
+revision remains draft v1; freeze, implementation and acceptance are pending.
+
+### 42-spec-review-1-reviewer — verdict: changes
+
+1. **Major — raw-read limit is a refusal, not clamping. Retained, fixed in this revision.**
+   Corrected LB and BR-429 and added the maxReadBytes + 1 refusal to AC-06
+   and the test plan. Source inspection: `src/content.ts:159–160` rejects
+   a requested length above maxReadBytes before authorization/content work;
+   `src/content.ts:213–243` applies remaining-byte and serialized-output
+   limits to admitted requests. Omission uses the configured maxReadBytes.
+2. **Major — mutation result fields are conditional. Retained, fixed in this revision.**
+   Corrected R, AC-01/AC-03 and BR-428. Source inspection:
+   `src/mutation-gate.ts:284–286` returns failed/code/attempts without op
+   for admission refusals used at lines 330–358; lines 450–458 add op and
+   applicable code/status/value, audit for an unrecorded outcome and message
+   for an uncertain result. The planned fixture checks cover these shapes
+   and the absence of a continuation cursor.
+3. **Minor — extraction cap needs a behavior check. Retained, fixed in this revision.**
+   Added the 262145-versus-262144 comparison to AC-06, the test plan and
+   BR-429 on a fixture longer than 262144 code points within source budgets.
+   Source inspection: `src/extraction.ts:124` caps collection at
+   `Math.min(args.length ?? 262144, 262144)`; lines 152–165 can further
+   reduce the returned chunk to fit serialized-output budgets. Identical
+   successful results are required, not a guaranteed 262144-character chunk.
+
+These corrections were checked against local source only. No runtime tests,
+Docker/Make gate, CI or corrected-head review were run in this revision.
