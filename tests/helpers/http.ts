@@ -199,6 +199,7 @@ export async function httpFixture(options: FixtureOptions = {}) {
       headers?: Record<string, string>;
       body?: string | Uint8Array;
       host?: string | null;
+      remoteAddress?: string;
     } = {},
   ): Promise<Response> {
     const headers = new Headers(init.headers ?? {});
@@ -209,7 +210,7 @@ export async function httpFixture(options: FixtureOptions = {}) {
       headers,
       ...(init.body === undefined ? {} : { body: init.body as BodyInit }),
     });
-    const response = await handler.handle(request, target);
+    const response = await handler.handle(request, target, init.remoteAddress);
     if (options.observe) await options.observe(response.clone(), target);
     return response;
   }

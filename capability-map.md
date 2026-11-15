@@ -1,5 +1,24 @@
 # Capability map
 
+## Provisional — OAuth proxy admission and grant handling hardened
+
+[F-035 v1](features/F-035-oauth-proxy-hardening.md) (#46), BR-421 and BR-422
+v1 with BR-023 v4, BR-024 v5, BR-131 v2, BR-133 v2, BR-137 v2, BR-162 v3,
+BR-167 v3, BR-184 v3 and BR-186 v2, ready for freeze and pending acceptance:
+in `proxy` mode an invalid token request no longer burns an authorization code
+or revokes its refresh family; concurrent logins on a cold or rotated upstream
+key set share one key fetch and reject ID tokens that expire while verification
+waits; upstream
+requests abort on every early exit without waiting for cancellation; and
+the unauthenticated OAuth routes admit each client peer separately under a
+global ceiling, the client being the socket address or, behind a proxy listed
+in `MCP_HTTP_TRUSTED_PROXIES` (optional and empty in the Compose example),
+its `X-Forwarded-For` address. Trust guidance requires exact proxy addresses
+or a dedicated proxy-only network and observed-address append at every hop.
+A shared hosted egress still has only 60 token requests per minute. Token
+redemption accepts an omitted redirect URI only when the authorization URI
+was the client's single registered URI; present values must match exactly.
+
 ## Accepted — PDF text extraction for common generator output
 
 [F-034 v1](features/F-034-pdf-extraction-profile.md) (#4), BR-412–BR-420 v1 with

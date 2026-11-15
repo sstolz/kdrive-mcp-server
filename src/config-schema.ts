@@ -122,6 +122,14 @@ export const inventory = [
     "list",
     [],
   ],
+  // F-035 BR-421: proxy-only, empty by default.
+  [
+    "httpTrustedProxies",
+    "MCP_HTTP_TRUSTED_PROXIES",
+    "http-trusted-proxies",
+    "list",
+    [],
+  ],
 ] as const;
 export type Setting = (typeof inventory)[number][0];
 export type DiagnosticSetting =
@@ -201,6 +209,8 @@ export interface LocalConfiguration {
   readonly oauthStateFile?: string;
   /** F-028 BR-291: the CIMD origins; empty keeps CIMD off. */
   readonly oauthAllowedClientIdOrigins: readonly string[];
+  /** F-035 BR-421: canonical trusted proxy addresses and networks. */
+  readonly httpTrustedProxies: readonly string[];
 }
 export interface PreflightResolver {
   inspectDrive(driveId: number): Promise<unknown>;

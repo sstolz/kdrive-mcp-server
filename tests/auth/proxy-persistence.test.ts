@@ -929,3 +929,62 @@ describe("BR-311 CIMD families persist without a client row (F-028 AC-08)", () =
     expect(families.filter((f) => f.client_id === CIMD_URL)).toHaveLength(1);
   });
 });
+
+it("BR-298 BR-137 v2 AC-02 a refused replay commits nothing", async () => {
+  const clock = new Clock();
+  const recorded = recording(openState(stateFile(), { clock }));
+  try {
+    const h = await harness({ clock, store: recorded.wrapped });
+    const client = await h.register({ redirect_uris: [LOOPBACK] });
+    const done = await h.login({
+      ...client,
+      redirect: "http://127.0.0.1:5000/callback",
+    });
+    const other = await h.register();
+    let token = json(await h.redeem(done)).refresh_token as string;
+    const variants: Record<string, string | undefined>[] = [
+      { redirect_uri: undefined },
+      { redirect_uri: "" },
+      { redirect_uri: "http://127.0.0.1:9999/callback" },
+      { code_verifier: "w".repeat(43) },
+      { code_verifier: "v".repeat(42) },
+      { code_verifier: "v".repeat(129) },
+      { code_verifier: "v".repeat(42) + "+" },
+      { resource: "https://other.test" },
+    ];
+    recorded.commits.length = 0;
+    expect((await h.redeem(done, {}, other)).status).toBe(400);
+    expect(recorded.commits).toEqual([]);
+    for (const extra of variants) {
+      recorded.commits.length = 0;
+      const refused = await h.redeem(done, extra);
+      expect(json(refused).error).toBe(
+        "resource" in extra ? "invalid_target" : "invalid_grant",
+      );
+      expect(recorded.commits).toEqual([]);
+      expect(events(h, "refresh_family_revoked")).toEqual([]);
+      const refreshed = await h.refresh(client, token);
+      expect(refreshed.status).toBe(200);
+      token = json(refreshed).refresh_token as string;
+    }
+    recorded.commits.length = 0;
+    const replay = h.redeem(done);
+    expect(
+      recorded.commits.map((writes) => writes.map((write) => write.op)),
+    ).toEqual([["deleteFamily"]]);
+    expect((await replay).status).toBe(400);
+    expect(events(h, "refresh_family_revoked")).toHaveLength(1);
+    expect((await h.refresh(client, token)).status).toBe(400);
+    const noRefresh = await h.login(
+      await h.register({ grant_types: ["authorization_code"] }),
+    );
+    await h.redeem(noRefresh);
+    recorded.commits.length = 0;
+    h.logs.length = 0;
+    expect((await h.redeem(noRefresh)).status).toBe(400);
+    expect(recorded.commits).toEqual([]);
+    expect(h.logs).toEqual([]);
+  } finally {
+    recorded.wrapped.close();
+  }
+});

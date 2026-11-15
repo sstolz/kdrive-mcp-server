@@ -283,3 +283,213 @@ describe("BR-131 bounded production upstream port", () => {
     expect(location(done).searchParams.get("error")).toBe("server_error");
   });
 });
+
+function cleanupFixture(
+  options: {
+    status?: number;
+    opaque?: boolean;
+    bytes?: number;
+    close?: boolean;
+    streamError?: boolean;
+    fetchError?: boolean;
+    abortAware?: boolean;
+    cancellation?: "throws" | "rejects" | "never settles";
+  } = {},
+) {
+  let signal: AbortSignal | null | undefined;
+  const original = new Error("synthetic upstream failure");
+  const cancel = vi.fn(() => {
+    if (options.cancellation === "throws") throw new Error("cleanup failed");
+    if (options.cancellation === "rejects")
+      return Promise.reject(new Error("cleanup failed"));
+    if (options.cancellation === "never settles")
+      return new Promise<void>(() => undefined);
+    return undefined;
+  });
+  const fetch: Fetch = (_input, init) => {
+    signal = init?.signal;
+    if (options.fetchError) return Promise.reject(original);
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        if (options.bytes !== undefined)
+          controller.enqueue(new Uint8Array(options.bytes).fill(0x20));
+        if (options.close) controller.close();
+        if (options.abortAware) {
+          signal?.addEventListener(
+            "abort",
+            () => {
+              controller.error(original);
+            },
+            { once: true },
+          );
+        }
+      },
+      pull(controller) {
+        if (options.streamError) controller.error(original);
+      },
+      cancel,
+    });
+    const response = options.opaque
+      ? ({ type: "opaqueredirect", status: 0, body } as Response)
+      : new Response(body, { status: options.status ?? 200 });
+    return Promise.resolve(response);
+  };
+  return {
+    port: createFetchUpstream({ fetch }),
+    cancel,
+    original,
+    aborted: () => signal?.aborted,
+  };
+}
+
+function fetchUpstream(port: ReturnType<typeof createFetchUpstream>) {
+  return port.fetchJson(`${UPSTREAM}/jwks`);
+}
+
+function postUpstream(port: ReturnType<typeof createFetchUpstream>) {
+  return port.postForm(`${UPSTREAM}/token`, new URLSearchParams());
+}
+
+describe("BR-131 v2 cleanup", () => {
+  afterEach(() => vi.useRealTimers());
+
+  it("BR-131 v2 AC-08 a refused redirect cancels its body and aborts its request", async () => {
+    for (const requestUpstream of [fetchUpstream, postUpstream]) {
+      for (const status of [301, 302, 303, 307, 308, 0]) {
+        const f = cleanupFixture(status === 0 ? { opaque: true } : { status });
+        await expect(requestUpstream(f.port)).rejects.toThrow(
+          "Upstream redirect refused.",
+        );
+        expect(f.aborted()).toBe(true);
+        expect(f.cancel).toHaveBeenCalledTimes(1);
+      }
+    }
+  });
+
+  it("BR-131 v2 AC-08 a bodyless opaque redirect aborts its request", async () => {
+    for (const requestUpstream of [fetchUpstream, postUpstream]) {
+      let signal: AbortSignal | null | undefined;
+      const port = createFetchUpstream({
+        fetch: (_input, init) => {
+          signal = init?.signal;
+          const response = Response.error();
+          Object.defineProperty(response, "type", { value: "opaqueredirect" });
+          return Promise.resolve(response);
+        },
+      });
+      await expect(requestUpstream(port)).rejects.toThrow(
+        "Upstream redirect refused.",
+      );
+      expect(signal?.aborted).toBe(true);
+    }
+  });
+
+  it("BR-131 v2 AC-09 every other early exit aborts its request and releases the body", async () => {
+    for (const requestUpstream of [fetchUpstream, postUpstream]) {
+      const success = cleanupFixture({ bytes: 65_536, close: true });
+      expect((await requestUpstream(success.port)).status).toBe(200);
+      expect(success.aborted()).toBe(false);
+      expect(success.cancel).not.toHaveBeenCalled();
+      const large = cleanupFixture({ bytes: 65_537 });
+      await expect(requestUpstream(large.port)).rejects.toThrow(
+        "Upstream response too large.",
+      );
+      expect(large.aborted()).toBe(true);
+      expect(large.cancel).toHaveBeenCalledTimes(1);
+      for (const options of [
+        { bytes: 10, streamError: true },
+        { fetchError: true },
+      ]) {
+        const failed = cleanupFixture(options);
+        await expect(requestUpstream(failed.port)).rejects.toBe(
+          failed.original,
+        );
+        expect(failed.aborted()).toBe(true);
+      }
+    }
+    vi.useFakeTimers();
+    const stalled = cleanupFixture();
+    let settled = false;
+    const outcome = stalled.port
+      .fetchJson(`${UPSTREAM}/x`)
+      .catch((error: unknown) => {
+        settled = true;
+        return error;
+      });
+    await vi.advanceTimersByTimeAsync(9999);
+    expect(settled).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(await outcome).toEqual(new Error("Upstream deadline exceeded."));
+    expect(stalled.aborted()).toBe(true);
+    expect(stalled.cancel).toHaveBeenCalledTimes(1);
+  });
+
+  it("BR-131 v2 AC-09 a closed oversized stream needs no cancel callback", async () => {
+    const f = cleanupFixture({ bytes: 65_537, close: true });
+    await expect(f.port.fetchJson(`${UPSTREAM}/x`)).rejects.toThrow(
+      "Upstream response too large.",
+    );
+    expect(f.aborted()).toBe(true);
+    expect(f.cancel).not.toHaveBeenCalled();
+  });
+
+  it.each(["throws", "rejects", "never settles"] as const)(
+    "BR-131 v2 AC-09 cancellation %s cannot delay or replace the failure",
+    async (cancellation) => {
+      vi.useFakeTimers();
+      const unhandled = vi.fn();
+      process.on("unhandledRejection", unhandled);
+      try {
+        for (const oversized of [false, true]) {
+          const f = cleanupFixture({
+            cancellation,
+            ...(oversized ? { bytes: 65_537 } : {}),
+          });
+          let settled = false;
+          const outcome = f.port
+            .fetchJson(`${UPSTREAM}/x`)
+            .catch((error: unknown) => {
+              settled = true;
+              return error;
+            });
+          await vi.advanceTimersByTimeAsync(oversized ? 0 : 10_000);
+          expect(settled).toBe(true);
+          expect(await outcome).toEqual(
+            new Error(
+              oversized
+                ? "Upstream response too large."
+                : "Upstream deadline exceeded.",
+            ),
+          );
+          expect(f.aborted()).toBe(true);
+          expect(f.cancel).toHaveBeenCalledTimes(1);
+        }
+        expect(unhandled).not.toHaveBeenCalled();
+      } finally {
+        process.off("unhandledRejection", unhandled);
+      }
+    },
+  );
+
+  it("BR-131 v2 AC-09 abort-aware streams need no cancel callback", async () => {
+    vi.useFakeTimers();
+    for (const oversized of [false, true]) {
+      const f = cleanupFixture({
+        abortAware: true,
+        ...(oversized ? { bytes: 65_537 } : {}),
+      });
+      const outcome = f.port
+        .fetchJson(`${UPSTREAM}/x`)
+        .catch((error: unknown) => error);
+      await vi.advanceTimersByTimeAsync(oversized ? 0 : 10_000);
+      expect(await outcome).toEqual(
+        new Error(
+          oversized
+            ? "Upstream response too large."
+            : "Upstream deadline exceeded.",
+        ),
+      );
+      expect(f.aborted()).toBe(true);
+    }
+  });
+});

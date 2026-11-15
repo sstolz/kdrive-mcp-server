@@ -144,7 +144,11 @@ export async function serve(
   };
   let response: Response;
   try {
-    response = await handler.handle(toRequest(req), target);
+    response = await handler.handle(
+      toRequest(req),
+      target,
+      req.socket.remoteAddress,
+    );
   } catch {
     refused();
     response = errorResponse(500, "server_error");
