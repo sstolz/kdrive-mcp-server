@@ -253,7 +253,7 @@ This table lists the settings of the Compose path below, taken from the
 [`examples/compose.yaml`](../examples/compose.yaml) and
 [`examples/config.yaml`](../examples/config.yaml). Every example value is
 illustrative: replace installation-specific values with yours. The Infomaniak
-issuer is real. "Set by the example" means that
+issuer is given in the [README](../README.md#values-from-the-infomaniak-side). "Set by the example" means that
 `examples/compose.yaml` already sets the value and you normally keep it.
 
 Server settings (the `environment` of the service; the server reads no
@@ -389,7 +389,7 @@ the Infomaniak Manager are given in French, as the Manager shows them at the
 time of writing.
 
 1. **The API application and the kDrive API token.** First choose the public
-   MCP URL (step 3): the application needs it. In the Manager, open
+   MCP URL (item 3): the application needs it. In the Manager, open
    **Utilisateurs et profils** → **Mon profil** → **Développeur** →
    **Application API** → **Créer une nouvelle application**, type
    **Application** and any name. The application URL field is the OAuth
@@ -486,7 +486,8 @@ Set its variables (see
 shell or in a `.env` file next to it (Compose reads that file; the server
 itself reads none). The `.env` file holds no secret, only the paths to the
 secret files, relative to the deployment directory. The installation-specific
-values below are fake; the issuer is the real Infomaniak issuer:
+values below are fake; for the Infomaniak issuer, see the
+[README](../README.md#values-from-the-infomaniak-side):
 
 ```sh
 # Published beta pinned by digest (step 1), or kdrive-mcp-server:runtime-amd64

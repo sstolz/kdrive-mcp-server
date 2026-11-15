@@ -141,8 +141,8 @@ describes the same steps in order.
   remote deployment). In the Manager: **Utilisateurs et profils** → **Mon
   profil** → **Développeur** → **Application API** → **Créer une nouvelle
   application**. Choose the type **Application** and any name. The
-  application URL field is the OAuth redirect (callback) URI. For a
-  deployment, enter `<MCP_PUBLIC_URL>/oauth/callback`, for example
+  application URL field is the OAuth redirect (callback) URI. For a local
+  test, enter `http://127.0.0.1:8765/callback`. For a deployment, enter `<MCP_PUBLIC_URL>/oauth/callback`, for example
   `https://mcp.example.com/mcp/oauth/callback`.
   Keep the client ID and client secret that are shown: a remote deployment
   uses them as `OAUTH_UPSTREAM_CLIENT_ID` and the client secret file.
