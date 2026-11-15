@@ -42,9 +42,10 @@ rewriting a known successful upstream result as a failed operation.
   serialization, record bytes, durability checks and mutation classifications.
 - Bound audit sink closure and the audit contribution to gate shutdown;
   preserve transport → gate → exit ordering.
-- Remove the callback-dependent stdout/stderr flush wait in the production
-  exit helper (`src/production.ts`); test that real helper through injected
-  process ports, rather than substituting the whole exit dependency.
+- Bound the stdout/stderr flush wait in the production exit helper
+  (`src/production.ts`) to 250 ms, capped by any remaining stdio shutdown
+  budget. Route dedicated stdio termination through that same helper;
+  test the real path through injected process ports and exit primitive.
 - Offer the existing fixed diagnostic once on any sink failure latch.
 - Prepare pending BR versions and index/capability/changelog records.
 - In the later implementation PR, synchronize the audit guidance in
@@ -103,9 +104,13 @@ rewriting a known successful upstream result as a failed operation.
   Synchronous fd 2 blockage is also outside these bounds. Gate close in the
   production composition is bounded by 45,000 ms from its call under the
   existing guarded policy and sole-attempt contracts. Transport → gate → exit and HTTP 503 semantics
-  remain unchanged. The production exit helper sets the requested exit code
-  and calls `process.exit` in the same turn without a stdout/stderr flush
-  write or callback wait. Verified by: AC-07–AC-09, AC-11–AC-13;
+  remain unchanged for dedicated processes; owned/library compositions
+  settle closure without terminating their host. Dedicated stdio uses the
+  same production exit helper as HTTP and other production exit callers.
+  That helper sets the requested exit code and races completion of both
+  stdout/stderr flush callbacks against a fixed ref'd 250 ms timer, capped
+  by any remaining stdio shutdown budget; the first completion calls
+  `process.exit` once. Verified by: AC-07–AC-09, AC-11–AC-13;
   AC-11's documentation row maps to
   `TestBR259_v2_AC11_docs_state_audit_bounds_and_ambiguity` in
   `tests/deployment-examples.test.ts`.
@@ -113,7 +118,9 @@ rewriting a known successful upstream result as a failed operation.
   BR-259 v2's append bounds and BR-254 v2's gate/sink closure bounds. The
   1,000 ms stdio exit-call bound without a run past intent remains: the
   remaining budget covers non-committed in-flight appends (including denied)
-  before sink close, as well as release and the production exit helper.
+  before sink close, as well as release and the shared production exit
+  helper's capped flush wait. This exit-call bound applies to the dedicated
+  stdio process; owned/library closure does not terminate its host.
   The navigation deadline never substitutes for a committed mutation's result.
   Verified by: AC-08, AC-09, AC-11–AC-13.
 
@@ -213,9 +220,10 @@ Set the guard before attempting the diagnostic so a synchronous throw or
 reentrant stream error cannot retry it. The text is reused even when no
 outcome was attempted; it contains no error payload, path, stack, record or
 secret. This is a best-effort diagnostic, not an audit record. Never await
-its callback or drain, retry it or let its failure replace a result or
-retain shutdown. Blocked stderr can prevent delivery. Successful close and
-non-latching oversize validation emit nothing.
+its callback or drain in the sink/gate, retry it or let its failure replace
+a result. The shared exit helper's bounded flush may allow this queued line
+to drain but adds no unbounded wait. Blocked stderr can prevent delivery.
+Successful close and non-latching oversize validation emit nothing.
 
 ### Shutdown
 
@@ -262,18 +270,38 @@ flush allowance is 1,000 ms. Audit work therefore fits inside the existing
 75 s deployment grace without changing that setting. This does not make a
 new promise about unrelated OAuth store or OS shutdown stalls. Preserve the
 existing normal signal exit code (HTTP 0; stdio's existing exit status).
-The dedicated process must call its exit primitive without awaiting stderr
-delivery or a timed-out file release. The real helper in `src/production.ts`
-sets `process.exitCode` and calls `process.exit(code)` in the same turn, with
-no empty stdout/stderr flush writes and no callback dependency: its flush
-wait budget is zero. This preserves the full 1,000 ms stdio allowance for
-transport/gate shutdown and adds nothing to HTTP's 1,000 + 45,000 ms audit
-shutdown ceiling within the 75 s grace. It may discard buffered output;
-transport closure remains responsible for its existing bounded response
-flush. Existing non-shutdown exit callers use the same immediate helper
-and keep their codes. Test injection replaces only the process ports (exit
-primitive, exit-code setter and stdout/stderr), not this helper's logic;
-production always supplies the real process ports, with no operator knob.
+At this revision's base, dedicated stdio cleanup in `src/stdio.ts` uses
+`setImmediate(() => process.exit(...))`; it bypasses `src/production.ts`.
+The owned-stream path selected in `src/main.ts` settles shutdown without
+calling a process exit primitive. Replace the dedicated stdio exit with
+the same production helper used by HTTP and other production exit callers,
+leaving owned/library compositions responsible only for closure. There is
+one production process-exit path; owned/test closure alone is not evidence
+that the dedicated path called it.
+
+The real helper in `src/production.ts` sets `process.exitCode`, issues
+empty stdout/stderr flush writes behind already-queued output, and races
+completion of both callbacks against a fixed ref'd 250 ms timer from helper
+entry. Call `process.exit(code)` exactly once when both callbacks complete
+or the timer expires, whichever is first; clear the timer on callback
+completion and ignore late callbacks after exit. During stdio shutdown,
+cap the wait at the non-negative remaining shutdown budget when one
+applies; an exhausted budget calls exit immediately without a new wait.
+The timer stays ref'd so a pending exit is not lost when no other handle
+keeps the process alive. No timed-out file release is awaited here.
+This permits fire-and-forget startup/fatal stderr messages followed by
+`exit(1)` in `src/main.ts`, and the fixed diagnostic, to drain promptly.
+The 250 ms cap is a short fixed delivery opportunity for ordinary buffered
+output, not a delivery guarantee or measured pipe latency; it bounds the
+extra HTTP wait to 1,000 + 45,000 + 250 = 46,250 ms within the 75 s grace.
+It never extends the total 1,000 ms no-intent stdio allowance. Output still
+queued after 250 ms on a stalled pipe may be lost, or earlier if the
+remaining stdio budget is shorter. Transport closure retains its existing
+bounded response flush. Non-shutdown exit callers keep their codes and
+receive the same 250 ms cap. Test injection replaces only the process ports
+(exit primitive, exit-code setter and stdout/stderr) and clock/timers, not
+the helper or dedicated stdio exit routing; production supplies real ports
+and timers, with no operator knob.
 Calling `process.exit` within a bound does not guarantee OS termination in
 the stall cases above. Library compositions resolve closure without
 terminating their host process.
@@ -429,7 +457,8 @@ diagnostic writes. All returned objects below are exact (no extra members).
   Then observable order is transport close, outcome failure, sink close,
   gate close, process exit; HTTP receives its existing 503 and exits 0;
   stdio with no prior error retains exit 0 and publishes no closed-session
-  result. Neither awaits the diagnostic callback or stderr drain. Repeat
+  result. Sink/gate closure never awaits the diagnostic callback or stderr
+  drain; process exit adds only AC-12's capped flush wait. Repeat
   these outcome-stall rows using a rejecting file release; exit still
   follows gate completion, never an unhandled rejection. These rows are
   verified only by
@@ -470,25 +499,41 @@ diagnostic writes. All returned objects below are exact (no extra members).
   does not determine whether a write occurred. Both also name a write or
   fdatasync stuck in the libuv threadpool as an unbounded OS-level teardown
   stall even after `process.exit` is called: retained fds last until actual
-  termination, not a guaranteed deadline. State the zero flush wait in the
-  production helper, possible loss of buffered output, and the shared
-  1,000 ms stdio allowance for non-committed appends and release. Neither
+  termination, not a guaranteed deadline. State the shared production
+  helper's ref'd 250 ms flush cap, shortened to any remaining stdio budget,
+  and possible loss of output still queued on a stalled pipe at that cap.
+  State the shared 1,000 ms stdio allowance for non-committed appends,
+  release and exit flushing, and distinguish dedicated process exit from
+  owned/library closure without host termination. Neither
   claims asynchronous stderr waits are unlimited. This documentation row is verified only by
   `TestBR259_v2_AC11_docs_state_audit_bounds_and_ambiguity`
   in `tests/deployment-examples.test.ts`.
 - **AC-12** (BR-254 v2, BR-070 v5) — Given the real production exit helper
-  used by `productionDependencies()` with injected process ports, stderr
-  whose write would never call back, and an exit primitive spy, When the
-  helper is called with code 0 or 1, Then it sets that code and calls the
-  primitive exactly once in the same turn (zero ms flush wait), without
-  advancing a timer or waiting for a callback; neither stdout nor stderr
-  receives an empty flush write. Repeat with stdout also never calling
-  back. Exercise the actual helper, not a replacement `MainDependencies.exit`.
+  used by `productionDependencies()` with injected stdout/stderr, exit-code
+  setter, exit primitive and fake clock/timers, When called with code 0 or
+  1, Then it sets that code and issues the flush writes after any queued
+  output. Exercise these rows with each code:
+  - Both callbacks fire promptly (stdout at 5 ms, stderr at 10 ms): no exit
+    after the first callback; exit exactly once immediately after the
+    second at 10 ms, with the fallback timer cleared, not at 250 ms.
+  - Neither callback fires, or only one fires (cover either stream): the
+    fallback timer is ref'd; no exit at 249 ms, exactly one exit at 250 ms.
+    Late callbacks never call exit again.
+  - The remaining stdio budget is 100 ms and callbacks never fire: no exit
+    at 99 ms, exactly one exit at 100 ms. With zero remaining budget, exit
+    immediately without another wait. Timely callbacks still win before
+    the shortened cap.
+  Include queued fire-and-forget stderr output followed by exit(1) and a
+  queued fixed audit diagnostic; the prompt-callback row observes those
+  bytes before exit. Exercise the actual helper, not a replacement
+  `MainDependencies.exit`.
   Verified only by
-  `TestBR254_v2_AC12_real_production_exit_has_no_flush_wait`
+  `TestBR254_v2_AC12_real_production_exit_bounds_flush_wait`
   in `tests/cli.test.ts`. AC-09 keeps its separate composition-order rows.
-- **AC-13** (BR-070 v5, BR-254 v2, BR-259 v2, BR-246) — Given stdio
-  with no run past intent, a policy-denied run whose audit append started
+- **AC-13** (BR-070 v5, BR-254 v2, BR-259 v2, BR-246) — Given the dedicated
+  stdio process path (`src/main.ts` → `src/stdio.ts` → the shared production
+  exit helper), with injected process ports, exit primitive and fake time,
+  no run past intent, a policy-denied run whose audit append started
   at time 0 and never calls back, and EOF/SIGINT/SIGTERM at time 100 ms,
   When transport close consumes 200 ms and run drain begins at 300 ms,
   Then the still-pending denied append gets only 800 ms of the 1,000 ms
@@ -497,13 +542,24 @@ diagnostic writes. All returned objects below are exact (no extra members).
   `{result:"denied",op:OP,code:"ACCESS_DENIED",attempts:0}`; no intent,
   outcome or upstream call starts, and the diagnostic is offered once.
   Sink close receives zero remaining time, then gate close settles and
-  the real AC-12 helper calls the injected exit primitive by 1,100 ms;
+  the real AC-12 helper calls the injected exit primitive exactly once by
+  1,100 ms with zero remaining flush allowance;
   no closed-session result is published. Repeat for file write/fdatasync
   stalls; never release a still-busy fd. In a separate row, let the denied
   append acknowledge at 400 ms and stall the now-idle file release: close
   gets only 700 ms, resolves/latches by 1,100 ms and offers one diagnostic;
   gate close and the real exit helper meet the same deadline. Repeated
   close cannot reset either deadline, and late completion changes nothing.
+  With the denied append acknowledged and sink/gate close complete at
+  1,000 ms instead, hold both flush callbacks: the helper receives only
+  100 ms, and its primitive is uncalled at 1,099 ms then called once at
+  1,100 ms. This pins propagation of a positive remaining budget through
+  the dedicated stdio path as well as the exhausted-budget case.
+  Assert that the dedicated path invokes the real shared helper and that
+  only its injected primitive performs exit; do not substitute the helper
+  or select the owned-stream branch merely to inject streams. A separate
+  owned/library closure control settles transport and gate with no process
+  exit call; it cannot satisfy the dedicated exit assertion.
   Verified only by
   `TestBR070_v5_AC13_denied_append_shares_remaining_stdio_shutdown_budget`
   in `tests/mutation-composition.test.ts`.
@@ -521,7 +577,8 @@ diagnostic writes. All returned objects below are exact (no extra members).
   in `tests/mutation-gate.test.ts`; count diagnostics separately from audit
   writes, and keep AC-01/AC-04/AC-05 result assertions unchanged.
 - **AC-15** (BR-259 v2) — Given a child using the supported production
-  Node runtime/platform and the real stderr sink, with fd 2 connected to a
+  Node runtime on Linux (the CI platform, with non-blocking POSIX pipes)
+  and the real stderr sink, with fd 2 connected to a
   pipe the parent immediately pauses and never reads, When the child
   prefills stderr with a fixed maximum of 8 MiB of synthetic bytes then
   starts one valid audit append, Then that append rejects with
@@ -554,7 +611,9 @@ diagnostic writes. All returned objects below are exact (no extra members).
    callbacks for deterministic boundaries. AC-15 alone uses bounded child
    pipe saturation to verify the supported runtime assumption; its parent
    watchdog and forced cleanup are mandatory. AC-12 drives the real
-   production helper, and AC-13 covers the pre-sink-close denied wait.
+   production helper's flush race, and AC-13 drives dedicated stdio through
+   that helper, covering the pre-sink-close denied wait and an owned closure
+   control that never terminates its host.
    Preserve existing healthy-path controls. Replace the obsolete
    `TestBR259_a_stderr_intent_resolving_after_5000_ms_makes_zero_attempts`
    expectation of a later outcome and
@@ -611,15 +670,21 @@ limits in the ticket at freeze and closure rather than inventing totals.
   sole 30,000 ms attempt; retain its 60,000 ms outer deadline without using
   it to justify another wait. Reject a blanket 5 s gate timeout that could
   discard a dispatched write's result. Keep 75 s deployment grace and
-  existing exit codes; do not wait for delivery of a failure diagnostic.
+  existing exit codes; sink/gate closure does not wait for a diagnostic.
   For no-intent stdio shutdown, apply the remaining 1,000 ms allowance to
   non-committed appends before draining runs, then to sink close; shortening
   only sink close would leave a denied append waiting up to 5,000 ms.
-  The production exit helper has zero flush wait. A further 1,000 ms flush
-  timer would overspend stdio's total allowance; reusing 5,000 ms would be
-  worse, while callback-only flushing can wait forever. Accept loss of
-  buffered output after transport close. OS/runtime teardown may still
-  stall indefinitely on a blocked libuv file operation; this is documented
+  Route dedicated stdio through the same production exit helper as HTTP
+  and other production callers; owned/library closure never terminates
+  its host. Race both flush callbacks against a ref'd 250 ms timer, capped
+  by the remaining stdio budget. This short fixed opportunity preserves
+  prompt delivery of queued startup/fatal messages and the diagnostic
+  while bounding shutdown delay. Reject zero-wait exit because it loses
+  ordinary buffered messages, callback-only flushing because it can wait
+  forever, and an uncapped extra allowance because it overspends stdio's
+  total budget. Output still queued after 250 ms on a stalled pipe may be
+  lost (earlier with a shorter remaining stdio budget). OS/runtime teardown
+  may still stall indefinitely on a blocked libuv file operation; this is documented
   alongside synchronous fd 2 stalls, not claimed fixed.
 - **D-4 — Exact deadline refuses.** Success requires elapsed time strictly
   below 5,000 ms. The previous stderr callback-at-5,000 success case is an
@@ -639,8 +704,8 @@ limits in the ticket at freeze and closure rather than inventing totals.
   A targeted search of `business-rules/` for `flush`, `process.exit` and
   `exit callback` found no rule specifically governing the production
   helper's flush. BR-254 governs transport → gate → process exit, so its
-  pending v2 carries the no-flush requirement; BR-210's HTTP signal code
-  stays unchanged. BR-241 v2 owns the expanded diagnostic trigger; BR-252's
+  pending v2 carries the shared exit path and bounded flush; BR-210's HTTP
+  signal code stays unchanged. BR-241 v2 owns the expanded diagnostic trigger; BR-252's
   outcome text and classification remain unchanged with one shared guard.
   No new BR or costly architectural choice warrants an ADR.
 
@@ -661,16 +726,19 @@ limits in the ticket at freeze and closure rather than inventing totals.
 - A write or fdatasync stuck in the libuv threadpool may block runtime/OS
   teardown even after `process.exit` is called. The retained fd can then
   remain open indefinitely; this unbounded OS-level stall is documented,
-  not fixed by append/close timers or the no-flush exit helper.
+  not fixed by append/close timers or the bounded-flush exit helper.
 - Pipe bounds require asynchronous fd 2 writes on the supported Node
-  runtime/platform. Planned evidence is
+  runtime on Linux (the CI platform with non-blocking POSIX pipes).
+  Planned evidence is
   `TestBR259_v2_AC15_unread_child_stderr_pipe_keeps_append_timeout_runnable`
   (`tests/audit-sink.test.ts`, AC-15), using an unread pipe, independent
   parent watchdog and forced child cleanup. It is not yet executed; no
   runtime qualification is claimed from fake-port tests alone.
-- Immediate process exit can discard buffered stdout/stderr, including the
-  best-effort diagnostic. Existing transport flush bounds still apply
-  before exit; the helper adds no further delivery guarantee.
+- Output still queued after 250 ms on a stalled pipe may be lost, including
+  the best-effort diagnostic (earlier if the remaining stdio budget is
+  shorter). The helper exits sooner when both flush callbacks complete;
+  it bounds the wait without guaranteeing delivery on a stalled pipe.
+  Existing transport flush bounds still apply before the helper.
 - Queued append deadlines deliberately reduce availability during collector
   congestion; each append must remain independently bounded even across
   sessions. Latching prevents subsequent audit writes behind uncertain bytes.
@@ -733,13 +801,10 @@ not supplied (unknown); no usage is inferred. This revision remains draft v1.
 ### 47c-spec-decision-1-fable — verdict: changes
 
 7. **F1 Major — production exit waits behind blocked stderr. Retained, fixed.**
-   Brought `src/production.ts`'s real exit helper into implementation scope;
-   BR-254 v2 requires zero stdout/stderr flush wait. D-3 ties this choice
-   to the existing 1,000 ms stdio and 45,000 ms gate budgets and records
-   possible buffered-output loss. No dedicated production-flush BR was
-   found, so the closest shutdown rule, BR-254, carries the change from
-   active v1 to pending v2. AC-12 drives the real helper with process-port
-   injection and callbacks that never fire; it asserts same-turn exit.
+   Brought `src/production.ts`'s real exit helper into implementation scope
+   under pending BR-254 v2. The initial disposition used zero flush wait;
+   review 3 below supersedes that choice with a capped flush race and
+   dedicated stdio routing. D-3 and AC-12 record the revised contract.
 8. **F2 Minor — denied append exceeds idle stdio bound. Retained, fixed.**
    Apply the remaining absolute stdio deadline to non-committed appends
    before gate drain, then to sink close; preserve denied classification
@@ -762,6 +827,24 @@ not supplied (unknown); no usage is inferred. This revision remains draft v1.
     prefill, IPC result, 5,000 ms append deadline, explicit scheduling
     tolerance, parent watchdog and forced cleanup. Risks cites that test
     as planned evidence; fake-clock tests alone do not qualify the runtime.
+
+### 47c-spec-review-3-reviewer — verdict: changes
+
+12. **R3-1 Major — dedicated stdio bypasses the helper. Retained, fixed.**
+    Route `src/stdio.ts`'s dedicated exit through the same production helper
+    as HTTP and other production exit callers. AC-13 observes that real
+    path with an injected exit primitive; an owned/library control closes
+    without host termination. BR-070 v5 and BR-254 v2 distinguish both paths.
+13. **R3-2 Major — zero flush wait loses buffered diagnostics. Retained, fixed.**
+    D-3 and BR-254 v2 race both stdout/stderr flush callbacks against a
+    ref'd 250 ms timer, capped by any remaining stdio shutdown budget.
+    AC-12 covers prompt callbacks, stalled callbacks and shorter/zero
+    budgets with fake time; risks limit output loss to bytes still queued
+    on a stalled pipe when that cap expires. The short fixed allowance
+    gives ordinary startup/fatal messages and the diagnostic time to drain.
+14. **R3-3 Minor — AC-15 runtime platform implicit. Retained, fixed.**
+    AC-15 and Risks name Linux, the CI platform with non-blocking POSIX
+    pipes, as the supported runtime for this row; the probe remains planned.
 
 These review identifiers and verdicts were supplied by the owner, not
 produced by a new agent review. Decision-pass model: Fable 5.2 per

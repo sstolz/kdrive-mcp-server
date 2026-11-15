@@ -8,13 +8,16 @@
 and [BR-259 v2](business-rules/BR-259.md): proposed 5,000 ms append budgets
 including queue time for stderr and files, immediate rejection on stream
 errors, permanent failure until restart, and bounded sink/gate shutdown. The proposal shares stdio's 1,000 ms
-allowance with non-committed appends, removes the production exit helper's
-flush wait, and offers the same fixed diagnostic once on any first latch.
+allowance with non-committed appends and a shared production exit helper's
+ref'd 250 ms flush cap, shortened to any remaining stdio budget. Dedicated
+stdio routes exit through that helper; owned/library closure never terminates
+its host. Output still queued on a stalled pipe at the cap may be lost.
+The same fixed diagnostic is offered once on any first latch.
 Synchronous fd 2 blockage and libuv file-operation teardown stalls remain
-unbounded; a bounded child-pipe runtime test is planned, not executed.
+unbounded; a bounded Linux child-pipe runtime test is planned, not executed.
 Intent failure sends no mutation; outcome failure preserves the upstream
 classification with `audit:"outcome_unrecorded"`. No new event or configuration.
-Supplied review-2 and decision-1 findings are dispositioned in the draft;
+Supplied review-2, decision-1 and review-3 findings are dispositioned in the draft;
 the revised draft awaits fresh review and is not implemented or accepted.
 Existing accepted versions remain active. Acceptance evidence will be recorded in #47 on the actual main SHA.
 

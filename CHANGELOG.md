@@ -132,10 +132,13 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
   preserves the upstream result with `audit:"outcome_unrecorded"` and the
   existing fixed diagnostic, now offered once on any first failure latch.
   Share the 1,000 ms stdio shutdown allowance with non-committed appends
-  and remove the production exit helper's stdout/stderr flush wait, accepting
-  possible buffered-output loss. Synchronous fd 2 blockage and libuv file
+  and route dedicated stdio exit through the shared production helper,
+  racing stdout/stderr flush callbacks against a ref'd 250 ms timer capped
+  by any remaining stdio budget; owned/library closure never terminates its
+  host. Output still queued after 250 ms on a stalled pipe may be lost
+  (earlier with a shorter remaining stdio budget). Synchronous fd 2 blockage and libuv file
   operations stuck during OS teardown remain unbounded and documented; a
-  bounded unread-pipe child test is planned as runtime evidence. No
+  bounded Linux unread-pipe child test is planned as runtime evidence. No
   implementation or acceptance is claimed.
 
 ## [0.6.0-beta.1] - 2026-11-13

@@ -955,7 +955,7 @@ HTTP request is out of scope.
 ## Pending — bounded audit append and shutdown waits
 
 [F-039 v1](../features/F-039-bounded-audit-sink.md) (#47 lot C) is draft and
-awaiting fresh review after the supplied review-2/decision-1 dispositions. It prepares five pending versions; existing accepted statements
+awaiting fresh review after the supplied review-2/decision-1/review-3 dispositions. It prepares five pending versions; existing accepted statements
 and evidence remain active and unchanged. No new BR ID or ADR is allocated.
 BR-242 serialization and BR-244/BR-252 before-/after-dispatch semantics stay
 unchanged, including outcome_unrecorded after an upstream success.
@@ -965,5 +965,5 @@ unchanged, including outcome_unrecorded after an upstream success.
 | [BR-070](BR-070.md) | v5      | Bounded audit shutdown replaces unlimited stderr waits; committed results and idle stdio bound retained. | [F-039 v1](../features/F-039-bounded-audit-sink.md) | Pending acceptance; v4 active |
 | [BR-240](BR-240.md) | v2      | Acknowledge complete writes only before the append deadline.                                             | [F-039 v1](../features/F-039-bounded-audit-sink.md) | Pending acceptance; v1 active |
 | [BR-241](BR-241.md) | v2      | Errors/timeouts reject appends and latch until restart; one fixed diagnostic on any first latch.         | [F-039 v1](../features/F-039-bounded-audit-sink.md) | Pending acceptance; v1 active |
-| [BR-254](BR-254.md) | v2      | Bounded sink/gate close; shared stdio deadline; production exit without flush wait; OS stalls excluded.  | [F-039 v1](../features/F-039-bounded-audit-sink.md) | Pending acceptance; v1 active |
+| [BR-254](BR-254.md) | v2      | Bounded sink/gate close; shared stdio exit helper with capped 250 ms flush; OS stalls excluded.          | [F-039 v1](../features/F-039-bounded-audit-sink.md) | Pending acceptance; v1 active |
 | [BR-259](BR-259.md) | v2      | Both sinks get one 5,000 ms budget from append call, including queue time.                               | [F-039 v1](../features/F-039-bounded-audit-sink.md) | Pending acceptance; v1 active |
