@@ -171,6 +171,10 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
   Preserve existing unofficial/untrusted-content notices and mutation
   cautions; fixed trusted text only, with no validation or behavior change.
 
+- #67 / F-043 v1 (draft; implementation and acceptance pending): specify
+  release-aware validation of the queue-fix changelog entry under BR-387 v2,
+  retaining the README and compatibility documentation requirements.
+
 ## [0.6.0-beta.1] - 2026-11-13
 
 ### Added
