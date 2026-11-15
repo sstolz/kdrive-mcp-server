@@ -15,11 +15,12 @@ rename, move, trash, restore and upload. Every call goes through a policy
 (configured roots, deny patterns, received-share rules) and every write is
 recorded in an audit log before and after it is sent.
 
-**Why this server.** Infomaniak publishes its own kDrive MCP server
-(`@infomaniak/mcp-server-kdrive`, checked at version 1.2.0). It runs over
-stdio only, so a remote client such as claude.ai cannot reach it. It is bound
-to a single drive: it lists items other users shared with you but cannot read
-them, since they live in another user's drive. It also has no tool to:
+**Why this server.** Infomaniak offers a REST API for kDrive but no hosted
+MCP endpoint, and Anthropic provides no kDrive connector. Infomaniak's own
+MCP server (`@infomaniak/mcp-server-kdrive`, checked at version 1.2.0) runs
+over stdio only, so a remote client such as claude.ai cannot reach it. It is
+bound to a single drive: it lists items other users shared with you but cannot
+read them, since they live in another user's drive. It also has no tool to:
 
 - read a file as text (`kdrive_read`: text files, PDF text, or a PNG preview
   of an image);
@@ -40,6 +41,9 @@ This server adds:
 
 Share tools are not available yet (`share` mode registers none, #20); the
 official server has them.
+
+It speaks standard MCP, so any compatible client can use it; only claude.ai
+has been verified end to end so far.
 
 **Status:** beta `0.6.0-beta.1` ([VERSION](VERSION)). The container image is
 published on GHCR as `ghcr.io/sstolz/kdrive-mcp-server:0.6.0-beta.1`
