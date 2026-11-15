@@ -89,14 +89,21 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
   token request that fails a code's client, redirect URI, PKCE or resource
   binding no longer consumes the code or revokes its refresh family; callbacks
   that arrive together on a cold or rotated upstream key set share one key
-  fetch instead of failing; upstream requests release their connection when
-  refused early; and the OAuth routes' rate limits apply per client (the
+  fetch instead of failing and check ID-token expiry after verification;
+  upstream requests abort when refused early without waiting for cancellation;
+  and the OAuth routes' rate limits apply per client (the
   socket address, or the `X-Forwarded-For` client behind a proxy listed in the
   new `MCP_HTTP_TRUSTED_PROXIES` setting; IPv6 per `/64`) under a global
-  ceiling, so one abusive client no longer locks registration, login or token
-  refresh for everyone. The Compose example passes the optional
+  ceiling. Clients behind one shared hosted egress still share the limit of
+  60 token requests per minute; one residential IPv6 subscriber can supply
+  enough `/64` peers to exhaust a global ceiling. The Compose example passes
+  the optional
   `MCP_HTTP_TRUSTED_PROXIES`, empty by default, so existing deployments start
-  unchanged.
+  unchanged. Guidance recommends exact proxy addresses or a dedicated
+  proxy-only network, with every hop appending the observed upstream address.
+  Token redemption accepts omitted `redirect_uri` only for an exact single
+  registered authorization URI; a supplied value must match exactly. The
+  Compose header distinguishes required values from optional empty defaults.
 
 ## [0.6.0-beta.1] - 2026-11-13
 
