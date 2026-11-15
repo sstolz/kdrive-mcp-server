@@ -529,9 +529,11 @@ Tree writes (create, rename, move, trash, restore):
   folder that is renamed or moved out of the deny patterns outside this server
   could be restored if kDrive recomputed the trash `path`; owner acceptance on
   2026-11-10 observed a deletion-time snapshot, so such a restore was denied.
-- Residual risk R-17-2 remains present pending actual-main acceptance of
-  [F-041](features/F-041-configured-root-ancestors.md): source-ancestor
-  protection is implemented but not yet accepted. A configured root moved
+- Residual risk R-17-2: the known-ancestor bypass is addressed;
+  [F-041](features/F-041-configured-root-ancestors.md) source-ancestor
+  protection was accepted on main `448a48f`
+  ([#47 comment](https://github.com/sstolz/kdrive-mcp-server/issues/47#issuecomment-6898895634)).
+  A configured root moved
   beneath an already-checked folder before the write is not protected, for up
   to the invocation deadline. Many roots can yield `REQUEST_TIMEOUT` or
   `LIMIT_EXCEEDED`. Visibility limits can

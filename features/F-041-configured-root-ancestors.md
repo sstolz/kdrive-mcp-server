@@ -2,7 +2,7 @@
 id: F-041
 title: Protect configured-root ancestors from structural mutations
 ticket: "#47"
-status: frozen
+status: done
 version: 1
 ---
 
