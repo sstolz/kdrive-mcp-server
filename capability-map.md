@@ -31,9 +31,9 @@ Lot C's accepted F-039 contract and active rule versions remain separate.
 
 ## Provisional — configured-root ancestor protection
 
-[F-041 v1](features/F-041-configured-root-ancestors.md) (#47 lot E),
+[F-041 frozen v1](features/F-041-configured-root-ancestors.md) (#47 lot E),
 [BR-277 v2](business-rules/BR-277.md), [BR-278 v2](business-rules/BR-278.md)
-and [BR-427 v1](business-rules/BR-427.md): proposed refusal of trash,
+and [BR-427 v1](business-rules/BR-427.md): frozen contract for refusal of trash,
 rename and move on any source folder containing a configured root in the
 same drive, in write/share modes, using fresh ID-bound ancestry. Unknown
 ancestry refuses `ACCESS_DENIED` with the existing `denied` audit shape.
@@ -41,7 +41,8 @@ Root rename/move outside this server does not make configuration-time paths
 authoritative; current evidence is required. Destination-side ancestry and
 copy/upload/create contracts are unchanged, and overlapping roots remain
 configurable. Visibility and check-then-act limits remain explicit.
-Draft v1; Review 1 dispositioned, revised-head approval and freeze pending;
+Frozen v1 by explicit instruction from reviewed base `75c0cea`; Reviews 1–2
+and Decision 1 dispositioned, with no corrected-head approval claimed;
 implementation and actual-main acceptance pending. Existing BR-277/BR-278 v1 remain active; R-17-2 is not yet resolved.
 
 ## Accepted — bounded audit waits and shutdown

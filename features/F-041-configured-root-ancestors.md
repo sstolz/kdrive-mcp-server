@@ -2,7 +2,7 @@
 id: F-041
 title: Protect configured-root ancestors from structural mutations
 ticket: "#47"
-status: draft
+status: frozen
 version: 1
 ---
 
@@ -19,6 +19,26 @@ no collision: main allocates through F-040, BR-426 and ADR-012; this lot
 adds F-041 and BR-427. Next free IDs: F-042, BR-428, ADR-013.
 Recheck current main and concurrent allocations before freeze and PR creation;
 no network check is authorized in this revision.
+
+Frozen v1 on 2026-11-15 at the owner's explicit instruction, from reviewed
+base `75c0ceaec1f8ba3603863ca91330ff5337ab6b3c` (local HEAD verified),
+with supplied
+`47e-spec-review-2-reviewer` (changes) and
+`47e-spec-decision-1-fable` (approve, minors), with all corrections and
+verdicts recorded below. This explicit freeze instruction overrides the
+usual requirement for a new approval of the corrected head; no such
+approval is claimed. This uncommitted freeze revision has no new SHA.
+Implementation, code review, CI and actual-main acceptance remain pending.
+Review token totals and actual reviewer model/effort were not supplied;
+no retrospective usage is inferred. Decision-pass tier is Fable 5.2 per PROJECT.md.
+
+Freeze allocation recheck: cached `origin/main` is `67c101a`, allocating
+through F-040, BR-426 and ADR-012. This branch adds F-041 and BR-427;
+all 425 allocated BR IDs have records (withdrawn BR-376/BR-377 excluded).
+Next free IDs: F-042, BR-428, ADR-013. Recheck current main before the PR.
+No network or ticket-state update is performed. Tests first follows
+AGENTS.md §3; local checks use existing host dependencies under this
+assignment's no-Docker constraint and are neither `make check` nor CI.
 
 ## Context
 
@@ -66,10 +86,9 @@ needed. The new behavior below is pending, not an observation of the code.
 - Solving provider check-then-act races, tracking external changes with
   watches, storing ancestry between invocations, or following unbounded
   parent links. No claim of atomic provider-wide root protection.
-- Source or test edits, Docker, network, commits, review, freeze,
-  implementation, acceptance or release in this assignment. The owner
-  explicitly approved Codex as the spec author; this is the author phase
-  only, with subsequent independent reviews still required.
+- Source edits, Docker, network, commits, implementation, acceptance or
+  release in this assignment. This assignment freezes the revised contract
+  and writes tests first; code review and acceptance remain required.
 
 ## Business rules
 
@@ -105,11 +124,14 @@ For another source, retain normal mode, scope, evidence and deny checks.
 Only a live directory source of `trash`, `rename` or `move` needs the new
 negative ancestry proof. Place it after `authorize(source)` and the source
 `dir` type check, before destination effects, execution or intent, in
-`src/policy/index.ts` (`effects`; review-base lines 431–439). A file cannot
+`src/policy/index.ts` (`effects`; review-base line 449,
+`if (source) authorize(source);`), before the destination inspect at line 455. A file cannot
 contain a root. An otherwise unauthorized call need not perform extra
 inspections. Received-share sources come from drives that are not configured,
-so no configured root can match; BR-257 refuses those mutations before any
-configured-root read. This check does not qualify received-share writes.
+so no configured root can match: zero configured-root reads hold only
+because that drive has no configured root. `shared.gate` (policy line 469)
+runs after the new check; BR-257 still refuses afterwards. This check does
+not qualify received-share writes.
 
 For each configured root in the source drive, use its resolved folder ID,
 never its configuration-time path. Inspect that exact ID at location `live`
@@ -304,6 +326,14 @@ correlation, IDs and unchanged kind-specific values follow F-017/F-018.
   with zero audit records and zero mutation requests. The tool wraps this
   gate JSON with `isError:true`; the pre-intent interruption precedence in
   `navigation.mutate` / `mutation-gate.decide` remains unchanged.
+  Given the configuration maximum of same-drive roots (256 entries,
+  `src/config-values.ts:204`: 255 roots plus the sentinel) and a deny
+  traversal that together exhaust the existing shared 512-call invocation
+  budget (`src/navigation.ts:321`), When their calls consume that budget, Then the admitted run
+  returns `{result:"failed",op:O,code:"LIMIT_EXCEEDED",attempts:0}`,
+  with zero mutation attempts, no intent or mutation, and the same error
+  tool wrapper. Verified by the same invocation-bounds test's
+  `budget-exhaustion` row. No new root-count cap or extra budget is introduced.
 - **AC-09** (BR-278 v2) — Given a root inspection double that would fail,
   When allowed create/upload into 10 or 11, or rename/move/trash of file
   21 runs, Then S and zero additional root inspection calls. Given a
@@ -324,12 +354,15 @@ correlation, IDs and unchanged kind-specific values follow F-017/F-018.
   in `tests/mutation-production.test.ts` (create/file operations) and
   `tests/upload-production.test.ts` (upload). Existing scope, denies,
   received-share and move-cycle tests remain unchanged controls.
-- **AC-10** (BR-277 v2) — Given the draft records, Then R-17-2 explicitly
-  remains present, with remediation pending review/implementation/acceptance.
+- **AC-10** (BR-277 v2) — Given the frozen records, Then R-17-2 explicitly
+  remains present, with remediation pending implementation/acceptance.
   Given later implementation documentation, Then README and SECURITY name
   source-ancestor protection in write/share, fail-closed unknown ancestry,
   permitted overlapping configuration and unchanged destination handling;
-  the visibility and check-then-act limits remain explicit. Only after
+  the visibility and check-then-act limits remain explicit. README includes
+  a troubleshooting sentence: check that configured roots are readable when
+  a folder mutation is denied; restore remains available under its existing
+  restrictions. Only after
   actual-main acceptance may the next records PR mark the specific known-
   ancestor bypass addressed and link its evidence. Verified by
   `TestBR277_v2_AC10_documented_ancestor_protection_and_residual_status`
@@ -362,9 +395,9 @@ correlation, IDs and unchanged kind-specific values follow F-017/F-018.
    Synchronize accepted BR/spec/capability/R-17-2 markers in the next
    reviewed PR before release. No per-run repository files are produced.
 
-This authoring assignment performs only document/content checks; tests,
-the Docker gate and CI are not run. No review, freeze or acceptance is
-claimed. No per-agent token counter is exposed for this authoring phase;
+The freeze revision and tests-first assignment run local document/content
+and targeted host checks where dependencies permit; the Docker gate and CI
+are not run. No corrected-head review or acceptance is claimed. No per-agent token counter is exposed for this authoring phase;
 no retrospective attribution or total is inferred.
 
 ## Decisions
@@ -396,14 +429,24 @@ no retrospective attribution or total is inferred.
 
 - A stale or inaccessible configured ID blocks otherwise permissible folder
   structural mutations in its drive until evidence/configuration is fixed;
-  this is the intentional fail-closed availability tradeoff.
+  this is the intentional fail-closed availability tradeoff. These denials
+  look like scope denials; README troubleshooting must tell operators to
+  check configured-root readability and that restore remains available.
+  A transient upstream failure on any root read also yields a spurious
+  `ACCESS_DENIED`; this becomes more likely with many roots.
 - Extra root metadata reads consume existing budgets and can cause earlier
-  refusals. Per-invocation reuse and no descendant walk bound the cost; no
-  increase to limits or new background cache is authorized.
+  refusals. Root count is capped at 256 by configuration
+  (`src/config-values.ts:204`); the linear cost is one GET per
+  non-sentinel same-drive root per folder trash/rename/move, sharing the
+  512-call invocation budget with deny traversal (`src/navigation.ts:321`).
+  Per-decision reuse avoids duplicates; no increase to limits or new
+  background cache is authorized.
 - Fresh inspections are not an atomic provider snapshot. Another actor can
   move a root beneath a checked source after evidence acquisition. Detect
   contradictions observed in one decision, but retain SPEC §10.6's race
-  limit rather than claiming the entire class eliminated.
+  limit rather than claiming the entire class eliminated. The ancestry
+  proof precedes deny traversal (`src/policy/index.ts:520–525`), so the
+  race window can approach the invocation deadline. This risk is accepted.
 - Case/Unicode inconsistencies from a provider refuse rather than being
   repaired. Consistent external changes still follow the configured ID.
 - Lot D / PR #58 is merged as `67c101a`; the local ID recheck found no
@@ -422,7 +465,7 @@ R-17-2 status are resolved by D-2–D-6; overlap policy is the owner's D-1.
 The owner supplied this review for this revision; the entries below record
 its verdict and the disposition of every finding, not a new review or an
 approval of the revised head. Reviewer model/effort and token counters were
-not supplied (unknown); no usage is inferred. This revision remains draft v1.
+not supplied (unknown); no usage is inferred. That revision remained draft v1.
 
 ### 47e-spec-review-1-reviewer — verdict: changes
 
@@ -452,4 +495,35 @@ not supplied (unknown); no usage is inferred. This revision remains draft v1.
    AC-08 cites the BR-070 v5 invocation deadline constant instead of
    duplicating a numeric duration.
 
-No new review, freeze, acceptance or forge publication is performed here.
+### 47e-spec-review-2-reviewer — verdict: changes
+
+- **R2-1 — Major, stale allocation paragraph. Retained, fixed.** The BR
+  index now states that all 425 allocated IDs have records; next free BR-428.
+- **R2-2 — Check placement. Retained, fixed.** Cite policy line 449's
+  `if (source) authorize(source);`, before destination inspection at 455;
+  lines 431–439 describe the existing direct-root guard.
+- **R2-3 — Received-share ordering. Retained, fixed.** `shared.gate` at
+  469 follows the new check. No roots are read only because the received
+  source drive has no configured roots; BR-257 still refuses afterwards.
+  This supersedes Review 1's incorrect "prior refusal" description.
+- **R2-4 — Merged lot D. Retained, fixed.** The BR index names merged
+  lot D (`67c101a`), not concurrent PR #58.
+
+### 47e-spec-decision-1-fable — verdict: approve, minors
+
+- **F-1 — Shared budget and linear cost. Retained, fixed.** AC-08 adds
+  `budget-exhaustion`, preserving `LIMIT_EXCEEDED` and zero mutation
+  attempts; Risks records the per-root GET cost under the existing 256-root
+  configuration cap (corrected at freeze: Fable's "uncapped" premise was
+  wrong; noted by the tests-first author).
+- **F-2 — Troubleshooting. Retained, fixed.** AC-10 and BR-277 v2 require
+  README guidance to check root readability and retain restore availability.
+- **F-3 — Long race window. Retained, accepted risk.** The proof precedes
+  deny traversal; the check-then-act window can approach the deadline.
+- **F-4 — Transient upstream failures. Retained, accepted risk.** Any root
+  read failure can cause a spurious `ACCESS_DENIED`, more likely with many roots.
+
+These verdicts were supplied by the owner, not generated in this assignment.
+No corrected-head approval, forge publication or actual-main acceptance is
+claimed. Actual reviewer model/effort and per-agent token counters were not
+supplied; no retrospective attribution is inferred.

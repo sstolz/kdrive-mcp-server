@@ -157,7 +157,7 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
   will explain transient `SERVER_BUSY` without promising retry success.
   This bounds concurrent pipelines, not total memory. Specification frozen;
   implementation and acceptance are pending.
-- #47 lot E / F-041 v1 (draft; pending review, implementation and acceptance):
+- #47 lot E / F-041 v1 (frozen; pending implementation and acceptance):
   specify refusal of trash, rename and move on source folders containing a
   configured root, using fresh same-drive ID ancestry and failing closed
   when it cannot be proved. Preserve `ACCESS_DENIED` and the existing denied
