@@ -2,7 +2,7 @@
 id: F-035
 title: OAuth proxy admission and grant handling hardened
 ticket: "#46"
-status: frozen
+status: done
 version: 1
 ---
 
