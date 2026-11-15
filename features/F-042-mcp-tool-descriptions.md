@@ -2,7 +2,7 @@
 id: F-042
 title: Describe every MCP tool and parameter for AI clients
 ticket: "#42"
-status: draft
+status: frozen
 version: 1
 ---
 
@@ -32,7 +32,7 @@ Targeted inventory: `registerTool`, `inputSchema`, `z.object`, `z.strictObject`,
 `src/extraction.ts`, `src/extraction-text.ts`, `src/extraction-pdf.ts`,
 `src/policy/values.ts` and `src/mutation-tools.ts`. All registrations and
 parameter schemas are covered by the tables below. No dynamic tools were found.
-Existing active BRs already cover the behavior relied on; this draft adds
+Existing active BRs already cover the behavior relied on; this contract adds
 pending documentation rules, not new observed behavior rules.
 
 ### SDK publication path
@@ -129,7 +129,7 @@ labels only, not literal output or required implementation identifiers.
 - **U** (all mutations, unchanged `UNCERTAIN_SENTENCE`):
   `If the result is uncertain, verify the item's state with a read tool before any new attempt.`
 - **R** (all mutations):
-  `On gate completion, returns a JSON operation result with result and attempts, plus applicable op, code, status, value, audit or message fields; no continuation cursor. Pre-gate refusals return a bare error code in MCP text content, not JSON.`
+  `On gate completion, returns a JSON operation result with result and attempts, plus applicable op, code, status, value, audit or message fields; no continuation cursor. Refusals before the gate return error text, not a JSON operation result: direct controller calls use bare error codes; SDK argument validation produces detailed error text, sanitized to INVALID_ARGUMENTS over stdio.`
 
 For ordinary read/navigation tools: `<name>. P N`.
 For the five paged tools: `<name>. P N C`.
@@ -266,7 +266,8 @@ map. Helper code may compose those literals exactly as specified above.
   the catalog composition, not just a nonempty string. Every mutation's R
   names result and attempts as guaranteed fields and op, code, status, value,
   audit and message as applicable fields, with no continuation cursor.
-  R distinguishes bare-code pre-gate refusals from these JSON results.
+  R distinguishes pre-gate error text from these JSON results, including
+  direct-controller codes, SDK validation text and stdio sanitization.
   Zero provider calls.
   Verified by `TestBR428_AC01_all_registered_tool_descriptions`.
 - **AC-02** (BR-429) — Given those listings, When each input property and
@@ -302,13 +303,21 @@ map. Helper code may compose those literals exactly as specified above.
   none has a continuation cursor. Reuse existing mutation fixtures, including
   an uncertain outcome whose audit append fails to cover both fields together.
   Verified by `TestBR428_AC03_mutation_result_fields_match_guidance`.
-  Given an invalid mutation argument or invalid upload encoding, When
-  `invokeMutation` refuses before calling the gate, Then the response is
+  Given an invalid mutation argument or invalid upload encoding when
+  `invokeMutation` is called directly, When it refuses before calling the gate,
+  Then the response is
   exactly `{isError:true,content:[{type:"text",text:"INVALID_ARGUMENTS"}]}`,
   with zero gate calls and no JSON operation result. Cover the read-mode
   controller refusal similarly with bare `ACCESS_DENIED`. Verified by the
   same test; these controller cases do not assume SDK validation uses the
   same error envelope.
+  Given initialized SDK stdio in write mode, When `kdrive_rename` is called
+  with invalid arguments, Then its wire result is exactly
+  `{isError:true,content:[{type:"text",text:"INVALID_ARGUMENTS"}]}`, with
+  zero gate/provider calls and no JSON operation result. The SDK validation
+  text is sanitized by the owned stdio transport. Verified by
+  `TestBR428_AC03_stdio_invalid_mutation_arguments` in
+  `tests/navigation-stdio.test.ts`.
 - **AC-04** (BR-428) — Given paged/text/download/image synthetic results,
   When a client follows the published guidance, Then an empty nonterminal
   page still continues using `next_cursor`; `A😀B` in one-code-point reads
@@ -436,7 +445,7 @@ map. Helper code may compose those literals exactly as specified above.
    every AC on the actual main SHA and record commands/results, review and
    exposed token usage in #42/its PR. Only then close #42; synchronize active
    markers in the next reviewed PR before release. No acceptance is inferred
-   from this draft, local inspection or a merge alone.
+   from this frozen contract, local inspection or a merge alone.
 
 ## Decisions
 
@@ -504,10 +513,10 @@ received-route distinctions are resolved in D-1–D-8.
 
 ## Stress-test
 
-The entries below record supplied findings and their dispositions. They do
-not constitute approval of the revised head. Status remains draft v1;
-freeze, implementation and acceptance are pending. Reviewer model/effort
-and token counters were not supplied (unknown).
+The entries below record supplied findings and their dispositions. Earlier
+revisions remained draft v1; the supplied freeze decision and retained
+corrections below establish frozen v1. Implementation and acceptance remain
+pending.
 
 ### 42-spec-review-1-reviewer — verdict: changes
 
@@ -557,3 +566,34 @@ and token counters were not supplied (unknown).
   branch/base and sandbox narrative from the contract and replaced the
   phase-boundary decision with product decisions. Review dispositions stay
   here, following F-041's Stress-test pattern.
+
+### 42-spec-review-3-reviewer — verdict: changes
+
+- **R3-1 — Major, pre-gate wire error forms. Retained, fixed.** R now
+  distinguishes error text from JSON operation results on every path.
+  `src/navigation.ts` registers mutation input schemas, so the installed
+  `@modelcontextprotocol/server` 2.4.0 SDK validates before the callback and
+  emits `isError` text starting `Input validation error: Invalid arguments for
+  tool <name>: ...`. Direct `invokeMutation` validation returns bare
+  `INVALID_ARGUMENTS` (read-mode refusal: `ACCESS_DENIED`).
+  `src/stdio-transport.ts:54–65` sanitizes SDK validation text to bare
+  `INVALID_ARGUMENTS` on the stdio wire. Thus the second reviewer's stdio
+  observation is correct; SDK text remains observable on unsanitized
+  transports. The installed SDK is the split server/core/client packages;
+  there is no installed `@modelcontextprotocol/sdk` package. AC-03 adds an
+  actual stdio invalid-mutation assertion with zero gate/provider calls.
+- **R3-2 — Minor, direct-call precondition. Retained, fixed.** BR-428's
+  INVALID_ARGUMENTS example explicitly puts direct `invokeMutation` use
+  in Given, matching AC-03.
+
+### 42-spec-decision-2-fable — verdict: approve freeze, minors
+
+- **F2-1 — Minor, allocated-rule count. Retained, fixed.** The BR index
+  now consistently states 428 allocated IDs and next free BR-431.
+- **F2-2 — Minor, stdio validation assertion. Retained, fixed.** Covered
+  by R3-1 and AC-03's stdio-level invalid mutation test.
+
+These verdicts were supplied by the owner, not generated in this assignment.
+No corrected-head approval, forge publication or actual-main acceptance is
+claimed. Actual reviewer model/effort and per-agent token counters were not
+supplied; no retrospective attribution is inferred.

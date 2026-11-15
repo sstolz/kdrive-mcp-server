@@ -128,8 +128,8 @@ unique tests. Historical-only rules retain their original AC targets without
 invented obsolete implementations. See the migration evidence (archived evidence `runs/35-migration-1.md`)
 and each record's Verification for preserved historical limits.
 
-All 425 allocated IDs have records, including merged lot D (`67c101a`).
-Withdrawn BR-376/BR-377 remain excluded and never reused. Next free BR-428.
+All 428 allocated IDs have records, including merged lot D (`67c101a`).
+Withdrawn BR-376/BR-377 remain excluded and never reused. Next free BR-431.
 
 ## Maintaining this index
 
@@ -1018,15 +1018,16 @@ No ADR is allocated. F-040 and BR-423–BR-426 belong to accepted lot D (`67c101
 
 ## Pending — MCP tool and parameter descriptions
 
-[F-042 v1](../features/F-042-mcp-tool-descriptions.md) (#42) is draft,
-not reviewed or frozen. It allocates BR-428–BR-430 v1; all are pending
+[F-042 v1](../features/F-042-mcp-tool-descriptions.md) (#42) is frozen v1,
+with supplied review and freeze-decision dispositions recorded in its Stress-test.
+It allocates BR-428–BR-430 v1; all are pending
 acceptance. BR-068 v1, BR-263 v2, BR-283 v2 and BR-424 v1 retain their
 active wording; the new catalog preserves their mandatory text verbatim.
 No existing active rule is replaced. No ADR. Next free IDs: F-043,
 BR-431, ADR-013. No implementation or acceptance is claimed.
 
-| Rule                | Version | Summary                                                                                         | Source                                                 | Status                    |
-| ------------------- | ------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------ | ------------------------- |
-| [BR-428](BR-428.md) | v1      | Exact purpose, result and continuation descriptions for all 16 tools.                           | [F-042 v1](../features/F-042-mcp-tool-descriptions.md) | Pending acceptance; draft |
-| [BR-429](BR-429.md) | v1      | Exact descriptions of all 58 parameter occurrences and pages.items, consistent with validation. | [F-042 v1](../features/F-042-mcp-tool-descriptions.md) | Pending acceptance; draft |
-| [BR-430](BR-430.md) | v1      | Fixed trusted text, catalog size budgets and unchanged non-description contracts.               | [F-042 v1](../features/F-042-mcp-tool-descriptions.md) | Pending acceptance; draft |
+| Rule                | Version | Summary                                                                                         | Source                                                 | Status                     |
+| ------------------- | ------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------ | -------------------------- |
+| [BR-428](BR-428.md) | v1      | Exact purpose, result and continuation descriptions for all 16 tools.                           | [F-042 v1](../features/F-042-mcp-tool-descriptions.md) | Pending acceptance; frozen |
+| [BR-429](BR-429.md) | v1      | Exact descriptions of all 58 parameter occurrences and pages.items, consistent with validation. | [F-042 v1](../features/F-042-mcp-tool-descriptions.md) | Pending acceptance; frozen |
+| [BR-430](BR-430.md) | v1      | Fixed trusted text, catalog size budgets and unchanged non-description contracts.               | [F-042 v1](../features/F-042-mcp-tool-descriptions.md) | Pending acceptance; frozen |
