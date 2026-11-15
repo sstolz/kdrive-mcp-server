@@ -7,12 +7,12 @@
 [BR-249 v2](business-rules/BR-249.md),
 [BR-250 v2](business-rules/BR-250.md) and
 [BR-268 v2](business-rules/BR-268.md), pending acceptance; v1 remains active.
-The proposed gate returns `failed` / `RATE_LIMITED` after the first valid
+The implementation pending acceptance returns `failed` / `RATE_LIMITED` after the first valid
 upstream 429, without an automatic retry or `Retry-After` wait. A later
 client invocation requires fresh admission and complete authorization and
 has its own audit records. Uncertain writes are still never replayed.
-This is a specification only, not an implemented or accepted capability;
-lot A acceptance evidence will be recorded in #47 on the actual main SHA.
+This capability remains provisional; lot A acceptance evidence will be
+recorded in #47 on the actual main SHA.
 
 ## Accepted — refused authorization-code redemption events restored
 

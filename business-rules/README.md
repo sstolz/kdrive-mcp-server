@@ -919,15 +919,15 @@ BR-137 to v3 with no new BR ID; accepted on main `14f5266` (#49 comment
 ## Pending — rate-limited mutations stop after one attempt
 
 [F-037 v1](../features/F-037-mutation-rate-limit-stop.md) (#47 lot A),
-ready for freeze, versions BR-248, BR-249, BR-250 and BR-268 to v2 with no
+frozen, versions BR-248, BR-249, BR-250 and BR-268 to v2 with no
 new BR ID. All four v1 rules remain active and their text/evidence is
 preserved in the canonical files; the four v2 definitions are pending
 acceptance, not additional rule IDs. BR-249 keeps its 60 s run deadline
 and 30 s attempt cap; BR-268 keeps its raw-port contract. Their obsolete
 retry examples are replaced in v2. BR-247, BR-251 and the audit schema
 remain unchanged. The supplied reviews and their dispositions are recorded
-in F-037; no freeze, implementation or acceptance is claimed. Evidence
-belongs in #47.
+in F-037. The implementation remains pending acceptance; evidence belongs
+in #47.
 
 | ID                  | Version | Rule                                                                                                  | Source                                                    | Status             |
 | ------------------- | ------- | ----------------------------------------------------------------------------------------------------- | --------------------------------------------------------- | ------------------ |

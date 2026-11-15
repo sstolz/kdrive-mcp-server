@@ -125,10 +125,27 @@ Every write and share tool runs through one gate (#17). Before any
 upstream write the gate writes a durable `intent` record (JSONL: time, identity,
 tool, operation kind, drive and item IDs; never names, paths, content, tokens,
 URLs or provider text), and after it an `outcome` record. If the intent cannot be
-written, nothing is sent. Only HTTP 429 is retried; a timeout, a lost response or
-a 5xx returns `uncertain` and is never replayed. If the outcome cannot be written,
+written, nothing is sent. Each mutation run makes at most one upstream attempt.
+A valid HTTP 429 returns `failed` / `RATE_LIMITED`, status 429, attempts 1,
+without a retry or a `Retry-After` wait. Every new client invocation requires
+fresh admission and full authorization. A timeout, a lost response or a 5xx
+returns `uncertain` and is never replayed; verify the item's state before any
+new attempt. If the outcome cannot be written,
 the client still gets the real result, marked `audit:"outcome_unrecorded"`, and
 every later write is refused until restart.
+
+Authorization is not atomic: the first-attempt window remains after policy
+validation. Intent append may take up to 5,000 ms, followed by transport queue,
+DNS and TLS within the 30,000 ms attempt timer. These separate bounds can total
+35,000 ms after the policy check; a target or ancestor may move before the first
+write. Stopping 429 retries does not close this window or add a provider-side
+version precondition.
+
+"429 means not applied" remains the unmeasured F-016 D-16-5 assumption, not a
+provider guarantee: [write evidence](docs/kdrive-write-evidence.md#not-measured)
+reports that none of the 85 measured responses was a 429. If a write takes
+effect before a 429, a later explicit invocation could duplicate it; this
+change adds no idempotency guarantee.
 
 - File sink: opened with `O_APPEND | O_NOFOLLOW`, created `0600`; an existing
   file must be owned by the server's user with no group or other permission bit.

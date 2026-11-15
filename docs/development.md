@@ -382,8 +382,11 @@ Each write gets one JSON line before it is sent (`intent`) and one after
 carry the time, the identity (`stdio`, the OAuth issuer and subject, or
 `insecure`), the tool, the operation kind and the drive and item IDs, never
 names, paths, content or secrets. If the intent cannot be written, nothing is
-sent. Only HTTP 429 is retried; a timeout, a lost response or a 5xx returns
-`uncertain` (verify the item before retrying).
+sent. Each mutation run makes at most one upstream attempt. A valid HTTP 429
+returns `failed` / `RATE_LIMITED`, status 429, attempts 1, without a retry or
+a `Retry-After` wait. Every new client invocation requires fresh admission and
+full authorization. A timeout, a lost response or a 5xx returns `uncertain`
+and is never replayed; verify the item's state before any new attempt.
 
 - In a container, a file audit log needs a writable mount (the root file system
   is read-only) and `stop_grace_period` must be at least 75 s in `write` and
