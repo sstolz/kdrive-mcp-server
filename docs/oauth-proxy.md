@@ -39,6 +39,24 @@ both OpenID Connect discovery paths. It is not an OpenID provider configuration
 (it lacks required members such as `jwks_uri`), so a strict OIDC client may
 reject the alias; owner acceptance should attribute such a failure to this.
 
+## Code refusal events (F-036, pending acceptance)
+
+[F-036 v1](../features/F-036-refused-code-event.md),
+[BR-137 v3](../business-rules/BR-137.md): after client authentication, each
+refused authorization-code redemption emits exactly one `token_refused` to the
+optional logger with only `{ handler: "token", error, status }`. Normal refusals
+have `status: 400` and `error: "invalid_grant"`; a resource mismatch after the
+earlier checks pass has `error: "invalid_target"`. No `reason` or request value
+is included. Without a logger, no output is added.
+
+The restored events add no state change or commit; the existing in-memory
+client-last-use update remains. A matching replay before code expiry still
+revokes its remaining refresh family and emits `refresh_family_revoked` with
+only `{ handler: "token" }`, followed by one `token_refused`. Store failures
+retain their single refusal with `status: 503` and
+`error: "temporarily_unavailable"`, alongside existing store/revocation events.
+Validation order, responses, code consumption and lifetime remain unchanged.
+
 ## Restart and persisted state (F-019, pending acceptance)
 
 - Without `OAUTH_STATE_FILE` all state is in memory in one instance. A restart

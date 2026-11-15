@@ -1805,10 +1805,9 @@ export function createOAuthProxy(options: OAuthProxyOptions): OAuthProxy {
   ): Promise<ProxyResponse> {
     const value = form.get("code");
     const code = value === null ? undefined : codes.get(value);
-    if (!code)
-      return Promise.resolve(tokenJson(400, { error: "invalid_grant" }));
+    if (!code) return Promise.resolve(tokenError(400, "invalid_grant"));
     if (time >= code.created + CODE_TTL)
-      return Promise.resolve(tokenJson(400, { error: "invalid_grant" }));
+      return Promise.resolve(tokenError(400, "invalid_grant"));
     const verifierValue = form.get("code_verifier") ?? "";
     if (
       code.request.clientId !== client.id ||
@@ -1816,15 +1815,15 @@ export function createOAuthProxy(options: OAuthProxyOptions): OAuthProxy {
       !VERIFIER.test(verifierValue) ||
       sha256(verifierValue).toString("base64url") !== code.request.codeChallenge
     )
-      return Promise.resolve(tokenJson(400, { error: "invalid_grant" }));
+      return Promise.resolve(tokenError(400, "invalid_grant"));
     const resource = form.get("resource");
     if (resource !== null && resource !== code.request.resource)
-      return Promise.resolve(tokenJson(400, { error: "invalid_target" }));
+      return Promise.resolve(tokenError(400, "invalid_target"));
     if (code.consumed) {
       const family =
         code.familyId === undefined ? undefined : families.get(code.familyId);
       if (family) return Promise.resolve(revoke(family, time));
-      return Promise.resolve(tokenJson(400, { error: "invalid_grant" }));
+      return Promise.resolve(tokenError(400, "invalid_grant"));
     }
     code.consumed = true;
     const change = begin(time);
