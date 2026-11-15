@@ -1672,6 +1672,7 @@ async function f039Main(
     ["SIGINT", "SIGTERM"].map((signal) => [signal, process.listeners(signal)]),
   );
   const signals = new EventEmitter();
+  const setExitCode = vi.fn();
   const originalAdapter = adapterModule.createKdriveAdapter;
   const originalGate = gateModule.createMutationGate;
   const mocks: { mockRestore(): void }[] = [
@@ -1797,7 +1798,7 @@ async function f039Main(
           : {}),
       },
       ...(options.owned
-        ? { protocol: { input: ports.input, output: out } }
+        ? { protocol: { input: ports.input, output: out }, setExitCode }
         : {}),
       signals: {
         on: (name, fn) => signals.on(name, fn),
@@ -1811,6 +1812,7 @@ async function f039Main(
       ports,
       out,
       err,
+      setExitCode,
       gate,
       handle,
       handler,
@@ -2018,6 +2020,80 @@ describe("F-039 bounded audit composition", () => {
 
 const F039_SIGNALS = ["EOF", "SIGINT", "SIGTERM"] as const;
 describe("F-039 dedicated and owned shutdown", () => {
+  it("TestBR070_v5_AC13_commit_during_transport_close_omits_exit_deadline", async () => {
+    vi.useFakeTimers();
+    const s = f039Sink("stderr");
+    const h = await f039Main(await s.sink, { transportMs: 200 });
+    try {
+      let commit!: () => void;
+      const dispatched = new Promise<void>((resolve) => {
+        commit = resolve;
+      });
+      const result = observed(
+        h.gate.run({
+          tool: "kdrive_rename",
+          operation: F039_RENAME,
+          identity: { kind: "stdio" },
+          dispatch: async (operation) => {
+            await dispatched;
+            return h.gate.execute(operation);
+          },
+        }),
+      );
+      expect(h.gate.hasCommitted).toBe(false);
+      h.signal("SIGTERM");
+      await vi.advanceTimersByTimeAsync(100);
+      commit();
+      await microtasks();
+      expect(h.gate.hasCommitted).toBe(true);
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(result.value).toEqual(F039_FAILED);
+      expect(h.order).toContain("gate-close");
+      expect(h.ports.exits).toEqual([]);
+      expect(h.err.callbacks).toHaveLength(1);
+      await vi.advanceTimersByTimeAsync(249);
+      expect(h.ports.exits).toEqual([]);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(h.ports.exits).toEqual([{ code: 0, at: 5350 }]);
+    } finally {
+      h.restore();
+    }
+  });
+
+  it("TestBR254_v2_AC09_throwing_shorten_deadline_still_reaches_stdio_exit", async () => {
+    vi.useFakeTimers();
+    const s = f039Sink("stderr");
+    const sink = await s.sink;
+    const shortenDeadline = vi.fn(() => {
+      throw new Error("SYNTHETIC_SHORTEN_FAILURE");
+    });
+    const h = await f039Main({
+      append: (record) => sink.append(record),
+      get latched() {
+        return sink.latched;
+      },
+      latch: () => {
+        sink.latch();
+      },
+      close: (deadline) => sink.close(deadline),
+      onLatch: (listener) => sink.onLatch?.(listener),
+      shortenDeadline,
+    });
+    try {
+      const closing = observed(h.handle!.close());
+      await vi.advanceTimersByTimeAsync(250);
+      expect(closing).toEqual({ settled: true, value: undefined });
+      expect(shortenDeadline).toHaveBeenCalledTimes(1);
+      expect(sink.latched).toBe(true);
+      expect(h.err.writes).toContain(gateModule.OUTCOME_UNRECORDED_DIAGNOSTIC);
+      expect(h.ports.exits).toEqual([{ code: 0, at: 250 }]);
+      await h.handle!.close();
+      expect(shortenDeadline).toHaveBeenCalledTimes(1);
+    } finally {
+      h.restore();
+    }
+  });
+
   it.each(
     F039_SIGNALS.flatMap((signal) =>
       [false, true].map((rejects) => ({ signal, rejects })),
@@ -2133,7 +2209,10 @@ describe("F-039 dedicated and owned shutdown", () => {
         await microtasks();
         expect(closed).toEqual({ settled: true, value: undefined });
         expect(h.ports.exits).toEqual([]);
-        if (row !== "healthy") expect(process.exitCode).toBe(1);
+        expect(process.exitCode).toBeUndefined();
+        expect(h.setExitCode.mock.calls).toEqual(
+          row === "healthy" ? [] : [[1]],
+        );
         expect(h.err.callbacks).toHaveLength(0);
       } finally {
         h.restore();

@@ -81,6 +81,8 @@ export function startStdioNavigation(
     if (done) return;
     done = true;
     beginClose();
+    // A run may commit while the transport is closing. Match the gate budget.
+    if (options.gate?.hasCommitted) shutdownDeadline = undefined;
     // BR-254: the transport is closed; the gate drains, then the process exits.
     // The signal handlers stay installed during the drain so that a signal
     // cannot kill the process before in-flight outcomes are recorded.

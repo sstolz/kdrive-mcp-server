@@ -553,13 +553,13 @@ export function createMutationGate(options: MutationGateOptions): MutationGate {
     },
     close(deadline?: number) {
       closed = true;
-      if (deadline !== undefined && !hasCommitted()) {
-        shutdownDeadline = Math.min(shutdownDeadline ?? Infinity, deadline);
-        sink?.shortenDeadline?.(shutdownDeadline);
-      }
       closing ??= (async () => {
-        while (inflight.size) await Promise.allSettled([...inflight]);
         try {
+          if (deadline !== undefined && !hasCommitted()) {
+            shutdownDeadline = Math.min(shutdownDeadline ?? Infinity, deadline);
+            sink?.shortenDeadline?.(shutdownDeadline);
+          }
+          while (inflight.size) await Promise.allSettled([...inflight]);
           await sink?.close(shutdownDeadline);
         } catch {
           sink?.latch();

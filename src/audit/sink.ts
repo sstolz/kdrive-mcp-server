@@ -124,7 +124,7 @@ export interface AuditSink {
   latch(): void;
   /** Internal absolute monotonic deadline for non-committed stdio shutdown. */
   shortenDeadline?(deadline: number): void;
-  /** One gate owns the first-latch diagnostic, including idle errors. */
+  /** Each listener is notified once on latch, including idle errors. */
   onLatch?(listener: () => void): void;
   close(shutdownDeadline?: number): Promise<void>;
 }
@@ -147,7 +147,7 @@ function serialSink(
   let active: PendingAppend | undefined;
   const pending = new Set<PendingAppend>();
   let deadline = Infinity;
-  let listener: (() => void) | undefined;
+  const listeners = new Set<() => void>();
   let closing: Promise<void> | undefined;
   let finishClose: (() => void) | undefined;
   let closeTimer: ReturnType<typeof setTimeout> | undefined;
@@ -155,12 +155,19 @@ function serialSink(
   let closeDone = false;
   let releasing = false;
 
+  function notify(listener: () => void) {
+    try {
+      listener();
+    } catch {
+      // Notification failure must not interrupt latching or resource release.
+    }
+  }
   function latch() {
     if (latched) return;
     latched = true;
     for (const append of pending) append.settle(false);
     // Latch before notifying: the diagnostic can itself cause a stream error.
-    listener?.();
+    for (const listener of [...listeners]) notify(listener);
     releaseWhenIdle();
   }
   function check(append: PendingAppend) {
@@ -171,7 +178,10 @@ function serialSink(
     clearTimeout(append.timer);
     const remaining = append.deadline - performance.now();
     if (remaining <= 0) latch();
-    else append.timer = setTimeout(latch, remaining);
+    else
+      append.timer = setTimeout(() => {
+        arm(append);
+      }, Math.ceil(remaining));
   }
   function completeClose() {
     if (closeDone) return;
@@ -182,6 +192,12 @@ function serialSink(
   function expireClose() {
     latch();
     completeClose();
+  }
+  function armClose() {
+    clearTimeout(closeTimer);
+    const remaining = closeDeadline - performance.now();
+    if (remaining <= 0) expireClose();
+    else closeTimer = setTimeout(armClose, Math.ceil(remaining));
   }
   function releaseWhenIdle() {
     if (!closed || closeDone || releasing) return;
@@ -244,9 +260,10 @@ function serialSink(
       return latched;
     },
     latch,
-    onLatch(notify) {
-      listener = notify;
-      if (latched) notify();
+    onLatch(listener) {
+      if (listeners.has(listener)) return;
+      listeners.add(listener);
+      if (latched) notify(listener);
     },
     shortenDeadline(at) {
       deadline = Math.min(deadline, at);
@@ -290,13 +307,8 @@ function serialSink(
       }
       if (!closeDone) {
         closeDeadline = Math.min(closeDeadline, shutdownDeadline);
-        clearTimeout(closeTimer);
-        const remaining = closeDeadline - performance.now();
-        if (remaining <= 0) expireClose();
-        else {
-          closeTimer = setTimeout(expireClose, remaining);
-          releaseWhenIdle();
-        }
+        armClose();
+        releaseWhenIdle();
       }
       return closing;
     },

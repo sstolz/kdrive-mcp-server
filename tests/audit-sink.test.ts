@@ -701,6 +701,68 @@ async function boundedSinkFixture(phase: AuditPhase) {
 }
 
 describe("F-039 bounded audit sink", () => {
+  it.each(["stderr", "write", "sync", "close"] as const)(
+    "TestBR259_v2_AC06_early_timer_rechecks_monotonic_deadline [%s]",
+    async (phase) => {
+      vi.useFakeTimers();
+      let monotonic = 0;
+      vi.spyOn(performance, "now").mockImplementation(() => monotonic);
+      const f = await boundedSinkFixture(phase === "close" ? "write" : phase);
+      const state = auditObserved(
+        phase === "close" ? f.sink.close() : f.sink.append(intent),
+      );
+      await auditTurns();
+      monotonic = 4998.6;
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(state.status).toBe("pending");
+      expect(f.sink.latched).toBe(false);
+      monotonic = 4999.97;
+      await vi.advanceTimersByTimeAsync(2);
+      expect(state.status).toBe("pending");
+      expect(f.sink.latched).toBe(false);
+      monotonic = 5000;
+      await vi.advanceTimersByTimeAsync(1);
+      if (phase === "close") expect(state.status).toBe("resolved");
+      else auditRejected(state);
+      expect(f.sink.latched).toBe(true);
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
+
+  it("TestBR241_v2_AC14_latch_notifies_each_listener_once_despite_throws_and_reentrancy", async () => {
+    vi.useFakeTimers();
+    const f = await boundedSinkFixture("write");
+    const late = vi.fn(() => {
+      throw new Error("SYNTHETIC_LISTENER_FAILURE");
+    });
+    const first = vi.fn(() => {
+      f.sink.onLatch?.(late);
+      f.sink.latch();
+      throw new Error("SYNTHETIC_LISTENER_FAILURE");
+    });
+    const second = vi.fn();
+    f.sink.onLatch?.(first);
+    f.sink.onLatch?.(second);
+    expect(() => {
+      f.sink.latch();
+    }).not.toThrow();
+    f.sink.onLatch?.(first);
+    f.sink.onLatch?.(late);
+    const after = vi.fn();
+    f.sink.onLatch?.(after);
+    f.sink.onLatch?.(after);
+    f.sink.latch();
+    for (const listener of [first, second, late, after])
+      expect(listener).toHaveBeenCalledTimes(1);
+    const closing = auditObserved(f.sink.close());
+    await auditTurns();
+    expect(f.close).toHaveBeenCalledTimes(1);
+    f.release.resolve(undefined);
+    await auditTurns();
+    expect(closing.status).toBe("resolved");
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it.each(["active", "idle"] as const)(
     "TestBR241_v2_AC02_stream_error_rejects_active_queued_and_future_appends [%s]",
     async (when) => {
