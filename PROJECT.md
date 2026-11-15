@@ -136,9 +136,6 @@ Owner decisions that set the parameters above, with their date and source.
   lives only in the session container (`~/.codex/auth.json`) and is never
   committed, logged or pasted. The environment allows `auth.openai.com` and
   `chatgpt.com` for this.
-  For #46, the owner temporarily extended D-11 so the Codex CLI authored the
-  implementation; the orchestrator ran `make check` and committed; strong-tier
-  review and the Fable decision pass still applied.
   - **Uses.** (a) A cross-vendor review: an extra read-only round
     (`codex exec -s read-only` or `codex exec review`) on a spec or a diff,
     for security-sensitive tickets or when the owner asks; it complements and
@@ -146,7 +143,10 @@ Owner decisions that set the parameters above, with their date and source.
     the tests or CI. (b) Mechanical tasks (refactors, repetitive tests, lint
     fixes) in a dedicated worktree, with writes limited to that worktree
     (`-s workspace-write`, `--cd <worktree>`); its output is reviewed and
-    checked like any author's.
+    checked like any author's. Exception to (b): for #46, the owner
+    temporarily extended D-11 so the Codex CLI authored the implementation;
+    the orchestrator ran `make check` and committed; strong-tier review and
+    the Fable decision pass still applied.
   - **Evidence.** A Codex review uses the identifier
     `<ticket>-<act>-<round>-codex` and is posted verbatim by the orchestrator
     like the reviewer tool's reports, with the Codex version, model and
