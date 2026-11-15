@@ -484,7 +484,7 @@ encoding:"utf-8"})` for `{file_id:3,format:"text"}`.
   | `detach-removes-existing-waiter` | A1 owns a permit and A2 waits in another session; A1 detaches while A2 is live | A2 immediately returns `E("SERVER_BUSY")`, leaves the queue with zero content starts, and never restarts after A1 exits |
   | `detach-diagnostics` | Each detached row above, with canary paths, IDs, names, errors and payloads; later confirm exit and inject duplicate events | Exactly one offer of the fixed detach line, then exactly one offer of the fixed release line; no other text or audit event, no canary; ordinary exit and immediate admission refusals offer neither line |
   | `http-process-stderr` | Through the real HTTP server/session composition, detach a started worker, close its originating session and later confirm exit | Exactly the fixed detach line and fixed release line reach the process stderr port, once each, despite session close; no canary or audit event; verified in `tests/http/extraction-admission.test.ts` under the same AC-08 test name |
-  | `diagnostic-failure` | Repeat detach/release with a diagnostic port that throws, reenters or never acknowledges | Each line is attempted once; settlement and release keep their original timing/results without waiting, retry or unhandled failure |
+  | `diagnostic-failure` | Repeat detach/release with a process diagnostic sink that throws, reenters or never acknowledges | Each line is attempted once; settlement and release keep their original timing/results without waiting, retry or unhandled failure |
   | `two-stuck-workers` | A and B detach and remain alive; skip B's release at t=10,001 in this row; C is already queued and a new distinct identity D requests extraction | A/B and D requests refuse `SERVER_BUSY` immediately, without content or queue entry; C retains its own deadline and starts no content until exit frees capacity; two detach lines, no release lines until explicit worker teardown; no permit is recycled early |
   | `stdio-stuck-worker` | The shared stdio/fallback identity's worker detaches and remains alive | Every later stdio/fallback extraction refuses `SERVER_BUSY` immediately despite the free second permit; metadata still runs; one detach line, no release line until explicit worker teardown |
 
@@ -823,7 +823,21 @@ its deferred BR-118 record and its LIMIT_EXCEEDED admission code/test name.
   permits belong to detached workers. AC-08 `two-stuck-workers` asserts
   D's immediate refusal instead of retaining its slot until REQUEST_TIMEOUT.
 
-These verdicts were supplied by the owner, not generated in this assignment.
+These verdicts were supplied by the orchestrator, not generated in this assignment.
 No corrected-head approval, forge publication or actual-main acceptance is
 claimed. Actual reviewer model/effort and per-agent token counters were not
 supplied; no retrospective attribution is inferred.
+
+### 47d-spec-freeze-confirm-1-reviewer — verdict: changes, minors only
+
+- **Minor — `projection-error` precondition.** The freeze added
+  `etag:'"version-1"'` to the AC-07 `projection-error` row so the fixture
+  reaches projection with a strong validator (F-038 refuses absent or weak
+  validators before extraction). Retained as a test-fixture precondition;
+  no behaviour change.
+- **Minor — AC-11 test location.** AC-11 maps to
+  `tests/extraction-admission-identity.test.ts`, with the real HTTP rows in
+  `tests/http/extraction-admission.test.ts`, to keep identity scenarios apart
+  from the process-wide queue tests. Retained; traceability only.
+- **Minor — stale "diagnostic port" wording** in the AC-08
+  `diagnostic-failure` row. Fixed: "process diagnostic sink".
