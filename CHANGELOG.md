@@ -125,6 +125,22 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
   strong descriptor). Specification frozen; implementation and acceptance
   are pending.
 
+- #47 lot C / F-039 v1 (accepted 2026-11-15): bound file and stderr
+  audit appends to 5,000 ms including queue wait, reject stream errors without
+  waiting for a callback, refuse later writes until restart, and bound audit
+  shutdown drain/release. Intent failure prevents dispatch; outcome failure
+  preserves the upstream result with `audit:"outcome_unrecorded"` and the
+  existing fixed diagnostic, now offered once on any first failure latch.
+  Share the 1,000 ms stdio shutdown allowance with non-committed appends
+  and route dedicated stdio exit through the shared production helper,
+  racing stdout/stderr flush callbacks against a ref'd 250 ms timer capped
+  by any remaining stdio budget; owned/library closure never terminates its
+  host. Output still queued after 250 ms on a stalled pipe may be lost
+  (earlier with a shorter remaining stdio budget). Synchronous fd 2 blockage and libuv file
+  operations stuck during OS teardown remain unbounded and documented; a
+  bounded Linux unread-pipe child test is planned as runtime evidence. No
+  implementation or acceptance is claimed.
+
 - #47 lot D / F-040 v1 (frozen; pending acceptance): specify two process-wide
   `kdrive_read` extractions, admitted before source buffering, and at most
   four waiters, served by oldest eligible identity, with one active permit

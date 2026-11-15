@@ -448,3 +448,71 @@ it("BR-186 v2 AC-21 required and optional variables match the Compose header", (
     }).toThrow();
   }
 });
+
+// F-039 AC-11: inspect operator guidance, never the frozen proposal or indexes.
+describe("F-039 audit shutdown documentation", () => {
+  it.each([
+    {
+      path: "README.md",
+      headings: ["Limits and risks", "Connect an AI client"],
+    },
+    {
+      path: "docs/deployment.md",
+      headings: ["Shutdown", "Write and share modes: audit log"],
+    },
+  ])(
+    "TestBR259_v2_AC11_docs_state_audit_bounds_and_ambiguity ($path)",
+    ({ path, headings }) => {
+      const text = readFileSync(path, "utf8");
+      const guidance = headings
+        .map((heading) => {
+          const marker = `\n## ${heading}\n`;
+          const start = text.indexOf(marker);
+          expect(start, `${path}: ${heading}`).toBeGreaterThanOrEqual(0);
+          const content = text.slice(start + marker.length);
+          const end = content.indexOf("\n## ");
+          return end < 0 ? content : content.slice(0, end);
+        })
+        .join(" ")
+        .replaceAll(/\s+/gu, " ");
+      for (const required of [
+        /(?:5,?000\s*ms|5\s*seconds?)/iu,
+        /append/iu,
+        /close/iu,
+        /asynchronous/iu,
+        /(?:permanent|until restart|restart.*(?:latch|refus))/iu,
+        /best.effort.*diagnostic|diagnostic.*best.effort/iu,
+        /(?:late|timed.out).*(?:byte|write|deliver)|(?:byte|write).*(?:later|late)/iu,
+        /75\s*s/iu,
+        /synchronous.*fd\s*2/iu,
+        /(?:file|TTY).*event loop|event loop.*(?:file|TTY)/iu,
+        /timer.*(?:cannot|prevent|not fire)|(?:prevent|block).*timer/iu,
+        /unbounded/iu,
+        /intent.*(?:without|no).*outcome.*ambiguous/iu,
+        /client.*mutation result.*authorit/iu,
+        /(?:shutdown.*HTTP 503|HTTP 503.*shutdown)/iu,
+        /(?:write|fdatasync).*libuv/iu,
+        /threadpool/iu,
+        /(?:teardown|termination).*unbounded|unbounded.*(?:teardown|termination)/iu,
+        /process\.exit/iu,
+        /(?:retain|descriptor|fd).*actual.*terminat/iu,
+        /(?:shared|production).*exit.*(?:helper|flush)/iu,
+        /ref.d.*250\s*ms|250\s*ms.*ref.d/iu,
+        /remaining.*stdio.*budget|stdio.*remaining.*budget/iu,
+        /(?:lost|loss).*stalled pipe|stalled pipe.*(?:lost|loss)/iu,
+        /1,?000\s*ms/iu,
+        /non.committed/iu,
+        /release/iu,
+        /dedicated/iu,
+        /owned|library/iu,
+        /without.*(?:terminat|exit).*host|(?:never|not).*terminat.*host/iu,
+      ])
+        expect
+          .soft(required.test(guidance), `${path}: ${String(required)}`)
+          .toBe(true);
+      expect(guidance).not.toMatch(
+        /stderr[^.]*wait[^.]*unlimited|unlimited[^.]*stderr/iu,
+      );
+    },
+  );
+});

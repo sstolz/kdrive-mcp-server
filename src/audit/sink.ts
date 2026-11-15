@@ -44,8 +44,9 @@ export interface AuditRecord {
 
 /** BR-236: the largest serialized record, LF included. */
 export const AUDIT_RECORD_MAX_BYTES = 8192;
-/** BR-259: the file-sink append bound. */
+/** BR-259 v2: the append bound, including queue time, for both sinks. */
 export const AUDIT_APPEND_TIMEOUT_MS = 5000;
+export const AUDIT_CLOSE_TIMEOUT_MS = 5000;
 /** BR-239: the fixed startup refusal. */
 export const AUDIT_OPEN_FAILED_MESSAGE =
   "The audit log could not be opened or is not a private regular file.";
@@ -121,46 +122,195 @@ export interface AuditSink {
   readonly latched: boolean;
   /** BR-241/BR-252: refuses every later append without I/O. */
   latch(): void;
-  close(): Promise<void>;
+  /** Internal absolute monotonic deadline for non-committed stdio shutdown. */
+  shortenDeadline?(deadline: number): void;
+  /** Each listener is notified once on latch, including idle errors. */
+  onLatch?(listener: () => void): void;
+  close(shutdownDeadline?: number): Promise<void>;
 }
 
-/** BR-241/BR-242: one append at a time, in call order, latched on failure. */
+interface PendingAppend {
+  readonly line: string;
+  deadline: number;
+  timer?: ReturnType<typeof setTimeout>;
+  settle(success: boolean): void;
+}
+
+/** BR-241/242/254/259: bounded callers, serialized physical operations. */
 function serialSink(
-  writeLine: (line: string) => Promise<void>,
-  release: () => Promise<void>,
+  writeLine: (line: string, check: () => void) => Promise<void>,
+  release: (() => Promise<void>) | undefined,
+  timeoutMs = AUDIT_APPEND_TIMEOUT_MS,
 ): AuditSink {
-  let latched = false,
-    closed = false,
-    tail: Promise<unknown> = Promise.resolve();
+  let latched = false;
+  let closed = false;
+  let active: PendingAppend | undefined;
+  const pending = new Set<PendingAppend>();
+  let deadline = Infinity;
+  const listeners = new Set<() => void>();
+  let closing: Promise<void> | undefined;
+  let finishClose: (() => void) | undefined;
+  let closeTimer: ReturnType<typeof setTimeout> | undefined;
+  let closeDeadline = Infinity;
+  let closeDone = false;
+  let releasing = false;
+
+  function notify(listener: () => void) {
+    try {
+      listener();
+    } catch {
+      // Notification failure must not interrupt latching or resource release.
+    }
+  }
+  function latch() {
+    if (latched) return;
+    latched = true;
+    for (const append of pending) append.settle(false);
+    // Latch before notifying: the diagnostic can itself cause a stream error.
+    for (const listener of [...listeners]) notify(listener);
+    releaseWhenIdle();
+  }
+  function check(append: PendingAppend) {
+    if (performance.now() >= append.deadline) latch();
+    if (latched) throw new AuditUnavailable();
+  }
+  function arm(append: PendingAppend) {
+    clearTimeout(append.timer);
+    const remaining = append.deadline - performance.now();
+    if (remaining <= 0) latch();
+    else
+      append.timer = setTimeout(() => {
+        arm(append);
+      }, Math.ceil(remaining));
+  }
+  function completeClose() {
+    if (closeDone) return;
+    closeDone = true;
+    clearTimeout(closeTimer);
+    finishClose?.();
+  }
+  function expireClose() {
+    latch();
+    completeClose();
+  }
+  function armClose() {
+    clearTimeout(closeTimer);
+    const remaining = closeDeadline - performance.now();
+    if (remaining <= 0) expireClose();
+    else closeTimer = setTimeout(armClose, Math.ceil(remaining));
+  }
+  function releaseWhenIdle() {
+    if (!closed || closeDone || releasing) return;
+    // Shared stderr has no fd to release: a rejected append need not await
+    // its late callback. File release must wait for the physical operation.
+    if (active && (release || pending.has(active))) return;
+    if (performance.now() >= closeDeadline) {
+      expireClose();
+      return;
+    }
+    if (!release) {
+      completeClose();
+      return;
+    }
+    releasing = true;
+    void Promise.resolve()
+      .then(() => {
+        if (performance.now() >= closeDeadline) {
+          expireClose();
+          return;
+        }
+        return release();
+      })
+      .then(
+        () => {
+          if (performance.now() >= closeDeadline) latch();
+          completeClose();
+        },
+        () => {
+          latch();
+          completeClose();
+        },
+      );
+  }
+  function pump() {
+    if (active || closed || latched) return;
+    const append = pending.values().next().value;
+    if (!append) return;
+    active = append;
+    // This promise tracks the underlying operation, never its timeout wrapper.
+    void Promise.resolve()
+      .then(() => {
+        check(append);
+        return writeLine(append.line, () => {
+          check(append);
+        });
+      })
+      .then(() => {
+        if (performance.now() >= append.deadline) latch();
+        append.settle(!latched);
+      }, latch)
+      .then(() => {
+        active = undefined;
+        if (closed) releaseWhenIdle();
+        else pump();
+      });
+  }
   const sink: AuditSink = {
     get latched() {
       return latched;
     },
-    latch() {
-      latched = true;
+    latch,
+    onLatch(listener) {
+      if (listeners.has(listener)) return;
+      listeners.add(listener);
+      if (latched) notify(listener);
+    },
+    shortenDeadline(at) {
+      deadline = Math.min(deadline, at);
+      for (const append of pending) {
+        append.deadline = Math.min(append.deadline, deadline);
+        arm(append);
+      }
     },
     append(record) {
-      const run = tail.then(async () => {
-        if (latched || closed) throw new AuditUnavailable();
-        const line = serializeAuditRecord(record);
-        // BR-236: an oversize record rejects without I/O and without latching.
-        if (Buffer.byteLength(line) > AUDIT_RECORD_MAX_BYTES)
-          throw new AuditUnavailable();
-        try {
-          await writeLine(line);
-        } catch {
-          latched = true;
-          throw new AuditUnavailable();
-        }
+      const started = performance.now();
+      if (latched || closed) return Promise.reject(new AuditUnavailable());
+      const line = serializeAuditRecord(record);
+      // BR-236: validation alone does not latch a healthy sink.
+      if (Buffer.byteLength(line) > AUDIT_RECORD_MAX_BYTES)
+        return Promise.reject(new AuditUnavailable());
+      return new Promise<void>((resolve, reject) => {
+        const append: PendingAppend = {
+          line,
+          deadline: Math.min(started + timeoutMs, deadline),
+          settle(success) {
+            if (!pending.delete(append)) return;
+            clearTimeout(append.timer);
+            if (success) resolve();
+            else reject(new AuditUnavailable());
+          },
+        };
+        pending.add(append);
+        arm(append);
+        void Promise.resolve().then(pump);
       });
-      tail = run.catch(() => undefined);
-      return run;
     },
-    async close() {
-      if (closed) return;
-      closed = true;
-      await tail;
-      await release();
+    close(shutdownDeadline = Infinity) {
+      if (!closing) {
+        closed = true;
+        closing = new Promise<void>((resolve) => {
+          finishClose = resolve;
+        });
+        closeDeadline = performance.now() + AUDIT_CLOSE_TIMEOUT_MS;
+        for (const append of pending)
+          if (append !== active) append.settle(false);
+      }
+      if (!closeDone) {
+        closeDeadline = Math.min(closeDeadline, shutdownDeadline);
+        armClose();
+        releaseWhenIdle();
+      }
+      return closing;
     },
   };
   return sink;
@@ -263,28 +413,16 @@ export async function openFileSink(
     throw new AuditStartupError();
   }
   return serialSink(
-    (line) =>
-      new Promise<void>((resolve, reject) => {
-        const timer = setTimeout(() => {
-          reject(new AuditUnavailable());
-        }, timeoutMs);
-        const data = Buffer.from(line);
-        void (async () => {
-          const written = await port.write(fd, data);
-          if (written !== data.byteLength) throw new AuditUnavailable();
-          await port.fdatasync(fd);
-        })().then(
-          () => {
-            clearTimeout(timer);
-            resolve();
-          },
-          (error: unknown) => {
-            clearTimeout(timer);
-            reject(error instanceof Error ? error : new AuditUnavailable());
-          },
-        );
-      }),
-    () => port.close(fd).catch(() => undefined),
+    async (line, check) => {
+      const data = Buffer.from(line);
+      const written = await port.write(fd, data);
+      check();
+      if (written !== data.byteLength) throw new AuditUnavailable();
+      await port.fdatasync(fd);
+      check();
+    },
+    () => port.close(fd),
+    timeoutMs,
   );
 }
 
@@ -295,23 +433,17 @@ export interface AuditStream {
 }
 /** BR-238/BR-240/BR-241: records on file descriptor 2, resolved by the write callback. */
 export function createStderrSink(stream: AuditStream): AuditSink {
-  let failed = false;
   const sink = serialSink(
     (line) =>
       new Promise<void>((resolve, reject) => {
-        if (failed) {
-          reject(new AuditUnavailable());
-          return;
-        }
         stream.write(line, (error) => {
-          if (error || failed) reject(new AuditUnavailable());
+          if (error) reject(new AuditUnavailable());
           else resolve();
         });
       }),
-    () => Promise.resolve(),
+    undefined,
   );
   stream.on?.("error", () => {
-    failed = true;
     sink.latch();
   });
   return sink;

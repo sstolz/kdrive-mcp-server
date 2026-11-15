@@ -283,8 +283,8 @@ Upload (`kdrive_upload`):
   JSON-encoded request. `text` that JSON escaping enlarges can be refused by
   the transport below 524,288 bytes: over HTTP the request gets HTTP 413; over
   stdio a frame above 1 MiB terminates the server with `STDIO_INPUT_FAILED`.
-  An upload already in flight completes and its outcome is recorded in the
-  audit log before exit, but its tool result is not delivered.
+  An upload already in flight reaches its classified result and bounded audit
+  outcome attempt before exit, but its tool result is not delivered.
 - Residual risks R-18-1 to R-18-5: the `conflict=error` refusal is not proven
   under every interleaving (R-18-1); between the check and a replace the target
   can change, giving `uncertain`, an undetected deny-pattern rename, or
@@ -312,6 +312,39 @@ Audit log: each write gets one JSON line before it is sent and one after; if
 the first cannot be written, nothing is sent. Records hold IDs, never names,
 paths, content or secrets. With `stderr`, records are only as durable as what
 collects stderr; use a file for a durable trail.
+
+[F-039](features/F-039-bounded-audit-sink.md) bounds asynchronous audit appends
+for both stderr and files to 5,000 ms from the call, including queue time,
+write and callback or `fdatasync`. Sink close has one 5,000 ms budget for drain
+and file release. Any stream/write/sync error or timeout permanently latches
+the sink until restart; pending appends reject and later writes are refused.
+The first latch offers one fixed best-effort diagnostic without waiting for
+its delivery. A failed intent sends nothing upstream; a failed outcome
+preserves the mutation result with `audit:"outcome_unrecorded"`.
+
+Timed-out bytes may still arrive later. An intent without an outcome is
+ambiguous: it proves neither dispatch nor its absence. The client's mutation
+result is the authority; a shutdown HTTP 503 does not determine whether a
+write occurred. Consult a recorded outcome or verify the item's state before
+any new attempt; never automatically replay an uncertain write.
+
+Shutdown closes transport, then gate, then exits the dedicated process.
+Gate close is bounded by 45,000 ms under the production policy and sole-attempt
+bounds; the deployment grace remains at least 75 s in write/share modes.
+The shared production exit helper waits for both output streams with a ref'd
+250 ms flush cap, shortened to the remaining stdio shutdown budget. Output
+still queued on a stalled pipe at that cap may be lost. Without a run past
+intent, stdio shares one 1,000 ms allowance from EOF/signal handling across
+transport close, non-committed appends, file release and exit flushing.
+Owned/library compositions close without terminating their host.
+
+These are asynchronous wait bounds. Synchronous fd 2 writes to a file or TTY
+can block the event loop, prevent timers from firing and remain unbounded.
+A write or `fdatasync` stuck in the libuv threadpool can cause an unbounded
+OS/runtime teardown stall even after `process.exit` is called. File release
+never races an in-flight port operation: if it outlives close's budget, the
+retained descriptor stays open until actual process termination, including in
+library hosts. No timer guarantees actual termination or durable delivery.
 
 ## More documentation
 

@@ -27,7 +27,26 @@ and resource reads retain their contracts. This limits concurrent pipelines,
 not total process memory. Reviews 1–3 and Decisions 1–2 are dispositioned; v1 is frozen at the explicit
 owner instruction, with no corrected-head approval claimed. Implementation
 and acceptance remain pending.
-Lot C's F-039 reservation and pending rule versions remain separate.
+Lot C's accepted F-039 contract and active rule versions remain separate.
+
+## Accepted — bounded audit waits and shutdown
+
+[F-039 v1](features/F-039-bounded-audit-sink.md) (#47 lot C),
+[BR-070 v5](business-rules/BR-070.md), [BR-240 v2](business-rules/BR-240.md),
+[BR-241 v2](business-rules/BR-241.md), [BR-254 v2](business-rules/BR-254.md)
+and [BR-259 v2](business-rules/BR-259.md): 5,000 ms append budgets
+including queue time for stderr and files, immediate rejection on stream
+errors, permanent failure until restart, and bounded sink/gate shutdown. The contract shares stdio's 1,000 ms
+allowance with non-committed appends and a shared production exit helper's
+ref'd 250 ms flush cap, shortened to any remaining stdio budget. Dedicated
+stdio routes exit through that helper; owned/library closure never terminates
+its host. Output still queued on a stalled pipe at the cap may be lost.
+The same fixed diagnostic is offered once on any first latch.
+Synchronous fd 2 blockage and libuv file-operation teardown stalls remain
+unbounded; the bounded Linux child-pipe runtime test is included in acceptance.
+Intent failure sends no mutation; outcome failure preserves the upstream
+classification with `audit:"outcome_unrecorded"`. No new event or configuration.
+Accepted on actual main `8bc1780` on 2026-11-15 (#47 comment `6897083907`).
 
 ## Accepted — fragmented reads and defensive validator handling
 
