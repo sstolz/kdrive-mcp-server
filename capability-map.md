@@ -2,7 +2,7 @@
 
 ## Provisional — rate-limited mutations stop after one attempt
 
-[F-037 v1](features/F-037-mutation-rate-limit-stop.md) (#47 lot A), ready for freeze:
+[F-037 v1](features/F-037-mutation-rate-limit-stop.md) (#47 lot A), frozen:
 [BR-248 v2](business-rules/BR-248.md),
 [BR-249 v2](business-rules/BR-249.md),
 [BR-250 v2](business-rules/BR-250.md) and
