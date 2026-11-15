@@ -16,7 +16,7 @@ IDs: F-042; new BR-428–BR-430 v1; AC-01–AC-08. No ADR.
 Cached `origin/main` is the supplied base; local `main` at `7fdc7b3` is
 stale. The supplied base and working tree allocate through F-041, BR-427
 and ADR-012. Next free IDs after this draft: F-043, BR-431, ADR-013.
-Recheck current main before freeze and PR creation. No network check was made.
+Recheck current main before freeze.
 
 This assignment produces a draft and pending records only: no review, freeze,
 implementation, tests, Docker, network, commits, PR or acceptance. It uses the
