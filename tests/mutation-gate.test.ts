@@ -1,3 +1,9 @@
+import {
+  ancestorFixture,
+  structuralKinds,
+  structuralOperation,
+} from "./helpers/root-ancestors.js";
+import { createPolicy } from "../src/policy/index.js";
 // F-016 mutation gate unit tests: AC-01–AC-03, AC-10–AC-19, AC-21 (gate),
 // AC-22, AC-27, with a synthetic mutator and a fake policy dispatch.
 import { EventEmitter } from "node:events";
@@ -15,6 +21,7 @@ import {
   OUTCOME_UNRECORDED_DIAGNOSTIC,
   UNCERTAIN_MESSAGE,
   createMutationGate,
+  gatedDependencies,
   type GateResult,
   type Mutator,
 } from "../src/mutation-gate.js";
@@ -2052,3 +2059,50 @@ describe("F-039 first-latch diagnostic", () => {
     },
   );
 });
+
+// F-041 AC-04: failed best-effort denial audit with the real policy facade.
+it.each(structuralKinds)(
+  "TestBR278_v2_AC04_failed_denied_append_keeps_access_denied %s",
+  async (kind) => {
+    const f = await ancestorFixture();
+    const append = vi.fn<AuditSink["append"]>(() =>
+      Promise.reject(new Error("synthetic sink failure")),
+    );
+    const h = harness({
+      sink: {
+        append,
+        latched: false,
+        latch: () => undefined,
+        close: () => Promise.resolve(),
+      },
+    });
+    const policy = createPolicy(
+      f.config,
+      gatedDependencies(f.dependencies, h.gate),
+    );
+    expect(
+      await h.gate.run({
+        tool: `kdrive_${kind}`,
+        operation: structuralOperation(kind, 10),
+        identity: { kind: "stdio" },
+        dispatch: (op) => policy.dispatch(op),
+      }),
+    ).toEqual({ result: "denied", op: OP, code: "ACCESS_DENIED", attempts: 0 });
+    expect(append).toHaveBeenCalledTimes(1);
+    // The sink adds v:1 when serializing; append receives an AuditRecord.
+    expect(append.mock.calls[0]![0]).toEqual({
+      ts: "2026-11-09T10:00:00.000Z",
+      event: "denied",
+      op: OP,
+      identity: { kind: "stdio" },
+      tool: `kdrive_${kind}`,
+      kind,
+      drive: 101,
+      ids: { target: 10, ...(kind === "move" ? { destination: 30 } : {}) },
+      code: "ACCESS_DENIED",
+    });
+    expect(h.mutator).not.toHaveBeenCalled();
+    expect(f.execute).not.toHaveBeenCalled();
+    await h.gate.close();
+  },
+);

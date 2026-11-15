@@ -246,7 +246,12 @@ The five write tools (#18) — `kdrive_create_folder`, `kdrive_rename`,
   and authorized, and refuses otherwise. A folder restore is refused when deny
   patterns are configured, because the trashed tree cannot be enumerated.
 - Received-share writes stay refused, even with `KDRIVE_MCP_SHARED_WRITE=1`.
-- Configured roots cannot be trashed, renamed or moved.
+- Configured roots and their strict source-ancestors cannot be trashed,
+  renamed or moved in `write` or `share` mode. Fresh same-drive root IDs and
+  validated parent chains determine ancestry, including after external moves
+  or renames. Unknown ancestry or an inaccessible root causes refusal with
+  `ACCESS_DENIED`. Overlapping roots remain valid configuration; move
+  destination handling is unchanged.
 - A mutation request uses its own TLS connection. A failure before the
   handshake completes is reported as not sent; any later failure is
   `uncertain` and is never replayed.
@@ -262,11 +267,18 @@ The five write tools (#18) — `kdrive_create_folder`, `kdrive_rename`,
   could be restored if kDrive recomputed the trash `path`; owner acceptance on
   2026-11-10 (step 6) observed a deletion-time snapshot, so such a restore was
   denied.
-- Residual risk R-17-2: the root protection covers only a configured root
-  targeted directly. With nested roots, trashing, renaming or moving an
-  authorized folder of an outer root that contains an inner configured root
-  also affects that inner root, and with deny patterns the trashed folder
-  cannot be restored through this server.
+- Residual risk R-17-2: the previously direct-only guard allowed mutations
+  of an outer root's authorized folder to affect an inner configured root.
+  **Status (2026-11-15): remediation implemented, still present pending
+  code review and actual-main acceptance.**
+  [F-041 v1](features/F-041-configured-root-ancestors.md) (#47 lot E)
+  refuses these source-ancestor mutations using fresh same-drive configured-root
+  ID ancestry and fails closed when ancestry cannot be determined. Visibility
+  limits or transient root-read failures can therefore refuse an unrelated
+  folder mutation. After acceptance, the next reviewed records update
+  will link the evidence and mark the known-ancestor bypass addressed;
+  external changes between evidence acquisition and mutation, including during
+  subsequent deny traversal, remain within the check-then-act risk (SPEC §10.6).
 
 ## Upload (F-018)
 

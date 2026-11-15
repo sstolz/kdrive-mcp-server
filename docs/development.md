@@ -427,7 +427,16 @@ attempt.
   that parent is live and authorized; otherwise the restore is refused. A
   folder restore is refused while deny patterns are configured (the trashed
   tree cannot be enumerated).
-- Configured roots cannot be trashed, renamed or moved.
+- Configured roots and their strict source-ancestors cannot be trashed,
+  renamed or moved in `write` or `share` mode. Each folder mutation inspects
+  same-drive non-sentinel configured root IDs live, reusing evidence only
+  within that decision and validating their parent chains against the source.
+  Unknown ancestry or an inaccessible root causes refusal with `ACCESS_DENIED`.
+  Overlapping roots remain valid configuration; move destination handling is
+  unchanged. Root reads share the invocation deadline and operation budget.
+  Any pre-intent budget exhaustion in a mutation (root reads, deny traversal
+  or an oversized page) returns `failed` / `LIMIT_EXCEEDED` without a `denied`
+  audit record, before intent or mutation.
 - `kdrive_move` stays inside one drive and does not rename.
 - Received-share writes stay refused, even with `KDRIVE_MCP_SHARED_WRITE=1`.
 - A check-then-act window remains (SPEC §10.6): the drive can change between
@@ -443,11 +452,11 @@ attempt.
   could be restored if kDrive recomputed the trash `path`; owner acceptance on
   2026-11-10 (step 6) observed a deletion-time snapshot, so such a restore was
   denied.
-- Residual risk R-17-2: the root protection covers only a configured root
-  targeted directly. With nested roots, trashing, renaming or moving an
-  authorized folder of an outer root that contains an inner configured root
-  also affects that inner root, and with deny patterns the trashed folder
-  cannot be restored through this server.
+- Residual risk R-17-2 remains present pending code review and actual-main
+  acceptance of [F-041](../features/F-041-configured-root-ancestors.md).
+  Source-ancestor protection is implemented; visibility limits can refuse
+  unrelated folder mutations, and external changes after the proof, including
+  during subsequent deny traversal, retain the check-then-act risk.
 
 The owner checks the tools against the real API with
 `make kdrive-write-acceptance KDRIVE_WRITE_FOLDER=<id>` (actual main,

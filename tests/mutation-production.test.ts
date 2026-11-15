@@ -35,6 +35,7 @@ vi.mock("../src/mutation-gate.js", async (importOriginal) => {
 
 let cleanup: (() => Promise<void>)[] = [];
 afterEach(async () => {
+  vi.useRealTimers();
   for (const step of cleanup.toReversed()) await step();
   cleanup = [];
   hooks.gates = [];
@@ -114,8 +115,10 @@ async function compose(options: Options = {}) {
     await client.close();
     await (run.handle as { close(): Promise<void> }).close();
   });
+  const raw = (name: string, args: Record<string, unknown>) =>
+    client.callTool({ name, arguments: args });
   const call = async (name: string, args: Record<string, unknown>) => {
-    const r = await client.callTool({ name, arguments: args });
+    const r = await raw(name, args);
     const text = (r.content as { text: string }[])[0]?.text ?? "";
     try {
       return JSON.parse(text) as GateResult;
@@ -131,7 +134,7 @@ async function compose(options: Options = {}) {
       .map((l) => JSON.parse(l) as Record<string, unknown>)
       .filter((r) => ["intent", "outcome", "denied"].includes(String(r.event)));
   const writes = () => f.upstream.seen.filter((s) => s.method !== "GET");
-  return { f, run, call, records, writes };
+  return { f, run, raw, call, records, writes };
 }
 type Composition = Awaited<ReturnType<typeof compose>>;
 async function expectDenied(
@@ -569,4 +572,316 @@ describe("AC-14 audit records hold IDs only; received shares stay refused", () =
     await expectDenied(c, "kdrive_restore", { drive_id, file_id: 500 });
     expect(c.writes()).toEqual([]);
   });
+});
+
+// F-041 BR-278 v2 / BR-427: preflight finishes before counters/failures start.
+describe("F-041 production ancestor protection", () => {
+  const kinds = ["trash", "rename", "move"] as const;
+  type Kind = (typeof kinds)[number];
+  const modes = ["write", "share"];
+  const tree = () => [
+    dir(10, 1, "A"),
+    dir(11, 10, "B"),
+    dir(40, 11, "R"),
+    dir(20, 1, "S"),
+    file(21, 20, "f"),
+    dir(22, 20, "Child"),
+    dir(30, 1, "D"),
+  ];
+  const args = (kind: Kind, id: number, destination = 30) => ({
+    file_id: id,
+    ...(kind === "rename" ? { name: "New" } : {}),
+    ...(kind === "move" ? { destination_folder_id: destination } : {}),
+  });
+  const rootPath = "/3/drive/101/files/40";
+  async function setup(mode = "write", extra: Options = {}) {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-15T00:00:00.000Z"));
+    return compose({
+      ...extra,
+      nodes: extra.nodes ?? tree(),
+      env: {
+        KDRIVE_MCP_ROOTS: "101:1,101:40",
+        KDRIVE_MCP_MODE: mode,
+        ...extra.env,
+      },
+    });
+  }
+  const reads = (c: Composition, start: number) =>
+    c.f.upstream.seen.slice(start).filter((r) => r.method === "GET");
+  async function outcome(
+    c: Composition,
+    kind: Kind,
+    input: Record<string, unknown>,
+    allowed: boolean,
+  ) {
+    const count = c.records().length,
+      writes = c.writes().length;
+    const envelope = await c.raw(`kdrive_${kind}`, input);
+    const content = envelope.content as { type: string; text: string }[];
+    expect(content).toHaveLength(1);
+    expect(content[0]!.type).toBe("text");
+    const result = JSON.parse(content[0]!.text) as GateResult;
+    expect(result.op).toMatch(/^[a-f0-9]{32}$/u);
+    expect(envelope.isError).toBe(!allowed);
+    const base = {
+      v: 1,
+      ts: "2026-11-15T00:00:00.000Z",
+      op: result.op,
+      identity: { kind: "stdio" },
+      tool: `kdrive_${kind}`,
+      kind,
+      drive: 101,
+      ids: {
+        target: input.file_id,
+        ...(kind === "move"
+          ? { destination: input.destination_folder_id }
+          : {}),
+      },
+    };
+    const records = c.records().slice(count);
+    if (allowed) {
+      expect(result).toMatchObject({
+        result: "succeeded",
+        attempts: 1,
+        status: 200,
+      });
+      expect(records.map((r) => r.event)).toEqual(["intent", "outcome"]);
+      expect(records[0]).toEqual({ ...base, event: "intent" });
+      expect(records[1]).toMatchObject({
+        ...base,
+        event: "outcome",
+        result: "succeeded",
+        attempts: 1,
+        status: 200,
+      });
+      expect(c.writes()).toHaveLength(writes + 1);
+    } else {
+      expect(result).toEqual({
+        result: "denied",
+        op: result.op,
+        code: "ACCESS_DENIED",
+        attempts: 0,
+      });
+      expect(records).toEqual([
+        { ...base, event: "denied", code: "ACCESS_DENIED" },
+      ]);
+      expect(c.writes()).toHaveLength(writes);
+      const line = c.run
+        .stderr()
+        .split("\n")
+        .find((l) => l.includes(`"op":"${result.op}"`));
+      expect(line).toBeDefined();
+      expect(c.run.stderr()).toContain(`${line}\n`);
+      expect(JSON.parse(line!)).toEqual(records[0]);
+    }
+    return result;
+  }
+  const matrix = modes.flatMap((mode) => kinds.map((kind) => ({ mode, kind })));
+  it.each(
+    matrix.flatMap((row) =>
+      [10, 11].flatMap((id) =>
+        ["", "/blocked/**"].map((deny) => ({ ...row, id, deny })),
+      ),
+    ),
+  )(
+    "TestBR278_v2_AC01_parent_and_grandparent_refused_in_write_and_share $mode $kind $id deny=$deny",
+    async ({ mode, kind, id, deny }) => {
+      const c = await setup(mode, { env: { KDRIVE_MCP_DENY: deny } });
+      await outcome(c, kind, args(kind, id), false);
+    },
+  );
+  it.each(matrix.flatMap((row) => [1, 40, 20].map((id) => ({ ...row, id }))))(
+    "TestBR278_v2_AC02_direct_roots_still_refused_and_siblings_allowed $mode $kind $id",
+    async ({ mode, kind, id }) => {
+      const c = await setup(mode),
+        start = c.f.upstream.seen.length;
+      await outcome(c, kind, args(kind, id), id === 20);
+      expect(reads(c, start).filter((r) => r.path === rootPath)).toHaveLength(
+        id === 20 ? 1 : 0,
+      );
+    },
+  );
+  const moveRows = [
+    ...[10, 11, 40].map((destination) => ({
+      kind: "move" as const,
+      id: 20,
+      destination,
+      allowed: true,
+    })),
+    ...[10, 11].flatMap((id) =>
+      [30, 1, id === 10 ? 1 : 10].map((destination) => ({
+        kind: "move" as const,
+        id,
+        destination,
+        allowed: false,
+      })),
+    ),
+    ...[20, 22].map((destination) => ({
+      kind: "move" as const,
+      id: 20,
+      destination,
+      allowed: false,
+    })),
+    ...[10, 11].map((id) => ({
+      kind: "rename" as const,
+      id,
+      destination: 30,
+      allowed: false,
+    })),
+  ];
+  it.each(modes.flatMap((mode) => moveRows.map((row) => ({ mode, ...row }))))(
+    "TestBR278_v2_AC03_move_destination_is_not_a_protected_source $mode $kind $id to $destination",
+    async ({ mode, kind, id, destination, allowed }) => {
+      const c = await setup(mode);
+      const input = args(kind, id, destination);
+      if (kind === "rename") input.name = id === 10 ? "A" : "B";
+      const start = c.f.upstream.seen.length;
+      await outcome(c, kind, input, allowed);
+      if (allowed)
+        expect(reads(c, start).filter((r) => r.path === rootPath)).toHaveLength(
+          1,
+        );
+    },
+  );
+  it.each(matrix)(
+    "TestBR278_v2_AC04_ancestor_denial_preserves_result_and_audit_schema $mode $kind",
+    async ({ mode, kind }) => {
+      const nodes = tree().map((n) => ({ ...n, name: `MARKER_${n.name}` }));
+      const c = await setup(mode, { nodes });
+      const result = await outcome(c, kind, args(kind, 10), false);
+      expect(
+        JSON.stringify(result) + JSON.stringify(c.records()),
+      ).not.toContain("MARKER_");
+    },
+  );
+  it.each(
+    kinds.flatMap((kind) =>
+      ["missing", "incomplete", "rejected"].map((row) => ({ kind, row })),
+    ),
+  )(
+    "TestBR427_AC05_unknown_root_ancestry_fails_closed $row $kind",
+    async ({ kind, row }) => {
+      const c = await setup();
+      c.f.drive.overrides.unshift((r) =>
+        r.path !== rootPath
+          ? undefined
+          : row === "missing"
+            ? notFound
+            : row === "rejected"
+              ? { status: 503, json: { result: "error" } }
+              : success({ id: 40, type: "dir" }),
+      );
+      await outcome(c, kind, args(kind, 20), false);
+    },
+  );
+  it.each(matrix)(
+    "TestBR427_AC07_renamed_and_moved_roots_use_current_id_ancestry $mode $kind",
+    async ({ mode, kind }) => {
+      const c = await setup(mode);
+      const rootIndex = c.f.drive.nodes.findIndex((n) => n.id === 40);
+      let root = c.f.drive.nodes[rootIndex]!;
+      for (const name of ["Renamed", "renamed", "\u00e9", "e\u0301"]) {
+        root = { ...root, name };
+        c.f.drive.nodes[rootIndex] = root;
+        for (const id of [10, 11]) {
+          const start = c.f.upstream.seen.length;
+          await outcome(c, kind, args(kind, id), false);
+          expect(
+            reads(c, start).filter((r) => r.path === rootPath),
+          ).toHaveLength(1);
+        }
+      }
+      root = { ...root, parent: 30 };
+      c.f.drive.nodes[rootIndex] = root;
+      c.f.drive.nodes.push(dir(41, 11, "R")); // A replacement at the original path is not root 40.
+      for (const [id, allowed] of [
+        [30, false],
+        [11, true],
+        [40, false],
+      ] as const) {
+        const start = c.f.upstream.seen.length;
+        await outcome(c, kind, args(kind, id, id === 30 ? 1 : 30), allowed);
+        expect(reads(c, start).filter((r) => r.path === rootPath)).toHaveLength(
+          id === 40 ? 0 : 1,
+        );
+        expect(providerItem(c.f.drive.nodes, 40).path).toBe(`/D/${root.name}`);
+      }
+    },
+  );
+  it.each(
+    kinds.flatMap((kind) =>
+      ["last-protected", "unknown", "all-outside"].map((row) => ({
+        kind,
+        row,
+      })),
+    ),
+  )(
+    "TestBR427_AC08_all_same_drive_roots_checked_once_without_tree_walk $row $kind",
+    async ({ kind, row }) => {
+      const c = await setup("write", {
+        nodes: [...tree(), dir(50, 30, "R50"), dir(60, 30, "R60")],
+        drives: [
+          { id: 101, role: "admin" },
+          { id: 102, role: "admin" },
+        ],
+        env: {
+          KDRIVE_IDS: "101,102",
+          KDRIVE_MCP_ROOTS: "101:1,101:50,101:60,101:40,102:40",
+        },
+      });
+      c.f.drive.overrides.unshift((r) =>
+        r.path === "/3/drive/102/files/40" ||
+        (row === "unknown" && r.path === "/3/drive/101/files/60")
+          ? notFound
+          : undefined,
+      );
+      const start = c.f.upstream.seen.length;
+      await outcome(
+        c,
+        kind,
+        args(kind, row === "last-protected" ? 10 : 20),
+        row === "all-outside",
+      );
+      const requests = reads(c, start);
+      for (const id of [50, 60, 40]) {
+        const count = requests.filter(
+          (r) => r.path === `/3/drive/101/files/${id}`,
+        ).length;
+        expect(count).toBeLessThanOrEqual(1);
+        if (row !== "unknown" || id === 50) expect(count).toBe(1);
+      }
+      expect(
+        requests.some(
+          (r) =>
+            r.path.includes("/102/") ||
+            r.path.endsWith("/files/1") ||
+            /\/files\/\d+\/files$/u.test(r.path),
+        ),
+      ).toBe(false);
+    },
+  );
+  it.each(
+    matrix.flatMap((row) => [10, 11].map((parent) => ({ ...row, parent }))),
+  )(
+    "TestBR278_v2_AC09_create_upload_and_file_mutations_unchanged $mode $kind parent=$parent",
+    async ({ mode, kind, parent }) => {
+      const c = await setup(mode);
+      let rootReads = 0;
+      c.f.drive.overrides.unshift((r) => {
+        if (r.path !== rootPath) return undefined;
+        rootReads++;
+        return notFound;
+      });
+      await expectSucceeded(
+        c,
+        "kdrive_create_folder",
+        { parent_id: parent, name: "n" },
+        "POST",
+        `/3/drive/101/files/${parent}/directory`,
+      );
+      await outcome(c, kind, args(kind, 21), true);
+      expect(rootReads).toBe(0);
+    },
+  );
 });

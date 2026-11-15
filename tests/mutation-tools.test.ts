@@ -652,3 +652,33 @@ describe("F-018 v3 AC-18 well-formed names for create_folder and rename", () => 
     },
   );
 });
+
+// F-041 AC-10: implementation wording is deliberately red until docs change.
+it("TestBR277_v2_AC10_documented_ancestor_protection_and_residual_status", () => {
+  for (const path of ["README.md", "SECURITY.md"]) {
+    const raw = readFileSync(path, "utf8");
+    const text = raw.replace(/\s+/gu, " ");
+    expect(text).toMatch(/(?:source|strict)[ -]ancestor/iu);
+    expect(text).toMatch(/(?:write.*share|share.*write)/iu);
+    expect(text).toMatch(
+      /(?:unknown|unprovable|inaccessible).*?(?:ancestry|root).*?(?:refus|deni|fail.closed)/iu,
+    );
+    expect(text).toMatch(/overlapping.*?(?:configur|allow|valid)/iu);
+    expect(text).toMatch(
+      /destination.*?(?:unchanged|not.*?(?:refus|protect))/iu,
+    );
+    expect(text).toMatch(/(?:visibility|inaccessible|unreadable)/iu);
+    expect(text).toMatch(/check.then.act/iu);
+    // Keep status assertions within this risk, not later accepted features.
+    const risk = /^- Residual risk R-17-2\b[^\n]*(?:\n[ \t]+[^\n]*)*/mu
+      .exec(raw)?.[0]
+      .replace(/\s+/gu, " ");
+    expect(risk).toMatch(/pending.*?acceptance/iu);
+    expect(risk).not.toMatch(
+      /(?:is resolved|has been resolved|accepted on main)/iu,
+    );
+  }
+  const readme = readFileSync("README.md", "utf8").replace(/\s+/gu, " ");
+  expect(readme).toMatch(/check.*?configured roots.*?readable/iu);
+  expect(readme).toMatch(/restore remains available/iu);
+});

@@ -480,7 +480,12 @@ Tree writes (create, rename, move, trash, restore):
   that parent is live and authorized; otherwise the restore is refused. A
   folder restore is refused while deny patterns are configured (the trashed
   tree cannot be enumerated).
-- Configured roots cannot be trashed, renamed or moved.
+- Configured roots and their strict source-ancestors cannot be trashed,
+  renamed or moved in `write` or `share` mode. Fresh same-drive root IDs and
+  validated parent chains determine ancestry, including after external moves
+  or renames. Unknown ancestry or an inaccessible root causes refusal with
+  `ACCESS_DENIED`. Overlapping roots remain valid configuration; move
+  destination handling is unchanged.
 - Received-share writes stay refused, even with `KDRIVE_MCP_SHARED_WRITE=1`.
 - A check-then-act window remains (SPEC §10.6): the drive can change between
   the check and the write. If the former parent is trashed between the check
@@ -494,11 +499,17 @@ Tree writes (create, rename, move, trash, restore):
   folder that is renamed or moved out of the deny patterns outside this server
   could be restored if kDrive recomputed the trash `path`; owner acceptance on
   2026-11-10 observed a deletion-time snapshot, so such a restore was denied.
-- Residual risk R-17-2: the root protection covers only a configured root
-  targeted directly. With nested roots, trashing, renaming or moving an
-  authorized folder of an outer root that contains an inner configured root
-  also affects that inner root, and with deny patterns the trashed folder
-  cannot be restored through this server.
+- Residual risk R-17-2 remains present pending actual-main acceptance of
+  [F-041](features/F-041-configured-root-ancestors.md): source-ancestor
+  protection is implemented but not yet accepted. A configured root moved
+  beneath an already-checked folder before the write is not protected, for up
+  to the invocation deadline. Many roots can yield `REQUEST_TIMEOUT` or
+  `LIMIT_EXCEEDED`. Visibility limits can
+  cause refusal even for an unrelated folder; the check-then-act window
+  remains, including during subsequent deny traversal.
+
+If a folder mutation is denied, check that configured roots are readable;
+restore remains available under its existing restrictions.
 
 Upload (`kdrive_upload`):
 

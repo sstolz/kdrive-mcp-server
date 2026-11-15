@@ -322,6 +322,25 @@ export function createPolicy(
     inv.inspections.set(k, inspected);
     return inspected;
   }
+  /** F-041 BR-427: fresh ID-bound roots must exclude this source ancestor. */
+  async function protectRootAncestors(source: Item, inv: Invocation) {
+    for (const root of roots) {
+      if (root.driveId !== source.driveId || root.folderId === 1) continue;
+      const current = await inspect(
+        { driveId: root.driveId, id: root.folderId },
+        "live",
+        inv,
+      );
+      if (current.type !== "dir") refuse("EVIDENCE_UNAVAILABLE");
+      const ancestor = current.parents.some(
+        (parent) => parent.id === source.id,
+      );
+      const prefix =
+        source.path !== current.path && within(source.path, current.path);
+      if (ancestor !== prefix) refuse("EVIDENCE_UNAVAILABLE");
+      if (ancestor) refuse("INVALID_OPERATION");
+    }
+  }
   /** BR-036–039: complete namespace-specific descendants; never filter a tree proof. */
   // eslint-disable-next-line sonarjs/cognitive-complexity -- F-011: pre-existing complex function; splitting it is deferred to keep reviewed control flow unchanged in this ticket (BACKLOG.md)
   async function traverse(
@@ -447,6 +466,9 @@ export function createPolicy(
         )
       : undefined;
     if (source) authorize(source);
+    // F-041 BR-278 v2: protect source folders before destination evidence.
+    if (source?.type === "dir" && ["trash", "rename", "move"].includes(op.kind))
+      await protectRootAncestors(source, inv);
     // BR-039 v2: a restore's destination is the immediate parent of its
     // original-trash evidence, inspected live; both reads must agree.
     const former = op.kind === "restore" ? source?.parents.at(-1) : undefined;

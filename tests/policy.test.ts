@@ -1,3 +1,10 @@
+import {
+  ancestorFixture,
+  ancestorRef,
+  structuralKinds,
+  structuralOperation,
+} from "./helpers/root-ancestors.js";
+import { plainItem } from "./helpers/navigation.js";
 import { describe, expect, it, vi } from "vitest";
 import { loadConfiguration, preflightConfiguration } from "../src/config.js";
 import { createPolicy, type EvidenceRequest } from "../src/policy/index.js";
@@ -1396,12 +1403,31 @@ describe("BR-278 configured roots are never trashed, renamed or moved", () => {
     expect(await f.policy.dispatch(operation)).toEqual(denied);
     expect(f.execute).not.toHaveBeenCalled();
   });
-  it("BR-278 a non-root child of a configured root can be renamed", async () => {
-    const f = await fixture({ KDRIVE_MCP_MODE: "write" });
-    expect(
-      await f.policy.dispatch({ kind: "rename", target: ref(11), name: "x" }),
-    ).toMatchObject({ ok: true });
-  });
+  it.each([false, true])(
+    "BR-278 v2 a non-root child can be renamed only without an inner configured root nested=%s",
+    async (nested) => {
+      const inner = node(40, "/r/a/inner", "dir", [root, a]);
+      const f = await fixture(
+        {
+          KDRIVE_MCP_MODE: "write",
+          KDRIVE_MCP_ROOTS: nested ? "7:10,7:40" : "7:10",
+        },
+        [root, a, b, file, inner],
+      );
+      const result = await f.policy.dispatch({
+        kind: "rename",
+        target: ref(11),
+        name: "x",
+      });
+      if (nested) {
+        expect(result).toEqual(denied);
+        expect(f.execute).not.toHaveBeenCalled();
+      } else {
+        expect(result).toMatchObject({ ok: true });
+        expect(f.execute).toHaveBeenCalledTimes(1);
+      }
+    },
+  );
 });
 
 describe("F-018 BR-035 v2 replace bindings", () => {
@@ -1533,4 +1559,211 @@ describe("F-018 BR-035 v2 replace in the drive root", () => {
     ).toEqual(denied);
     expect(f.execute).not.toHaveBeenCalled();
   });
+});
+
+// F-041 BR-278 v2 / BR-427: real guarded dispatch, no synthetic policy verdicts.
+describe("F-041 configured-root ancestry", () => {
+  it.each(structuralKinds)(
+    "TestBR278_v2_AC01_batch_cannot_bypass_ancestor_protection %s",
+    async (kind) => {
+      const f = await ancestorFixture();
+      expect(
+        await f.policy.dispatch({
+          kind: "batch",
+          operations: [
+            { ...structuralOperation("rename", 20), name: "SiblingNew" },
+            structuralOperation(kind, 10),
+          ],
+        }),
+      ).toEqual(denied);
+      expect(f.execute).not.toHaveBeenCalled();
+    },
+  );
+
+  const invalidRootRows = [
+    "missing",
+    "incomplete",
+    "rejected",
+    "trashed",
+    "file",
+    "wrong-id",
+    "wrong-drive",
+    "cycle",
+    "missing-parent",
+    "contradictory",
+  ];
+  it.each(
+    invalidRootRows.flatMap((row) =>
+      structuralKinds.map((kind) => ({ row, kind })),
+    ),
+  )(
+    "TestBR427_AC05_unknown_root_ancestry_fails_closed $row $kind",
+    async ({ row, kind }) => {
+      const f = await ancestorFixture();
+      const root = structuredClone(f.root);
+      let evidence: unknown = root;
+      switch (row) {
+        case "missing":
+          evidence = { status: "missing" };
+          break;
+        case "incomplete":
+          evidence = { ...root, status: "incomplete" };
+          break;
+        case "trashed":
+          root.lifecycle = "trashed";
+          break;
+        case "file":
+          root.type = "file";
+          break;
+        case "wrong-id":
+          root.id = 41;
+          break;
+        case "wrong-drive":
+          root.driveId = 102;
+          break;
+        case "cycle":
+          root.parents.push(root);
+          break;
+        case "missing-parent":
+          root.parents.splice(1, 1);
+          break;
+        case "contradictory":
+          // Internally valid chain, but its ancestor 20 contradicts source /S.
+          evidence = {
+            ...root,
+            parents: [f.sentinel, { ...f.a, id: 20 }, f.b],
+          };
+          break;
+      }
+      const inspect = f.inspect.getMockImplementation()!;
+      f.inspect.mockImplementation((ref) => {
+        if (ref.id !== 40) return inspect(ref);
+        if (row === "rejected")
+          return Promise.reject(new Error("root unavailable"));
+        return Promise.resolve(evidence);
+      });
+      expect(await f.policy.check(structuralOperation(kind, 20))).toEqual({
+        allowed: false,
+        code: "EVIDENCE_UNAVAILABLE",
+      });
+      expect(await f.policy.dispatch(structuralOperation(kind, 20))).toEqual(
+        denied,
+      );
+      expect(f.execute).not.toHaveBeenCalled();
+    },
+  );
+
+  const canonicalRows = [
+    ["case-upper", "A", "A", "protected"],
+    ["case-lower", "a", "a", "protected"],
+    ["NFC", "\u00e9", "\u00e9", "protected"],
+    ["NFD", "e\u0301", "e\u0301", "protected"],
+    ["component-boundary", "A", "AB", "allowed"],
+    ["case-sibling", "A", "a", "allowed"],
+    ["unicode-sibling", "\u00e9", "e\u0301", "allowed"],
+    ["trailing-slash", "A", "A", "invalid"],
+    ["double-slash", "A", "A", "invalid"],
+    ["case-mismatch", "A", "A", "invalid"],
+    ["unicode-mismatch", "\u00e9", "\u00e9", "invalid"],
+    ["prefix-without-id", "A", "A", "invalid"],
+  ] as const;
+  it.each(
+    canonicalRows.flatMap(([row, sourceName, parentName, expected]) =>
+      structuralKinds.map((kind) => ({
+        row,
+        sourceName,
+        parentName,
+        expected,
+        kind,
+      })),
+    ),
+  )(
+    "TestBR427_AC06_ids_and_exact_canonical_paths_agree $row $kind",
+    async ({ row, sourceName, parentName, expected, kind }) => {
+      const f = await ancestorFixture();
+      const source = plainItem(10, `/${sourceName}`, "dir", [f.sentinel], 101);
+      const parentId =
+        expected === "allowed" || row === "prefix-without-id" ? 50 : 10;
+      const parent = plainItem(
+        parentId,
+        `/${parentName}`,
+        "dir",
+        [f.sentinel],
+        101,
+      );
+      const root = plainItem(
+        40,
+        `/${parentName}/R`,
+        "dir",
+        [f.sentinel, parent],
+        101,
+      );
+      if (row === "trailing-slash") root.path += "/";
+      if (row === "double-slash") root.path = `/${parentName}//R`;
+      if (row === "case-mismatch") root.parents[1]!.name = "a";
+      if (row === "unicode-mismatch") root.parents[1]!.name = "e\u0301";
+      f.nodes.set("101:10", source);
+      f.nodes.set("101:40", root);
+      const op = structuralOperation(kind, 10);
+      expect(await f.policy.check(op)).toEqual(
+        expected === "allowed"
+          ? { allowed: true }
+          : {
+              allowed: false,
+              code:
+                expected === "protected"
+                  ? "INVALID_OPERATION"
+                  : "EVIDENCE_UNAVAILABLE",
+            },
+      );
+      if (expected !== "allowed") {
+        expect(await f.policy.dispatch(op)).toEqual(denied);
+        expect(f.execute).not.toHaveBeenCalled();
+      }
+    },
+  );
+
+  it.each(["write", "share", "read"])(
+    "TestBR278_v2_AC09_other_operations_and_read_mode_unchanged %s",
+    async (mode) => {
+      const f = await ancestorFixture({ KDRIVE_MCP_MODE: mode });
+      const original = f.inspect.getMockImplementation()!;
+      f.inspect.mockImplementation((ref) =>
+        ref.id === 40
+          ? Promise.reject(new Error("no root read permitted"))
+          : original(ref),
+      );
+      if (mode === "read") {
+        for (const kind of structuralKinds)
+          expect(await f.policy.check(structuralOperation(kind, 10))).toEqual({
+            allowed: false,
+            code: "LEVEL_REQUIRED",
+          });
+        expect(f.inspect).not.toHaveBeenCalled();
+        return;
+      }
+      expect(
+        await f.policy.check({
+          kind: "copy",
+          target: ancestorRef(10),
+          destination: ancestorRef(30),
+        }),
+      ).toEqual({ allowed: false, code: "INVALID_OPERATION" });
+      const restored = {
+        ...f.file,
+        location: "original-trash",
+        lifecycle: "trashed",
+        treeRootId: 21,
+        parents: f.file.parents.map((p) => ({
+          ...p,
+          location: "original-trash",
+        })),
+      };
+      f.nodes.set("101:21", restored);
+      expect(
+        await f.policy.check({ kind: "restore", target: ancestorRef(21) }),
+      ).toEqual({ allowed: true });
+      expect(f.inspect.mock.calls.filter(([ref]) => ref.id === 40)).toEqual([]);
+    },
+  );
 });

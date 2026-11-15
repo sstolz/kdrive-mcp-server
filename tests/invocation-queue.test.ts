@@ -1,3 +1,5 @@
+import { ancestorFixture, structuralKinds } from "./helpers/root-ancestors.js";
+import { plainItem } from "./helpers/navigation.js";
 // F-026: bounded invocation queue in front of the single invocation slot.
 import { getEventListeners } from "node:events";
 import { readFileSync } from "node:fs";
@@ -671,3 +673,143 @@ it("TestBR384_v2_AC06_waiting_and_prior_operations_do_not_spend_stream_deadline"
     await first;
   }
 });
+
+// F-041 AC-08: bounded evidence, through the real mutation tool projection.
+it.each(
+  structuralKinds.flatMap((kind) =>
+    ["deadline", "cancel", "budget-exhaustion"].map((row) => ({ kind, row })),
+  ),
+)(
+  "TestBR427_AC08_root_reads_share_existing_invocation_bounds $row $kind",
+  async ({ kind, row }) => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
+    const roots = Array.from({ length: 255 }, (_, i) => 1000 + i);
+    const f = await ancestorFixture(
+      row === "budget-exhaustion"
+        ? {
+            KDRIVE_MCP_ROOTS: ["101:1", ...roots.map((id) => `101:${id}`)].join(
+              ",",
+            ),
+            KDRIVE_MCP_DENY: "/blocked/**",
+            KDRIVE_MCP_MAX_TREE_ITEMS: "1000",
+          }
+        : {},
+    );
+    for (const id of roots)
+      f.nodes.set(
+        `101:${id}`,
+        plainItem(id, `/R${id}`, "dir", [f.sentinel], 101),
+      );
+    // AC-08 precondition correction: configuration caps roots at 256 entries.
+    // 255 non-sentinel roots plus a 257-directory deny traversal share 512 calls.
+    if (row === "budget-exhaustion") {
+      let parent = f.sibling;
+      for (let i = 0; i < 257; i++) {
+        const child = plainItem(
+          2000 + i,
+          `${parent.path}/d`,
+          "dir",
+          [...parent.parents, parent],
+          101,
+        );
+        f.nodes.set(`101:${child.id}`, child);
+        parent = child;
+      }
+      // Use the request-aware port below rather than a paged collection budget.
+      f.children.mockImplementation((request) =>
+        Promise.resolve({
+          ...request,
+          status: "complete",
+          terminal: true,
+          entries: [...f.nodes.values()].filter(
+            (n) => n.parents.at(-1)?.id === request.id,
+          ),
+        }),
+      );
+    }
+    const m = memory();
+    const mutator = vi.fn<Mutator>(() => Promise.resolve(ok()));
+    const gate = createMutationGate({
+      mode: "write",
+      sink: m.sink,
+      mutators: { [kind]: mutator },
+      clock: () => new Date("2026-11-15T00:00:00.000Z"),
+      now: () => performance.now(),
+      random: (n) => new Uint8Array(n),
+      diagnostic: () => undefined,
+    });
+    const c = createNavigationController(
+      f.config,
+      gatedDependencies(f.dependencies, gate),
+      undefined,
+      { gate },
+    );
+    const abort = new AbortController();
+    let release!: (value: unknown) => void;
+    const pendingRoot = new Promise<unknown>((resolve) => {
+      release = resolve;
+    });
+    const original = f.inspect.getMockImplementation()!;
+    f.inspect.mockImplementation((ref) =>
+      ref.id === 40 && row !== "budget-exhaustion"
+        ? pendingRoot
+        : original(ref),
+    );
+    try {
+      const pending = c.invokeMutation(
+        `kdrive_${kind}`,
+        {
+          file_id: 20,
+          ...(kind === "rename" ? { name: "New" } : {}),
+          ...(kind === "move" ? { destination_folder_id: 30 } : {}),
+        },
+        stdio,
+        abort.signal,
+      );
+      await vi.advanceTimersByTimeAsync(0);
+      if (row === "deadline") await vi.advanceTimersByTimeAsync(10_000);
+      if (row === "cancel") abort.abort();
+      const result = await pending;
+      const codes: Record<string, string> = {
+        deadline: "REQUEST_TIMEOUT",
+        cancel: "CANCELLED",
+        "budget-exhaustion": "LIMIT_EXCEEDED",
+      };
+      const code = codes[row];
+      expect(result).toEqual({
+        isError: true,
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              result: "failed",
+              op: "0".repeat(32),
+              code,
+              attempts: 0,
+            }),
+          },
+        ],
+      });
+      expect(mutator).not.toHaveBeenCalled();
+      expect(m.lines).toEqual([]);
+      if (row === "budget-exhaustion") {
+        expect(f.inspect).toHaveBeenCalledTimes(kind === "move" ? 257 : 256);
+        expect(
+          f.inspect.mock.calls.length +
+            vi.mocked(f.dependencies.children).mock.calls.length,
+        ).toBe(512);
+      } else
+        expect(
+          f.inspect.mock.calls.filter(([ref]) => ref.id === 40),
+        ).toHaveLength(1);
+      release(f.root);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(mutator).not.toHaveBeenCalled();
+      expect(m.lines).toEqual([]);
+    } finally {
+      release(f.root);
+      c.close();
+      await gate.close();
+    }
+  },
+);

@@ -407,7 +407,10 @@ export function createNavigationController(
       // BR-258: navigation bounds apply until the gate starts the intent
       // append inside this call; the call itself is never raced or aborted.
       alive(inv);
-      if (++inv.calls > 512) throw new BoundFailure("LIMIT_EXCEEDED");
+      if (++inv.calls > 512) {
+        boundCode = "LIMIT_EXCEEDED";
+        throw new BoundFailure("LIMIT_EXCEEDED");
+      }
       return dependencies.execute(operation);
     },
     ...(received
@@ -747,7 +750,10 @@ export function createNavigationController(
             performance.now() >= inv.deadline
           )
             return "REQUEST_TIMEOUT";
-          return inv.controller.signal.aborted ? "CANCELLED" : undefined;
+          if (inv.controller.signal.aborted) return "CANCELLED";
+          // F-041 AC-08: policy collapses port errors, but a spent budget
+          // remains a failed pre-intent run with no mutation attempt.
+          return boundCode === "LIMIT_EXCEEDED" ? boundCode : undefined;
         },
       });
       return { ok: true, value: withinOutput(result) };
