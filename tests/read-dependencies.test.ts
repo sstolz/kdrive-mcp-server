@@ -195,12 +195,12 @@ it("TestBR122_pure_js_dependencies packed-runtime composition works with optiona
     image = encodePng({ width: 2, height: 1, data: Buffer.alloc(8, 255) });
   writeFileSync(
     join(directory, "probe.mjs"),
-    `import {runExtraction} from './dist/extraction.js';globalThis.fetch=()=>{throw Error('NETWORK_FORBIDDEN')};const inputs=${JSON.stringify(
+    `import {runExtraction} from './dist/extraction.js';import {acquireExtraction} from './dist/extraction-admission.js';globalThis.fetch=()=>{throw Error('NETWORK_FORBIDDEN')};const inputs=${JSON.stringify(
       [
         { format: "pdf", data: pdf.toString("base64") },
         { format: "image", data: Buffer.from(image).toString("base64") },
       ],
-    )};const out=[];for(const input of inputs){const bytes=Uint8Array.from(Buffer.from(input.data,'base64'));const value=await runExtraction({bytes,args:{format:input.format},metadata:{drive_id:7,file_id:3,etag:'"v1"',size_bytes:bytes.length},budget:16777216,maxOutputChars:200000},new AbortController().signal,5000);out.push({kind:value.kind,...(value.kind==='pdf'?{text:value.text}:{width:value.width,height:value.height})});}console.log(JSON.stringify(out));`,
+    )};const out=[];for(const input of inputs){const bytes=Uint8Array.from(Buffer.from(input.data,'base64'));const signal=new AbortController().signal;const permit=await acquireExtraction(undefined,signal,()=>{});try{const value=await runExtraction({bytes,args:{format:input.format},metadata:{drive_id:7,file_id:3,etag:'"v1"',size_bytes:bytes.length},budget:16777216,maxOutputChars:200000},signal,5000,{permit,deadline:performance.now()+5000});out.push({kind:value.kind,...(value.kind==='pdf'?{text:value.text}:{width:value.width,height:value.height})});}finally{permit.release();}}console.log(JSON.stringify(out));`,
   );
   const result = execFileSync(process.execPath, ["probe.mjs"], {
     cwd: directory,

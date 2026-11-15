@@ -170,6 +170,18 @@ Read tools (all modes):
 Resource template: `kdrive://{drive_id}/file/{id}` returns one complete binary
 file (`application/octet-stream`) when it fits the read limit.
 
+`kdrive_read` shares two process-wide extraction permits across text, PDF and
+image reads, including continuations and empty sources. Each identity can hold
+one permit and one waiter; at most four calls wait, in oldest eligible order.
+Admission precedes source buffering, and waiting spends the invocation's existing
+10-second deadline. Raw downloads and resource reads do not use these permits.
+
+SERVER_BUSY is a transient admission refusal before source work, including
+extraction queue saturation, an identity's waiting limit or a detached worker
+holding its permit. The server does not automatically retry; a later client
+invocation requires fresh admission and authorization. Capacity may remain
+unavailable until a stuck worker exits or the process restarts.
+
 Write tools (`write` and `share` modes only):
 
 | Tool                   | Purpose                                                          |
@@ -213,7 +225,8 @@ Key limits:
 - One tool call per session runs at a time. Up to 4 further calls wait in
   arrival order, each for at most 12 seconds. `SERVER_BUSY` means the call
   was refused before any kDrive request, so it is safe to retry, writes
-  included, once an earlier call has completed (see
+  included. For extraction, completion of an earlier call does not guarantee
+  that a detached worker has released its permit (see
   [docs/mcp-client-compatibility.md](docs/mcp-client-compatibility.md#parallel-tool-calls)).
 
 The full read behaviour (pagination, encodings, PDF profile, bounds) is
