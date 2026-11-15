@@ -1,3 +1,8 @@
+import {
+  changelogFixture,
+  changelogTicketSection,
+  currentRepositoryChangelog,
+} from "./helpers/changelog.js";
 import { ancestorFixture, structuralKinds } from "./helpers/root-ancestors.js";
 import { plainItem } from "./helpers/navigation.js";
 // F-026: bounded invocation queue in front of the single invocation slot.
@@ -550,6 +555,19 @@ describe("F-026 bounded invocation queue (controller)", () => {
   });
 });
 
+// BR-387 v2 uses the shared parser for both real and synthetic documents,
+// in Fixed-only mode: the Fixed bullet starts with `- #16 ` and no Added line
+// is required.
+function queueChangelogSection(changelog: string): string {
+  return changelogTicketSection(
+    currentRepositoryChangelog(changelog),
+    "#16",
+    "- #16 ",
+    "",
+    { fixedPrefix: "- #16 " },
+  );
+}
+
 describe("F-026 documentation", () => {
   it("TestBR387_docs_describe_queue_and_retryable_SERVER_BUSY", () => {
     const readme = readFileSync("README.md", "utf8");
@@ -568,12 +586,203 @@ describe("F-026 documentation", () => {
     }
     expect(section.length).toBeGreaterThan(100);
     const changelog = readFileSync("CHANGELOG.md", "utf8");
-    const unreleased = changelog.slice(
-      changelog.indexOf("## [Unreleased]"),
-      changelog.indexOf("\n## [", changelog.indexOf("## [Unreleased]") + 1),
-    );
-    expect(unreleased).toMatch(/### Fixed\n\n- #16 /);
+    // F-043 AC-01: do not derive this expectation from the selection helper.
+    const expectedHeading =
+      changelog
+        .split("\n")
+        .find((line) =>
+          /^## \[0\.6\.0-beta\.2\] - \d{4}-\d{2}-\d{2}$/u.test(line),
+        ) ?? "## [Unreleased]";
+    expect(queueChangelogSection(changelog)).toBe(expectedHeading);
   });
+});
+
+describe("F-043 changelog sections (BR-387 v2)", () => {
+  const unreleased = "## [Unreleased]";
+  const beta2 = "## [0.6.0-beta.2] - 2026-11-15";
+  const newer = "## [0.7.0] - 2026-12-01";
+  const beta1 = "## [0.6.0-beta.1] - 2026-11-13";
+  // No additional content marker is required by BR-387 v2.
+  const fixed = "- #16 Queue fix.\n";
+  const other = "- #7 Another change.\n";
+  const citation = "- Related queue fix for #16.\n";
+
+  it.each([
+    ["no release", ""],
+    ["undated release", changelogFixture(["## [0.7.0]", other, ""])],
+    ["unrelated dated release", changelogFixture([newer, other, ""])],
+  ])("TestBR387_v2_changelog_unreleased_fallback: %s", (_name, suffix) => {
+    expect(
+      queueChangelogSection(changelogFixture([unreleased, fixed, ""]) + suffix),
+    ).toBe(unreleased);
+  });
+
+  it.each([
+    ["no release", ""],
+    ["undated release", changelogFixture(["## [0.7.0]", other, ""])],
+    ["unrelated dated release", changelogFixture([newer, other, ""])],
+  ])(
+    "TestBR387_v2_changelog_unreleased_fallback: missing entry with %s fails",
+    (_name, suffix) => {
+      expect(() =>
+        queueChangelogSection(changelogFixture([unreleased, "", ""]) + suffix),
+      ).toThrow("missing #16 Fixed line");
+    },
+  );
+
+  it.each([
+    ["first Fixed bullet", beta2, fixed],
+    ["later Fixed bullet", beta2, other + fixed],
+    ["different release date", "## [0.6.0-beta.2] - 2026-11-30", fixed],
+  ])(
+    "TestBR387_v2_changelog_release_fixed_line: %s",
+    (_name, heading, entry) => {
+      expect(
+        queueChangelogSection(
+          changelogFixture([unreleased, "", ""], [heading, entry, ""]),
+        ),
+      ).toBe(heading);
+    },
+  );
+
+  it.each([
+    ["Added only", `### Added\n\n${fixed}`],
+    ["Changed only", `### Changed\n\n${fixed}`],
+    ["citation later in the Fixed bullet", `### Fixed\n\n${citation}`],
+    [
+      "prefix inside the Fixed bullet, with an Added citation",
+      `### Fixed\n\n- Related - #16 Queue fix.\n\n### Added\n\n${citation}`,
+    ],
+    [
+      "Changed citation after an unrelated Fixed entry",
+      `### Fixed\n\n${other}\n### Changed\n\n${fixed}`,
+    ],
+  ])("TestBR387_v2_changelog_release_fixed_line: %s fails", (_name, body) => {
+    expect(() =>
+      queueChangelogSection(`${unreleased}\n\n${beta2}\n\n${body}`),
+    ).toThrow("missing #16 Fixed line");
+  });
+
+  it.each([
+    ["Unreleased #160 only", unreleased, ""],
+    ["release #160 only", beta2, ""],
+    ["Unreleased #16 Added cannot validate #160 Fixed", unreleased, citation],
+    ["release #16 Added cannot validate #160 Fixed", beta2, citation],
+  ])("TestBR387_v2_changelog_ticket_boundary: %s", (_name, heading, added) => {
+    expect(() =>
+      queueChangelogSection(
+        changelogFixture(
+          ...(heading === unreleased
+            ? []
+            : ([[unreleased, "", ""]] as [string, string, string][])),
+          [heading, fixed.replace("#16", "#160"), added],
+        ),
+      ),
+    ).toThrow("missing #16 Fixed line");
+  });
+
+  it.each([
+    ["only older release cites #16", other, fixed, beta2],
+    ["both releases cite #16", fixed, fixed, newer],
+    ["no release cites #16", other, other, unreleased],
+  ])(
+    "TestBR387_v2_changelog_first_matching_release: %s",
+    (_name, newerFixed, olderFixed, expected) => {
+      expect(
+        queueChangelogSection(
+          changelogFixture(
+            [unreleased, fixed, ""],
+            [newer, newerFixed, ""],
+            [beta2, olderFixed, ""],
+          ),
+        ),
+      ).toBe(expected);
+    },
+  );
+
+  it("TestBR387_v2_changelog_first_matching_release: file order wins over version order", () => {
+    expect(
+      queueChangelogSection(
+        changelogFixture(
+          [unreleased, "", ""],
+          [beta2, fixed, ""],
+          [newer, fixed, ""],
+        ),
+      ),
+    ).toBe(beta2);
+  });
+
+  it.each([
+    ["valid older release", "", fixed],
+    ["valid Unreleased", fixed, other],
+  ])(
+    "TestBR387_v2_changelog_first_matching_release: newer Added citation blocks %s",
+    (_name, unreleasedFixed, olderFixed) => {
+      expect(() =>
+        queueChangelogSection(
+          changelogFixture(
+            [unreleased, unreleasedFixed, ""],
+            [newer, other, citation],
+            [beta2, olderFixed, ""],
+          ),
+        ),
+      ).toThrow("missing #16 Fixed line");
+    },
+  );
+
+  it.each([
+    ["at the archive cutoff", changelogFixture([beta1, fixed, ""])],
+    [
+      "after the archive cutoff",
+      changelogFixture(
+        [beta1, other, ""],
+        ["## [0.5.0] - 2026-10-01", fixed, ""],
+      ),
+    ],
+  ])(
+    "TestBR387_v2_changelog_archive_cutoff_and_empty_section: #16 %s fails",
+    (_name, suffix) => {
+      expect(() =>
+        queueChangelogSection(changelogFixture([unreleased, "", ""]) + suffix),
+      ).toThrow("missing #16 Fixed line");
+    },
+  );
+
+  it.each([
+    ["at the archive cutoff", changelogFixture([beta1, fixed, ""])],
+    [
+      "after the archive cutoff",
+      changelogFixture(
+        [beta1, other, ""],
+        ["## [0.5.0] - 2026-10-01", fixed, ""],
+      ),
+    ],
+  ])(
+    "TestBR387_v2_changelog_archive_cutoff_and_empty_section: Unreleased wins over #16 %s",
+    (_name, suffix) => {
+      expect(
+        queueChangelogSection(
+          changelogFixture([unreleased, fixed, ""]) + suffix,
+        ),
+      ).toBe(unreleased);
+    },
+  );
+
+  it.each([
+    ["heading only", unreleased],
+    [
+      "cannot borrow from preceding undated section",
+      changelogFixture(["## [0.7.0]", fixed, ""]) + unreleased,
+    ],
+    ["heading with final newline", `${unreleased}\n`],
+  ])(
+    "TestBR387_v2_changelog_archive_cutoff_and_empty_section: %s fails",
+    (_name, fixture) => {
+      expect(() => queueChangelogSection(fixture)).toThrow(
+        "missing #16 Fixed line",
+      );
+    },
+  );
 });
 
 it("TestBR384_v2_AC06_waiting_and_prior_operations_do_not_spend_stream_deadline", async () => {
