@@ -269,15 +269,14 @@ The five write tools (#18) — `kdrive_create_folder`, `kdrive_rename`,
   denied.
 - Residual risk R-17-2: the previously direct-only guard allowed mutations
   of an outer root's authorized folder to affect an inner configured root.
-  **Status (2026-11-15): remediation implemented, still present pending
-  code review and actual-main acceptance.**
+  **Status (2026-11-15): the known-ancestor bypass is addressed; F-041 was
+  accepted on main `448a48f`
+  ([#47 comment](https://github.com/sstolz/kdrive-mcp-server/issues/47#issuecomment-6898895634)).**
   [F-041 v1](features/F-041-configured-root-ancestors.md) (#47 lot E)
   refuses these source-ancestor mutations using fresh same-drive configured-root
   ID ancestry and fails closed when ancestry cannot be determined. Visibility
   limits or transient root-read failures can therefore refuse an unrelated
-  folder mutation. After acceptance, the next reviewed records update
-  will link the evidence and mark the known-ancestor bypass addressed;
-  external changes between evidence acquisition and mutation, including during
+  folder mutation. External changes between evidence acquisition and mutation, including during
   subsequent deny traversal, remain within the check-then-act risk (SPEC §10.6).
 
 ## Upload (F-018)
