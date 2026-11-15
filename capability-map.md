@@ -1,12 +1,12 @@
 # Capability map
 
-## Provisional — queue changelog release sections
+## Accepted — queue changelog release sections
 
-[F-043 v1](features/F-043-queue-changelog-release-sections.md) (#67), frozen
-2026-11-15, [BR-387 v2](business-rules/BR-387.md): release-aware location for the
+[F-043 v1](features/F-043-queue-changelog-release-sections.md) (#67) (accepted 2026-11-15),
+[BR-387 v2](business-rules/BR-387.md): release-aware location for the
 #16 Fixed entry, with Unreleased fallback and the BR-321 v4 archive cutoff.
-BR-387 v1 remains active and unchanged. Implementation and
-acceptance are pending; no new working capability is claimed.
+Accepted on actual main `f72a15b` on 2026-11-15 (#67 comment `6902168340`).
+BR-387 v2 is active; no new BR or ADR.
 
 ## Accepted — MCP tool and parameter descriptions
 

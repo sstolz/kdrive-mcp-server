@@ -46,12 +46,14 @@ official server has them.
 It speaks standard MCP, so any compatible client can use it; only claude.ai
 has been verified end to end so far.
 
-**Status:** beta `0.6.0-beta.1` ([VERSION](VERSION)). The container image is
-published on GHCR as `ghcr.io/sstolz/kdrive-mcp-server:0.6.0-beta.1`
-(`linux/amd64` and `linux/arm64`; pin it by digest), and the npm package as
-`@sstolz/kdrive-mcp-server@beta`; both went through the gated release workflow
-([docs/publishing.md](docs/publishing.md)). The published beta predates the
-changes under Unreleased in [CHANGELOG.md](CHANGELOG.md); build the image or
+**Status:** beta `0.6.0-beta.2` is prepared ([VERSION](VERSION)) and is to be
+published through the gated release workflow
+([docs/publishing.md](docs/publishing.md)). `0.6.0-beta.1` remains the currently
+published beta until the post-publication records are updated: the container
+image is `ghcr.io/sstolz/kdrive-mcp-server:0.6.0-beta.1`
+(`linux/amd64` and `linux/arm64`; pin it by digest), and the npm package is
+`@sstolz/kdrive-mcp-server@beta`. The published beta predates the later changes
+listed under `0.6.0-beta.2` in [CHANGELOG.md](CHANGELOG.md); build the image or
 the package from this repository to get them.
 
 <a id="quick-start"></a>
@@ -403,13 +405,13 @@ You need Docker with Compose and GNU Make 3.81 or later.
 ```sh
 make setup        # build the development container and install dependencies
 make image        # container image: kdrive-mcp-server:runtime-<arch>
-make pack         # npm package: ./artifacts/sstolz-kdrive-mcp-server-0.6.0-beta.1.tgz
+make pack         # npm package: ./artifacts/sstolz-kdrive-mcp-server-0.6.0-beta.2.tgz
 ```
 
 `make image IMAGE_PLATFORMS=linux/amd64` builds one architecture only. A
 local build pushes nothing to a registry. To use the CLI on your machine,
 install the package with
-`npm install -g ./artifacts/sstolz-kdrive-mcp-server-0.6.0-beta.1.tgz` (keep
+`npm install -g ./artifacts/sstolz-kdrive-mcp-server-0.6.0-beta.2.tgz` (keep
 the leading `./`, without which npm reads the argument as a GitHub shorthand); it
 provides the `kdrive-mcp-server` command. `kdrive-mcp-server --help` and
 `--version` need no configuration.

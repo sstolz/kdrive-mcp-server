@@ -26,8 +26,12 @@ packages. Publishing a scoped package publicly needs `--access public`.
 
 ## Versions
 
-- The public beta is `0.6.0-beta.1`, then `0.6.0-beta.2` and so on. Each beta
-  is published under the npm dist-tag `beta` with public access.
+- `0.6.0-beta.2` is prepared and is to be published through the gated release
+  workflow. `0.6.0-beta.1` remains the currently published beta until the
+  post-publication records are updated. The published beta predates the later
+  changes listed under `0.6.0-beta.2` in [CHANGELOG.md](../CHANGELOG.md).
+  The prepared beta will be published under the npm dist-tag `beta` with
+  public access.
 - `latest` points at the deprecated placeholder `0.0.0-placeholder.0` until
   1.0.0 is published under `latest`: a beta publish never moves it. Users
   install `@sstolz/kdrive-mcp-server@beta` or an exact version.

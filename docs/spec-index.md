@@ -88,7 +88,7 @@ override the current Docker-only development contract.
 | F-040 | #47 lot D | `features/F-040-process-wide-extraction-admission.md` | Done v1, accepted on main 67c101a (2026-11-15); BR-423–BR-426 v1 and BR-118 v3 active; no ADR                                                                                                                                                                                                                                                            |
 | F-041 | #47 lot E | `features/F-041-configured-root-ancestors.md`         | Done v1, accepted on main 448a48f (2026-11-15); BR-277 and BR-278 v2 and BR-427 v1 active; no ADR                                                                                                                                                                                                                                                        |
 | F-042 | #42       | `features/F-042-mcp-tool-descriptions.md`             | Done v1, accepted on main 3b035b8 (2026-11-15); BR-428–BR-430 v1 active; no ADR                                                                                                                                                                                                                                                                          |
-| F-043 | #67       | `features/F-043-queue-changelog-release-sections.md`  | Frozen v1 (2026-11-15); BR-387 v2 pending acceptance, v1 active and unchanged; release-aware #16 Fixed entry; no new BR or ADR                                                                                                                                                                                                                           |
+| F-043 | #67       | `features/F-043-queue-changelog-release-sections.md`  | Done v1, accepted on main f72a15b (2026-11-15); BR-387 v2 active; no new BR or ADR                                                                                                                                                                                                                                                                       |
 
 Version history: [v1 immutable snapshot](../features/history/F-001-v1.md),
 [v2 immutable snapshot](../features/history/F-001-v2.md),
@@ -144,9 +144,9 @@ BR-014 and BR-015 to v2 in its [frozen quality-gate contract](../features/F-011-
 
 #42 allocates F-042 / BR-428–BR-430 v1 in its [MCP description catalog](../features/F-042-mcp-tool-descriptions.md). All three versions were accepted on actual main `3b035b8` on 2026-11-15 (#42 comment `6900828692`) and are active. BR-068 v1, BR-263 v2, BR-283 v2 and BR-424 v1 remain active and unchanged. No ADR is allocated.
 
-#67 allocates F-043 in the [frozen queue changelog release-sections contract](../features/F-043-queue-changelog-release-sections.md)
-and versions BR-387 to v2, pending acceptance. BR-387 v1 remains active and
-unchanged. No new BR or ADR. Next free IDs: **F-044, BR-431, ADR-013**
+#67 allocates F-043 in the [queue changelog release-sections contract](../features/F-043-queue-changelog-release-sections.md)
+and versions BR-387 to v2, active after acceptance on actual main `f72a15b`
+on 2026-11-15 (#67 comment `6902168340`). No new BR or ADR. Next free IDs: **F-044, BR-431, ADR-013**
 (BR-376 and BR-377 remain withdrawn).
 
 #14 was frozen after independent review and autonomous freeze; these
@@ -255,7 +255,7 @@ No template or planning entry grants implementation permission.
 
 ## Readiness and remaining product decisions
 
-The current VERSION is the first beta, 0.6.0-beta.1 (#2); this index creates no
+The current VERSION is beta 0.6.0-beta.2; this index creates no
 release. Product decisions D-03–D-07 and probes E-01–E-03 remain with their
 affected backlog tickets (archive `docs/github-backlog.md`). F-002 validates local configuration
 and an injected preflight boundary only; it does not qualify a real provider,
