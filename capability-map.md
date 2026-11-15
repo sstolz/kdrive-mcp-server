@@ -1,5 +1,17 @@
 # Capability map
 
+## Provisional — fragmented reads and defensive validator handling
+
+[F-038 v1](features/F-038-stream-budget-and-weak-etags.md) (#47 lot B),
+[BR-070 v4](business-rules/BR-070.md),
+[BR-205 v2](business-rules/BR-205.md) and
+[BR-384 v2](business-rules/BR-384.md): proposed body reads consume byte
+and time bounds without spending the 512 upstream-operation budget; weak
+`W/` validators follow the existing absent-validator refusal in describe/open.
+Current accepted rule versions remain active. Draft, not reviewed, frozen,
+implemented or accepted; F-038 OQ-1 must be resolved before freeze.
+This adds no ability to read content without a qualifying validator.
+
 ## Accepted — rate-limited mutations stop after one attempt
 
 [F-037 v1](features/F-037-mutation-rate-limit-stop.md) (#47 lot A),

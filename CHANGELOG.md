@@ -115,6 +115,13 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
   performs fresh admission and authorization with its own audit records;
   uncertain writes are never automatically replayed.
 
+- #47 lot B / F-038 v1 (draft, pending acceptance): separate body reads
+  and EOF probes from the unchanged 512 upstream-operation budget, retaining
+  byte caps and deadlines so valid fragmented content can complete; treat
+  case-sensitive `W/` validators exactly as absent validators in both
+  descriptor and range responses, preserving existing strong derivation.
+  Specification only; implementation and acceptance are pending.
+
 ## [0.6.0-beta.1] - 2026-11-13
 
 ### Added
