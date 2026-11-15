@@ -2,7 +2,7 @@
 id: F-034
 title: PDF text extraction for common generator output
 ticket: "#4"
-status: frozen
+status: done
 version: 2
 ---
 

@@ -1,12 +1,11 @@
 # ADR-012 — Projected PDF text profile
 
-Status: proposed (2026-11-14). Design of
-[F-034 v1](../features/F-034-pdf-extraction-profile.md), ticket #4, ready for
-freeze; implementation and acceptance pending. Supersedes, once accepted, the
-PDF admission profile of
-[ADR-004](ADR-004-bounded-extraction-dependencies.md) (the closed
-classic-xref, Helvetica/WinAnsi, fixed-key profile of its Decision and the
-matching Consequences); the rest of ADR-004 stands, as amended by
+Status: accepted (2026-11-15). Design of
+[F-034 v1](../features/F-034-pdf-extraction-profile.md), ticket #4, accepted on
+main `570c4b2` (#4 comment `4-acceptance-1-orchestrator`). Supersedes the PDF
+admission profile of [ADR-004](ADR-004-bounded-extraction-dependencies.md) (the
+closed classic-xref, Helvetica/WinAnsi, fixed-key profile of its Decision and
+the matching Consequences); the rest of ADR-004 stands, as amended by
 [ADR-010](ADR-010-direct-image-codecs.md) for images. ADR-004 keeps its text
 unchanged (AGENTS.md §7); this ADR and `docs/spec-index.md` record the
 supersession.
