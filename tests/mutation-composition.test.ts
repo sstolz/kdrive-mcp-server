@@ -10,6 +10,7 @@ import { createStderrSink, type AuditSink } from "../src/audit/sink.js";
 import {
   createMutationGate,
   gatedDependencies,
+  type GateResult,
   type Mutator,
 } from "../src/mutation-gate.js";
 import {
@@ -17,8 +18,13 @@ import {
   navigationBinding,
 } from "../src/navigation.js";
 import { startStdioNavigation } from "../src/stdio.js";
-import type { PolicyDependencies } from "../src/policy/index.js";
-import { navigationFixture } from "./helpers/navigation.js";
+import { createPolicy, type PolicyDependencies } from "../src/policy/index.js";
+import type { Operation } from "../src/policy/operation.js";
+import {
+  navigationFixture,
+  plainItem,
+  plainRoot,
+} from "./helpers/navigation.js";
 import { httpFixture } from "./helpers/http.js";
 import { UPSTREAM } from "./helpers/proxy.js";
 import {
@@ -904,7 +910,7 @@ describe("BR-258 and BR-070 v2 mutation invocation lifecycle", () => {
     });
   });
 
-  it("TestBR258_TestBR070_a_429_at_8000_ms_retried_after_5_s_succeeds", async () => {
+  it("TestBR248_v2_AC06_429_at_8000_ms_finishes_without_a_navigation_retry", async () => {
     vi.useFakeTimers();
     let calls = 0;
     const h = await controllerWith(() =>
@@ -913,14 +919,57 @@ describe("BR-258 and BR-070 v2 mutation invocation lifecycle", () => {
         : Promise.resolve(ok()),
     );
     let result: unknown;
-    void h.c
+    let settledAt: number | undefined;
+    const start = performance.now();
+    const pending = h.c
       .mutate("kdrive_rename", renameFile, { kind: "stdio" })
-      .then((r) => (result = r));
-    await vi.advanceTimersByTimeAsync(14_000);
-    expect(result).toEqual({
+      .then((value) => {
+        result = value;
+        settledAt = performance.now() - start;
+      });
+    await vi.advanceTimersByTimeAsync(7_999);
+    expect(result).toBeUndefined();
+    await vi.advanceTimersByTimeAsync(1);
+    const expected = {
       ok: true,
-      value: { result: "succeeded", op: OP, attempts: 2, status: 200 },
-    });
+      value: {
+        result: "failed",
+        op: OP,
+        code: "RATE_LIMITED",
+        attempts: 1,
+        status: 429,
+      },
+    };
+    const base = {
+      v: 1,
+      ts: "2026-11-09T10:00:00.000Z",
+      op: OP,
+      identity: { kind: "stdio" },
+      tool: "kdrive_rename",
+      kind: "rename",
+      drive: 7,
+      ids: { target: 3 },
+    };
+    const records = [
+      { ...base, event: "intent" },
+      {
+        ...base,
+        event: "outcome",
+        result: "failed",
+        attempts: 1,
+        ms: 8_000,
+        status: 429,
+        code: "RATE_LIMITED",
+      },
+    ];
+    expect(result).toEqual(expected);
+    expect(settledAt).toBe(8_000);
+    expect(h.m.records()).toEqual(records);
+    await pending;
+    await vi.advanceTimersByTimeAsync(52_001);
+    expect(h.mutator).toHaveBeenCalledTimes(1);
+    expect(result).toEqual(expected);
+    expect(h.m.records()).toEqual(records);
   });
 
   it("TestBR258_mutate_waits_while_another_invocation_is_active", async () => {
@@ -1020,4 +1069,424 @@ describe("BR-258 and BR-070 v2 mutation invocation lifecycle", () => {
       value: { result: "succeeded", op: OP, attempts: 1, status: 200 },
     });
   });
+});
+
+// F-037: the real guarded policy, mutable complete evidence and injected writes.
+describe("BR-248 v2 fresh authorization after a rate-limited invocation", () => {
+  const ref = (id: number) => ({ driveId: 101, id });
+  const rename: Operation = {
+    kind: "rename",
+    target: ref(42),
+    name: "renamed",
+  };
+  const limited = (op: string) => ({
+    result: "failed",
+    op,
+    code: "RATE_LIMITED",
+    attempts: 1,
+    status: 429,
+  });
+  const baseFor = (tool: string, operation: Operation, op: string) => ({
+    v: 1,
+    ts: "2026-11-09T10:00:00.000Z",
+    op,
+    identity: { kind: "stdio" },
+    tool,
+    kind: operation.kind,
+    drive: 101,
+    ids: {
+      ...(operation.target ? { target: operation.target.id } : {}),
+      ...(operation.destination
+        ? { destination: operation.destination.id }
+        : {}),
+    },
+  });
+  const limitedRecords = (base: ReturnType<typeof baseFor>) => [
+    { ...base, event: "intent" },
+    {
+      ...base,
+      event: "outcome",
+      result: "failed",
+      attempts: 1,
+      ms: 0,
+      status: 429,
+      code: "RATE_LIMITED",
+    },
+  ];
+
+  function fixture() {
+    const drive = plainRoot(101);
+    const root = plainItem(10, "/r", "dir", [drive], 101);
+    const parent = plainItem(11, "/r/open", "dir", [drive, root], 101);
+    const destination = plainItem(12, "/r/dest", "dir", [drive, root], 101);
+    const secret = plainItem(13, "/r/secret", "dir", [drive, root], 101);
+    const outside = plainItem(20, "/outside", "dir", [drive], 101);
+    const target = plainItem(
+      42,
+      "/r/open/a",
+      "file",
+      [drive, root, parent],
+      101,
+    );
+    const nodes = new Map(
+      [drive, root, parent, destination, secret, outside, target].map(
+        (node) => [node.id, node],
+      ),
+    );
+    const replies = [ok(429, { retryAfter: "5" }), ok()];
+    const mutator = vi.fn<Mutator>(() => Promise.resolve(replies.shift()));
+    let sequence = 0;
+    const defaults = {
+      KDRIVE_ID: "101",
+      KDRIVE_IDS: "101",
+      KDRIVE_MCP_ROOTS: "101:10",
+      KDRIVE_MCP_DENY: "/r/secret/**",
+      KDRIVE_MCP_MODE: "share",
+      KDRIVE_MCP_ALLOW_PUBLIC_LINKS: "1",
+      KDRIVE_MCP_INVITE_DOMAINS: "example.test",
+    };
+    async function compose(env: Record<string, string> = {}) {
+      const f = await navigationFixture({ ...defaults, ...env });
+      const inspect = vi.fn<PolicyDependencies["inspect"]>(
+        (reference, location) => {
+          const node = nodes.get(reference.id);
+          if (!node || reference.driveId !== 101)
+            return Promise.resolve({ status: "missing" });
+          // Original-trash evidence has a historical parent chain in its own
+          // namespace. The live parent remains separately inspectable.
+          return Promise.resolve(
+            structuredClone(
+              location === "original-trash"
+                ? {
+                    ...node,
+                    location,
+                    lifecycle: "trashed",
+                    treeRootId: node.id,
+                    parents: node.parents.map((ancestor) => ({
+                      ...ancestor,
+                      location,
+                    })),
+                  }
+                : node,
+            ),
+          );
+        },
+      );
+      const m = memory();
+      const gate = createMutationGate({
+        mode: f.config.mode,
+        ...(f.config.mode === "read" ? {} : { sink: m.sink }),
+        // Sharing remains injected even for the reconstructed write-mode gate.
+        mutators: Object.fromEntries(
+          [
+            "rename",
+            "move",
+            "replace",
+            "restore",
+            "share-link",
+            "share-invite",
+          ].map((kind) => [kind, mutator]),
+        ),
+        random: (n) => {
+          const offset = sequence++ * 16;
+          return Uint8Array.from({ length: n }, (_, index) => index + offset);
+        },
+        clock: () => new Date("2026-11-09T10:00:00.000Z"),
+        now: () => performance.now(),
+        diagnostic: () => undefined,
+      });
+      const dependencies: PolicyDependencies = {
+        ...f.dependencies,
+        inspect,
+        children: (request) =>
+          Promise.resolve({
+            ...request,
+            status: "complete",
+            entries: [],
+            terminal: true,
+          }),
+      };
+      const policy = createPolicy(
+        f.config,
+        gatedDependencies(dependencies, gate),
+      );
+      const dispatch = vi.fn((operation: Operation) =>
+        policy.dispatch(operation),
+      );
+      return {
+        m,
+        policy,
+        inspect,
+        dispatch,
+        run: (tool: string, operation: Operation) =>
+          gate.run({ tool, operation, identity: { kind: "stdio" }, dispatch }),
+      };
+    }
+    function move(id: number, parentId: number) {
+      const node = nodes.get(id)!;
+      const nextParent = nodes.get(parentId)!;
+      nodes.set(
+        id,
+        plainItem(
+          id,
+          `${nextParent.path}/${node.name}`,
+          node.type,
+          [...nextParent.parents, nextParent],
+          101,
+        ),
+      );
+    }
+    return { compose, nodes, move, mutator, replies };
+  }
+
+  function start(
+    h: Awaited<ReturnType<ReturnType<typeof fixture>["compose"]>>,
+    tool: string,
+    operation: Operation,
+  ) {
+    const state: { result?: GateResult; settledAt?: number } = {};
+    const beginning = performance.now();
+    const pending = h.run(tool, operation).then((value) => {
+      state.result = value;
+      state.settledAt = performance.now() - beginning;
+    });
+    return { state, pending };
+  }
+
+  it("TestBR248_v2_AC02_target_moves_into_denied_directory_during_retry_after", async () => {
+    vi.useFakeTimers();
+    const f = fixture();
+    const h = await f.compose();
+    const base = baseFor("kdrive_rename", rename, OP);
+    const first = start(h, "kdrive_rename", rename);
+    await vi.advanceTimersByTimeAsync(0);
+    // Soft assertions also expose the old code's second upstream call below.
+    expect.soft(first.state.result).toEqual(limited(OP));
+    expect.soft(first.state.settledAt).toBe(0);
+    expect.soft(h.m.records()).toEqual(limitedRecords(base));
+    await vi.advanceTimersByTimeAsync(1_000);
+    f.move(42, 13);
+    await vi.advanceTimersByTimeAsync(4_000);
+    expect(f.mutator).toHaveBeenCalledTimes(1);
+    expect(h.dispatch).toHaveBeenCalledTimes(1);
+    await first.pending;
+    expect(first.state.result).toEqual(limited(OP));
+    expect(h.m.records()).toEqual(limitedRecords(base));
+    const before = h.inspect.mock.calls.length;
+    const second = await h.run("kdrive_rename", rename);
+    const nextOp = "101112131415161718191a1b1c1d1e1f";
+    expect(second).toEqual({
+      result: "denied",
+      op: nextOp,
+      code: "ACCESS_DENIED",
+      attempts: 0,
+    });
+    expect(h.inspect.mock.calls.slice(before)).toEqual([[ref(42), "live"]]);
+    expect(h.m.records().slice(0, 2)).toEqual(limitedRecords(base));
+    expect(h.m.records().slice(2)).toEqual([
+      {
+        ...baseFor("kdrive_rename", rename, nextOp),
+        event: "denied",
+        code: "ACCESS_DENIED",
+      },
+    ]);
+    // This is deny matching on consistent ancestry, not an evidence refusal.
+    expect(await h.policy.check(rename)).toEqual({
+      allowed: false,
+      code: "DENIED_PATH",
+    });
+    await vi.advanceTimersByTimeAsync(55_001);
+    expect(f.mutator).toHaveBeenCalledTimes(1);
+    expect(h.dispatch).toHaveBeenCalledTimes(2);
+    expect(h.m.records()).toEqual([
+      ...limitedRecords(base),
+      {
+        ...baseFor("kdrive_rename", rename, nextOp),
+        event: "denied",
+        code: "ACCESS_DENIED",
+      },
+    ]);
+  });
+
+  it("TestBR248_v2_AC03_unchanged_target_requires_a_new_authorized_invocation", async () => {
+    vi.useFakeTimers();
+    const f = fixture();
+    const h = await f.compose();
+    const base = baseFor("kdrive_rename", rename, OP);
+    const first = start(h, "kdrive_rename", rename);
+    await vi.advanceTimersByTimeAsync(0);
+    expect.soft(first.state.result).toEqual(limited(OP));
+    expect.soft(first.state.settledAt).toBe(0);
+    expect.soft(h.m.records()).toEqual(limitedRecords(base));
+    await vi.advanceTimersByTimeAsync(5_001);
+    expect(f.mutator).toHaveBeenCalledTimes(1);
+    expect(h.dispatch).toHaveBeenCalledTimes(1);
+    await first.pending;
+    expect(first.state.result).toEqual(limited(OP));
+    expect(h.m.records()).toEqual(limitedRecords(base));
+    const before = h.inspect.mock.calls.length;
+    const second = await h.run("kdrive_rename", rename);
+    const nextOp = "101112131415161718191a1b1c1d1e1f";
+    expect(second).toEqual({
+      result: "succeeded",
+      op: nextOp,
+      attempts: 1,
+      status: 200,
+    });
+    expect(h.inspect.mock.calls.slice(before)).toEqual([[ref(42), "live"]]);
+    const nextBase = baseFor("kdrive_rename", rename, nextOp);
+    const records = [
+      { ...nextBase, event: "intent" },
+      {
+        ...nextBase,
+        event: "outcome",
+        result: "succeeded",
+        attempts: 1,
+        ms: 0,
+        status: 200,
+      },
+    ];
+    expect(h.m.records().slice(0, 2)).toEqual(limitedRecords(base));
+    expect(h.m.records().slice(2)).toEqual(records);
+    await vi.advanceTimersByTimeAsync(55_000);
+    expect(f.mutator).toHaveBeenCalledTimes(2);
+    expect(h.dispatch).toHaveBeenCalledTimes(2);
+    expect(h.m.records()).toEqual([...limitedRecords(base), ...records]);
+  });
+
+  const cases: [string, string, Operation, Record<string, string>, string][] = [
+    ["target_outside_root", "kdrive_rename", rename, {}, "OUTSIDE_SCOPE"],
+    [
+      "destination_denied",
+      "kdrive_move",
+      { kind: "move", target: ref(42), destination: ref(12) },
+      {},
+      "DENIED_PATH",
+    ],
+    [
+      "destination_outside_root",
+      "kdrive_move",
+      { kind: "move", target: ref(42), destination: ref(12) },
+      {},
+      "OUTSIDE_SCOPE",
+    ],
+    [
+      "replacement_parent_changed",
+      "kdrive_upload",
+      { kind: "replace", target: ref(42), destination: ref(11), name: "a" },
+      {},
+      "INVALID_OPERATION",
+    ],
+    [
+      "restore_parent_denied",
+      "kdrive_restore",
+      { kind: "restore", target: ref(42) },
+      { KDRIVE_MCP_DENY: "/r/open" },
+      "DENIED_PATH",
+    ],
+    [
+      "configured_root_target",
+      "kdrive_rename",
+      rename,
+      { KDRIVE_MCP_ROOTS: "101:42" },
+      "INVALID_OPERATION",
+    ],
+    [
+      "share_mode_removed",
+      "kdrive_share_link",
+      { kind: "share-link", target: ref(42) },
+      { KDRIVE_MCP_MODE: "write" },
+      "LEVEL_REQUIRED",
+    ],
+    [
+      "domain_removed",
+      "kdrive_share_access",
+      { kind: "share-invite", target: ref(42), domain: "example.test" },
+      { KDRIVE_MCP_INVITE_DOMAINS: "other.test" },
+      "SHARE_RESTRICTED",
+    ],
+    [
+      "public_links_disabled",
+      "kdrive_share_link",
+      { kind: "share-link", target: ref(42) },
+      { KDRIVE_MCP_ALLOW_PUBLIC_LINKS: "0" },
+      "SHARE_RESTRICTED",
+    ],
+    [
+      "read_mode",
+      "kdrive_rename",
+      rename,
+      { KDRIVE_MCP_MODE: "read" },
+      "LEVEL_REQUIRED",
+    ],
+  ];
+  it.each(cases)(
+    "TestBR248_v2_AC04_new_invocation_after_%s_uses_current_authorization",
+    async (row, tool, operation, env, refusal) => {
+      vi.useFakeTimers();
+      const f = fixture();
+      if (row === "configured_root_target") f.nodes.get(42)!.type = "dir";
+      const h = await f.compose();
+      const base = baseFor(tool, operation, OP);
+      const first = start(h, tool, operation);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(first.state.result).toEqual(limited(OP));
+      expect(first.state.settledAt).toBe(0);
+      expect(h.m.records()).toEqual(limitedRecords(base));
+      await first.pending;
+      await vi.advanceTimersByTimeAsync(1_000);
+      const moves: Record<string, [number, number]> = {
+        target_outside_root: [42, 20],
+        destination_denied: [12, 13],
+        destination_outside_root: [12, 20],
+        replacement_parent_changed: [42, 12],
+      };
+      const move = moves[row];
+      if (move) f.move(...move);
+      // Changed configuration is captured by a newly constructed policy/gate.
+      const next = Object.keys(env).length ? await f.compose(env) : h;
+      await vi.advanceTimersByTimeAsync(59_001);
+      expect(f.mutator).toHaveBeenCalledTimes(1);
+      expect(first.state.result).toEqual(limited(OP));
+      expect(h.m.records()).toEqual(limitedRecords(base));
+      const recordOffset = next.m.records().length;
+      const second = await next.run(tool, operation);
+      const nextOp = "101112131415161718191a1b1c1d1e1f";
+      expect(second).toEqual(
+        row === "read_mode"
+          ? { result: "failed", code: "ACCESS_DENIED", attempts: 0 }
+          : {
+              result: "denied",
+              op: nextOp,
+              code: "ACCESS_DENIED",
+              attempts: 0,
+            },
+      );
+      const records =
+        row === "read_mode"
+          ? []
+          : [
+              {
+                ...baseFor(tool, operation, nextOp),
+                event: "denied",
+                code: "ACCESS_DENIED",
+              },
+            ];
+      expect(next.m.records().slice(recordOffset)).toEqual(records);
+      expect(h.m.records().slice(0, 2)).toEqual(limitedRecords(base));
+      // Check the exact policy reason, isolating binding, scope and config
+      // rules from malformed evidence or an unavailable share mutator.
+      expect(await next.policy.check(operation)).toEqual({
+        allowed: false,
+        code: refusal,
+      });
+      expect(f.mutator).toHaveBeenCalledTimes(1);
+      expect(f.replies).toEqual([ok()]);
+      expect(h.m.records()).toEqual([
+        ...limitedRecords(base),
+        ...(next === h ? records : []),
+      ]);
+      if (next !== h) expect(next.m.records()).toEqual(records);
+    },
+  );
 });

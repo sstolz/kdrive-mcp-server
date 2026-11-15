@@ -753,91 +753,127 @@ describe("BR-247 classification", () => {
   });
 });
 
-describe("BR-248 429-only retry", () => {
-  async function timed(
-    replies: (() => Promise<unknown>)[],
-  ): Promise<{ result: GateResult; at: number[] }> {
+// F-037 v1: complete result and JSONL contracts for the pending v2 rules.
+const BASE = {
+  v: 1,
+  ts: "2026-11-09T10:00:00.000Z",
+  op: OP,
+  identity: { kind: "stdio" },
+  tool: "kdrive_rename",
+  kind: "rename",
+  drive: 101,
+  ids: { target: 42 },
+};
+const LIMITED = {
+  result: "failed",
+  op: OP,
+  code: "RATE_LIMITED",
+  attempts: 1,
+  status: 429,
+};
+const limitedRecords = (ms = 0, base = BASE) => [
+  { ...base, event: "intent" },
+  {
+    ...base,
+    event: "outcome",
+    result: "failed",
+    attempts: 1,
+    ms,
+    status: 429,
+    code: "RATE_LIMITED",
+  },
+];
+
+describe("BR-248 v2 one attempt per invocation", () => {
+  async function terminal429(
+    retryAfter: string | undefined,
+    tool = "kdrive_rename",
+    operation: Record<string, unknown> = rename,
+    ids: { target?: number; destination?: number } = { target: 42 },
+  ) {
     vi.useFakeTimers();
-    const at: number[] = [];
-    let index = 0;
+    const replies = [
+      response(429, retryAfter === undefined ? {} : { retryAfter }),
+      response(200),
+    ];
     const h = harness({
-      mutator: () => {
-        at.push(performance.now());
-        const reply = replies[Math.min(index++, replies.length - 1)];
-        return reply ? reply() : Promise.resolve(response(200));
-      },
+      mode: "share",
+      mutator: () => Promise.resolve(replies.shift()),
     });
-    const start = performance.now();
-    const pending = h.run();
-    await vi.runAllTimersAsync();
-    const result = await pending;
-    return { result, at: at.map((t) => t - start) };
-  }
-  const reply = (status: number, retryAfter?: string) => () =>
-    Promise.resolve(
-      response(status, retryAfter === undefined ? {} : { retryAfter }),
-    );
-
-  it("TestBR248_a_429_then_200_waits_1000_ms", async () => {
-    const { result, at } = await timed([reply(429), reply(200)]);
-    expect(result).toMatchObject({ result: "succeeded", attempts: 2 });
-    expect(at).toEqual([0, 1000]);
-  });
-
-  it("TestBR248_retry_after_5_waits_5000_ms", async () => {
-    const { result, at } = await timed([reply(429, "5"), reply(200)]);
-    expect(result).toMatchObject({ result: "succeeded", attempts: 2 });
-    expect(at).toEqual([0, 5000]);
-  });
-
-  it("TestBR248_retry_after_30_is_still_honoured", async () => {
-    const { at } = await timed([reply(429, "30"), reply(200)]);
-    expect(at).toEqual([0, 30000]);
-  });
-
-  it.each(["31", "100", "0000000031"])(
-    "TestBR248_retry_after_%s_ends_rate_limited_after_one_attempt",
-    async (value) => {
-      const { result, at } = await timed([reply(429, value), reply(200)]);
-      expect(result).toEqual({
+    const base = { ...BASE, tool, kind: operation.kind, ids };
+    const expected = [
+      { ...base, event: "intent" },
+      {
+        ...base,
+        event: "outcome",
         result: "failed",
-        op: OP,
-        code: "RATE_LIMITED",
         attempts: 1,
+        ms: 0,
         status: 429,
-      });
-      expect(at).toEqual([0]);
+        code: "RATE_LIMITED",
+      },
+    ];
+    const start = performance.now();
+    let result: GateResult | undefined;
+    const pending = h.run({ tool, operation }).then((value) => {
+      result = value;
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(result).toEqual(LIMITED);
+    expect(performance.now() - start).toBe(0);
+    expect(h.records()).toEqual(expected);
+    await pending;
+    await vi.advanceTimersByTimeAsync(60_001);
+    expect(result).toEqual(LIMITED);
+    expect(h.mutator).toHaveBeenCalledTimes(1);
+    expect(h.policy).toHaveBeenCalledTimes(1);
+    expect(replies).toEqual([response(200)]);
+    expect(h.records()).toEqual(expected);
+  }
+
+  it.each([
+    undefined,
+    "0",
+    "1",
+    "5",
+    "30",
+    "31",
+    "9999999999",
+    "",
+    "-1",
+    "1.5",
+    " 5",
+    "12345678901",
+    "Wed, 21 Oct 2026 07:28:00 GMT",
+    // Retain the other v1 over-ceiling inputs.
+    "100",
+    "0000000031",
+  ])(
+    "TestBR248_v2_AC01_retry_after_%j_never_schedules_another_attempt",
+    async (retryAfter) => {
+      await terminal429(retryAfter);
     },
   );
 
-  it.each([
-    "-1",
-    "1.5",
-    "Wed, 21 Oct 2026 07:28:00 GMT",
-    "12345678901",
-    " 5",
-    "",
-  ])("TestBR248_retry_after_%j_uses_the_default_wait", async (value) => {
-    const { at } = await timed([reply(429, value), reply(200)]);
-    expect(at).toEqual([0, 1000]);
-  });
-
-  it("TestBR248_three_429s_end_rate_limited_after_three_attempts", async () => {
-    const { result, at } = await timed([reply(429)]);
-    expect(result).toMatchObject({
-      result: "failed",
-      code: "RATE_LIMITED",
-      attempts: 3,
-      status: 429,
-    });
-    expect(at).toEqual([0, 1000, 3000]);
-  });
-
-  it("TestBR248_a_5xx_is_not_retried", async () => {
-    const { result, at } = await timed([reply(500), reply(200)]);
-    expect(result).toMatchObject({ result: "uncertain", attempts: 1 });
-    expect(at).toEqual([0]);
-  });
+  const ids = [
+    { destination: 1 },
+    { destination: 1 },
+    { target: 42, destination: 1 },
+    { target: 42 },
+    { target: 42, destination: 5 },
+    { target: 42 },
+    { target: 42 },
+    { target: 42 },
+    { target: 42 },
+  ];
+  it.each(KINDS)(
+    "TestBR248_v2_AC01_kind_%s_stops_on_the_first_429",
+    async (kind) => {
+      const index = KINDS.indexOf(kind);
+      const [tool, operation] = PAIRS[index]!;
+      await terminal429("5", tool, operation, ids[index]);
+    },
+  );
 });
 
 describe("BR-249 attempt and run deadlines", () => {
@@ -864,67 +900,93 @@ describe("BR-249 attempt and run deadlines", () => {
     });
   });
 
-  it("TestBR249_a_429_wait_past_the_run_deadline_ends_rate_limited_without_waiting", async () => {
-    vi.useFakeTimers();
-    const delays = [29_000, 29_500];
-    let index = 0;
-    const h = harness({
-      mutator: () =>
-        new Promise((r) =>
-          setTimeout(() => {
-            r(response(429));
-          }, delays[index++] ?? 0),
-        ),
-    });
-    const start = performance.now();
-    let result: GateResult | undefined,
-      at = 0;
-    void h.run().then((r) => {
-      result = r;
-      at = performance.now() - start;
-    });
-    await vi.runAllTimersAsync();
-    expect(result).toMatchObject({
-      result: "failed",
-      code: "RATE_LIMITED",
-      attempts: 2,
-    });
-    expect(at).toBe(59_500);
-  });
+  it.each([429, 200])(
+    "TestBR249_v2_AC06_attempt_deadline_remains_uncertain_without_retry",
+    async (lateStatus) => {
+      vi.useFakeTimers();
+      let release!: (value: unknown) => void;
+      let signal: AbortSignal | undefined;
+      const h = harness({
+        mutator: (_op, _payload, attemptSignal) => {
+          signal = attemptSignal;
+          return new Promise((resolve) => {
+            release = resolve;
+          });
+        },
+      });
+      let result: GateResult | undefined;
+      const pending = h.run().then((value) => {
+        result = value;
+      });
+      await vi.advanceTimersByTimeAsync(29_999);
+      expect(result).toBeUndefined();
+      expect(signal?.aborted).toBe(false);
+      expect(h.records()).toEqual([{ ...BASE, event: "intent" }]);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(signal?.aborted).toBe(true);
+      const expected = {
+        result: "uncertain",
+        op: OP,
+        code: "UPSTREAM_UNCERTAIN",
+        attempts: 1,
+        message:
+          "The upstream result is unknown; verify the item's state before any new attempt.",
+      };
+      const records = [
+        { ...BASE, event: "intent" },
+        {
+          ...BASE,
+          event: "outcome",
+          result: "uncertain",
+          attempts: 1,
+          ms: 30_000,
+          code: "UPSTREAM_UNCERTAIN",
+        },
+      ];
+      expect(result).toEqual(expected);
+      expect(h.records()).toEqual(records);
+      await pending;
+      release(response(lateStatus, { retryAfter: "5" }));
+      await vi.advanceTimersByTimeAsync(30_001);
+      expect(result).toEqual(expected);
+      expect(h.records()).toEqual(records);
+      expect(h.mutator).toHaveBeenCalledTimes(1);
+    },
+  );
 
-  it("TestBR249_the_second_attempt_is_aborted_at_the_60000_ms_run_deadline", async () => {
+  it("TestBR249_v2_AC06_429_at_25000_ms_never_starts_a_second_attempt", async () => {
     vi.useFakeTimers();
     const signals: AbortSignal[] = [];
-    const start = performance.now();
     const h = harness({
       mutator: (_op, _payload, signal) => {
         signals.push(signal);
         if (signals.length === 1)
-          return new Promise((r) =>
+          return new Promise((resolve) => {
             setTimeout(() => {
-              r(response(429, { retryAfter: "10" }));
-            }, 25_000),
-          );
+              resolve(response(429, { retryAfter: "10" }));
+            }, 25_000);
+          });
         return new Promise(() => undefined);
       },
     });
-    let result: GateResult | undefined,
-      at = 0;
-    void h.run().then((r) => {
-      result = r;
-      at = performance.now() - start;
+    let result: GateResult | undefined;
+    let settledAt: number | undefined;
+    const start = performance.now();
+    const pending = h.run().then((value) => {
+      result = value;
+      settledAt = performance.now() - start;
     });
-    await vi.advanceTimersByTimeAsync(59_999);
-    expect(signals).toHaveLength(2);
-    expect(signals[1]?.aborted).toBe(false);
-    await vi.advanceTimersByTimeAsync(1);
-    expect(signals[1]?.aborted).toBe(true);
-    expect(at).toBe(60_000);
-    expect(result).toMatchObject({
-      result: "uncertain",
-      code: "UPSTREAM_UNCERTAIN",
-      attempts: 2,
-    });
+    await vi.advanceTimersByTimeAsync(25_000);
+    expect(result).toEqual(LIMITED);
+    expect(settledAt).toBe(25_000);
+    expect(h.records()).toEqual(limitedRecords(25_000));
+    await pending;
+    await vi.advanceTimersByTimeAsync(35_001);
+    expect(signals).toHaveLength(1);
+    expect(signals[0]?.aborted).toBe(false);
+    expect(h.mutator).toHaveBeenCalledTimes(1);
+    expect(result).toEqual(LIMITED);
+    expect(h.records()).toEqual(limitedRecords(25_000));
   });
 });
 
@@ -1010,33 +1072,92 @@ describe("BR-250 cancellation", () => {
     ]);
   });
 
-  it("TestBR250_a_cancellation_during_a_429_wait_ends_CANCELLED_after_one_attempt", async () => {
+  it.each(["during_attempt", "during_outcome"])(
+    "TestBR250_v2_AC05_cancellation_%s_does_not_replace_a_429",
+    async (when) => {
+      vi.useFakeTimers();
+      const cancel = new AbortController();
+      let reply!: (value: unknown) => void;
+      let append: (() => void) | undefined;
+      let signal: AbortSignal | undefined;
+      const h = harness({
+        mutator: (_op, _payload, attemptSignal) => {
+          signal = attemptSignal;
+          return new Promise((resolve) => {
+            reply = resolve;
+          });
+        },
+        write: (index, commit) => {
+          if (index === 1 && when === "during_outcome") append = commit;
+          else commit();
+        },
+      });
+      let result: GateResult | undefined;
+      const pending = h.run({ cancellation: cancel.signal }).then((value) => {
+        result = value;
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(h.mutator).toHaveBeenCalledTimes(1);
+      expect(h.records()).toEqual([{ ...BASE, event: "intent" }]);
+      if (when === "during_attempt") cancel.abort();
+      expect(signal?.aborted).toBe(false);
+      reply(response(429, { retryAfter: "5" }));
+      await vi.advanceTimersByTimeAsync(0);
+      if (when === "during_outcome") {
+        expect(append).toBeTypeOf("function");
+        expect(result).toBeUndefined();
+        expect(h.records()).toEqual([{ ...BASE, event: "intent" }]);
+        cancel.abort();
+        append!();
+        await vi.advanceTimersByTimeAsync(0);
+      }
+      expect(result).toEqual(LIMITED);
+      expect(h.records()).toEqual(limitedRecords());
+      await pending;
+      await vi.advanceTimersByTimeAsync(60_001);
+      expect(signal?.aborted).toBe(false);
+      expect(h.mutator).toHaveBeenCalledTimes(1);
+      expect(result).toEqual(LIMITED);
+      expect(h.records()).toEqual(limitedRecords());
+    },
+  );
+
+  it("TestBR250_v2_AC05_pre_attempt_cancellation_keeps_its_boundary", async () => {
     vi.useFakeTimers();
-    const cancel = new AbortController();
-    const h = harness({ mutator: () => Promise.resolve(response(429)) });
-    let result: GateResult | undefined;
-    void h.run({ cancellation: cancel.signal }).then((r) => (result = r));
-    await vi.advanceTimersByTimeAsync(500);
-    expect(h.mutator).toHaveBeenCalledTimes(1);
-    cancel.abort();
-    await vi.advanceTimersByTimeAsync(0);
-    await vi.waitFor(() => {
-      expect(result).toBeDefined();
-    });
-    expect(result).toEqual({
-      result: "failed",
-      op: OP,
-      code: "CANCELLED",
-      attempts: 1,
-      status: 429,
-    });
-    await vi.runAllTimersAsync();
-    expect(h.mutator).toHaveBeenCalledTimes(1);
-    expect(h.records()[1]).toMatchObject({
-      event: "outcome",
-      code: "CANCELLED",
-      attempts: 1,
-    });
+    for (const boundary of ["dispatch", "after_intent"]) {
+      const cancel = new AbortController();
+      const h = harness({
+        beforeExecute: () => {
+          if (boundary === "dispatch") cancel.abort();
+        },
+        write: (index, commit) => {
+          commit();
+          if (index === 0) cancel.abort();
+        },
+      });
+      expect(await h.run({ cancellation: cancel.signal })).toEqual({
+        result: "failed",
+        op: OP,
+        code: "CANCELLED",
+        attempts: 0,
+      });
+      expect(h.records()).toEqual(
+        boundary === "dispatch"
+          ? []
+          : [
+              { ...BASE, event: "intent" },
+              {
+                ...BASE,
+                event: "outcome",
+                result: "failed",
+                attempts: 0,
+                ms: 0,
+                code: "CANCELLED",
+              },
+            ],
+      );
+      expect(h.mutator).not.toHaveBeenCalled();
+    }
   });
 
   it("TestBR250_a_cancellation_during_an_attempt_does_not_abort_it", async () => {
@@ -1056,6 +1177,135 @@ describe("BR-250 cancellation", () => {
     });
     expect(signal?.aborted).toBe(false);
     expect(h.records()[1]).toMatchObject({ result: "succeeded" });
+  });
+});
+
+describe("F-037 classification and outcome failure controls", () => {
+  it.each([
+    "503",
+    "412",
+    "500",
+    "unbranded_throw",
+    "not_sent",
+    "missing_accepted",
+    "accessor_status",
+    "oversize_retry_after",
+  ])(
+    "TestBR248_v2_AC07_reply_%s_preserves_classification_without_retry",
+    async (kind) => {
+      vi.useFakeTimers();
+      const getter = vi.fn(() => 429);
+      const replies: Record<string, () => Promise<unknown>> = {
+        "503": () => Promise.resolve(response(503)),
+        "412": () => Promise.resolve(response(412)),
+        "500": () => Promise.resolve(response(500)),
+        unbranded_throw: () => Promise.reject(new Error("private failure")),
+        not_sent: () => Promise.reject(new NotSent()),
+        missing_accepted: () =>
+          Promise.resolve({ outcome: "response", status: 429 }),
+        accessor_status: () =>
+          Promise.resolve(
+            Object.defineProperty(
+              { outcome: "response", accepted: false },
+              "status",
+              { get: getter, enumerable: true },
+            ),
+          ),
+        oversize_retry_after: () =>
+          Promise.resolve(response(429, { retryAfter: "1".repeat(33) })),
+      };
+      const h = harness({ mutator: replies[kind]! });
+      const rejected = kind === "412";
+      const notSent = kind === "not_sent";
+      const outcome = {
+        result: rejected || notSent ? "failed" : "uncertain",
+        attempts: 1,
+        code: rejected
+          ? "UPSTREAM_REJECTED"
+          : notSent
+            ? "NOT_SENT"
+            : "UPSTREAM_UNCERTAIN",
+        ...(["503", "412", "500"].includes(kind)
+          ? { status: Number(kind) }
+          : {}),
+      };
+      const expected = {
+        ...outcome,
+        op: OP,
+        ...(outcome.result === "uncertain"
+          ? {
+              message:
+                "The upstream result is unknown; verify the item's state before any new attempt.",
+            }
+          : {}),
+      };
+      let result: GateResult | undefined;
+      const pending = h.run().then((value) => {
+        result = value;
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(result).toEqual(expected);
+      const records = [
+        { ...BASE, event: "intent" },
+        { ...BASE, event: "outcome", ...outcome, ms: 0 },
+      ];
+      expect(h.records()).toEqual(records);
+      await pending;
+      await vi.advanceTimersByTimeAsync(60_001);
+      expect(h.mutator).toHaveBeenCalledTimes(1);
+      expect(getter).not.toHaveBeenCalled();
+      expect(result).toEqual(expected);
+      expect(h.records()).toEqual(records);
+    },
+  );
+
+  it("TestBR248_v2_AC07_failed_429_outcome_append_never_replays", async () => {
+    vi.useFakeTimers();
+    const attempted: unknown[] = [];
+    const persisted: unknown[] = [];
+    const sink = createStderrSink({
+      write(chunk, callback) {
+        const record: unknown = JSON.parse(chunk);
+        attempted.push(record);
+        if (attempted.length === 1) {
+          persisted.push(record);
+          callback();
+        } else callback(new Error("synthetic append failure"));
+        return true;
+      },
+    });
+    const h = harness({
+      sink,
+      mutator: () => Promise.resolve(response(429, { retryAfter: "5" })),
+    });
+    let result: GateResult | undefined;
+    const pending = h.run().then((value) => {
+      result = value;
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    const expected = { ...LIMITED, audit: "outcome_unrecorded" };
+    expect(result).toEqual(expected);
+    await pending;
+    expect(persisted).toEqual([{ ...BASE, event: "intent" }]);
+    expect(attempted).toEqual(limitedRecords());
+    expect(sink.latched).toBe(true);
+    expect(h.diagnostics).toEqual([
+      "Audit outcome could not be recorded; further writes are refused until restart.\n",
+    ]);
+    expect(await h.run()).toEqual({
+      result: "failed",
+      code: "AUDIT_UNAVAILABLE",
+      attempts: 0,
+    });
+    await vi.advanceTimersByTimeAsync(60_001);
+    expect(h.mutator).toHaveBeenCalledTimes(1);
+    expect(h.policy).toHaveBeenCalledTimes(1);
+    expect(result).toEqual(expected);
+    expect(persisted).toEqual([{ ...BASE, event: "intent" }]);
+    expect(attempted).toEqual(limitedRecords());
+    expect(h.diagnostics).toEqual([
+      "Audit outcome could not be recorded; further writes are refused until restart.\n",
+    ]);
   });
 });
 
