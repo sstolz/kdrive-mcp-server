@@ -1,5 +1,6 @@
 import { SignJWT, decodeJwt, decodeProtectedHeader, importPKCS8 } from "jose";
 import { describe, expect, it } from "vitest";
+import { proxyStateSnapshot } from "../../src/auth/proxy/proxy.js";
 import {
   CLAUDE,
   LOOPBACK,
@@ -19,6 +20,20 @@ import {
   FakeMetadata,
   cimdDocument,
 } from "../helpers/cimd.js";
+
+// F-036: exact logger entries; no request-derived fields are permitted.
+const GRANT_REFUSED = {
+  name: "token_refused",
+  fields: { handler: "token", error: "invalid_grant", status: 400 },
+};
+const TARGET_REFUSED = {
+  name: "token_refused",
+  fields: { handler: "token", error: "invalid_target", status: 400 },
+};
+const FAMILY_REVOKED = {
+  name: "refresh_family_revoked",
+  fields: { handler: "token" },
+};
 
 function basic(id: string, secret: string): string {
   // eslint-disable-next-line sonarjs/no-nested-template-literals -- F-011: pre-existing nested template kept unchanged
@@ -273,7 +288,7 @@ describe("BR-137 authorization-code grant", () => {
     ],
     ["another resource", { resource: "https://other.test" }],
   ])(
-    "BR-137 v2 AC-01 refuses %s without consuming the code",
+    "BR-137 v3 AC-01 refuses %s without consuming the code",
     async (_l, variant) => {
       for (const kind of ["registered", "CIMD"]) {
         const metadata = new FakeMetadata();
@@ -309,10 +324,14 @@ describe("BR-137 authorization-code grant", () => {
             ? "invalid_target"
             : "invalid_grant";
         expectError(response, 400, error);
-        expect(h.logs).toEqual([]);
+        expect(h.logs).toEqual([
+          error === "invalid_target" ? TARGET_REFUSED : GRANT_REFUSED,
+        ]);
+        h.logs.length = 0;
         const accepted = await h.redeem(done);
         expect(accepted.status).toBe(200);
         expect(json(accepted).refresh_token).toEqual(expect.any(String));
+        expect(h.logs).toEqual([]);
       }
     },
   );
@@ -529,16 +548,18 @@ async function redirectProfile(
   const accepted =
     supplied === "matching" || (supplied === "omitted" && profile === "single");
   expect(result.status).toBe(accepted ? 200 : 400);
-  expect(h.logs).toEqual([]);
+  expect(h.logs).toEqual(accepted ? [] : [GRANT_REFUSED]);
   if (!accepted) {
     expectError(result, 400, "invalid_grant");
+    h.logs.length = 0;
     expect((await h.redeem(done)).status).toBe(200);
+    expect(h.logs).toEqual([]);
   }
 }
 
-describe("BR-137 v2 binding order", () => {
+describe("BR-137 v3 binding order", () => {
   it.each(["single", "multiple", "variable loopback"])(
-    "BR-137 v2 AC-01 redirect URI %s follows the compatibility profile",
+    "BR-137 v3 AC-01 redirect URI %s follows the compatibility profile",
     async (profile) => {
       for (const kind of ["registered", "CIMD"])
         for (const supplied of ["omitted", "matching", "mismatching"])
@@ -547,7 +568,7 @@ describe("BR-137 v2 binding order", () => {
   );
 
   it.each([43, 128])(
-    "BR-137 v2 AC-01 accepts a %i-character verifier",
+    "BR-137 v3 AC-01 accepts a %i-character verifier",
     async (length) => {
       const h = await harness();
       const client = await h.register();
@@ -555,19 +576,23 @@ describe("BR-137 v2 binding order", () => {
       const flow = await h.approve(client, verifier);
       const code =
         location(await h.callback(flow)).searchParams.get("code") ?? "";
+      h.logs.length = 0;
       expect(
         (await h.redeem({ code, verifier, client, redirect: client.redirect }))
           .status,
       ).toBe(200);
+      expect(h.logs).toEqual([]);
     },
   );
 
-  it("BR-137 v2 AC-02 only a replay matching every binding revokes the family", async () => {
+  it("BR-137 v3 AC-02 only a replay matching every binding revokes the family", async () => {
     const h = await harness();
-    const done = await h.login();
+    const client = await h.register({ redirect_uris: [CLAUDE, LOOPBACK] });
+    const done = await h.login(client);
     const other = await h.register();
     let token = json(await h.redeem(done)).refresh_token as string;
     const variants: Record<string, string | undefined>[] = [
+      { redirect_uri: undefined },
       { redirect_uri: "" },
       { redirect_uri: "http://127.0.0.1:9999/callback" },
       { code_verifier: "w".repeat(43) },
@@ -576,51 +601,76 @@ describe("BR-137 v2 binding order", () => {
       { code_verifier: "v".repeat(42) + "+" },
       { resource: "https://other.test" },
     ];
+    h.logs.length = 0;
     expectError(await h.redeem(done, {}, other), 400, "invalid_grant");
+    expect(h.logs).toEqual([GRANT_REFUSED]);
+    const afterOther = await h.refresh(done.client, token);
+    expect(afterOther.status).toBe(200);
+    token = json(afterOther).refresh_token as string;
     for (const extra of variants) {
+      h.logs.length = 0;
       expectError(
         await h.redeem(done, extra),
         400,
         "resource" in extra ? "invalid_target" : "invalid_grant",
       );
-      expect(h.logs).toEqual([]);
+      expect(h.logs).toEqual([
+        "resource" in extra ? TARGET_REFUSED : GRANT_REFUSED,
+      ]);
       const refreshed = await h.refresh(done.client, token);
       expect(refreshed.status).toBe(200);
       token = json(refreshed).refresh_token as string;
     }
+    h.logs.length = 0;
     expectError(await h.redeem(done), 400, "invalid_grant");
-    expect(
-      h.logs.filter((entry) => entry.name === "refresh_family_revoked"),
-    ).toHaveLength(1);
+    expect(h.logs).toEqual([FAMILY_REVOKED, GRANT_REFUSED]);
     expectError(await h.refresh(done.client, token), 400, "invalid_grant");
-    const client = await h.register({ grant_types: ["authorization_code"] });
-    const noFamily = await h.login(client);
+    h.logs.length = 0;
+    expectError(await h.redeem(done), 400, "invalid_grant");
+    expect(h.logs).toEqual([GRANT_REFUSED]);
+    const codeOnly = await h.register({ grant_types: ["authorization_code"] });
+    const noFamily = await h.login(codeOnly);
+    h.logs.length = 0;
     expect((await h.redeem(noFamily)).status).toBe(200);
+    expect(h.logs).toEqual([]);
     h.logs.length = 0;
     expectError(await h.redeem(noFamily), 400, "invalid_grant");
-    expect(h.logs).toEqual([]);
+    expect(h.logs).toEqual([GRANT_REFUSED]);
   });
 
-  it("BR-137 v2 AC-03 the 60-second lifetime bounds redemption and replay revocation", async () => {
+  it("BR-137 v3 AC-03 the 60-second lifetime bounds redemption and replay revocation", async () => {
     for (const elapsed of [59_999, 60_000])
       for (const replay of [false, true]) await lifetimeCase(elapsed, replay);
   });
 
-  it("BR-137 v2 AC-04 concurrent redemptions consume and revoke only on matching requests", async () => {
+  it("BR-137 v3 AC-04 concurrent redemptions consume and revoke only on matching requests", async () => {
     for (const order of ["both valid", "wrong first", "wrong last"]) {
       const h = await harness();
       const done = await h.login();
       const wrong = { code_verifier: "w".repeat(43) };
+      h.logs.length = 0;
       const first = h.redeem(done, order === "wrong first" ? wrong : {});
       const second = h.redeem(done, order === "wrong last" ? wrong : {});
       const responses = await Promise.all([first, second]);
       expect(responses.map((response) => response.status).sort()).toEqual([
         200, 400,
       ]);
-      expect(
-        h.logs.filter((entry) => entry.name === "refresh_family_revoked"),
-      ).toHaveLength(order === "both valid" ? 1 : 0);
-      if (order !== "both valid") expect(h.logs).toEqual([]);
+      expectError(
+        responses.find((response) => response.status === 400)!,
+        400,
+        "invalid_grant",
+      );
+      expect(h.logs).toEqual(
+        order === "both valid"
+          ? [FAMILY_REVOKED, GRANT_REFUSED]
+          : [GRANT_REFUSED],
+      );
+      const accepted = responses.find((response) => response.status === 200)!;
+      const refreshed = await h.refresh(
+        done.client,
+        json(accepted).refresh_token as string,
+      );
+      expect(refreshed.status).toBe(order === "both valid" ? 400 : 200);
     }
   });
 });
@@ -631,18 +681,104 @@ async function lifetimeCase(elapsed: number, replay: boolean) {
   let token: string | undefined;
   if (replay) {
     h.clock.advance(1000);
+    h.logs.length = 0;
     token = json(await h.redeem(done)).refresh_token as string;
+    expect(h.logs).toEqual([]);
   }
   h.clock.advance(elapsed - (replay ? 1000 : 0));
+  h.logs.length = 0;
   const result = await h.redeem(done);
   expect(result.status).toBe(!replay && elapsed < 60_000 ? 200 : 400);
-  const revocations = h.logs.filter(
-    (entry) => entry.name === "refresh_family_revoked",
+  if (result.status === 400) expectError(result, 400, "invalid_grant");
+  expect(h.logs).toEqual(
+    elapsed === 60_000
+      ? [GRANT_REFUSED]
+      : replay
+        ? [FAMILY_REVOKED, GRANT_REFUSED]
+        : [],
   );
-  expect(revocations).toHaveLength(replay && elapsed < 60_000 ? 1 : 0);
-  if (elapsed === 60_000) expect(h.logs).toEqual([]);
   if (replay) {
     const refreshed = await h.refresh(done.client, token);
     expect(refreshed.status).toBe(elapsed < 60_000 ? 400 : 200);
+    token = json(refreshed).refresh_token as string | undefined;
   }
+  if (elapsed === 60_000) {
+    // Authorization purges expired codes; the next redemption is unknown.
+    await h.approve(done.client, "p".repeat(43));
+    const state = proxyStateSnapshot(h.proxy) as {
+      codes: [string, unknown][];
+    };
+    expect(state.codes.some(([value]) => value === done.code)).toBe(false);
+    h.logs.length = 0;
+    expectError(await h.redeem(done), 400, "invalid_grant");
+    expect(h.logs).toEqual([GRANT_REFUSED]);
+    if (replay) expect((await h.refresh(done.client, token)).status).toBe(200);
+  }
+}
+
+it("BR-137 v3 AC-05 missing codes and competing failures log the first refusal", async () => {
+  const h = await harness();
+  const done = await h.login();
+  for (const code of [undefined, "", "SYNTHETIC-UNKNOWN-CODE"]) {
+    h.logs.length = 0;
+    expectError(await h.redeem(done, { code }), 400, "invalid_grant");
+    expect(h.logs).toEqual([GRANT_REFUSED]);
+  }
+  for (let attempt = 0; attempt < 2; attempt++) {
+    h.logs.length = 0;
+    expectError(
+      await h.redeem(done, { code_verifier: "w".repeat(43) }),
+      400,
+      "invalid_grant",
+    );
+    expect(h.logs).toEqual([GRANT_REFUSED]);
+  }
+  h.logs.length = 0;
+  expect((await h.redeem(done)).status).toBe(200);
+  expect(h.logs).toEqual([]);
+  for (const consumed of [false, true]) {
+    await competingCodeFailures(consumed);
+  }
+});
+
+async function competingCodeFailures(consumed: boolean) {
+  const h = await harness();
+  const done = await h.login();
+  const other = await h.register();
+  let token: string | undefined;
+  if (consumed) token = json(await h.redeem(done)).refresh_token as string;
+  const variants = [
+    { extra: {}, client: other },
+    { extra: { redirect_uri: "" }, client: done.client },
+    { extra: { code_verifier: "w".repeat(43) }, client: done.client },
+  ];
+  for (const { extra, client } of variants) {
+    h.logs.length = 0;
+    expectError(
+      await h.redeem(
+        done,
+        { ...extra, resource: "https://other.test" },
+        client,
+      ),
+      400,
+      "invalid_grant",
+    );
+    expect(h.logs).toEqual([GRANT_REFUSED]);
+  }
+  h.logs.length = 0;
+  expectError(
+    await h.redeem(done, { resource: "https://other.test" }),
+    400,
+    "invalid_target",
+  );
+  expect(h.logs).toEqual([TARGET_REFUSED]);
+  h.clock.advance(60_000);
+  h.logs.length = 0;
+  expectError(
+    await h.redeem(done, { resource: "https://other.test" }),
+    400,
+    "invalid_grant",
+  );
+  expect(h.logs).toEqual([GRANT_REFUSED]);
+  if (consumed) expect((await h.refresh(done.client, token)).status).toBe(200);
 }

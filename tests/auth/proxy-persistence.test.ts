@@ -37,6 +37,18 @@ afterEach(() => {
 });
 
 const VERIFIER = "v".repeat(43);
+const GRANT_REFUSED = {
+  name: "token_refused",
+  fields: { handler: "token", error: "invalid_grant", status: 400 },
+};
+const TARGET_REFUSED = {
+  name: "token_refused",
+  fields: { handler: "token", error: "invalid_target", status: 400 },
+};
+const FAMILY_REVOKED = {
+  name: "refresh_family_revoked",
+  fields: { handler: "token" },
+};
 
 async function onFile(
   path: string,
@@ -930,7 +942,7 @@ describe("BR-311 CIMD families persist without a client row (F-028 AC-08)", () =
   });
 });
 
-it("BR-298 BR-137 v2 AC-02 a refused replay commits nothing", async () => {
+it("BR-298 BR-137 v3 AC-02 a refused replay commits nothing", async () => {
   const clock = new Clock();
   const recorded = recording(openState(stateFile(), { clock }));
   try {
@@ -953,38 +965,212 @@ it("BR-298 BR-137 v2 AC-02 a refused replay commits nothing", async () => {
       { resource: "https://other.test" },
     ];
     recorded.commits.length = 0;
-    expect((await h.redeem(done, {}, other)).status).toBe(400);
+    h.logs.length = 0;
+    expectCodeRefusal(await h.redeem(done, {}, other), "invalid_grant");
     expect(recorded.commits).toEqual([]);
+    expect(h.logs).toEqual([GRANT_REFUSED]);
+    const afterOther = await h.refresh(client, token);
+    expect(afterOther.status).toBe(200);
+    token = json(afterOther).refresh_token as string;
     for (const extra of variants) {
       recorded.commits.length = 0;
+      h.logs.length = 0;
       const refused = await h.redeem(done, extra);
-      expect(json(refused).error).toBe(
+      expectCodeRefusal(
+        refused,
         "resource" in extra ? "invalid_target" : "invalid_grant",
       );
       expect(recorded.commits).toEqual([]);
-      expect(events(h, "refresh_family_revoked")).toEqual([]);
+      expect(h.logs).toEqual([
+        "resource" in extra ? TARGET_REFUSED : GRANT_REFUSED,
+      ]);
       const refreshed = await h.refresh(client, token);
       expect(refreshed.status).toBe(200);
       token = json(refreshed).refresh_token as string;
     }
     recorded.commits.length = 0;
+    h.logs.length = 0;
     const replay = h.redeem(done);
     expect(
       recorded.commits.map((writes) => writes.map((write) => write.op)),
     ).toEqual([["deleteFamily"]]);
-    expect((await replay).status).toBe(400);
-    expect(events(h, "refresh_family_revoked")).toHaveLength(1);
+    expectCodeRefusal(await replay, "invalid_grant");
+    expect(h.logs).toEqual([FAMILY_REVOKED, GRANT_REFUSED]);
     expect((await h.refresh(client, token)).status).toBe(400);
+    recorded.commits.length = 0;
+    h.logs.length = 0;
+    expectCodeRefusal(await h.redeem(done), "invalid_grant");
+    expect(recorded.commits).toEqual([]);
+    expect(h.logs).toEqual([GRANT_REFUSED]);
     const noRefresh = await h.login(
       await h.register({ grant_types: ["authorization_code"] }),
     );
     await h.redeem(noRefresh);
     recorded.commits.length = 0;
     h.logs.length = 0;
-    expect((await h.redeem(noRefresh)).status).toBe(400);
+    expectCodeRefusal(await h.redeem(noRefresh), "invalid_grant");
     expect(recorded.commits).toEqual([]);
-    expect(h.logs).toEqual([]);
+    expect(h.logs).toEqual([GRANT_REFUSED]);
   } finally {
     recorded.wrapped.close();
+  }
+});
+
+function expectCodeRefusal(response: ProxyResponse, error: string): void {
+  expect(response.status).toBe(400);
+  expect(response.body).toBe(JSON.stringify({ error }));
+  expect(response.headers).toEqual([
+    ["Content-Type", "application/json"],
+    ["Cache-Control", "no-store"],
+    ["Pragma", "no-cache"],
+  ]);
+  expect(header(response, "cache-control")).toBe("no-store");
+  expect(header(response, "pragma")).toBe("no-cache");
+}
+
+/** BR-137 v3 preserves every store except the in-memory client last use. */
+function refusalState(h: Harness) {
+  const state = snapshot(h);
+  return {
+    ...state,
+    clients: state.clients.map((client) => ({ ...client, lastUse: 0 })),
+  };
+}
+
+async function refusalWithoutWrite(
+  h: Harness,
+  commits: StoreWrite[][],
+  request: () => Promise<ProxyResponse>,
+  error = "invalid_grant",
+) {
+  const before = refusalState(h);
+  commits.length = 0;
+  h.logs.length = 0;
+  expectCodeRefusal(await request(), error);
+  expect(h.logs).toEqual([
+    error === "invalid_target" ? TARGET_REFUSED : GRANT_REFUSED,
+  ]);
+  expect(commits).toEqual([]);
+  expect(refusalState(h)).toEqual(before);
+}
+
+it("BR-298 BR-137 v3 AC-05 restored refusal events write no state", async () => {
+  for (const consumed of [false, true]) {
+    await refusalWriteCases(consumed);
+  }
+  await noFamilyWriteCases();
+});
+
+async function refusalWriteCases(consumed: boolean) {
+  const clock = new Clock();
+  const recorded = recording(openState(stateFile(), { clock }));
+  try {
+    const h = await harness({ clock, store: recorded.wrapped });
+    const done = await h.login();
+    const other = await h.register();
+    let token: string | undefined;
+    if (consumed) token = json(await h.redeem(done)).refresh_token as string;
+    for (const code of [undefined, "", "SYNTHETIC-UNKNOWN-CODE"]) {
+      await refusalWithoutWrite(h, recorded.commits, () =>
+        h.redeem(done, { code }),
+      );
+    }
+    for (const extra of [
+      { redirect_uri: "", resource: "https://other.test" },
+      { code_verifier: "w".repeat(43), resource: "https://other.test" },
+    ]) {
+      await refusalWithoutWrite(h, recorded.commits, () =>
+        h.redeem(done, extra),
+      );
+    }
+    await refusalWithoutWrite(h, recorded.commits, () =>
+      h.redeem(done, { resource: "https://other.test" }, other),
+    );
+    await refusalWithoutWrite(
+      h,
+      recorded.commits,
+      () => h.redeem(done, { resource: "https://other.test" }),
+      "invalid_target",
+    );
+    for (let attempt = 0; attempt < 2; attempt++) {
+      await refusalWithoutWrite(h, recorded.commits, () =>
+        h.redeem(done, { code_verifier: "w".repeat(43) }),
+      );
+    }
+    // Keep an independent unconsumed code for the expiry boundary.
+    const expired = await h.login(done.client);
+    if (!consumed) {
+      h.logs.length = 0;
+      const accepted = await h.redeem(done);
+      expect(accepted.status).toBe(200);
+      expect(h.logs).toEqual([]);
+      token = json(accepted).refresh_token as string;
+    }
+    clock.advance(60_000);
+    for (const code of [expired, done]) {
+      await refusalWithoutWrite(h, recorded.commits, () => h.redeem(code));
+      await refusalWithoutWrite(h, recorded.commits, () =>
+        h.redeem(code, { resource: "https://other.test" }),
+      );
+    }
+    expect((await h.refresh(done.client, token)).status).toBe(200);
+  } finally {
+    recorded.wrapped.close();
+  }
+}
+
+async function noFamilyWriteCases() {
+  const clock = new Clock();
+  const recorded = recording(openState(stateFile(), { clock }));
+  try {
+    const h = await harness({ clock, store: recorded.wrapped });
+    const done = await h.login();
+    expect((await h.redeem(done)).status).toBe(200);
+    h.logs.length = 0;
+    expectCodeRefusal(await h.redeem(done), "invalid_grant");
+    expect(h.logs).toEqual([FAMILY_REVOKED, GRANT_REFUSED]);
+    await refusalWithoutWrite(h, recorded.commits, () => h.redeem(done));
+    const codeOnly = await h.login(
+      await h.register({ grant_types: ["authorization_code"] }),
+    );
+    expect((await h.redeem(codeOnly)).status).toBe(200);
+    await refusalWithoutWrite(h, recorded.commits, () => h.redeem(codeOnly));
+  } finally {
+    recorded.wrapped.close();
+  }
+}
+
+it("BR-299 BR-137 v3 AC-05 failed code commits log exactly one refusal", async () => {
+  for (const replay of [false, true]) {
+    const clock = new Clock();
+    const { port, control } = faultyPort();
+    const { h, store } = await onFile(stateFile(), clock, { port });
+    try {
+      const done = await h.login();
+      if (replay) expect((await h.redeem(done)).status).toBe(200);
+      control.failCommit = true;
+      h.logs.length = 0;
+      const refused = await h.redeem(done);
+      expectUnavailable(refused);
+      expect(header(refused, "pragma")).toBe("no-cache");
+      expect(h.logs).toEqual([
+        ...(replay ? [FAMILY_REVOKED] : []),
+        {
+          name: "store_write_failed",
+          fields: { handler: "token", store: "families" },
+        },
+        {
+          name: "token_refused",
+          fields: {
+            handler: "token",
+            error: "temporarily_unavailable",
+            status: 503,
+          },
+        },
+      ]);
+    } finally {
+      control.failCommit = false;
+      store.close();
+    }
   }
 });
