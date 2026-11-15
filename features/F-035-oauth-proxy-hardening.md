@@ -11,7 +11,8 @@ version: 1
 Author: Claude Opus 5.5 (effort unknown), spec phase, 2026-11-15.
 Base: branch `feat/46-oauth-hardening` (main `958138f`).
 IDs: F-035; BR-421 v1; BR-422 v1; BR-023 v4; BR-024 v5; BR-131 v2;
-BR-133 v2; BR-137 v2; BR-162 v3; BR-167 v3; AC-01–AC-20. No ADR (D-8).
+BR-133 v2; BR-137 v2; BR-162 v3; BR-167 v3; BR-184 v3; AC-01–AC-21.
+No ADR (D-8).
 Next free IDs checked on main (`docs/spec-index.md`, `business-rules/`):
 F-035, BR-421, ADR-013.
 
@@ -76,10 +77,13 @@ server behind a reverse proxy.
 - The HTTP adapter passes `req.socket.remoteAddress` to the router
   (`HttpHandler.handle(request, target, remoteAddress?)`; tests that call
   `handle` without it get the peer `unknown`).
+- BR-184 v3: `examples/compose.yaml` passes the optional
+  `MCP_HTTP_TRUSTED_PROXIES`, empty by default, with a comment on Traefik's
+  network (D-9).
 - `docs/oauth-proxy.md` (reverse-proxy requirements, limits and residual
   risks) and `docs/deployment.md` (step 4, the reverse proxy's network
-  without an address literal, BR-186): each change marked as F-035 pending
-  acceptance.
+  without an address literal, BR-186, and the Compose variable): each
+  change marked as F-035 pending acceptance.
 
 ### Out of scope
 
@@ -90,8 +94,9 @@ server behind a reverse proxy.
   headers and the PROXY protocol (D-4).
 - Any other use of the peer: it binds no consent, cookie, code or CIMD
   fetch, and is never logged (BR-167 v3).
-- `examples/compose.yaml` and BR-184: the example sets no trusted proxy
-  (open question Q-1).
+- Any other change to `examples/compose.yaml` or to BR-186, which stays
+  as it is: the optional variable's empty default is the server default,
+  not an installation-specific value (D-9).
 - A cap on failed attempts per code (D-1), and any change to consent or
   flow consumption (BR-129, BR-132), which stays one-use whatever the
   outcome.
@@ -153,7 +158,9 @@ server behind a reverse proxy.
   `opaqueredirect` or status 300–399), the body exceeds 65,536 bytes, reading
   the body fails, or the 10-second deadline passes, then before the returned
   promise rejects: the request's abort signal is aborted, and a response
-  whose body has not been read to its end has that body cancelled. A URL
+  whose body has not been read to its end has that body cancelled; a body
+  whose stream has errored is already closed, so for it only the abort is
+  required. A URL
   other than `https` still rejects before any `fetch`. The rejection is
   otherwise as under v1 (discovery unusable, `server_error` at the code
   exchange, BR-132), and a cancellation or abort that throws is ignored. A
@@ -162,7 +169,9 @@ server behind a reverse proxy.
 - **BR-421** — The F-002 setting `httpTrustedProxies` (environment
   `MCP_HTTP_TRUSTED_PROXIES`, comma-separated like the other list settings;
   option `--http-trusted-proxies`; YAML `httpTrustedProxies`) is an optional
-  list, default empty, of at most 16 entries. Each entry is an IPv4 address
+  list, default empty, of at most 64 entries; an empty value
+  (`MCP_HTTP_TRUSTED_PROXIES=`, YAML `[]`) is the empty list, as for
+  BR-291. Each entry is an IPv4 address
   in dotted-decimal form without leading zeros, or an IPv6 address
   byte-identical to the WHATWG URL serialisation of itself (lowercase,
   compressed, no zone, no brackets, no dotted IPv4 part) and not inside
@@ -170,12 +179,14 @@ server behind a reverse proxy.
   length without a leading zero, 8–32 for IPv4 and 8–128 for IPv6, with no
   address bit set after the prefix. An entry without a prefix stands for
   `/32` (IPv4) or `/128` (IPv6). Any other entry is refused with
-  `INVALID_VALUE`, and so is a list of more than 16 entries or with two
+  `INVALID_VALUE`, and so is a list of more than 64 entries or with two
   entries naming the same prefix (for example `192.0.2.1` and
   `192.0.2.1/32`); overlapping prefixes of different lengths are accepted.
   The setting is accepted only with transport `http`, authentication on and
-  OAuth mode `proxy` (the BR-290 restriction); otherwise
-  `CONFLICTING_SETTINGS`. It is read at startup only. Verified by: AC-10.
+  OAuth mode `proxy` (the BR-290 restriction); set explicitly in any other
+  configuration, the empty list included, it is refused with
+  `CONFLICTING_SETTINGS`, as BR-291 is. It is read at startup only.
+  Verified by: AC-10.
 - **BR-422** — The peer of a request on an OAuth route is derived from the
   socket's remote address `S`, as Node reports it, and the BR-421 list `T`:
   (1) every address is normalised before it is compared or used: an
@@ -211,7 +222,7 @@ server behind a reverse proxy.
   | `authorize` | 30       | 60     | 60 s          |
   | `consent`   | 30       | 60     | 60 s          |
   | `callback`  | 30       | 60     | 60 s          |
-  | `token`     | 60       | 300    | 60 s          |
+  | `token`     | 60       | 1,200  | 60 s          |
 
   The peer is the BR-422 peer. Each window keeps the v1 semantics: it opens
   at the first counted request while none is open for its key, lasts the
@@ -229,7 +240,7 @@ server behind a reverse proxy.
   route; before an entry is added, every entry of that table whose window
   has ended is removed, so a table holds fewer than twice its global limit
   (at most 119 entries for `register`, `authorize`, `consent` and
-  `callback`, 599 for `token`). Verified by: AC-13–AC-18.
+  `callback`, 2,399 for `token`). Verified by: AC-13–AC-18.
 - **BR-167 v3** — v2 holds, except that the `request_refused` event of a
   429 from a BR-162 v3 OAuth window also has the field `window`, `peer` or
   `global`; every other event keeps its v2 fields. No response, error,
@@ -238,7 +249,15 @@ server behind a reverse proxy.
   AC-14, AC-15, AC-19.
 - **BR-023 v4** (F-002) — adds the bounds of BR-421. Verified by: AC-10.
 - **BR-024 v5** (F-002) — adds `httpTrustedProxies` to the proxy-only
-  settings. Verified by: AC-10.
+  settings (BR-421). Verified by: AC-10.
+- **BR-184 v3** (F-013) — v2 holds, and the service environment also has
+  `MCP_HTTP_TRUSTED_PROXIES: ${MCP_HTTP_TRUSTED_PROXIES:-}`, the only
+  variable of the file with a default, directly preceded by a comment line
+  that names `MCP_HTTP_TRUSTED_PROXIES`, Traefik's network and
+  `docs/deployment.md` and contains no IP address. The v1 loading check
+  replaces this variable by its empty default, and the environment then
+  loads with an empty `httpTrustedProxies`; with the value `192.0.2.0/24`
+  it loads with that one entry. Verified by: AC-21.
 
 Existing rules this feature relies on without change:
 
@@ -264,10 +283,13 @@ Proxy tests use the fake clock, upstream port and logger of
 - **AC-01** (BR-137 v2) — Given a fresh code issued to client A, When it is
   presented with client B's credentials, without `redirect_uri`, with an
   altered loopback port, a wrong verifier, a 42-character verifier, a
-  verifier with `+`, or another `resource`, Then each gets 400
-  `invalid_grant` (`invalid_target` for the resource), no event is logged,
-  and a following correct redemption by A gets 200 with a refresh token.
-  Verified by: `BR-137 v2 AC-01 refuses %s without consuming the code` in
+  129-character verifier, a verifier with `+`, or another `resource`, Then
+  each gets 400 `invalid_grant` (`invalid_target` for the resource), no
+  event is logged, and a following correct redemption by A gets 200 with a
+  refresh token; Given codes whose challenges come from a 43-character and
+  a 128-character verifier, Then each correct redemption gets 200.
+  Verified by: `BR-137 v2 AC-01 refuses %s without consuming the code` and
+  `BR-137 v2 AC-01 accepts a %i-character verifier` in
   `tests/auth/proxy-token.test.ts`.
 - **AC-02** (BR-137 v2, BR-298 v2) — Given a code redeemed by A (family F)
   and a state file, When the code is presented again with each mismatch of
@@ -288,13 +310,15 @@ Proxy tests use the fake clock, upstream port and logger of
   matching replay at `T + 60` s − 1 ms revokes F, and for another such code
   a matching replay at `T + 60` s gets 400 `invalid_grant` with no event and
   F still refreshes. Verified by: `BR-137 v2 AC-03 the 60-second lifetime
-  bounds redemption and replay revocation`.
+  bounds redemption and replay revocation` in
+  `tests/auth/proxy-token.test.ts`.
 - **AC-04** (BR-137 v2) — Given a fresh code, When two correct redemptions
   run concurrently, Then one gets 200 and the other 400 `invalid_grant`
   with one `refresh_family_revoked`; When a wrong-verifier request and a
   correct one run concurrently, in either order, Then they get 400 and 200
   and no event is logged. Verified by: `BR-137 v2 AC-04 concurrent
-  redemptions consume and revoke only on matching requests`.
+  redemptions consume and revoke only on matching requests` in
+  `tests/auth/proxy-token.test.ts`.
 - **AC-05** (BR-133 v2) — Given an empty JWKS cache and an upstream whose
   JWKS reply is held, When two and then three callbacks whose ID tokens
   carry the served `kid` arrive before the reply is released, Then every
@@ -309,7 +333,8 @@ Proxy tests use the fake clock, upstream port and logger of
   `code` without a request; and When at `T + 61` s a callback with the
   original `kid` arrives while the refetch is held, Then it redirects with
   a `code` before the refetch is released. Verified by: `BR-133 v2 AC-06
-  concurrent callbacks with a rotated kid share one refetch`.
+  concurrent callbacks with a rotated kid share one refetch` in
+  `tests/auth/proxy-id-token.test.ts`.
 - **AC-07** (BR-133 v2) — Given an empty cache, When a JWKS fetch started
   at `T` is held and then fails while two callbacks await it, Then both are
   rejected (`server_error` redirect) after one request; When a callback
@@ -319,39 +344,50 @@ Proxy tests use the fake clock, upstream port and logger of
   `T` and released at `T + 5` s, Then a callback at `T + 3,600` s − 1 ms uses
   the cache without a request and one at `T + 3,600` s makes one. Verified
   by: `BR-133 v2 AC-07 a shared fetch fails for every waiter and both
-  bounds count from its start`.
+  bounds count from its start` in `tests/auth/proxy-id-token.test.ts`.
 - **AC-08** (BR-131 v2) — Given the production port over a fake `fetch`
-  whose response body records `cancel`, When `fetchJson` and `postForm`
+  whose response body is a `ReadableStream` whose underlying source records
+  each call of its `cancel` callback, When `fetchJson` and `postForm`
   each receive a 301, 302, 303, 307 and 308 response with a body, and an
   `opaqueredirect` response, Then each rejects as a refused redirect, and
-  when its rejection is observed the body's `cancel` has been called once
-  and the request's signal is aborted. Verified by: `BR-131 v2 AC-08 a
+  when its rejection is observed the source's `cancel` has been called
+  once and the request's signal is aborted. Verified by: `BR-131 v2 AC-08 a
   refused redirect cancels its body and aborts its request` in
   `tests/auth/proxy-upstream.test.ts`.
 - **AC-09** (BR-131 v2) — Given the same port, When the body has 65,536
-  bytes, Then the exchange fulfils and the signal is not aborted; When it
-  has 65,537 bytes, when its stream errors after 10 bytes, and when `fetch`
-  itself rejects, Then the exchange rejects, the signal is aborted and a
-  received body has been cancelled; When the headers arrive and the body
-  then stalls past 10,000 ms, Then the exchange rejects at 10,000 ms with
-  the signal aborted and the body cancelled, and at 9,999 ms it is still
-  pending; and When `cancel` throws, Then the rejection is unchanged.
-  Verified by: `BR-131 v2 AC-09 every other early exit aborts its request
-  and releases the body`.
+  bytes, Then the exchange fulfils, the signal is not aborted and the
+  source's `cancel` is not called; When it has 65,537 bytes, Then the
+  exchange rejects, the signal is aborted and the source's `cancel` has
+  been called once; When its stream errors after 10 bytes, or `fetch`
+  itself rejects, Then the exchange rejects and the signal is aborted (an
+  errored stream never calls its source's `cancel`, so none is required);
+  When the headers arrive and the body then stalls past 10,000 ms, Then the
+  exchange rejects at 10,000 ms with the signal aborted and the source's
+  `cancel` called once, and at 9,999 ms it is still pending; and When
+  `cancel` throws, Then the rejection is unchanged. Verified by:
+  `BR-131 v2 AC-09 every other early exit aborts its request and releases
+  the body` in `tests/auth/proxy-upstream.test.ts`.
 - **AC-10** (BR-421, BR-023 v4, BR-024 v5) — Given each source
   (environment, option, YAML), When the list holds `127.0.0.1`,
   `192.0.2.0/24`, `10.0.0.0/8`, `198.51.100.7/32`, `2001:db8::1`,
-  `2001:db8::/32`, `fd00::/8` and `2001:db8::/128`, or 16 valid entries,
-  Then it loads; When it holds 17 entries, `192.0.2.1` with `192.0.2.1/32`,
-  `10.0.0.0/7`, `fd00::/7`, `0.0.0.0/0`, `::/0`, `192.0.2.0/33`,
+  `2001:db8::/32`, `fd00::/8` and `2001:db8::/128`, or 64 valid entries,
+  Then it loads; When `MCP_HTTP_TRUSTED_PROXIES` is set to the empty value
+  or YAML `httpTrustedProxies` is `[]`, Then it loads as the empty list, as
+  when the setting is absent; When it holds 65 entries, `192.0.2.1` with
+  `192.0.2.1/32`, `10.0.0.0/7`, `fc00::/7`, `fd00::/7`, `0.0.0.0/0`, `::/0`,
+  `192.0.2.0/33`,
   `2001:db8::/129`, `10.0.0.1/8`, `2001:db8::1/32`, `192.0.2.0/024`,
   `010.0.0.1`, `192.0.2`, `2001:DB8::1`, `2001:db8:0:0:0:0:0:1`,
   `[2001:db8::1]`, `fe80::1%eth0`, `::ffff:192.0.2.1`, `::ffff:c000:201`,
-  `192.0.2.1:80`, `proxy.example.com` or an empty entry, Then
-  `INVALID_VALUE`; Given stdio, `--insecure-no-auth`, or `delegate` mode,
-  Then `CONFLICTING_SETTINGS`. Verified by:
-  `tests/config-value-boundaries.test.ts` and `tests/config.test.ts`
-  (`BR-421 AC-10 ...`).
+  `192.0.2.1:80`, `proxy.example.com` or an empty entry (`127.0.0.1,`),
+  Then `INVALID_VALUE`; Given stdio, `--insecure-no-auth`, or `delegate`
+  mode, When the list holds `127.0.0.1`, or is set to the empty value or
+  `[]`, Then `CONFLICTING_SETTINGS`. Verified by: `BR-421 BR-023 v4 AC-10
+  accepts %s` and `BR-421 BR-023 v4 AC-10 refuses %s as INVALID_VALUE` in
+  `tests/config-value-boundaries.test.ts`, and `BR-421 AC-10 loads the
+  list from environment, option and YAML`, `BR-421 AC-10 an empty value is
+  the empty list` and `BR-421 BR-024 v5 AC-10 refuses the list with %s as
+  CONFLICTING_SETTINGS` in `tests/config.test.ts`.
 - **AC-11** (BR-422) — Given an empty list, Then the peers of sockets
   `192.0.2.7` and `::ffff:192.0.2.7` are equal; `2001:db8:1:2::1`,
   `2001:db8:1:2:ffff:ffff:ffff:ffff` and `2001:db8:1:2::5%eth0` are one
@@ -365,12 +401,14 @@ Proxy tests use the fake clock, upstream port and logger of
   lines `198.51.100.1` and `203.0.113.9`, `203.0.113.9`; for no header, an
   empty header, `junk`, `203.0.113.9:443` or `[2001:db8::9]`, `127.0.0.1`;
   for `198.51.100.1, junk, 127.0.0.2` with list `127.0.0.0/8`, `127.0.0.2`;
-  for 33 elements `127.0.0.3` followed by `198.51.100.1` on the left with
-  list `127.0.0.0/8`, `127.0.0.3`, and for 31 such elements, `198.51.100.1`;
+  with list `127.0.0.0/8`, for `198.51.100.1` followed by 31 elements
+  `127.0.0.3` (the client is element 32, examined), `198.51.100.1`, and for
+  `198.51.100.1` followed by 32 such elements (the client is element 33,
+  never examined), `127.0.0.3`;
   for `::ffff:203.0.113.9`, the peer of `203.0.113.9`; and Given socket
   `192.0.2.50` not in the list, Then `X-Forwarded-For` is ignored.
   Verified by: `BR-422 AC-12 the X-Forwarded-For walk trusts only listed
-  proxies`.
+  proxies` in `tests/http/peer.test.ts`.
 - **AC-13** (BR-422, BR-162 v3) — Given the real server listening on
   `127.0.0.1` with list `127.0.0.1`, When 30 authorize requests carry
   `X-Forwarded-For: 198.51.100.1`, Then the 31st with that header gets 429
@@ -393,29 +431,30 @@ Proxy tests use the fake clock, upstream port and logger of
   `window` `global`, and a request from a peer already counted gets the same;
   the refused new peer has no entry, and when the global window ends it
   passes as a first request. Verified by: `BR-162 v3 AC-15 the global
-  ceiling of %s is %i per %i seconds`.
+  ceiling of %s is %i per %i seconds` in `tests/http/rate-limits.test.ts`.
 - **AC-16** (BR-162 v3) — Given peer P sending 60 token requests with an
   unknown client and then a valid refresh, Then the valid one gets 429
   `window` `peer`, while a valid refresh from peer Q gets 200; Given P
   sending 30 registrations with an invalid body, Then a valid registration
   from Q gets 201. Verified by: `BR-162 v3 AC-16 invalid requests lock out
-  only their own peer`.
+  only their own peer` in `tests/http/rate-limits.test.ts`.
 - **AC-17** (BR-162 v3) — Given the authorize table, When one peer is
   admitted at `T`, 59 others at `T + 60` s − 1 ms and 60 others at
   `T + 60` s, Then the table holds 119 entries (the first one removed); When
   a new peer arrives at `T + 120` s − 1 ms, Then it is refused (`global`) and
   the table still holds 119; When one arrives at `T + 120` s, Then it is
-  admitted and the table holds 1; and for `token`, with 1, 299 and 300 peers
-  at the same instants, the table holds 599. Verified by: `BR-162 v3 AC-17
-  a peer table holds fewer than twice its global limit` (through the
-  limiter's entry count).
+  admitted and the table holds 1; and for `token`, with 1, 1,199 and 1,200
+  peers at the same instants, the table holds 2,399. Verified by:
+  `BR-162 v3 AC-17 a peer table holds fewer than twice its global limit`
+  in `tests/http/rate-limits.test.ts` (through the limiter's entry count).
 - **AC-18** (BR-162 v3) — Given a full window for peer P, Then requests
   refused with 403 `invalid_host`, 405, 413 by framing, 403 `invalid_origin`
   and 429 are counted in neither P's nor the global window; Given a full
   global window, Then a request refused by it does not count for its peer;
   and Given 30 MCP requests and 120 health requests, Then no OAuth window
   changes (through the limiter's counts). Verified by: `BR-162 v3 AC-18
-  refused and non-OAuth requests count in no OAuth window`.
+  refused and non-OAuth requests count in no OAuth window` in
+  `tests/http/rate-limits.test.ts`.
 - **AC-19** (BR-167 v3, BR-422) — Given a capturing logger and list
   `192.0.2.66`, When requests with remote address `192.0.2.66` and
   `X-Forwarded-For: 198.51.100.77, 203.0.113.88` are admitted and refused by
@@ -432,11 +471,25 @@ Proxy tests use the fake clock, upstream port and logger of
   BR-186 privacy test still passes. Verified by: `BR-421 BR-162 v3 AC-20
   the operator documentation describes peer admission` in
   `tests/docs/oauth-admission-docs.test.ts`.
+- **AC-21** (BR-184 v3) — Given `examples/compose.yaml`, Then its service
+  environment maps `MCP_HTTP_TRUSTED_PROXIES` to
+  `${MCP_HTTP_TRUSTED_PROXIES:-}`, the line before it is a comment naming
+  `MCP_HTTP_TRUSTED_PROXIES`, Traefik's network and `docs/deployment.md`,
+  no other value has a default, and the BR-186 hygiene check still passes;
+  When the environment is loaded with that variable replaced by its empty
+  default, Then `httpTrustedProxies` is `[]`; When it is loaded with
+  `192.0.2.0/24`, Then it is `["192.0.2.0/24"]`; and a copy without the
+  comment, or with `${MCP_HTTP_TRUSTED_PROXIES:?…}`, is rejected. Verified
+  by: `BR-184 v3 AC-21 the Compose example passes an optional empty
+  trusted-proxy list` in `tests/deployment-examples.test.ts`.
 
 The v2 tests `BR-162 AC-11 ...` and `BR-325 BR-162 v2 ...` keep passing
 unchanged: without a remote address every request is the peer `unknown`,
 whose limits equal the v1 limits. The v1 test `BR-137 refuses %s and
-consumes the code` is replaced by AC-01's test (BR-137 v2).
+consumes the code` is replaced by AC-01's test (BR-137 v2). The v1 test
+`BR-184 Compose environment loads as HTTP proxy configuration` keeps its
+assertions; its substitution also replaces `${NAME:-}` by its empty default
+(BR-184 v3).
 
 ## Decisions
 
@@ -475,13 +528,19 @@ consumes the code` is replaced by AC-01's test (BR-137 v2).
   is per address; IPv6 is per `/64`, the usual assignment to one host or
   subnet, since per-address peers would give the holder of one `/64` 2^64
   peers. Prefixes shorter than `/8` are refused so that "trust everything"
-  cannot be configured by accident. Rejected: always trusting
-  `X-Forwarded-For` (any client chooses its peer); the leftmost element
-  (client-supplied); the `Forwarded` header (Traefik and most proxies send
-  `X-Forwarded-For` by default; a second parser doubles the surface);
-  per-address IPv6; `/56` or `/48` grouping (joins unrelated customers of
-  hosting providers that assign one `/64` per machine); host-name entries
-  (DNS at startup, rebinding).
+  cannot be configured by accident. The list holds up to 64 entries so
+  that the published ranges of a CDN in front of the server fit (one such
+  provider lists more than 16). This reverses F-012 D-8 ("no forwarded
+  headers in process") for `X-Forwarded-For` behind a listed proxy, and
+  F-012 D-7's rejection of per-IP limits in process, which held only while
+  no trustworthy client address existed behind the proxy. Rejected: always
+  trusting `X-Forwarded-For` (any client chooses its peer); the leftmost
+  element (client-supplied); the `Forwarded` header (Traefik and most
+  proxies send `X-Forwarded-For` by default; a second parser doubles the
+  surface); per-address IPv6; `/56` or `/48` grouping (joins unrelated
+  customers of hosting providers that assign one `/64` per machine);
+  host-name entries (DNS at startup, rebinding); a cap of 16 entries (too
+  few for a CDN's published ranges).
 - **D-5 — Per-peer limits equal to the v1 limits; global ceilings above
   them; invalid requests count in both.** With an empty list behind one
   reverse proxy every request has the same peer, so the server behaves
@@ -492,7 +551,8 @@ consumes the code` is replaced by AC-01's test (BR-137 v2).
   flows per 600 s (bound 1,000 each), and 60 registrations an hour need
   over 16 hours to cycle 1,000 clients. The token route creates no entry
   beyond the families of codes, which the callback ceiling bounds, so its
-  ceiling is 300 a minute (one hash per refused request). Counting before
+  ceiling is 1,200 a minute (D-10): it protects no store, and an admitted
+  request costs at most one hash. Counting before
   the body is read keeps v1's protection of the body reader; counting by
   outcome would need the body first. The table bound follows from removing
   ended windows before each insertion, so no eviction exists that an
@@ -514,35 +574,93 @@ consumes the code` is replaced by AC-01's test (BR-137 v2).
 - **D-7 — Residual risks**, listed in `docs/oauth-proxy.md`: an attacker
   with two or more peers (two IPv6 `/64`s, for example) can still hold a
   global window full, which locks the route for everyone as under v2 but at
-  twice the rate (five times for `token`); clients whose token and
+  twice the rate (twenty times for `token`, 20 peers at their per-peer
+  limit); clients whose token and
   registration requests come from a shared egress (for example a hosted AI
   service's servers) share one peer, and another user of that service can
   fill it; with an empty list behind a reverse proxy, v2's shared lockout
   remains; a listed proxy that does not set or append the client address
   as the last `X-Forwarded-For` element lets clients choose their peer.
+  A wrong list (an address that is not a proxy, or a proxy that forwards
+  client-supplied elements) lets an attacker name a victim's address as
+  its peer and lock that peer out with 30 requests (60 on `token`), and so
+  does a listed range that also contains clients, whose own elements are
+  then skipped as trusted hops. The doubled `register` ceiling halves the
+  time an attacker needs to evict an idle client from the 1,000-client
+  store, and its refresh families with it: about 16.7 hours instead of
+  about 33 under v2.
 - **D-8 — No ADR.** The setting is additive and empty by default, the
   windows live in memory, nothing is persisted and the choice is reversed
   by a new version of BR-162 and BR-422.
 
+- **D-9 — The Compose example offers the setting, empty by default
+  (owner decision Q-1 (c), 2026-11-15).** The documented Compose deployment
+  puts Traefik in front, so it gets per-peer admission only when the
+  operator sets `MCP_HTTP_TRUSTED_PROXIES` to Traefik's network. The
+  example passes `${MCP_HTTP_TRUSTED_PROXIES:-}`: unset, the server gets
+  the empty value, which BR-421 reads as the empty list (as `asList()`
+  already does for BR-291), so every existing deployment starts unchanged
+  with v2's shared windows; the comment points to `docs/deployment.md`,
+  which explains how to read the network's range. The comment holds no
+  address (BR-186), and BR-186's `${NAME:?…}` clause stays as it is: an
+  empty default is the server's own default, not an installation-specific
+  value. Rejected: (a) the documentation only (the operator who copies the
+  example never sees the setting); (b) a required
+  `${MCP_HTTP_TRUSTED_PROXIES:?…}` (every existing deployment fails at
+  `docker compose up` until it sets the variable).
+- **D-10 — Global ceilings (owner decision Q-2, 2026-11-15).** The global
+  ceilings of `register`, `authorize`, `consent` and `callback` are twice
+  their v2 limits, which the store arithmetic of D-5 allows; `token` gets
+  1,200 a minute (table bound 2,399), with 60 per peer. At 300 a minute,
+  five IPv6 `/64`s at their per-peer limit would block every refresh;
+  1,200 needs 20 peers. Rejected: global ceilings equal to v2 with
+  per-peer limits at half of them (stricter than v2 for an unconfigured
+  deployment, where every client shares one peer); 300 for `token` (five
+  peers close it).
+
 ## Open questions
 
-- **Q-1 — Compose example.** The documented Compose deployment
-  (`examples/compose.yaml`, BR-184) puts Traefik in front, so it gets the
-  per-peer protection only if the operator sets `MCP_HTTP_TRUSTED_PROXIES`
-  to Traefik's network. Options: (a) document it in `docs/deployment.md`
-  only, the example unchanged (this spec); (b) add
-  `MCP_HTTP_TRUSTED_PROXIES: ${MCP_HTTP_TRUSTED_PROXIES:?…}` to the example,
-  which versions BR-184 and makes every existing deployment set it before
-  `docker compose up` succeeds again; (c) add it as optional with an empty
-  default, which needs the list grammar to accept an empty value.
-  Recommendation: (a) now, (b) with the next breaking release.
-- **Q-2 — Global ceilings.** D-5 doubles the v2 process-wide limits (five
-  times for `token`) as global ceilings, so a single source can no longer
-  close a route but unauthenticated load may double. Options: (a) the
-  table as written; (b) global ceilings equal to v2 and per-peer limits at
-  half of them (stricter than v2 for an unconfigured deployment).
-  Recommendation: (a).
+None. Q-1 (Compose example) and Q-2 (global ceilings) were answered by the
+owner on 2026-11-15 and are recorded as D-9 and D-10.
 
 ## Stress-test
 
-Pending spec review.
+Spec review 1 (`46-spec-review-1-reviewer`, approve with minors; owner
+decisions Q-1 (c), Q-2):
+
+- **Minor 1 — retained.** An errored stream never calls its source's
+  `cancel`, and `cancel()` on a locked body rejects. BR-131 v2 now requires
+  only the abort for a body whose stream has errored; AC-08 and AC-09
+  observe the `cancel` callback of the fake body's underlying source, and
+  AC-09's stream-error and `fetch`-rejection rows require only the aborted
+  signal.
+- **Minor 2 — retained.** BR-421 states that an empty value
+  (`MCP_HTTP_TRUSTED_PROXIES=`, YAML `[]`) is the empty list, as for
+  BR-291 (`asList()` already maps `""` to `[]` for list settings), and that
+  any explicit value outside proxy mode, the empty list included, is
+  `CONFLICTING_SETTINGS`, as the other proxy-only settings (BR-290,
+  BR-291) are refused whenever set. AC-10 has rows for both. The premise
+  of the former Q-1 (c) is corrected in D-9.
+- **Minor 3 — retained.** AC-12 tests the boundary: 31 trusted elements
+  (the client is element 32 and is the peer) and 32 (the client is element
+  33 and is never examined). The BR-422 record's example follows.
+- **Minor 4 — retained.** AC-10 adds `fc00::/7`, which breaks only the
+  length rule (`fd00::/7` stays as a row that breaks two). AC-01 adds a
+  refused 129-character verifier and accepted 43- and 128-character
+  verifiers.
+- **Minor 5 — retained.** Every AC names its exact tests and their files;
+  AC-10's names follow the `BR-NNN [vN] AC-NN …` convention.
+- **Minor 6 — retained.** (a) D-4 records that it reverses F-012 D-8 and
+  F-012 D-7's rejection of per-IP limits. (b) D-7 adds the residual of a
+  wrong list or a listed range that contains clients (a chosen victim's
+  peer locked out with 30 requests). (c) D-7 adds that the doubled
+  `register` ceiling halves the time to evict an idle client and its
+  families (about 16.7 h instead of 33 h). (d) The list cap rises from 16
+  to 64 entries (BR-421, AC-10 with 64 and 65 entries, D-4).
+- **Q-1 — owner decision (c).** `examples/compose.yaml` passes
+  `${MCP_HTTP_TRUSTED_PROXIES:-}` with a comment on Traefik's network:
+  BR-184 v3, AC-21, D-9. BR-186 is unchanged (D-9).
+- **Q-2 — owner decision.** The global ceilings stay twice v2 for
+  `register`, `authorize`, `consent` and `callback`; `token` rises to 1,200
+  a minute with 60 per peer, so its table bound is 2,399: BR-162 v3, AC-17,
+  D-5, D-7, D-10.

@@ -94,7 +94,9 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
   socket address, or the `X-Forwarded-For` client behind a proxy listed in the
   new `MCP_HTTP_TRUSTED_PROXIES` setting; IPv6 per `/64`) under a global
   ceiling, so one abusive client no longer locks registration, login or token
-  refresh for everyone.
+  refresh for everyone. The Compose example passes the optional
+  `MCP_HTTP_TRUSTED_PROXIES`, empty by default, so existing deployments start
+  unchanged.
 
 ## [0.6.0-beta.1] - 2026-11-13
 
