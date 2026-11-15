@@ -1019,6 +1019,11 @@ it("BR-298 BR-137 v3 AC-02 a refused replay commits nothing", async () => {
 function expectCodeRefusal(response: ProxyResponse, error: string): void {
   expect(response.status).toBe(400);
   expect(response.body).toBe(JSON.stringify({ error }));
+  expect(response.headers).toEqual([
+    ["Content-Type", "application/json"],
+    ["Cache-Control", "no-store"],
+    ["Pragma", "no-cache"],
+  ]);
   expect(header(response, "cache-control")).toBe("no-store");
   expect(header(response, "pragma")).toBe("no-cache");
 }

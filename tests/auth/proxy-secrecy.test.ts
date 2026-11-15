@@ -237,6 +237,9 @@ it("BR-137 v3 AC-06 code refusals work without a logger", async () => {
   const stderr = vi
     .spyOn(process.stderr, "write")
     .mockImplementation(() => true);
+  const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+  const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
   try {
     for (const kind of CODE_REFUSALS) {
       const captured = await captureCodeRefusal(kind, true);
@@ -248,9 +251,15 @@ it("BR-137 v3 AC-06 code refusals work without a logger", async () => {
     }
     expect(stdout).not.toHaveBeenCalled();
     expect(stderr).not.toHaveBeenCalled();
+    expect(log).not.toHaveBeenCalled();
+    expect(warn).not.toHaveBeenCalled();
+    expect(error).not.toHaveBeenCalled();
   } finally {
     stdout.mockRestore();
     stderr.mockRestore();
+    log.mockRestore();
+    warn.mockRestore();
+    error.mockRestore();
   }
 });
 
