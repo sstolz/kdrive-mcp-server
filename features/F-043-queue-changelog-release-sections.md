@@ -2,7 +2,7 @@
 id: F-043
 title: Queue documentation changelog release sections
 ticket: "#67"
-status: draft
+status: frozen
 version: 1
 ---
 
@@ -45,13 +45,13 @@ fallback when no release cites the current ticket and the archive cutoff.
   boundaries and the `changelogTicket12Section` archive cutoff. Support
   a "Fixed required, bullet starts with `- #16 `, no additional text marker"
   option for #16 without changing #104 or #12 selection or content requirements.
-- Record the draft and pending v2 in the rule index, spec index, capability
+- Record the frozen contract and pending v2 in the rule index, spec index, capability
   map and Unreleased changelog entry.
 
 ### Out of scope
 
 Product behavior, README or compatibility wording changes, BR-321 changes,
-source or test edits in this draft, release promotion, version bumps, tags,
+source edits, release promotion, version bumps, tags,
 publication, CI or build changes, and acceptance claims.
 
 ## Business rules
@@ -74,8 +74,9 @@ in `tests/dependency-audit.test.ts`, then `make check`.
   README and compatibility assertions remain unchanged and the #16 Fixed
   entry passes in its selected section. Compute the expected heading directly
   from the real `CHANGELOG.md` lines, without the selection helper: it is
-  `## [0.6.0-beta.2] - 2026-11-15` if that exact heading line exists, otherwise
-  `## [Unreleased]`. Assert that the helper's returned heading equals this
+  the line matching `^## \[0\.6\.0-beta\.2\] - \d{4}-\d{2}-\d{2}$` if one
+  exists, otherwise `## [Unreleased]`. The release date is not fixed.
+  Assert that the helper's returned heading equals this
   independently computed expectation.
 - **AC-02** (BR-387 v2) — Given a synthetic changelog with the #16 Fixed
   line under Unreleased, When checked with no release section, with only an
@@ -116,8 +117,9 @@ in `tests/dependency-audit.test.ts`, then `make check`.
   `TestBR321_audit_docs development, security and changelog state the audit contract`
   runs in `tests/dependency-audit.test.ts`, Then the heading returned for
   #12 equals an independently computed expectation: inspect the real file's
-  lines without the selection helper and use `## [0.6.0-beta.2] - 2026-11-15`
-  if that exact heading line exists, otherwise `## [Unreleased]`. Assert that
+  lines without the selection helper and use the line matching
+  `^## \[0\.6\.0-beta\.2\] - \d{4}-\d{2}-\d{2}$` if one exists, otherwise
+  `## [Unreleased]`. The release date is not fixed. Assert that
   the helper's result equals this expected heading.
   The #12 Fixed and Added requirements, markers, archive cutoff, #104
   assertion and other documentation assertions remain unchanged.
@@ -146,14 +148,18 @@ in `tests/dependency-audit.test.ts`, then `make check`.
   text marker" option. Update the #12 real-file heading assertion through
   AC-07 so it follows the existing BR-321 v4
   contract across promotion; no BR-321 revision is needed.
-- **D-4 — Draft only.** Record the pending requirement without moving
+- **D-4 — Separate release promotion.** Record the pending requirement without moving
   existing changelog entries. Release 0.6.0-beta.2 is a separate change.
 
 ## Open questions
 
 ## Stress-test
 
-### Review 1 dispositions
+The entries below record supplied findings and their dispositions. Earlier
+revisions remained draft v1; the supplied freeze instruction and retained
+corrections below establish frozen v1 on 2026-11-15, from reviewed head
+`2b81164b2c99a22747e076b94a1f45ec279a7780`. Implementation and acceptance remain
+pending. Tests first follows AGENTS.md §3.
 
 ### 67-spec-review-1-reviewer — verdict: changes
 
@@ -181,11 +187,12 @@ in `tests/dependency-audit.test.ts`, then `make check`.
   zero pending-acceptance rules, plus one pending version of an active
   rule (BR-387 v2), following the existing pending-version convention.
 - **Major — independent real-file expectations. Retained, fixed.** AC-01
-  and AC-07 derive the expected heading from an exact-line presence check
-  for `## [0.6.0-beta.2] - 2026-11-15`, falling back to `## [Unreleased]`,
+  and AC-07 derive the expected heading from a real-file line matching
+  `^## \[0\.6\.0-beta\.2\] - \d{4}-\d{2}-\d{2}$`, falling back to `## [Unreleased]`,
   without calling the selection helper. Each asserts the helper's result
   equals that expectation. This supersedes Review 1's selection-derived
-  expectation wording and incorporates the optional Review 2 note.
+  expectation wording and incorporates the optional Review 2 note recorded
+  below. Decision 2 removes the originally pinned date.
 - **Minor — preserve the Fixed bullet prefix. Retained, fixed.** BR-387 v2,
   Scope and D-2–D-3 require a Fixed bullet starting with `- #16 `, matching
   the prefix in `tests/invocation-queue.test.ts:575`. AC-03 adds a failing
@@ -194,3 +201,31 @@ in `tests/dependency-audit.test.ts`, then `make check`.
 - **Minor — remove status narrative. Retained, fixed.** Removed the
   Stress-test preamble and BR-387 Verification's implementation/acceptance
   disclaimer.
+
+### 67-spec-review-2-reviewer — verdict: unknown (not supplied)
+
+- **Optional — independent real-file expectation. Retained.** The note
+  referenced by decision 1 is covered by AC-01 and AC-07. The complete
+  review and its verdict were not supplied; no approval is inferred.
+
+### 67-spec-decision-2-fable — verdict: changes
+
+- **F2-1 — Major, variable release date. Retained, fixed.** AC-01 and
+  AC-07 use the real line matching
+  `^## \[0\.6\.0-beta\.2\] - \d{4}-\d{2}-\d{2}$`, or Unreleased if absent,
+  independently of the selection helper. Synthetic fixture dates remain
+  concrete examples, not a release-date commitment.
+- **F2-2 — Minor, active-version metadata. Retained, fixed.** BR-387's
+  metadata says `status: active`; v1 stays active while v2 awaits acceptance.
+  The index keeps 420 active, eight superseded, zero pending-acceptance rules
+  and one pending version of an active rule.
+- **F2-3 — Minor, review records. Retained, fixed.** Removed the empty
+  Review 1 dispositions heading. Reviews 2 and 3 have explicit entries;
+  the unavailable Review 2 verdict is marked unknown.
+
+### 67-spec-review-3-reviewer — verdict: approve
+
+- **Minor — empty dispositions heading. Retained, fixed.** Removed the
+  empty Review 1 heading, also covered by F2-3.
+
+Reviewer models, efforts and token counts are not supplied; they remain unknown.

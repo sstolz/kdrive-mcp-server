@@ -2,10 +2,10 @@
 
 ## Provisional — queue changelog release sections
 
-[F-043 v1](features/F-043-queue-changelog-release-sections.md) (#67),
-[BR-387 v2](business-rules/BR-387.md): draft release-aware location for the
+[F-043 v1](features/F-043-queue-changelog-release-sections.md) (#67), frozen
+2026-11-15, [BR-387 v2](business-rules/BR-387.md): release-aware location for the
 #16 Fixed entry, with Unreleased fallback and the BR-321 v4 archive cutoff.
-BR-387 v1 remains active and unchanged. Review, freeze, implementation and
+BR-387 v1 remains active and unchanged. Implementation and
 acceptance are pending; no new working capability is claimed.
 
 ## Accepted — MCP tool and parameter descriptions

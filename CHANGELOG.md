@@ -171,7 +171,7 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
   Preserve existing unofficial/untrusted-content notices and mutation
   cautions; fixed trusted text only, with no validation or behavior change.
 
-- #67 / F-043 v1 (draft; implementation and acceptance pending): specify
+- #67 / F-043 v1 (frozen 2026-11-15; implementation and acceptance pending): specify
   release-aware validation of the queue-fix changelog entry under BR-387 v2,
   retaining the README and compatibility documentation requirements.
 
