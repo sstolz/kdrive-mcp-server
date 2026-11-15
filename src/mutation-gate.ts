@@ -66,7 +66,7 @@ export type Mutator = (
   signal: AbortSignal,
 ) => Promise<unknown>;
 
-export type GateCode = AuditCode | "REQUEST_TIMEOUT";
+export type GateCode = AuditCode | "REQUEST_TIMEOUT" | "LIMIT_EXCEEDED";
 /** BR-255: the only members of a gate result. */
 export interface GateResult {
   readonly result: "succeeded" | "failed" | "uncertain" | "denied";
@@ -103,7 +103,8 @@ export interface GateRun {
   readonly cancellation?: AbortSignal | undefined;
   /** Navigation bounds before the intent append starts (BR-250, BR-258). */
   readonly interrupted?:
-    (() => "REQUEST_TIMEOUT" | "CANCELLED" | undefined) | undefined;
+    | (() => "REQUEST_TIMEOUT" | "CANCELLED" | "LIMIT_EXCEEDED" | undefined)
+    | undefined;
 }
 
 export interface MutationGate {
@@ -124,7 +125,7 @@ interface RunState {
   readonly cancellation: AbortSignal | undefined;
   readonly interrupted: GateRun["interrupted"];
   execution?: Promise<GateResult>;
-  code?: "REQUEST_TIMEOUT" | "CANCELLED";
+  code?: "REQUEST_TIMEOUT" | "CANCELLED" | "LIMIT_EXCEEDED";
   /** Set once dispatch settles: no later `execute` may commit (defence in depth). */
   settled?: boolean;
 }

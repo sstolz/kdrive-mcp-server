@@ -878,7 +878,7 @@ describe("F-041 production ancestor protection", () => {
         "kdrive_create_folder",
         { parent_id: parent, name: "n" },
         "POST",
-        `/2/drive/101/files/${parent}/directory`,
+        `/3/drive/101/files/${parent}/directory`,
       );
       await outcome(c, kind, args(kind, 21), true);
       expect(rootReads).toBe(0);

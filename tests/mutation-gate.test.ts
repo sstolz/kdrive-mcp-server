@@ -2089,8 +2089,8 @@ it.each(structuralKinds)(
       }),
     ).toEqual({ result: "denied", op: OP, code: "ACCESS_DENIED", attempts: 0 });
     expect(append).toHaveBeenCalledTimes(1);
+    // The sink adds v:1 when serializing; append receives an AuditRecord.
     expect(append.mock.calls[0]![0]).toEqual({
-      v: 1,
       ts: "2026-11-09T10:00:00.000Z",
       event: "denied",
       op: OP,
