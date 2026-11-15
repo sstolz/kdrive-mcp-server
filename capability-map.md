@@ -1,5 +1,119 @@
 # Capability map
 
+## Accepted — process-wide extraction admission
+
+[F-040 v1](features/F-040-process-wide-extraction-admission.md)
+(#47 lot D), [BR-423 v1](business-rules/BR-423.md),
+[BR-424 v1](business-rules/BR-424.md), [BR-425 v1](business-rules/BR-425.md),
+[BR-426 v1](business-rules/BR-426.md) and [BR-118 v3](business-rules/BR-118.md): admission contract for all `kdrive_read` formats uses two
+process-wide permits before source buffering, at most one permit and one live
+waiter per identity, and four waiters globally, serving the oldest eligible
+waiter. Queue/identity saturation returns `SERVER_BUSY` without automatic retry;
+waiting spends the invocation deadline, with `REQUEST_TIMEOUT` on expiry and
+`ACCESS_DENIED` on cancel/close. Failed/overdue worker termination releases the
+session slot by its deadline; a detached watcher keeps the permit and identity
+charged until exit. That identity's existing waiter and later extraction calls
+refuse immediately with `SERVER_BUSY` (earlier liveness causes still prevail).
+Live termination rejection preserves final authorization before
+`CONTENT_UNAVAILABLE`; expiry uses `REQUEST_TIMEOUT`, earlier cancel/close
+keeps `ACCESS_DENIED`. A process-owned stderr sink in both transports, retained after session close,
+offers fixed payload-free detach/release diagnostics to signal
+lost/recovered capacity; permanently stuck workers reduce capacity until restart
+(two cause immediate refusal for every new extraction caller, one blocks the
+shared stdio identity). README/tool/compatibility
+wording explains transient `SERVER_BUSY` and its recovery limits. Raw
+and resource reads retain their contracts. This limits concurrent pipelines,
+not total process memory. Accepted on actual main `67c101a` on 2026-11-15 (#47 comment `6897680463`).
+Lot C's accepted F-039 contract and active rule versions remain separate.
+
+## Accepted — bounded audit waits and shutdown
+
+[F-039 v1](features/F-039-bounded-audit-sink.md) (#47 lot C),
+[BR-070 v5](business-rules/BR-070.md), [BR-240 v2](business-rules/BR-240.md),
+[BR-241 v2](business-rules/BR-241.md), [BR-254 v2](business-rules/BR-254.md)
+and [BR-259 v2](business-rules/BR-259.md): 5,000 ms append budgets
+including queue time for stderr and files, immediate rejection on stream
+errors, permanent failure until restart, and bounded sink/gate shutdown. The contract shares stdio's 1,000 ms
+allowance with non-committed appends and a shared production exit helper's
+ref'd 250 ms flush cap, shortened to any remaining stdio budget. Dedicated
+stdio routes exit through that helper; owned/library closure never terminates
+its host. Output still queued on a stalled pipe at the cap may be lost.
+The same fixed diagnostic is offered once on any first latch.
+Synchronous fd 2 blockage and libuv file-operation teardown stalls remain
+unbounded; the bounded Linux child-pipe runtime test is included in acceptance.
+Intent failure sends no mutation; outcome failure preserves the upstream
+classification with `audit:"outcome_unrecorded"`. No new event or configuration.
+Accepted on actual main `8bc1780` on 2026-11-15 (#47 comment `6897083907`).
+
+## Accepted — fragmented reads and defensive validator handling
+
+[F-038 v1](features/F-038-stream-budget-and-weak-etags.md) (#47 lot B),
+[BR-070 v4](business-rules/BR-070.md),
+[BR-205 v2](business-rules/BR-205.md) and
+[BR-384 v2](business-rules/BR-384.md): body reads consume byte
+and time bounds without spending the 512 upstream-operation budget; weak
+`W/` validators follow the existing absent-validator refusal in describe/open.
+Accepted on actual main `2ae303c` on 2026-11-15 (#47 comment `6895105510`).
+F-038 D-1 preserves the existing
+operation charging points; counting every physical HTTP request is out of scope.
+This adds no ability to read content without a qualifying validator.
+
+## Accepted — rate-limited mutations stop after one attempt
+
+[F-037 v1](features/F-037-mutation-rate-limit-stop.md) (#47 lot A),
+[BR-248 v2](business-rules/BR-248.md),
+[BR-249 v2](business-rules/BR-249.md),
+[BR-250 v2](business-rules/BR-250.md) and
+[BR-268 v2](business-rules/BR-268.md): the implementation returns `failed` / `RATE_LIMITED` after the first valid
+upstream 429, without an automatic retry or `Retry-After` wait. A later
+client invocation requires fresh admission and complete authorization and
+has its own audit records. Uncertain writes are still never replayed.
+Accepted on actual main `8b92e07` on 2026-11-15 (#47 comment `6894142807`).
+
+## Accepted — refused authorization-code redemption events restored
+
+[F-036 v1](features/F-036-refused-code-event.md) (#49),
+[BR-137 v3](business-rules/BR-137.md): in
+`proxy` mode every refused code redemption emits exactly one `token_refused`
+with only `handler`, OAuth `error` and `status`, without a `reason` or request
+value. Binding checks, responses and state handling stay as in v2, including
+the existing family revocation on a matching replay.
+Accepted on actual main `14f5266` on 2026-11-15 (#49 comment `6893052881`).
+
+## Accepted — OAuth proxy admission and grant handling hardened
+
+[F-035 v1](features/F-035-oauth-proxy-hardening.md) (#46), BR-421 and BR-422
+v1 with BR-023 v4, BR-024 v5, BR-131 v2, BR-133 v2, BR-137 v2, BR-162 v3,
+BR-167 v3, BR-184 v3 and BR-186 v2: in `proxy` mode an invalid token request
+no longer burns an authorization code or revokes its refresh family; concurrent
+logins on a cold or rotated upstream key set share one key fetch and reject ID
+tokens that expire while verification waits; upstream requests abort on every
+early exit without waiting for cancellation; and
+the unauthenticated OAuth routes admit each client peer separately under a
+global ceiling, the client being the socket address or, behind a proxy listed
+in `MCP_HTTP_TRUSTED_PROXIES` (optional and empty in the Compose example),
+its `X-Forwarded-For` address. Trust guidance requires exact proxy addresses
+or a dedicated proxy-only network and observed-address append at every hop.
+A shared hosted egress still has only 60 token requests per minute. Token
+redemption accepts an omitted redirect URI only when the authorization URI
+was the client's single registered URI; present values must match exactly.
+Accepted on actual main `703bece` on 2026-11-15 (#46 comment `6891311411`).
+
+## Accepted — PDF text extraction for common generator output
+
+[F-034 v1](features/F-034-pdf-extraction-profile.md) (#4), BR-412–BR-420 v1 with
+BR-114 v2 and ADR-012: `kdrive_read` with `format:"pdf"` reads cross-reference
+and object streams, incremental updates, FlateDecode with PNG predictors and the
+ASCII filters, inherited page attributes, content arrays, text inside Form
+XObjects (OCR layers, overlays, imposed pages, figures, transparency groups),
+pages with inline images of known length, and simple, Type0 or Type3 fonts whose
+shown codes map through an encoding, a Type 1 built-in encoding or `ToUnicode`,
+from a canonical projection that holds only the selected pages' text inputs;
+encrypted files, fonts with no mapping outside their program and other filters
+on text streams still refuse, and `kdrive_download` stays the fallback. Accepted
+on actual main `570c4b2` on 2026-11-15 (#4 comment
+`4-acceptance-1-orchestrator`).
+
 ## Accepted — CIMD document handling hardened
 
 [F-033 v1](features/F-033-cimd-hardening.md) (#26), BR-129 v6 with BR-306 v2,

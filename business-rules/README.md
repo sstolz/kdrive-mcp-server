@@ -1,6 +1,6 @@
 # Business-rule index
 
-All **409 allocated rules** (BR-218–BR-233 belong to F-015, BR-234–BR-259 to F-016, BR-260–BR-278 to F-017, BR-279–BR-289 to F-018, BR-290 and BR-292–BR-314 to F-019, BR-315–BR-321 to F-020, BR-322–BR-327 to F-021, BR-328–BR-340 to F-022, BR-341–BR-352 to F-023, BR-353–BR-375, BR-378 and BR-379 to F-024, BR-380–BR-388 to F-026, BR-389–BR-392 to F-027, BR-291, BR-305–BR-311 and BR-393–BR-395 to F-028 (#3; reserved for this work by F-019 as archive #109), BR-396–BR-398 to F-029 (#25), BR-399–BR-403 to F-030 (#23), BR-404–BR-410 to F-031 (#31), BR-411 to F-032 (#33); BR-376 and BR-377 were withdrawn in F-024 v2, were never accepted, have no record and are never reused) now have a canonical record with YAML metadata, Rule,
+All **424 allocated rules** (BR-218–BR-233 belong to F-015, BR-234–BR-259 to F-016, BR-260–BR-278 to F-017, BR-279–BR-289 to F-018, BR-290 and BR-292–BR-314 to F-019, BR-315–BR-321 to F-020, BR-322–BR-327 to F-021, BR-328–BR-340 to F-022, BR-341–BR-352 to F-023, BR-353–BR-375, BR-378 and BR-379 to F-024, BR-380–BR-388 to F-026, BR-389–BR-392 to F-027, BR-291, BR-305–BR-311 and BR-393–BR-395 to F-028 (#3; reserved for this work by F-019 as archive #109), BR-396–BR-398 to F-029 (#25), BR-399–BR-403 to F-030 (#23), BR-404–BR-410 to F-031 (#31), BR-411 to F-032 (#33), BR-412–BR-420 to F-034 (#4), BR-421 and BR-422 to F-035 (#46), BR-423–BR-426 to F-040 (#47 lot D); BR-376 and BR-377 were withdrawn in F-024 v2, were never accepted, have no record and are never reused) now have a canonical record with YAML metadata, Rule,
 Rationale, concrete Given / When / Then Examples, Verification and History. Every
 new record begins its initial BR version1; BR-042 is now version2 under F-003 v2; BR-024 and BR-100
 version 2 were accepted with F-010 (#21) on main `3fc14c3`. BR-010, BR-012 and BR-014 v2 and BR-015 v3
@@ -17,7 +17,7 @@ F-002 acceptance (archived evidence `runs/33-acceptance-1.md`) on
 #4 (archive issue 4),
 #31 (archive issue 31) and
 #33 (archive issue 33).
-There are **401 active, 8 superseded and 0 pending-acceptance** rules (F-033 v1 (#26) versions BR-129 to v6 and BR-306, BR-307, BR-309 and BR-394 to v2, all active after acceptance on main `6ef8b55`; F-032 v1 (#33) allocates BR-411 v1 and versions BR-129 to v5 and BR-142 to v3, all active after acceptance on main `89be2ba`; F-031 v1 (#31) allocates BR-404–BR-410 v1 and versions BR-129 to v4, BR-143 to v4, BR-393 to v3, BR-399 to v2, BR-402 to v2 and BR-403 to v2, all active after acceptance on main `901f7af`; F-030 v1 (#23) allocates BR-399–BR-403 v1 and versions BR-129 to v3 and BR-393 to v2, all active after acceptance on main `f747072`; F-029 v2 (#25) allocates BR-396–BR-398 v1 and versions BR-171 to v3, all active after acceptance on main `3428df5`; F-028 v2, with BR-291, BR-305–BR-311 and BR-393–BR-395 v1 and BR-023 v3, BR-024 v4, BR-125 v2, BR-128 v3, BR-129 v2, BR-136 v2, BR-143 v3, BR-169 v3, BR-295 v2, BR-298 v2, BR-299 v2 and BR-302 v2, was accepted on actual main `aa540d4` on 2026-11-14; the owner-run claude.ai check is not done and is unblocked since #25 was accepted; F-027 v2, with BR-389–BR-392 v1 and BR-122 v3, BR-315 v2, BR-318 v2, BR-320 v3 and BR-321 v4, and BR-317 superseded by BR-390, was accepted on actual main `75bd9bb` on 2026-11-14; F-026 v1, with BR-380–BR-388 v1 and BR-070 v3, BR-118 v2 and BR-258 v2, was accepted on actual main `2d10e19` on 2026-11-13; F-025 v1, with BR-321 v3, was accepted on actual main `e857db3` on 2026-11-13; F-024 v2, with BR-353–BR-375, BR-378 and BR-379 v1 and BR-016 v3 and BR-178 v3, was accepted on actual main `163e701` on 2026-11-13; BR-376, BR-377 and the BR-321 v2 of F-024 v1 were withdrawn in F-024 v2, and BR-321 v2 is never reused; F-023 v1, with BR-341–BR-352 v1 and BR-015 v7, BR-149 v3, BR-183 v3, BR-225 v3, BR-227 v3, BR-229 v2 and BR-320 v2, was accepted on actual main `ad25fa2` on 2026-11-12; F-022 v2, with BR-328–BR-340 (BR-335 v2, the others v1) and BR-146 v2, was accepted on actual main `e7d6367` on 2026-11-12; F-021 v1, with BR-322–BR-327 v1 and BR-154 v2, BR-156 v2, BR-162 v2, BR-167 v2, BR-168 v2, BR-180 v2, BR-181 v2, BR-184 v2 and BR-187 v3, was accepted on actual main `e208996` on 2026-11-11; F-020 v1, with BR-315–BR-321 v1 and BR-015 v6, BR-122 v2, BR-225 v2 and BR-227 v2, was accepted on actual main `b6acf86` on 2026-11-11; F-019 v1, with BR-290, BR-292–BR-304 and BR-312–BR-314 v1 and BR-023 v2, BR-024 v3, BR-124 v2, BR-128 v2, BR-139 v2, BR-140 v2, BR-142 v2, BR-143 v2, BR-152 v2 and BR-169 v2, was accepted on actual main `68209fe` on 2026-11-11; F-018 v1, with BR-279–BR-289 and BR-035 v2, BR-060 v6, BR-190 v3, BR-266 v2 and BR-274 v2, was accepted on actual main `0f1852c` on 2026-11-10; F-017 v1, with BR-260–BR-278 and BR-039 v2, BR-060 v5, BR-190 v2 and BR-200 v2, was accepted on actual main `4b59c52` on 2026-11-10; F-016 v1, with BR-234–BR-259 and BR-069/BR-070 v2, was accepted on actual main `005b9ba` on 2026-11-10; F-003 v2 and F-004 v1, with BR-029–BR-058, were accepted on 2026-11-09 through the F-014 production acceptance; F-014 v7, with BR-190–BR-217 and BR-016, BR-028, BR-071, BR-123 and BR-175 v2, was accepted on actual main `2a9c1e3` on 2026-11-09). Acceptance covers local
+There are **416 active, 8 superseded and 0 pending-acceptance** rules (F-040 v1 (#47 lot D) allocates BR-423–BR-426 v1 and versions BR-118 to v3, all active after acceptance on main `67c101a`; F-039 v1 (#47 lot C) versions BR-070 to v5 and BR-240, BR-241, BR-254 and BR-259 to v2, all active after acceptance on main `8bc1780`; F-038 v1 (#47 lot B) versions BR-070 to v4 and BR-205 and BR-384 to v2, all active after acceptance on main `2ae303c`; F-037 v1 (#47 lot A) versions BR-248, BR-249, BR-250 and BR-268 to v2, all active after acceptance on main `8b92e07`; F-036 v1 (#49) versions BR-137 to v3, active after acceptance on main `14f5266`; F-035 v1 (#46) allocates BR-421 and BR-422 v1 and versions BR-023 to v4, BR-024 to v5, BR-131, BR-133, BR-137 and BR-186 to v2 and BR-162, BR-167 and BR-184 to v3, all active after acceptance on main `703bece`; F-034 v1 (#4) allocates BR-412–BR-420 v1 and versions BR-114 to v2, and F-034 v2 versions BR-173, BR-226 and BR-392 to v2, all active after acceptance on main `570c4b2`; F-033 v1 (#26) versions BR-129 to v6 and BR-306, BR-307, BR-309 and BR-394 to v2, all active after acceptance on main `6ef8b55`; F-032 v1 (#33) allocates BR-411 v1 and versions BR-129 to v5 and BR-142 to v3, all active after acceptance on main `89be2ba`; F-031 v1 (#31) allocates BR-404–BR-410 v1 and versions BR-129 to v4, BR-143 to v4, BR-393 to v3, BR-399 to v2, BR-402 to v2 and BR-403 to v2, all active after acceptance on main `901f7af`; F-030 v1 (#23) allocates BR-399–BR-403 v1 and versions BR-129 to v3 and BR-393 to v2, all active after acceptance on main `f747072`; F-029 v2 (#25) allocates BR-396–BR-398 v1 and versions BR-171 to v3, all active after acceptance on main `3428df5`; F-028 v2, with BR-291, BR-305–BR-311 and BR-393–BR-395 v1 and BR-023 v3, BR-024 v4, BR-125 v2, BR-128 v3, BR-129 v2, BR-136 v2, BR-143 v3, BR-169 v3, BR-295 v2, BR-298 v2, BR-299 v2 and BR-302 v2, was accepted on actual main `aa540d4` on 2026-11-14; the owner-run claude.ai check is not done and is unblocked since #25 was accepted; F-027 v2, with BR-389–BR-392 v1 and BR-122 v3, BR-315 v2, BR-318 v2, BR-320 v3 and BR-321 v4, and BR-317 superseded by BR-390, was accepted on actual main `75bd9bb` on 2026-11-14; F-026 v1, with BR-380–BR-388 v1 and BR-070 v3, BR-118 v2 and BR-258 v2, was accepted on actual main `2d10e19` on 2026-11-13; F-025 v1, with BR-321 v3, was accepted on actual main `e857db3` on 2026-11-13; F-024 v2, with BR-353–BR-375, BR-378 and BR-379 v1 and BR-016 v3 and BR-178 v3, was accepted on actual main `163e701` on 2026-11-13; BR-376, BR-377 and the BR-321 v2 of F-024 v1 were withdrawn in F-024 v2, and BR-321 v2 is never reused; F-023 v1, with BR-341–BR-352 v1 and BR-015 v7, BR-149 v3, BR-183 v3, BR-225 v3, BR-227 v3, BR-229 v2 and BR-320 v2, was accepted on actual main `ad25fa2` on 2026-11-12; F-022 v2, with BR-328–BR-340 (BR-335 v2, the others v1) and BR-146 v2, was accepted on actual main `e7d6367` on 2026-11-12; F-021 v1, with BR-322–BR-327 v1 and BR-154 v2, BR-156 v2, BR-162 v2, BR-167 v2, BR-168 v2, BR-180 v2, BR-181 v2, BR-184 v2 and BR-187 v3, was accepted on actual main `e208996` on 2026-11-11; F-020 v1, with BR-315–BR-321 v1 and BR-015 v6, BR-122 v2, BR-225 v2 and BR-227 v2, was accepted on actual main `b6acf86` on 2026-11-11; F-019 v1, with BR-290, BR-292–BR-304 and BR-312–BR-314 v1 and BR-023 v2, BR-024 v3, BR-124 v2, BR-128 v2, BR-139 v2, BR-140 v2, BR-142 v2, BR-143 v2, BR-152 v2 and BR-169 v2, was accepted on actual main `68209fe` on 2026-11-11; F-018 v1, with BR-279–BR-289 and BR-035 v2, BR-060 v6, BR-190 v3, BR-266 v2 and BR-274 v2, was accepted on actual main `0f1852c` on 2026-11-10; F-017 v1, with BR-260–BR-278 and BR-039 v2, BR-060 v5, BR-190 v2 and BR-200 v2, was accepted on actual main `4b59c52` on 2026-11-10; F-016 v1, with BR-234–BR-259 and BR-069/BR-070 v2, was accepted on actual main `005b9ba` on 2026-11-10; F-003 v2 and F-004 v1, with BR-029–BR-058, were accepted on 2026-11-09 through the F-014 production acceptance; F-014 v7, with BR-190–BR-217 and BR-016, BR-028, BR-071, BR-123 and BR-175 v2, was accepted on actual main `2a9c1e3` on 2026-11-09). Acceptance covers local
 configuration, synthetic injected preflight, accepted #8/#9/#10 injected scopes and the accepted #11 OIDC qualification tooling and validator, and the accepted #14 injected bounded extraction (F-009); F-008 qualified Infomaniak and Gitea as `proxy-only`. The #12 authenticated HTTP
 listener in proxy mode is accepted with one real claude.ai connection over a synthetic drive. The production read-only
 kDrive adapter and the stdio and HTTP runtime of the packaged CLI are accepted with F-014.
@@ -142,7 +142,7 @@ Keep navigation aligned with the [allocation ledger](../docs/spec-index.md),
 canonical records, examples and actual-main acceptance evidence in the same
 appropriately scoped, reviewed PR. Pending precedes acceptance; accepted markers
 are synchronized according to the existing workflow before release. The next
-unused BR ID is BR-412 (BR-376 and BR-377 are withdrawn and never reused). No new delivery step, product contract or release
+unused BR ID is BR-423 (BR-376 and BR-377 are withdrawn and never reused). No new delivery step, product contract or release
 authorization is introduced. The [capability map](../capability-map.md) describes
 accepted user-facing scope and explicitly provisional entries.
 
@@ -252,7 +252,7 @@ accepted on actual main `7b046a0` (acceptance (archived evidence `runs/14-accept
 | [BR-111](BR-111.md) | v1      | Every extraction downloads one entire bounded source version through exact F-007 range/body evidence before decoding any source bytes.                                               | [F-009 v1](../features/F-009-bounded-content-reading.md) | Active                                    |
 | [BR-112](BR-112.md) | v1      | Text decoding accepts only the declared encodings with strict validation, preserves text after one leading BOM removal and never silently substitutes malformed input.               | [F-009 v1](../features/F-009-bounded-content-reading.md) | Active                                    |
 | [BR-113](BR-113.md) | v1      | Text/selected-page output truncates only at code-point boundaries and reports exact progress while counting the entire serialized output budget.                                     | [F-009 v1](../features/F-009-bounded-content-reading.md) | Active                                    |
-| [BR-114](BR-114.md) | v1      | PDF extraction accepts only the bounded preflight profile and never starts PDF.js on unsupported, malformed or over-budget containers.                                               | [F-009 v1](../features/F-009-bounded-content-reading.md) | Active                                    |
+| [BR-114](BR-114.md) | v1      | PDF extraction accepts only the bounded preflight profile and never starts PDF.js on unsupported, malformed or over-budget containers.                                               | [F-009 v1](../features/F-009-bounded-content-reading.md) | Active; v2 active since F-034 (see below) |
 | [BR-115](BR-115.md) | v1      | PDF text contains only the requested ordered pages with declared separators, and a selection without extractable non-whitespace text returns an explicit no-text result without OCR. | [F-009 v1](../features/F-009-bounded-content-reading.md) | Active                                    |
 | [BR-116](BR-116.md) | v1      | Image decoding starts only after bounded format/dimension/ decompression admission and publishes exactly one complete valid resized PNG with metadata, or an explicit refusal.       | [F-009 v1](../features/F-009-bounded-content-reading.md) | Active                                    |
 | [BR-117](BR-117.md) | v1      | All input, decoded/decompressed, structural, processing-time and serialized-output ceilings are cumulative within one invocation and equality is permitted.                          | [F-009 v1](../features/F-009-bounded-content-reading.md) | Active                                    |
@@ -281,13 +281,13 @@ MCP-client connections are deferred to #12/#13 and are not established.
 | [BR-128](BR-128.md) | v2      | Authorization validation: error page for unverified targets, ordered client redirects otherwise.      | [F-010 v1](../features/F-010-oauth-proxy.md) | Active (v2, #103); v3 active since F-028 (see below) |
 | [BR-129](BR-129.md) | v1      | Consent page on every authorization; one-use 600-second consent; security headers.                    | [F-010 v1](../features/F-010-oauth-proxy.md) | Active; v6 active since F-033 (see below)            |
 | [BR-130](BR-130.md) | v1      | `__Host-kdrive-oauth` browser binding cookie, refreshed by each state-creating response.              | [F-010 v1](../features/F-010-oauth-proxy.md) | Active                                               |
-| [BR-131](BR-131.md) | v1      | Upstream discovery, PKCE S256, `state`, `nonce` and bounded upstream requests.                        | [F-010 v1](../features/F-010-oauth-proxy.md) | Active                                               |
+| [BR-131](BR-131.md) | v1      | Upstream discovery, PKCE S256, `state`, `nonce` and bounded upstream requests.                        | [F-010 v1](../features/F-010-oauth-proxy.md) | Active; v2 active since F-035 (see below)            |
 | [BR-132](BR-132.md) | v1      | Ordered callback checks; RFC 9207 `iss`; fixed error mapping; upstream code exchange.                 | [F-010 v1](../features/F-010-oauth-proxy.md) | Active                                               |
-| [BR-133](BR-133.md) | v1      | Strict upstream ID-token verification with bounded JWKS caching and refetch.                          | [F-010 v1](../features/F-010-oauth-proxy.md) | Active                                               |
+| [BR-133](BR-133.md) | v1      | Strict upstream ID-token verification with bounded JWKS caching and refetch.                          | [F-010 v1](../features/F-010-oauth-proxy.md) | Active; v2 active since F-035 (see below)            |
 | [BR-134](BR-134.md) | v1      | Upstream `(iss, sub)` or verified-email allowlist at login; else `access_denied`.                     | [F-010 v1](../features/F-010-oauth-proxy.md) | Active                                               |
 | [BR-135](BR-135.md) | v1      | One-use 60-second code bound to client, redirect, PKCE, resource and identity.                        | [F-010 v1](../features/F-010-oauth-proxy.md) | Active                                               |
 | [BR-136](BR-136.md) | v1      | Token-endpoint client authentication; `401 invalid_client` for unknown clients.                       | [F-010 v1](../features/F-010-oauth-proxy.md) | Active; v2 active since F-028 (see below)            |
-| [BR-137](BR-137.md) | v1      | Authorization-code grant checks; consumption before `await`; reuse revokes the family.                | [F-010 v1](../features/F-010-oauth-proxy.md) | Active                                               |
+| [BR-137](BR-137.md) | v1      | Authorization-code grant checks; consumption before `await`; reuse revokes the family.                | [F-010 v1](../features/F-010-oauth-proxy.md) | Active; v3 active since F-036 (see below)            |
 | [BR-138](BR-138.md) | v1      | One-hour ES256 `at+jwt` access token with `kid`, `upstream_iss` and `client_id`.                      | [F-010 v1](../features/F-010-oauth-proxy.md) | Active                                               |
 | [BR-139](BR-139.md) | v2      | Hashed refresh tokens; 30-day family and 7-day inactivity bounds; rotation.                           | [F-010 v1](../features/F-010-oauth-proxy.md) | Active (v2, #103)                                    |
 | [BR-140](BR-140.md) | v2      | Ordered refresh checks; reuse or cross-client use revokes the family.                                 | [F-010 v1](../features/F-010-oauth-proxy.md) | Active (v2, #103)                                    |
@@ -305,7 +305,7 @@ to v4 (the `image` CI job). All were accepted on actual main `25e79ba` on 2026-1
 | ID                  | Version | Rule                                                                                                                   | Source                                      | Status                                    |
 | ------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- | ----------------------------------------- |
 | [BR-172](BR-172.md) | v1      | Production Dockerfile stages, native build stages, digest-pinned Node 26.13.0 bases.                                   | [F-013 v2](../features/F-013-http-image.md) | Active                                    |
-| [BR-173](BR-173.md) | v1      | `deps` installs production dependencies without optional ones; `runtime` copies an allowlist and runs no npm.          | [F-013 v2](../features/F-013-http-image.md) | Active                                    |
+| [BR-173](BR-173.md) | v1      | `deps` installs production dependencies without optional ones; `runtime` copies an allowlist and runs no npm.          | [F-013 v2](../features/F-013-http-image.md) | Active; v2 active since F-034 (see below) |
 | [BR-174](BR-174.md) | v1      | Runtime runs as UID/GID 1000; `/app` is root-owned and not group/other-writable.                                       | [F-013 v2](../features/F-013-http-image.md) | Active                                    |
 | [BR-175](BR-175.md) | v1      | Runtime environment, stop signal, port and CLI entrypoint; honest not-implemented diagnostic.                          | [F-013 v2](../features/F-013-http-image.md) | Active; v2 active since F-014 (see below) |
 | [BR-176](BR-176.md) | v1      | `smoke` stage adds only the dev-only acceptance composition.                                                           | [F-013 v2](../features/F-013-http-image.md) | Active                                    |
@@ -318,7 +318,7 @@ to v4 (the `image` CI job). All were accepted on actual main `25e79ba` on 2026-1
 | [BR-183](BR-183.md) | v1      | CI job `image`: per-architecture matrix, read-only, bounded, Make-only steps.                                          | [F-013 v2](../features/F-013-http-image.md) | Active                                    |
 | [BR-184](BR-184.md) | v1      | Compose example: hardened single service, file secrets, Traefik routing, required variables.                           | [F-013 v2](../features/F-013-http-image.md) | Active                                    |
 | [BR-185](BR-185.md) | v1      | YAML configuration example for `--config`, file credentials only.                                                      | [F-013 v2](../features/F-013-http-image.md) | Active                                    |
-| [BR-186](BR-186.md) | v1      | Examples and deployment doc use only reserved hosts, two addresses and no installation path.                           | [F-013 v2](../features/F-013-http-image.md) | Active                                    |
+| [BR-186](BR-186.md) | v1      | Examples and deployment doc use only reserved hosts, two addresses and no installation path.                           | [F-013 v2](../features/F-013-http-image.md) | Active; v2 active since F-035 (see below) |
 | [BR-187](BR-187.md) | v2      | Deployment doc sections incl. personal-server guide and Troubleshooting, truthful status phrases, no readiness claims. | [F-013 v3](../features/F-013-http-image.md) | Active (v2, #101)                         |
 | [BR-188](BR-188.md) | v1      | `make image-binfmt`: opt-in, digest-pinned arm64 emulation registration.                                               | [F-013 v2](../features/F-013-http-image.md) | Active                                    |
 
@@ -406,7 +406,7 @@ statements of the five versioned rules replace their v1 statements listed above.
 | [BR-202](BR-202.md) | v3      | `collection` serves `list` (children route), `search` (`query`, plus `directory_id` when the scope is not ….  | [F-014 v5](../features/F-014-production-kdrive-adapter.md) | Active                                    |
 | [BR-203](BR-203.md) | v3      | Received `list` uses only the unscoped `/3/drive/files/shared_with_me`; received `inspect` uses the ….        | [F-014 v4](../features/F-014-production-kdrive-adapter.md) | Active                                    |
 | [BR-204](BR-204.md) | v1      | Normalized received capabilities set `read` to the provider `can_read === true`, set `list` and `search` ….   | [F-014 v1](../features/F-014-production-kdrive-adapter.md) | Active                                    |
-| [BR-205](BR-205.md) | v1      | `describe` reads fresh metadata, then issues one download with `Range: bytes=0-0`; it returns ….              | [F-014 v1](../features/F-014-production-kdrive-adapter.md) | Active                                    |
+| [BR-205](BR-205.md) | v1      | `describe` reads fresh metadata, then issues one download with `Range: bytes=0-0`; it returns ….              | [F-014 v1](../features/F-014-production-kdrive-adapter.md) | Active; v2 active since F-038 (see below) |
 | [BR-206](BR-206.md) | v1      | `open` sends `Range: bytes=<start>-<end>` and `Accept-Encoding: identity`; before exposing a body it ….       | [F-014 v1](../features/F-014-production-kdrive-adapter.md) | Active                                    |
 | [BR-207](BR-207.md) | v1      | `inspectDrive` returns `{id, role}` with the provider role of that drive from one ….                          | [F-014 v1](../features/F-014-production-kdrive-adapter.md) | Active                                    |
 | [BR-208](BR-208.md) | v1      | The token is read only through the existing F-002 sources.                                                    | [F-014 v1](../features/F-014-production-kdrive-adapter.md) | Active                                    |
@@ -440,26 +440,26 @@ BR-070 v2 replace the v1 statements listed above.
 | [BR-237](BR-237.md) | v1      | Identity `stdio`, verified `oauth` (iss, sub) or `insecure`; none refused.                                               | [F-016 v1](../features/F-016-mutation-audit-gate.md) | Active                                    |
 | [BR-238](BR-238.md) | v1      | Records on fd 2 or the configured file; sink opened only in write/share modes.                                           | [F-016 v1](../features/F-016-mutation-audit-gate.md) | Active                                    |
 | [BR-239](BR-239.md) | v1      | File sink `O_APPEND`/`O_NOFOLLOW`, mode 0600, owner and 0o077 checks.                                                    | [F-016 v1](../features/F-016-mutation-audit-gate.md) | Active                                    |
-| [BR-240](BR-240.md) | v1      | Append resolves after one full write plus `fdatasync` or the stderr callback.                                            | [F-016 v1](../features/F-016-mutation-audit-gate.md) | Active                                    |
-| [BR-241](BR-241.md) | v1      | Any write failure latches the sink for the process lifetime.                                                             | [F-016 v1](../features/F-016-mutation-audit-gate.md) | Active                                    |
+| [BR-240](BR-240.md) | v1      | Append resolves after one full write plus `fdatasync` or the stderr callback.                                            | [F-016 v1](../features/F-016-mutation-audit-gate.md) | Active; v2 active since F-039 (see below) |
+| [BR-241](BR-241.md) | v1      | Any write failure latches the sink for the process lifetime.                                                             | [F-016 v1](../features/F-016-mutation-audit-gate.md) | Active; v2 active since F-039 (see below) |
 | [BR-242](BR-242.md) | v1      | Appends serialized in call order, single write of at most 8,192 bytes.                                                   | [F-016 v1](../features/F-016-mutation-audit-gate.md) | Active                                    |
 | [BR-243](BR-243.md) | v1      | Durable intent before the first attempt; outcome after classification; shared `op`.                                      | [F-016 v1](../features/F-016-mutation-audit-gate.md) | Active                                    |
 | [BR-244](BR-244.md) | v1      | Failed intent append: zero attempts, `AUDIT_UNAVAILABLE`.                                                                | [F-016 v1](../features/F-016-mutation-audit-gate.md) | Active                                    |
 | [BR-245](BR-245.md) | v1      | Admission refusals with zero records, zero policy calls, zero attempts.                                                  | [F-016 v1](../features/F-016-mutation-audit-gate.md) | Active                                    |
 | [BR-246](BR-246.md) | v1      | Decision by the shared guarded facade; denial records one `denied` record.                                               | [F-016 v1](../features/F-016-mutation-audit-gate.md) | Active                                    |
 | [BR-247](BR-247.md) | v1      | Attempt classification table; unknown or malformed results are `uncertain`.                                              | [F-016 v1](../features/F-016-mutation-audit-gate.md) | Active                                    |
-| [BR-248](BR-248.md) | v1      | Only 429 is retried, at most 3 attempts, bounded `Retry-After`.                                                          | [F-016 v1](../features/F-016-mutation-audit-gate.md) | Active                                    |
-| [BR-249](BR-249.md) | v1      | 60 s run deadline; each attempt aborted after min(30 s, time left).                                                      | [F-016 v1](../features/F-016-mutation-audit-gate.md) | Active                                    |
-| [BR-250](BR-250.md) | v1      | Cancellation rules before and after the intent append.                                                                   | [F-016 v1](../features/F-016-mutation-audit-gate.md) | Active                                    |
+| [BR-248](BR-248.md) | v1      | Only 429 is retried, at most 3 attempts, bounded `Retry-After`.                                                          | [F-016 v1](../features/F-016-mutation-audit-gate.md) | Active; v2 active since F-037 (see below) |
+| [BR-249](BR-249.md) | v1      | 60 s run deadline; each attempt aborted after min(30 s, time left).                                                      | [F-016 v1](../features/F-016-mutation-audit-gate.md) | Active; v2 active since F-037 (see below) |
+| [BR-250](BR-250.md) | v1      | Cancellation rules before and after the intent append.                                                                   | [F-016 v1](../features/F-016-mutation-audit-gate.md) | Active; v2 active since F-037 (see below) |
 | [BR-251](BR-251.md) | v1      | `uncertain` ends the run with `UPSTREAM_UNCERTAIN` and the fixed message.                                                | [F-016 v1](../features/F-016-mutation-audit-gate.md) | Active                                    |
 | [BR-252](BR-252.md) | v1      | Outcome append failure keeps the real classification with `audit:"outcome_unrecorded"`.                                  | [F-016 v1](../features/F-016-mutation-audit-gate.md) | Active                                    |
 | [BR-253](BR-253.md) | v1      | A crash between intent and outcome leaves the intent as the last record of its `op`.                                     | [F-016 v1](../features/F-016-mutation-audit-gate.md) | Active                                    |
-| [BR-254](BR-254.md) | v1      | Gate close drains in-flight runs; shutdown order transport, gate, exit.                                                  | [F-016 v1](../features/F-016-mutation-audit-gate.md) | Active                                    |
+| [BR-254](BR-254.md) | v1      | Gate close drains in-flight runs; shutdown order transport, gate, exit.                                                  | [F-016 v1](../features/F-016-mutation-audit-gate.md) | Active; v2 active since F-039 (see below) |
 | [BR-255](BR-255.md) | v1      | Gate result members are a closed set.                                                                                    | [F-016 v1](../features/F-016-mutation-audit-gate.md) | Active                                    |
 | [BR-256](BR-256.md) | v1      | Policy `execute` bound to the gate executor; production evidence and cap for decisions.                                  | [F-016 v1](../features/F-016-mutation-audit-gate.md) | Active                                    |
 | [BR-257](BR-257.md) | v1      | Received-share mutation reloads `shared_with_me` and is denied.                                                          | [F-016 v1](../features/F-016-mutation-audit-gate.md) | Active                                    |
 | [BR-258](BR-258.md) | v1      | `mutate` entry point; navigation bounds stop at the intent append.                                                       | [F-016 v1](../features/F-016-mutation-audit-gate.md) | Active; v2 active since F-026 (see below) |
-| [BR-259](BR-259.md) | v1      | File append bounded at 5,000 ms; a late intent gives zero attempts.                                                      | [F-016 v1](../features/F-016-mutation-audit-gate.md) | Active                                    |
+| [BR-259](BR-259.md) | v1      | File append bounded at 5,000 ms; a late intent gives zero attempts.                                                      | [F-016 v1](../features/F-016-mutation-audit-gate.md) | Active; v2 active since F-039 (see below) |
 | [BR-069](BR-069.md) | v2      | Stdio stdout carries only MCP frames; stderr carries fixed diagnostics and, with `auditLog=stderr`, F-016 audit records. | [F-016 v1](../features/F-016-mutation-audit-gate.md) | Active                                    |
 | [BR-070](BR-070.md) | v2      | Invocation bounds, except a gate run past its intent append, which F-016 bounds.                                         | [F-016 v1](../features/F-016-mutation-audit-gate.md) | Active; v3 active since F-026 (see below) |
 
@@ -470,31 +470,31 @@ versions BR-039 to v2, BR-060 to v5, BR-190 to v2 and BR-200 to v2. All were
 accepted on actual main `4b59c52` on 2026-11-10
 (acceptance (archived evidence `runs/18-acceptance-1.md`)); the new versions are active.
 
-| ID                  | Version | Rule                                                                                                                                     | Source                                                                                              | Status                      |
-| ------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- | --------------------------- |
-| [BR-260](BR-260.md) | v3      | Strict arguments of the five write tools; NFC, well-formed `name` (create, rename); Tool-table operation; `INVALID_ARGUMENTS` otherwise. | [F-017 v1](../features/F-017-controlled-tree-mutations.md), [F-018 v3](../features/F-018-upload.md) | Active (v3, F-018 v3, #100) |
-| [BR-261](BR-261.md) | v1      | Write annotations; `destructiveHint` true for `kdrive_trash` only.                                                                       | [F-017 v1](../features/F-017-controlled-tree-mutations.md)                                          | Active                      |
-| [BR-262](BR-262.md) | v1      | One `mutate` call; one text item with the gate result JSON; `isError` unless `succeeded`.                                                | [F-017 v1](../features/F-017-controlled-tree-mutations.md)                                          | Active                      |
-| [BR-263](BR-263.md) | v2      | Fixed description sentences and the uncertain-result sentence.                                                                           | [F-017 v1](../features/F-017-controlled-tree-mutations.md), [F-018 v2](../features/F-018-upload.md) | Active (v2, F-018 v2, #91)  |
-| [BR-264](BR-264.md) | v1      | Original-trash evidence from trash metadata plus the live former parent.                                                                 | [F-017 v1](../features/F-017-controlled-tree-mutations.md)                                          | Active                      |
-| [BR-265](BR-265.md) | v1      | `missing`/`incomplete` trash evidence cases.                                                                                             | [F-017 v1](../features/F-017-controlled-tree-mutations.md)                                          | Active                      |
-| [BR-266](BR-266.md) | v1      | New TLS connection per mutation; `Connection: close`; explicit `Content-Length`; no redirect.                                            | [F-017 v1](../features/F-017-controlled-tree-mutations.md)                                          | Active                      |
-| [BR-267](BR-267.md) | v1      | `NotSent` before the TLS handshake, `MUTATION_UNKNOWN` after it.                                                                         | [F-017 v1](../features/F-017-controlled-tree-mutations.md)                                          | Active                      |
-| [BR-268](BR-268.md) | v1      | Raw port result; the mutator alone validates a complete 2xx body.                                                                        | [F-017 v1](../features/F-017-controlled-tree-mutations.md)                                          | Active                      |
-| [BR-269](BR-269.md) | v1      | No adapter deadline; the gate attempt abort destroys the socket.                                                                         | [F-017 v1](../features/F-017-controlled-tree-mutations.md)                                          | Active                      |
-| [BR-270](BR-270.md) | v1      | No permanent deletion and no `DELETE` on a `/trash` path.                                                                                | [F-017 v1](../features/F-017-controlled-tree-mutations.md)                                          | Active                      |
-| [BR-271](BR-271.md) | v1      | One request per attempt on the kind's route; no read-back.                                                                               | [F-017 v1](../features/F-017-controlled-tree-mutations.md)                                          | Active                      |
-| [BR-272](BR-272.md) | v1      | Folder-create check; `created` and `value` with the new ID.                                                                              | [F-017 v1](../features/F-017-controlled-tree-mutations.md)                                          | Active                      |
-| [BR-273](BR-273.md) | v1      | Cancellable-action check; `cancel_id` never exposed.                                                                                     | [F-017 v1](../features/F-017-controlled-tree-mutations.md)                                          | Active                      |
-| [BR-274](BR-274.md) | v1      | Production registers exactly the five mutators.                                                                                          | [F-017 v1](../features/F-017-controlled-tree-mutations.md)                                          | Active                      |
-| [BR-275](BR-275.md) | v1      | Single-drive move; different evidence drives are denied.                                                                                 | [F-017 v1](../features/F-017-controlled-tree-mutations.md)                                          | Active                      |
-| [BR-276](BR-276.md) | v1      | Owner-run `make kdrive-write-acceptance` with a sanitized summary.                                                                       | [F-017 v1](../features/F-017-controlled-tree-mutations.md)                                          | Active                      |
-| [BR-277](BR-277.md) | v1      | README and `SECURITY.md` write-tool limits and residual risks R-17-1, R-17-2.                                                            | [F-017 v1](../features/F-017-controlled-tree-mutations.md)                                          | Active                      |
-| [BR-278](BR-278.md) | v1      | Configured roots are never trashed, renamed or moved.                                                                                    | [F-017 v1](../features/F-017-controlled-tree-mutations.md)                                          | Active                      |
-| [BR-039](BR-039.md) | v2      | Restore carries only `target`; destination derived from the evidence's immediate parent.                                                 | [F-017 v1](../features/F-017-controlled-tree-mutations.md)                                          | Active                      |
-| [BR-060](BR-060.md) | v5      | `write`/`share` add the five mutation tools.                                                                                             | [F-017 v1](../features/F-017-controlled-tree-mutations.md)                                          | Active                      |
-| [BR-190](BR-190.md) | v2      | Trash-metadata `GET` and `POST`/`DELETE` on the five mutation routes.                                                                    | [F-017 v1](../features/F-017-controlled-tree-mutations.md)                                          | Active                      |
-| [BR-200](BR-200.md) | v2      | Trashed-tree `children` and adapter `execute` stay unavailable.                                                                          | [F-017 v1](../features/F-017-controlled-tree-mutations.md)                                          | Active                      |
+| ID                  | Version | Rule                                                                                                                                     | Source                                                                                              | Status                                    |
+| ------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- | ----------------------------------------- |
+| [BR-260](BR-260.md) | v3      | Strict arguments of the five write tools; NFC, well-formed `name` (create, rename); Tool-table operation; `INVALID_ARGUMENTS` otherwise. | [F-017 v1](../features/F-017-controlled-tree-mutations.md), [F-018 v3](../features/F-018-upload.md) | Active (v3, F-018 v3, #100)               |
+| [BR-261](BR-261.md) | v1      | Write annotations; `destructiveHint` true for `kdrive_trash` only.                                                                       | [F-017 v1](../features/F-017-controlled-tree-mutations.md)                                          | Active                                    |
+| [BR-262](BR-262.md) | v1      | One `mutate` call; one text item with the gate result JSON; `isError` unless `succeeded`.                                                | [F-017 v1](../features/F-017-controlled-tree-mutations.md)                                          | Active                                    |
+| [BR-263](BR-263.md) | v2      | Fixed description sentences and the uncertain-result sentence.                                                                           | [F-017 v1](../features/F-017-controlled-tree-mutations.md), [F-018 v2](../features/F-018-upload.md) | Active (v2, F-018 v2, #91)                |
+| [BR-264](BR-264.md) | v1      | Original-trash evidence from trash metadata plus the live former parent.                                                                 | [F-017 v1](../features/F-017-controlled-tree-mutations.md)                                          | Active                                    |
+| [BR-265](BR-265.md) | v1      | `missing`/`incomplete` trash evidence cases.                                                                                             | [F-017 v1](../features/F-017-controlled-tree-mutations.md)                                          | Active                                    |
+| [BR-266](BR-266.md) | v1      | New TLS connection per mutation; `Connection: close`; explicit `Content-Length`; no redirect.                                            | [F-017 v1](../features/F-017-controlled-tree-mutations.md)                                          | Active                                    |
+| [BR-267](BR-267.md) | v1      | `NotSent` before the TLS handshake, `MUTATION_UNKNOWN` after it.                                                                         | [F-017 v1](../features/F-017-controlled-tree-mutations.md)                                          | Active                                    |
+| [BR-268](BR-268.md) | v1      | Raw port result; the mutator alone validates a complete 2xx body.                                                                        | [F-017 v1](../features/F-017-controlled-tree-mutations.md)                                          | Active; v2 active since F-037 (see below) |
+| [BR-269](BR-269.md) | v1      | No adapter deadline; the gate attempt abort destroys the socket.                                                                         | [F-017 v1](../features/F-017-controlled-tree-mutations.md)                                          | Active                                    |
+| [BR-270](BR-270.md) | v1      | No permanent deletion and no `DELETE` on a `/trash` path.                                                                                | [F-017 v1](../features/F-017-controlled-tree-mutations.md)                                          | Active                                    |
+| [BR-271](BR-271.md) | v1      | One request per attempt on the kind's route; no read-back.                                                                               | [F-017 v1](../features/F-017-controlled-tree-mutations.md)                                          | Active                                    |
+| [BR-272](BR-272.md) | v1      | Folder-create check; `created` and `value` with the new ID.                                                                              | [F-017 v1](../features/F-017-controlled-tree-mutations.md)                                          | Active                                    |
+| [BR-273](BR-273.md) | v1      | Cancellable-action check; `cancel_id` never exposed.                                                                                     | [F-017 v1](../features/F-017-controlled-tree-mutations.md)                                          | Active                                    |
+| [BR-274](BR-274.md) | v1      | Production registers exactly the five mutators.                                                                                          | [F-017 v1](../features/F-017-controlled-tree-mutations.md)                                          | Active                                    |
+| [BR-275](BR-275.md) | v1      | Single-drive move; different evidence drives are denied.                                                                                 | [F-017 v1](../features/F-017-controlled-tree-mutations.md)                                          | Active                                    |
+| [BR-276](BR-276.md) | v1      | Owner-run `make kdrive-write-acceptance` with a sanitized summary.                                                                       | [F-017 v1](../features/F-017-controlled-tree-mutations.md)                                          | Active                                    |
+| [BR-277](BR-277.md) | v1      | README and `SECURITY.md` write-tool limits and residual risks R-17-1, R-17-2.                                                            | [F-017 v1](../features/F-017-controlled-tree-mutations.md)                                          | Active                                    |
+| [BR-278](BR-278.md) | v1      | Configured roots are never trashed, renamed or moved.                                                                                    | [F-017 v1](../features/F-017-controlled-tree-mutations.md)                                          | Active                                    |
+| [BR-039](BR-039.md) | v2      | Restore carries only `target`; destination derived from the evidence's immediate parent.                                                 | [F-017 v1](../features/F-017-controlled-tree-mutations.md)                                          | Active                                    |
+| [BR-060](BR-060.md) | v5      | `write`/`share` add the five mutation tools.                                                                                             | [F-017 v1](../features/F-017-controlled-tree-mutations.md)                                          | Active                                    |
+| [BR-190](BR-190.md) | v2      | Trash-metadata `GET` and `POST`/`DELETE` on the five mutation routes.                                                                    | [F-017 v1](../features/F-017-controlled-tree-mutations.md)                                          | Active                                    |
+| [BR-200](BR-200.md) | v2      | Trashed-tree `children` and adapter `execute` stay unavailable.                                                                          | [F-017 v1](../features/F-017-controlled-tree-mutations.md)                                          | Active                                    |
 
 ## Accepted — upload
 
@@ -591,23 +591,23 @@ BR-162, BR-167, BR-168, BR-180, BR-181 and BR-184 to v2 and BR-187 to v3. All
 were accepted on actual main `e208996` on 2026-11-11 (evidence (archive issue 105)); for the
 versioned rules the new version is the active rule.
 
-| ID                  | Version | Rule                                                                         | Source                                                  | Status |
-| ------------------- | ------- | ---------------------------------------------------------------------------- | ------------------------------------------------------- | ------ |
-| [BR-322](BR-322.md) | v1      | `GET /healthz` in both modes; fixed check order; constant 200 body.          | [F-021 v1](../features/F-021-container-health-check.md) | Active |
-| [BR-323](BR-323.md) | v1      | `/healthz` ignores credentials, sessions and mode; no dependency call.       | [F-021 v1](../features/F-021-container-health-check.md) | Active |
-| [BR-324](BR-324.md) | v1      | Loopback `Host` forms accepted on `/healthz` only.                           | [F-021 v1](../features/F-021-container-health-check.md) | Active |
-| [BR-325](BR-325.md) | v1      | `health_loopback` and `health_public` windows, 120 per 60 s each.            | [F-021 v1](../features/F-021-container-health-check.md) | Active |
-| [BR-326](BR-326.md) | v1      | `dist/healthcheck.js` probe: `node:http` only, exit codes and failure codes. | [F-021 v1](../features/F-021-container-health-check.md) | Active |
-| [BR-327](BR-327.md) | v1      | Runtime `HEALTHCHECK` exec form, 10 s / 10 s / 30 s / 3.                     | [F-021 v1](../features/F-021-container-health-check.md) | Active |
-| [BR-154](BR-154.md) | v2      | Route table adds `/healthz` (GET).                                           | [F-021 v1](../features/F-021-container-health-check.md) | Active |
-| [BR-156](BR-156.md) | v2      | `Host` check except the BR-324 loopback allowance.                           | [F-021 v1](../features/F-021-container-health-check.md) | Active |
-| [BR-162](BR-162.md) | v2      | Process-wide windows add the two health windows.                             | [F-021 v1](../features/F-021-container-health-check.md) | Active |
-| [BR-167](BR-167.md) | v2      | `request_refused` route may be `health`; no event for a 200.                 | [F-021 v1](../features/F-021-container-health-check.md) | Active |
-| [BR-168](BR-168.md) | v2      | Insecure mode also serves `/healthz`.                                        | [F-021 v1](../features/F-021-container-health-check.md) | Active |
-| [BR-180](BR-180.md) | v2      | Smoke launch adds `--health-interval=2s`; a no-server probe container.       | [F-021 v1](../features/F-021-container-health-check.md) | Active |
-| [BR-181](BR-181.md) | v2      | Image-smoke checks (7)–(10) for the health check.                            | [F-021 v1](../features/F-021-container-health-check.md) | Active |
-| [BR-184](BR-184.md) | v2      | Compose: no `healthcheck` key; comment pointing to the docs.                 | [F-021 v1](../features/F-021-container-health-check.md) | Active |
-| [BR-187](BR-187.md) | v3      | Deployment doc: Health check section; step 7 waits for `healthy`.            | [F-021 v1](../features/F-021-container-health-check.md) | Active |
+| ID                  | Version | Rule                                                                         | Source                                                  | Status                                    |
+| ------------------- | ------- | ---------------------------------------------------------------------------- | ------------------------------------------------------- | ----------------------------------------- |
+| [BR-322](BR-322.md) | v1      | `GET /healthz` in both modes; fixed check order; constant 200 body.          | [F-021 v1](../features/F-021-container-health-check.md) | Active                                    |
+| [BR-323](BR-323.md) | v1      | `/healthz` ignores credentials, sessions and mode; no dependency call.       | [F-021 v1](../features/F-021-container-health-check.md) | Active                                    |
+| [BR-324](BR-324.md) | v1      | Loopback `Host` forms accepted on `/healthz` only.                           | [F-021 v1](../features/F-021-container-health-check.md) | Active                                    |
+| [BR-325](BR-325.md) | v1      | `health_loopback` and `health_public` windows, 120 per 60 s each.            | [F-021 v1](../features/F-021-container-health-check.md) | Active                                    |
+| [BR-326](BR-326.md) | v1      | `dist/healthcheck.js` probe: `node:http` only, exit codes and failure codes. | [F-021 v1](../features/F-021-container-health-check.md) | Active                                    |
+| [BR-327](BR-327.md) | v1      | Runtime `HEALTHCHECK` exec form, 10 s / 10 s / 30 s / 3.                     | [F-021 v1](../features/F-021-container-health-check.md) | Active                                    |
+| [BR-154](BR-154.md) | v2      | Route table adds `/healthz` (GET).                                           | [F-021 v1](../features/F-021-container-health-check.md) | Active                                    |
+| [BR-156](BR-156.md) | v2      | `Host` check except the BR-324 loopback allowance.                           | [F-021 v1](../features/F-021-container-health-check.md) | Active                                    |
+| [BR-162](BR-162.md) | v2      | Process-wide windows add the two health windows.                             | [F-021 v1](../features/F-021-container-health-check.md) | Active; v3 active since F-035 (see below) |
+| [BR-167](BR-167.md) | v2      | `request_refused` route may be `health`; no event for a 200.                 | [F-021 v1](../features/F-021-container-health-check.md) | Active; v3 active since F-035 (see below) |
+| [BR-168](BR-168.md) | v2      | Insecure mode also serves `/healthz`.                                        | [F-021 v1](../features/F-021-container-health-check.md) | Active                                    |
+| [BR-180](BR-180.md) | v2      | Smoke launch adds `--health-interval=2s`; a no-server probe container.       | [F-021 v1](../features/F-021-container-health-check.md) | Active                                    |
+| [BR-181](BR-181.md) | v2      | Image-smoke checks (7)–(10) for the health check.                            | [F-021 v1](../features/F-021-container-health-check.md) | Active                                    |
+| [BR-184](BR-184.md) | v2      | Compose: no `healthcheck` key; comment pointing to the docs.                 | [F-021 v1](../features/F-021-container-health-check.md) | Active; v3 active since F-035 (see below) |
+| [BR-187](BR-187.md) | v3      | Deployment doc: Health check section; step 7 waits for `healthy`.            | [F-021 v1](../features/F-021-container-health-check.md) | Active                                    |
 
 ## Accepted — Quality Gate failure summary
 
@@ -709,20 +709,20 @@ to v3, accepted on actual main `e857db3` on 2026-11-13; v3 is the active rule.
 BR-380–BR-388 v1 and versions BR-258 to v2, BR-070 to v3 and BR-118 to v2.
 All were accepted on actual main `2d10e19` on 2026-11-13 ([evidence](https://github.com/sstolz/kdrive-mcp-server/issues/16#issuecomment-6863879656)).
 
-| ID                  | Version | Rule                                                                          | Source                                                    | Status |
-| ------------------- | ------- | ----------------------------------------------------------------------------- | --------------------------------------------------------- | ------ |
-| [BR-380](BR-380.md) | v1      | One invocation per session; other calls join a per-session FIFO wait queue.   | [F-026 v1](../features/F-026-bounded-invocation-queue.md) | Active |
-| [BR-381](BR-381.md) | v1      | At most 4 waiting calls; a further call gets `SERVER_BUSY`, zero requests.    | [F-026 v1](../features/F-026-bounded-invocation-queue.md) | Active |
-| [BR-382](BR-382.md) | v1      | A call waits at most 12,000 ms, then `SERVER_BUSY`; tie with release defined. | [F-026 v1](../features/F-026-bounded-invocation-queue.md) | Active |
-| [BR-383](BR-383.md) | v1      | Synchronous FIFO hand-off at release; taker re-checks close and abort.        | [F-026 v1](../features/F-026-bounded-invocation-queue.md) | Active |
-| [BR-384](BR-384.md) | v1      | Deadline, budgets and output bounds start when the slot is taken.             | [F-026 v1](../features/F-026-bounded-invocation-queue.md) | Active |
-| [BR-385](BR-385.md) | v1      | Abort while waiting: `ACCESS_DENIED`, zero requests, listeners removed.       | [F-026 v1](../features/F-026-bounded-invocation-queue.md) | Active |
-| [BR-386](BR-386.md) | v1      | Close while waiting: every waiter `ACCESS_DENIED` at once.                    | [F-026 v1](../features/F-026-bounded-invocation-queue.md) | Active |
-| [BR-387](BR-387.md) | v1      | README and client docs describe the queue and retryable `SERVER_BUSY`.        | [F-026 v1](../features/F-026-bounded-invocation-queue.md) | Active |
-| [BR-388](BR-388.md) | v1      | Stdio outbound FIFO of 6 waiting frames; overflow closes; 1,000 ms per frame. | [F-026 v1](../features/F-026-bounded-invocation-queue.md) | Active |
-| [BR-258](BR-258.md) | v2      | `mutate` waits in the shared queue instead of refusing at once.               | [F-026 v1](../features/F-026-bounded-invocation-queue.md) | Active |
-| [BR-070](BR-070.md) | v3      | A second stdio outbound frame waits (BR-388) instead of closing.              | [F-026 v1](../features/F-026-bounded-invocation-queue.md) | Active |
-| [BR-118](BR-118.md) | v2      | Rule unchanged; the concurrent-call example now waits.                        | [F-026 v1](../features/F-026-bounded-invocation-queue.md) | Active |
+| ID                  | Version | Rule                                                                          | Source                                                    | Status                                    |
+| ------------------- | ------- | ----------------------------------------------------------------------------- | --------------------------------------------------------- | ----------------------------------------- |
+| [BR-380](BR-380.md) | v1      | One invocation per session; other calls join a per-session FIFO wait queue.   | [F-026 v1](../features/F-026-bounded-invocation-queue.md) | Active                                    |
+| [BR-381](BR-381.md) | v1      | At most 4 waiting calls; a further call gets `SERVER_BUSY`, zero requests.    | [F-026 v1](../features/F-026-bounded-invocation-queue.md) | Active                                    |
+| [BR-382](BR-382.md) | v1      | A call waits at most 12,000 ms, then `SERVER_BUSY`; tie with release defined. | [F-026 v1](../features/F-026-bounded-invocation-queue.md) | Active                                    |
+| [BR-383](BR-383.md) | v1      | Synchronous FIFO hand-off at release; taker re-checks close and abort.        | [F-026 v1](../features/F-026-bounded-invocation-queue.md) | Active                                    |
+| [BR-384](BR-384.md) | v1      | Deadline, budgets and output bounds start when the slot is taken.             | [F-026 v1](../features/F-026-bounded-invocation-queue.md) | Active; v2 active since F-038 (see below) |
+| [BR-385](BR-385.md) | v1      | Abort while waiting: `ACCESS_DENIED`, zero requests, listeners removed.       | [F-026 v1](../features/F-026-bounded-invocation-queue.md) | Active                                    |
+| [BR-386](BR-386.md) | v1      | Close while waiting: every waiter `ACCESS_DENIED` at once.                    | [F-026 v1](../features/F-026-bounded-invocation-queue.md) | Active                                    |
+| [BR-387](BR-387.md) | v1      | README and client docs describe the queue and retryable `SERVER_BUSY`.        | [F-026 v1](../features/F-026-bounded-invocation-queue.md) | Active                                    |
+| [BR-388](BR-388.md) | v1      | Stdio outbound FIFO of 6 waiting frames; overflow closes; 1,000 ms per frame. | [F-026 v1](../features/F-026-bounded-invocation-queue.md) | Active                                    |
+| [BR-258](BR-258.md) | v2      | `mutate` waits in the shared queue instead of refusing at once.               | [F-026 v1](../features/F-026-bounded-invocation-queue.md) | Active                                    |
+| [BR-070](BR-070.md) | v3      | A second stdio outbound frame waits (BR-388) instead of closing.              | [F-026 v1](../features/F-026-bounded-invocation-queue.md) | Active; v4 active since F-038 (see below) |
+| [BR-118](BR-118.md) | v2      | Rule unchanged; the concurrent-call example now waits.                        | [F-026 v1](../features/F-026-bounded-invocation-queue.md) | Active; v3 active since F-040 (see below) |
 
 ## Accepted — direct image codecs
 
@@ -731,18 +731,18 @@ BR-389–BR-392 v1, versions BR-122 to v3, BR-315 to v2, BR-318 to v2, BR-320 to
 v3 and BR-321 to v4, and supersedes BR-317 by BR-390. All were accepted on
 actual main `75bd9bb` on 2026-11-14 (#12 comment `12-acceptance-1-orchestrator`).
 
-| ID                  | Version | Rule                                                                            | Source                                               | Status                    |
-| ------------------- | ------- | ------------------------------------------------------------------------------- | ---------------------------------------------------- | ------------------------- |
-| [BR-389](BR-389.md) | v1      | No `@jimp/` package or import; `pngjs` 7.0.0 and `jpeg-js` 0.4.4 exact.         | [F-027 v2](../features/F-027-direct-image-codecs.md) | Active                    |
-| [BR-390](BR-390.md) | v1      | Direct codec calls with Jimp's options; codec errors propagate unchanged.       | [F-027 v2](../features/F-027-direct-image-codecs.md) | Active; supersedes BR-317 |
-| [BR-391](BR-391.md) | v1      | Local nearest-neighbour resize on the current bitmap; characterization digests. | [F-027 v2](../features/F-027-direct-image-codecs.md) | Active                    |
-| [BR-392](BR-392.md) | v1      | `make install-check`: install the packed tarball, no `zod` < 4.6.6, no Jimp.    | [F-027 v2](../features/F-027-direct-image-codecs.md) | Active                    |
-| [BR-122](BR-122.md) | v3      | Jimp clauses removed; the image codecs declare no dependencies.                 | [F-027 v2](../features/F-027-direct-image-codecs.md) | Active                    |
-| [BR-315](BR-315.md) | v2      | `overrides` equal `{"minimatch": "11.0.8"}`.                                    | [F-027 v2](../features/F-027-direct-image-codecs.md) | Active                    |
-| [BR-318](BR-318.md) | v2      | No `skipLibCheck`; every third-party declaration checked.                       | [F-027 v2](../features/F-027-direct-image-codecs.md) | Active                    |
-| [BR-320](BR-320.md) | v3      | CI `audit` job adds a fourth step `make install-check`.                         | [F-027 v2](../features/F-027-direct-image-codecs.md) | Active                    |
-| [BR-321](BR-321.md) | v4      | Audit docs without Jimp; `SECURITY.md` #12 limit; #12 changelog lines.          | [F-027 v2](../features/F-027-direct-image-codecs.md) | Active                    |
-| [BR-317](BR-317.md) | v1      | Superseded by BR-390 on the acceptance of F-027.                                | [F-020 v1](../features/F-020-dependency-audit.md)    | Superseded by BR-390      |
+| ID                  | Version | Rule                                                                            | Source                                               | Status                                    |
+| ------------------- | ------- | ------------------------------------------------------------------------------- | ---------------------------------------------------- | ----------------------------------------- |
+| [BR-389](BR-389.md) | v1      | No `@jimp/` package or import; `pngjs` 7.0.0 and `jpeg-js` 0.4.4 exact.         | [F-027 v2](../features/F-027-direct-image-codecs.md) | Active                                    |
+| [BR-390](BR-390.md) | v1      | Direct codec calls with Jimp's options; codec errors propagate unchanged.       | [F-027 v2](../features/F-027-direct-image-codecs.md) | Active; supersedes BR-317                 |
+| [BR-391](BR-391.md) | v1      | Local nearest-neighbour resize on the current bitmap; characterization digests. | [F-027 v2](../features/F-027-direct-image-codecs.md) | Active                                    |
+| [BR-392](BR-392.md) | v1      | `make install-check`: install the packed tarball, no `zod` < 4.6.6, no Jimp.    | [F-027 v2](../features/F-027-direct-image-codecs.md) | Active; v2 active since F-034 (see below) |
+| [BR-122](BR-122.md) | v3      | Jimp clauses removed; the image codecs declare no dependencies.                 | [F-027 v2](../features/F-027-direct-image-codecs.md) | Active                                    |
+| [BR-315](BR-315.md) | v2      | `overrides` equal `{"minimatch": "11.0.8"}`.                                    | [F-027 v2](../features/F-027-direct-image-codecs.md) | Active                                    |
+| [BR-318](BR-318.md) | v2      | No `skipLibCheck`; every third-party declaration checked.                       | [F-027 v2](../features/F-027-direct-image-codecs.md) | Active                                    |
+| [BR-320](BR-320.md) | v3      | CI `audit` job adds a fourth step `make install-check`.                         | [F-027 v2](../features/F-027-direct-image-codecs.md) | Active                                    |
+| [BR-321](BR-321.md) | v4      | Audit docs without Jimp; `SECURITY.md` #12 limit; #12 changelog lines.          | [F-027 v2](../features/F-027-direct-image-codecs.md) | Active                                    |
+| [BR-317](BR-317.md) | v1      | Superseded by BR-390 on the acceptance of F-027.                                | [F-020 v1](../features/F-020-dependency-audit.md)    | Superseded by BR-390                      |
 
 ## Accepted — Client ID Metadata Documents
 
@@ -769,8 +769,8 @@ unblocked it (F-029 accepted on main `3428df5`).
 | [BR-393](BR-393.md) | v1      | Consent page shows the client ID, its host and the loopback line.               | [F-028 v2](../features/F-028-client-id-metadata-documents.md) | Active; v3 active since F-031 (see below) |
 | [BR-394](BR-394.md) | v1      | `client_metadata_refused` and `client_metadata_fetched`; one event per refusal. | [F-028 v2](../features/F-028-client-id-metadata-documents.md) | Active; v2 active since F-033 (see below) |
 | [BR-395](BR-395.md) | v1      | Operator documentation and discovery procedure.                                 | [F-028 v2](../features/F-028-client-id-metadata-documents.md) | Active                                    |
-| [BR-023](BR-023.md) | v3      | Adds the bounds of BR-291.                                                      | [F-028 v2](../features/F-028-client-id-metadata-documents.md) | Active                                    |
-| [BR-024](BR-024.md) | v4      | `oauthAllowedClientIdOrigins` is proxy-only; origin conflicts.                  | [F-028 v2](../features/F-028-client-id-metadata-documents.md) | Active                                    |
+| [BR-023](BR-023.md) | v3      | Adds the bounds of BR-291.                                                      | [F-028 v2](../features/F-028-client-id-metadata-documents.md) | Active; v4 active since F-035 (see below) |
+| [BR-024](BR-024.md) | v4      | `oauthAllowedClientIdOrigins` is proxy-only; origin conflicts.                  | [F-028 v2](../features/F-028-client-id-metadata-documents.md) | Active; v5 active since F-035 (see below) |
 | [BR-125](BR-125.md) | v2      | `client_id_metadata_document_supported` only with a nonempty list.              | [F-028 v2](../features/F-028-client-id-metadata-documents.md) | Active                                    |
 | [BR-128](BR-128.md) | v3      | CIMD checks before any fetch; asynchronous handler; latch re-check.             | [F-028 v2](../features/F-028-client-id-metadata-documents.md) | Active                                    |
 | [BR-129](BR-129.md) | v2      | Consent page content of BR-393 for CIMD clients.                                | [F-028 v2](../features/F-028-client-id-metadata-documents.md) | Active; v6 active since F-033 (see below) |
@@ -860,3 +860,139 @@ on main `6ef8b55` (#26 comment `26-acceptance-1-orchestrator`).
 | [BR-307](BR-307.md) | v2      | Adds the AS112, AMT and AS112 direct-delegation blocks (IPv4 and IPv6).                   | [F-033 v1](../features/F-033-cimd-hardening.md) | Active |
 | [BR-309](BR-309.md) | v2      | A usable stale entry is served before the four-fetch cap answers `busy`.                  | [F-033 v1](../features/F-033-cimd-hardening.md) | Active |
 | [BR-394](BR-394.md) | v2      | A header-bound `size` (BR-306 v2) has `status` 0; a body-bound `size` keeps 200.          | [F-033 v1](../features/F-033-cimd-hardening.md) | Active |
+
+## Accepted — PDF text extraction for common generator output
+
+[F-034 v1](../features/F-034-pdf-extraction-profile.md) (#4) allocates
+BR-412–BR-420 v1 and versions BR-114 to v2; F-034 v2 versions BR-173, BR-226 and
+BR-392 to v2 so that the Apache-2.0 licence text ships with the package and the
+image; all accepted on main `570c4b2` (#4 comment
+`4-acceptance-1-orchestrator`).
+
+| ID                  | Version | Rule                                                                                        | Source                                                  | Status |
+| ------------------- | ------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------- | ------ |
+| [BR-114](BR-114.md) | v2      | Profile of BR-412–BR-420; PDF.js sees only the canonical projection; refusal order.         | [F-034 v1](../features/F-034-pdf-extraction-profile.md) | Active |
+| [BR-412](BR-412.md) | v1      | Cross-reference tables and streams through a bounded, cycle-checked `/Prev` chain.          | [F-034 v1](../features/F-034-pdf-extraction-profile.md) | Active |
+| [BR-413](BR-413.md) | v1      | Objects by offset or object stream; indirect `/Length`; 4,096 resolved objects.             | [F-034 v1](../features/F-034-pdf-extraction-profile.md) | Active |
+| [BR-414](BR-414.md) | v1      | Only needed streams are decoded (Flate, PNG predictors, ASCII filters); each use counts.    | [F-034 v1](../features/F-034-pdf-extraction-profile.md) | Active |
+| [BR-415](BR-415.md) | v1      | The canonical document keeps the page tree and the selected pages' text inputs only.        | [F-034 v1](../features/F-034-pdf-extraction-profile.md) | Active |
+| [BR-416](BR-416.md) | v1      | Content keeps text operators, drops graphics and inline images of known length.             | [F-034 v1](../features/F-034-pdf-extraction-profile.md) | Active |
+| [BR-417](BR-417.md) | v1      | Simple, Type0 and Type3 fonts with a full mapping, canonical names, no program.             | [F-034 v1](../features/F-034-pdf-extraction-profile.md) | Active |
+| [BR-418](BR-418.md) | v1      | Text-production bound weighted by each font's largest mapping, per execution.               | [F-034 v1](../features/F-034-pdf-extraction-profile.md) | Active |
+| [BR-419](BR-419.md) | v1      | Form XObjects are inlined and every execution counted; nesting 8, executions 4,096.         | [F-034 v1](../features/F-034-pdf-extraction-profile.md) | Active |
+| [BR-420](BR-420.md) | v1      | Simple-font codes resolve to explicit glyph names; Type 1 built-in encoding from cleartext. | [F-034 v1](../features/F-034-pdf-extraction-profile.md) | Active |
+| [BR-173](BR-173.md) | v2      | `runtime` also copies `LICENSES/Apache-2.0.txt` into `/app/LICENSES/`.                      | [F-034 v2](../features/F-034-pdf-extraction-profile.md) | Active |
+| [BR-226](BR-226.md) | v2      | A path under `LICENSES/` is an image input.                                                 | [F-034 v2](../features/F-034-pdf-extraction-profile.md) | Active |
+| [BR-392](BR-392.md) | v2      | The install check also copies `LICENSES/`.                                                  | [F-034 v2](../features/F-034-pdf-extraction-profile.md) | Active |
+
+## Accepted — OAuth proxy admission and grant handling hardened
+
+[F-035 v1](../features/F-035-oauth-proxy-hardening.md) (#46) allocates
+BR-421 and BR-422 v1 and versions BR-023 to v4, BR-024 to v5, BR-131, BR-133,
+BR-137 and BR-186 to v2 and BR-162, BR-167 and BR-184 to v3; all accepted on
+main `703bece` (#46 comment `6891311411`).
+
+| ID                  | Version | Rule                                                                                              | Source                                                 | Status                                    |
+| ------------------- | ------- | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------ | ----------------------------------------- |
+| [BR-421](BR-421.md) | v1      | `httpTrustedProxies`: at most 64 IPv4/IPv6 addresses or prefixes (/8 or longer), proxy mode only. | [F-035 v1](../features/F-035-oauth-proxy-hardening.md) | Active                                    |
+| [BR-422](BR-422.md) | v1      | Peer: socket address, or the `X-Forwarded-For` client behind a listed proxy; IPv6 per `/64`.      | [F-035 v1](../features/F-035-oauth-proxy-hardening.md) | Active                                    |
+| [BR-023](BR-023.md) | v4      | Adds the bounds of BR-421.                                                                        | [F-035 v1](../features/F-035-oauth-proxy-hardening.md) | Active                                    |
+| [BR-024](BR-024.md) | v5      | `httpTrustedProxies` is proxy-only.                                                               | [F-035 v1](../features/F-035-oauth-proxy-hardening.md) | Active                                    |
+| [BR-131](BR-131.md) | v2      | Early upstream exits abort independently and initiate readable-body cancellation without waiting. | [F-035 v1](../features/F-035-oauth-proxy-hardening.md) | Active                                    |
+| [BR-133](BR-133.md) | v2      | Shared JWKS fetch; ID-token time checks after verification; cache bounds from fetch start.        | [F-035 v1](../features/F-035-oauth-proxy-hardening.md) | Active                                    |
+| [BR-137](BR-137.md) | v2      | Bindings first; single-URI omission profile; only success consumes and matching replay revokes.   | [F-035 v1](../features/F-035-oauth-proxy-hardening.md) | Active; v3 active since F-036 (see below) |
+| [BR-162](BR-162.md) | v3      | Per-peer window (v1 limits) and global ceiling per OAuth route; bounded tables.                   | [F-035 v1](../features/F-035-oauth-proxy-hardening.md) | Active                                    |
+| [BR-167](BR-167.md) | v3      | An OAuth-window 429 adds `window`; no peer address in responses or events.                        | [F-035 v1](../features/F-035-oauth-proxy-hardening.md) | Active                                    |
+| [BR-184](BR-184.md) | v3      | Compose: optional `MCP_HTTP_TRUSTED_PROXIES`, empty by default, with a comment.                   | [F-035 v1](../features/F-035-oauth-proxy-hardening.md) | Active                                    |
+| [BR-186](BR-186.md) | v2      | Required Compose values stay required; optional values may have empty defaults; header matches.   | [F-035 v1](../features/F-035-oauth-proxy-hardening.md) | Active                                    |
+
+## Accepted — refused authorization-code redemption events restored
+
+[F-036 v1](../features/F-036-refused-code-event.md) (#49) versions
+BR-137 to v3 with no new BR ID; accepted on main `14f5266` (#49 comment
+`6893052881`). BR-143 v4's event catalogue and fields remain unchanged.
+
+| ID                  | Version | Rule                                                                                                     | Source                                              | Status |
+| ------------------- | ------- | -------------------------------------------------------------------------------------------------------- | --------------------------------------------------- | ------ |
+| [BR-137](BR-137.md) | v3      | Exactly one existing-shape `token_refused` per refused code redemption; no `reason` or new state change. | [F-036 v1](../features/F-036-refused-code-event.md) | Active |
+
+## Accepted — rate-limited mutations stop after one attempt
+
+[F-037 v1](../features/F-037-mutation-rate-limit-stop.md) (#47 lot A),
+versions BR-248, BR-249, BR-250 and BR-268 to v2 with no
+new BR ID; accepted on main `8b92e07` (#47 comment `6894142807`).
+The v1 text/evidence is preserved in the canonical files. BR-249 keeps its 60 s run deadline
+and 30 s attempt cap; BR-268 keeps its raw-port contract. Their obsolete
+retry examples are replaced in v2. BR-247, BR-251 and the audit schema
+remain unchanged. The supplied reviews and their dispositions are recorded
+in F-037.
+
+| ID                  | Version | Rule                                                                                                  | Source                                                    | Status |
+| ------------------- | ------- | ----------------------------------------------------------------------------------------------------- | --------------------------------------------------------- | ------ |
+| [BR-248](BR-248.md) | v2      | One attempt per mutation run; valid 429 returns `RATE_LIMITED` without waiting or retrying.           | [F-037 v1](../features/F-037-mutation-rate-limit-stop.md) | Active |
+| [BR-249](BR-249.md) | v2      | Keep the 60 s run deadline and 30 s cap for the sole attempt; no second-attempt window.               | [F-037 v1](../features/F-037-mutation-rate-limit-stop.md) | Active |
+| [BR-250](BR-250.md) | v2      | No retry-wait cancellation; cancellation during/after an attempt preserves its result.                | [F-037 v1](../features/F-037-mutation-rate-limit-stop.md) | Active |
+| [BR-268](BR-268.md) | v2      | Keep the bounded raw port reply; a forwarded or omitted retry header never schedules another attempt. | [F-037 v1](../features/F-037-mutation-rate-limit-stop.md) | Active |
+
+## Accepted — stream operation budgets and weak validators
+
+[F-038 v1](../features/F-038-stream-budget-and-weak-etags.md) (#47 lot B)
+versions BR-070 to v4 and BR-205 and BR-384 to v2 with no new BR ID;
+accepted on main `2ae303c` (#47 comment `6895105510`).
+The previous versions' text/evidence is preserved in the canonical files.
+BR-088 keeps its retry rule; the obsolete fragment-budget assertion is
+replaced in the tests. BR-206 continues using BR-205 normalization;
+BR-207 keeps its 1,024-request / 120,000 ms preflight bounds. F-038 D-1
+preserves the existing operation charging points; counting every physical
+HTTP request is out of scope.
+
+| ID                  | Version | Rule                                                                                                       | Source                                                        | Status                                    |
+| ------------------- | ------- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- | ----------------------------------------- |
+| [BR-070](BR-070.md) | v4      | Exclude body reads and EOF from the unchanged 512-operation budget; retain byte/deadline/lifecycle bounds. | [F-038 v1](../features/F-038-stream-budget-and-weak-etags.md) | Active; v5 active since F-039 (see below) |
+| [BR-205](BR-205.md) | v2      | Normalize exact `W/` validators as absent in describe/open; preserve other derivation.                     | [F-038 v1](../features/F-038-stream-budget-and-weak-etags.md) | Active                                    |
+| [BR-384](BR-384.md) | v2      | Slot-owned operation budgets exclude body reads; stream progress never resets the deadline.                | [F-038 v1](../features/F-038-stream-budget-and-weak-etags.md) | Active                                    |
+
+## Accepted — bounded audit append and shutdown waits
+
+[F-039 v1](../features/F-039-bounded-audit-sink.md) (#47 lot C)
+versions BR-070 to v5 and BR-240, BR-241, BR-254 and BR-259 to v2;
+accepted on main `8bc1780` (#47 comment `6897083907`).
+The previous versions' text/evidence is preserved in the canonical files.
+No new BR ID or ADR is allocated.
+BR-242 serialization and BR-244/BR-252 before-/after-dispatch semantics stay
+unchanged, including outcome_unrecorded after an upstream success.
+
+| ID                  | Version | Rule                                                                                                     | Source                                              | Status |
+| ------------------- | ------- | -------------------------------------------------------------------------------------------------------- | --------------------------------------------------- | ------ |
+| [BR-070](BR-070.md) | v5      | Bounded audit shutdown replaces unlimited stderr waits; committed results and idle stdio bound retained. | [F-039 v1](../features/F-039-bounded-audit-sink.md) | Active |
+| [BR-240](BR-240.md) | v2      | Acknowledge complete writes only before the append deadline.                                             | [F-039 v1](../features/F-039-bounded-audit-sink.md) | Active |
+| [BR-241](BR-241.md) | v2      | Errors/timeouts reject appends and latch until restart; one fixed diagnostic on any first latch.         | [F-039 v1](../features/F-039-bounded-audit-sink.md) | Active |
+| [BR-254](BR-254.md) | v2      | Bounded sink/gate close; shared stdio exit helper with capped 250 ms flush; OS stalls excluded.          | [F-039 v1](../features/F-039-bounded-audit-sink.md) | Active |
+| [BR-259](BR-259.md) | v2      | Both sinks get one 5,000 ms budget from append call, including queue time.                               | [F-039 v1](../features/F-039-bounded-audit-sink.md) | Active |
+
+## Accepted — process-wide extraction admission
+
+[F-040 v1](../features/F-040-process-wide-extraction-admission.md)
+(#47 lot D) allocates BR-423–BR-426 v1 and versions BR-118 to v3;
+accepted on main `67c101a` (#47 comment `6897680463`).
+The previous BR-118 version's text/evidence is preserved in its canonical file.
+No ADR is allocated. BR-070, BR-117 and BR-384 retain their bounds. F-040 D-4 explicitly
+records the failed/overdue-termination exception in accepted BR-118 v3:
+release the invocation slot within its deadline while a detached exit watcher
+retains the permit/identity until exit, preserving BR-109 final authorization.
+Detach/release offer fixed payload-free diagnostics through a process-owned
+stderr sink in both transports, retained after session close. Each identity has at most
+one live waiter; a detached charged identity refuses immediately with SERVER_BUSY.
+When every permit is detached, all new extraction callers refuse immediately.
+
+Lot C's F-039 and its BR-070 v5, BR-240 v2, BR-241 v2, BR-254 v2 and
+BR-259 v2 are accepted above. Lot D neither versions those rules nor depends
+on a BR-070 v6.
+
+| ID                  | Version | Rule                                                                                                              | Source                                                             | Status |
+| ------------------- | ------- | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ | ------ |
+| [BR-423](BR-423.md) | v1      | Two process-wide permits before buffering; at most one per identity.                                              | [F-040 v1](../features/F-040-process-wide-extraction-admission.md) | Active |
+| [BR-424](BR-424.md) | v1      | Four waiters, at most one per identity; oldest eligible first; queue/identity refusal is `SERVER_BUSY`.           | [F-040 v1](../features/F-040-process-wide-extraction-admission.md) | Active |
+| [BR-425](BR-425.md) | v1      | Extraction waiting spends the running invocation deadline and obeys cancel/close.                                 | [F-040 v1](../features/F-040-process-wide-extraction-admission.md) | Active |
+| [BR-426](BR-426.md) | v1      | Release once after worker exit; detach ownership on failed/overdue termination; fixed detach/release diagnostics. | [F-040 v1](../features/F-040-process-wide-extraction-admission.md) | Active |
+| [BR-118](BR-118.md) | v3      | Deadline-bounded session-slot release on detach; permit retained until exit; final authorization preserved.       | [F-040 v1](../features/F-040-process-wide-extraction-admission.md) | Active |

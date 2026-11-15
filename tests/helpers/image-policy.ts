@@ -125,6 +125,11 @@ function validateRuntimeCopy(args: string): void {
         destination === "/app/node_modules/",
       "runtime copies only node_modules/ from deps",
     );
+  else if (sources.length === 1 && sources[0] === "LICENSES/Apache-2.0.txt")
+    check(
+      from === undefined && destination === "/app/LICENSES/",
+      "runtime copies the Apache-2.0 licence text into /app/LICENSES/",
+    );
   else
     check(
       from === undefined &&

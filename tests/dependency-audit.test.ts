@@ -13,6 +13,7 @@ import { expect, it } from "vitest";
 import {
   collectInstalled,
   installVerdict,
+  packFiles,
   type Installed,
 } from "../scripts/install-check.js";
 
@@ -853,4 +854,20 @@ it("TestBR321_audit_docs changelog #12 lines misplaced, incomplete or citing #12
       ),
     ),
   ).toThrow("missing #12 Fixed line");
+});
+
+it("TestBR392_install_check copies every package.json files entry, LICENSES included", () => {
+  expect(packFiles).toEqual([
+    "dist",
+    "LICENSE",
+    "LICENSES",
+    "NOTICE",
+    "README.md",
+    "package.json",
+  ]);
+  const manifest = JSON.parse(readFileSync("package.json", "utf8")) as {
+    files: string[];
+  };
+  for (const entry of manifest.files)
+    expect(packFiles).toContain(entry.replace(/\/$/u, ""));
 });

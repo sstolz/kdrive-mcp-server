@@ -140,10 +140,10 @@ describes the same steps in order.
 - **API application** (needed for the token, and for the OAuth client of a
   remote deployment). In the Manager: **Utilisateurs et profils** → **Mon
   profil** → **Développeur** → **Application API** → **Créer une nouvelle
-  application**. Choose the type **Application**, any name, and as the
-  application URL the redirect URI `<MCP_PUBLIC_URL>/oauth/callback`, for
-  example `https://mcp.example.com/mcp/oauth/callback`.
-  <!-- owner: confirm which URL Infomaniak expects in this field -->
+  application**. Choose the type **Application** and any name. The
+  application URL field is the OAuth redirect (callback) URI. For a
+  deployment, enter `<MCP_PUBLIC_URL>/oauth/callback`, for example
+  `https://mcp.example.com/mcp/oauth/callback`.
   Keep the client ID and client secret that are shown: a remote deployment
   uses them as `OAUTH_UPSTREAM_CLIENT_ID` and the client secret file.
 - **API token** (`KDRIVE_TOKEN_FILE`). In the Manager: **Utilisateurs et
@@ -158,9 +158,10 @@ describes the same steps in order.
   <https://manager.infomaniak.com/v3/ng/accounts/token/list>. The token is
   shown once: store it in a file only you can read, never in a CLI argument or
   a committed file.
-- **Drive ID** (`KDRIVE_ID`). <!-- owner: confirm Infomaniak UI paths -->
-  The numeric ID of your kDrive, for example `123456`. Look for it in your
-  kDrive account, or list the drives your token can access with the
+- **Drive ID** (`KDRIVE_ID`). The number in the kDrive web app URL after
+  `/kdrive/app/drive/`: for example,
+  `https://ksuite.infomaniak.com/kdrive/app/drive/123456/…` gives `123456`.
+  You can also list the drives your token can access with the
   [kDrive API](https://developer.infomaniak.com/docs/api) (the `/2/drive`
   routes). An example that reads the token from a file, so that it stays off
   the command line (curl reads its options from standard input):
@@ -176,11 +177,13 @@ describes the same steps in order.
 
 - **OAuth client and issuer** (`OAUTH_UPSTREAM_CLIENT_ID`, its secret,
   `OAUTH_ISSUER`; remote deployment only). With Infomaniak as the provider,
-  use the client ID and client secret of the API application above. With
-  another provider, register a confidential OAuth 2.0 / OpenID Connect
+  use the client ID and client secret of the API application above and set
+  `OAUTH_ISSUER` to `https://login.infomaniak.com` (no trailing slash), as
+  given by [Infomaniak's discovery document](https://login.infomaniak.com/.well-known/openid-configuration).
+  With another provider, register a confidential OAuth 2.0 / OpenID Connect
   application with the redirect URI `<MCP_PUBLIC_URL>/oauth/callback`. Take
   the issuer exactly as the provider's `/.well-known/openid-configuration`
-  document gives it. <!-- owner: confirm the Infomaniak issuer value -->
+  document gives it.
 
 ## Connect an AI client
 
@@ -305,14 +308,15 @@ walks through it with Docker Compose and Traefik; in short:
    and an EC P-256 signing key in PKCS#8 PEM (the server never generates one).
 3. Start from [examples/compose.yaml](examples/compose.yaml) (environment and
    Compose secrets behind Traefik) or [examples/config.yaml](examples/config.yaml)
-   (YAML alternative). The key settings (fake values):
+   (YAML alternative). The key settings (fake deployment values, with
+   Infomaniak as the provider):
 
    ```yaml
    KDRIVE_MCP_TRANSPORT: http
    OAUTH_MODE: proxy
    MCP_HTTP_HOST: 0.0.0.0 # inside the container only
    MCP_PUBLIC_URL: https://mcp.example.com/mcp
-   OAUTH_ISSUER: https://login.example.com # your OIDC provider
+   OAUTH_ISSUER: https://login.infomaniak.com # Infomaniak; no trailing slash
    OAUTH_UPSTREAM_CLIENT_ID: 00000000-fake-client-id
    OAUTH_ALLOWED_EMAILS: you@example.com
    OAUTH_ALLOWED_REDIRECT_URIS: https://claude.ai/api/mcp/auth_callback
@@ -401,6 +405,18 @@ Read tools (all modes):
 Resource template: `kdrive://{drive_id}/file/{id}` returns one complete binary
 file (`application/octet-stream`) when it fits the read limit.
 
+`kdrive_read` shares two process-wide extraction permits across text, PDF and
+image reads, including continuations and empty sources. Each identity can hold
+one permit and one waiter; at most four calls wait, in oldest eligible order.
+Admission precedes source buffering, and waiting spends the invocation's existing
+10-second deadline. Raw downloads and resource reads do not use these permits.
+
+SERVER_BUSY is a transient admission refusal before source work, including
+extraction queue saturation, an identity's waiting limit or a detached worker
+holding its permit. The server does not automatically retry; a later client
+invocation requires fresh admission and authorization. Capacity may remain
+unavailable until a stuck worker exits or the process restarts.
+
 Write tools (`write` and `share` modes only):
 
 | Tool                   | Purpose                                                          |
@@ -412,7 +428,11 @@ Write tools (`write` and `share` modes only):
 | `kdrive_restore`       | Restore a trashed item to its former parent.                     |
 | `kdrive_upload`        | Upload `text` or `base64` content, new file or in-place replace. |
 
-Each write returns `succeeded`, `failed`, `uncertain` or `denied`. After
+Each write returns `succeeded`, `failed`, `uncertain` or `denied` and makes at
+most one upstream attempt. A valid HTTP 429 returns `failed` / `RATE_LIMITED`
+without an automatic retry or a `Retry-After` wait. You may explicitly invoke
+it again after a pause; each new invocation requires fresh admission and full
+authorization. After
 `uncertain`, check the item with a read tool before trying again: the server
 never replays an uncertain write.
 
@@ -423,15 +443,25 @@ Key limits:
 - Names given to `kdrive_upload`, `kdrive_create_folder` and `kdrive_rename`
   must be in Unicode NFC (composed form); other forms are refused with
   `INVALID_ARGUMENTS`.
-- `kdrive_read` handles a conservative PDF profile only, so many valid PDFs
-  return `UNSUPPORTED_FORMAT`; images are returned within 512x512 pixels.
+- `kdrive_read` extracts PDF text from a bounded projection of the file (F-034):
+  cross-reference and object streams, incremental updates, FlateDecode with
+  PNG predictors and the ASCII filters, text inside Form XObjects, inline
+  images of known length, and Type 1, TrueType, Type0 and Type3 fonts whose
+  shown codes map through an encoding, a Type 1 built-in encoding or
+  `ToUnicode`. Encrypted files, other filters on text streams, fonts whose text
+  depends on their program and inline images of unknown length return
+  `UNSUPPORTED_FORMAT`; `kdrive_download` returns the bytes of a refused file.
+  A simple font with a Chinese (GBK) font name is read through its declared
+  encoding, so text a viewer would decode as GBK comes out as Latin
+  characters. Images are returned within 512x512 pixels.
 - Listings return at most 256 items per call and continue with single-use
   cursors that expire after five minutes; downloads continue with
   `offset_bytes` and the previous chunk's `etag`.
 - One tool call per session runs at a time. Up to 4 further calls wait in
   arrival order, each for at most 12 seconds. `SERVER_BUSY` means the call
   was refused before any kDrive request, so it is safe to retry, writes
-  included, once an earlier call has completed (see
+  included. For extraction, completion of an earlier call does not guarantee
+  that a detached worker has released its permit (see
   [docs/mcp-client-compatibility.md](docs/mcp-client-compatibility.md#parallel-tool-calls)).
 
 The full read behaviour (pagination, encodings, PDF profile, bounds) is
@@ -488,8 +518,8 @@ Upload (`kdrive_upload`):
   JSON-encoded request. `text` that JSON escaping enlarges can be refused by
   the transport below 524,288 bytes: over HTTP the request gets HTTP 413; over
   stdio a frame above 1 MiB terminates the server with `STDIO_INPUT_FAILED`.
-  An upload already in flight completes and its outcome is recorded in the
-  audit log before exit, but its tool result is not delivered.
+  An upload already in flight reaches its classified result and bounded audit
+  outcome attempt before exit, but its tool result is not delivered.
 - Residual risks R-18-1 to R-18-5: the `conflict=error` refusal is not proven
   under every interleaving (R-18-1); between the check and a replace the target
   can change, giving `uncertain`, an undetected deny-pattern rename, or
@@ -517,6 +547,39 @@ Audit log: each write gets one JSON line before it is sent and one after; if
 the first cannot be written, nothing is sent. Records hold IDs, never names,
 paths, content or secrets. With `stderr`, records are only as durable as what
 collects stderr; use a file for a durable trail.
+
+[F-039](features/F-039-bounded-audit-sink.md) bounds asynchronous audit appends
+for both stderr and files to 5,000 ms from the call, including queue time,
+write and callback or `fdatasync`. Sink close has one 5,000 ms budget for drain
+and file release. Any stream/write/sync error or timeout permanently latches
+the sink until restart; pending appends reject and later writes are refused.
+The first latch offers one fixed best-effort diagnostic without waiting for
+its delivery. A failed intent sends nothing upstream; a failed outcome
+preserves the mutation result with `audit:"outcome_unrecorded"`.
+
+Timed-out bytes may still arrive later. An intent without an outcome is
+ambiguous: it proves neither dispatch nor its absence. The client's mutation
+result is the authority; a shutdown HTTP 503 does not determine whether a
+write occurred. Consult a recorded outcome or verify the item's state before
+any new attempt; never automatically replay an uncertain write.
+
+Shutdown closes transport, then gate, then exits the dedicated process.
+Gate close is bounded by 45,000 ms under the production policy and sole-attempt
+bounds; the deployment grace remains at least 75 s in write/share modes.
+The shared production exit helper waits for both output streams with a ref'd
+250 ms flush cap, shortened to the remaining stdio shutdown budget. Output
+still queued on a stalled pipe at that cap may be lost. Without a run past
+intent, stdio shares one 1,000 ms allowance from EOF/signal handling across
+transport close, non-committed appends, file release and exit flushing.
+Owned/library compositions close without terminating their host.
+
+These are asynchronous wait bounds. Synchronous fd 2 writes to a file or TTY
+can block the event loop, prevent timers from firing and remain unbounded.
+A write or `fdatasync` stuck in the libuv threadpool can cause an unbounded
+OS/runtime teardown stall even after `process.exit` is called. File release
+never races an in-flight port operation: if it outlives close's budget, the
+retained descriptor stays open until actual process termination, including in
+library hosts. No timer guarantees actual termination or durable delivery.
 
 ## More documentation
 

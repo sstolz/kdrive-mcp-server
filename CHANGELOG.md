@@ -22,6 +22,22 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
 
 ### Changed
 
+- #4 / F-034 v2 (accepted 2026-11-15): `kdrive_read` with `format:"pdf"` extracts
+  text from files written by common generators: cross-reference and object
+  streams (PDF 1.5+), incremental updates, linearized files, FlateDecode with
+  PNG predictors, ASCII85Decode and ASCIIHexDecode, metadata, annotations and
+  structure (left out), inherited page attributes, content arrays, graphics
+  around text, text inside Form XObjects (OCR text layers, overlays, imposed
+  pages, LaTeX figures, browser transparency groups), inline images of known
+  length, and Type 1, TrueType, Type0 and Type3 fonts whose shown codes map
+  through an encoding, a Type 1 built-in encoding (pdfLaTeX Computer Modern) or
+  `ToUnicode`. Font programs and Type3 glyph procedures never reach PDF.js.
+  Encrypted files, fonts whose text depends on their program, inline images of
+  unknown length and other filters on text streams still return
+  `UNSUPPORTED_FORMAT`; `kdrive_download` returns their bytes. A cross-reference
+  stream no longer refuses as `CONTENT_UNAVAILABLE`. The npm package and the
+  runtime image ship the Apache-2.0 licence text as `LICENSES/Apache-2.0.txt`
+  (BR-173 v2, BR-392 v2).
 - #3 / F-028 v2 (accepted 2026-11-14): the OAuth state file is at format
   version 2 while it holds a CIMD refresh family (ADR-011); earlier releases
   refuse such a file with `OAUTH_STATE_VERSION`. Removing the origins and
@@ -68,6 +84,78 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
   header block (interim blocks included) over 8,192 bytes are refused, whatever
   their status; and `192.31.196.0/24`, `192.52.193.0/24`, `192.175.48.0/24` and
   `2620:4f:8000::/48` are no longer fetched from.
+
+- #46 / F-035 v1 (accepted 2026-11-15): in `proxy` mode a
+  token request that fails a code's client, redirect URI, PKCE or resource
+  binding no longer consumes the code or revokes its refresh family; callbacks
+  that arrive together on a cold or rotated upstream key set share one key
+  fetch instead of failing and check ID-token expiry after verification;
+  upstream requests abort when refused early without waiting for cancellation;
+  and the OAuth routes' rate limits apply per client (the
+  socket address, or the `X-Forwarded-For` client behind a proxy listed in the
+  new `MCP_HTTP_TRUSTED_PROXIES` setting; IPv6 per `/64`) under a global
+  ceiling. Clients behind one shared hosted egress still share the limit of
+  60 token requests per minute; one residential IPv6 subscriber can supply
+  enough `/64` peers to exhaust a global ceiling. The Compose example passes
+  the optional
+  `MCP_HTTP_TRUSTED_PROXIES`, empty by default, so existing deployments start
+  unchanged. Guidance recommends exact proxy addresses or a dedicated
+  proxy-only network, with every hop appending the observed upstream address.
+  Token redemption accepts omitted `redirect_uri` only for an exact single
+  registered authorization URI; a supplied value must match exactly. The
+  Compose header distinguishes required values from optional empty defaults.
+- #49 / F-036 v1 (accepted 2026-11-15): restore `token_refused` for
+  refused authorization-code redemptions, with only `handler`, OAuth `error`
+  and `status`. Validation order, responses and state handling stay unchanged,
+  including family revocation on a matching replay; no `reason` field is added.
+
+- #47 lot A / F-037 v1 (accepted 2026-11-15): the first
+  valid upstream 429 ends a mutation as `failed` / `RATE_LIMITED`, without
+  an automatic retry using stale authorization. A new client invocation
+  performs fresh admission and authorization with its own audit records;
+  uncertain writes are never automatically replayed.
+
+- #47 lot B / F-038 v1 (accepted 2026-11-15): separate body reads
+  and EOF probes from the unchanged 512 upstream-operation budget, retaining
+  byte caps and deadlines so valid fragmented content can complete; treat
+  case-sensitive `W/` validators exactly as absent validators in both
+  descriptor and range responses, preserving existing strong derivation.
+  Files readable today with weak validators will intentionally be refused
+  (`VERSION_UNAVAILABLE` at describe; `CONTENT_UNAVAILABLE` at open after a
+  strong descriptor). Specification frozen; implementation and acceptance
+  are pending.
+
+- #47 lot C / F-039 v1 (accepted 2026-11-15): bound file and stderr
+  audit appends to 5,000 ms including queue wait, reject stream errors without
+  waiting for a callback, refuse later writes until restart, and bound audit
+  shutdown drain/release. Intent failure prevents dispatch; outcome failure
+  preserves the upstream result with `audit:"outcome_unrecorded"` and the
+  existing fixed diagnostic, now offered once on any first failure latch.
+  Share the 1,000 ms stdio shutdown allowance with non-committed appends
+  and route dedicated stdio exit through the shared production helper,
+  racing stdout/stderr flush callbacks against a ref'd 250 ms timer capped
+  by any remaining stdio budget; owned/library closure never terminates its
+  host. Output still queued after 250 ms on a stalled pipe may be lost
+  (earlier with a shorter remaining stdio budget). Synchronous fd 2 blockage and libuv file
+  operations stuck during OS teardown remain unbounded and documented; a
+  bounded Linux unread-pipe child test is planned as runtime evidence. No
+  implementation or acceptance is claimed.
+
+- #47 lot D / F-040 v1 (accepted 2026-11-15): limit concurrent
+  `kdrive_read` extractions to two process-wide, admitted before source buffering, with at most
+  four waiters, served by oldest eligible identity, with one active permit
+  and one live waiter per identity. Queue/identity refusal uses `SERVER_BUSY` without automatic
+  retry; queued waits count against the existing invocation deadline and
+  obey cancel/close. Failed/overdue termination releases the invocation slot
+  within its deadline; a detached watcher retains the permit/identity until
+  worker exit (BR-118 v3). Final authorization is
+  preserved. Detached identities refuse immediately with `SERVER_BUSY`; fixed
+  payload-free detach/release diagnostics use a process-owned stderr sink in
+  stdio and HTTP, retained after session close, to signal capacity loss/recovery.
+  When all permits are detached, every new extraction caller refuses immediately.
+  Permanently stuck workers reduce capacity until restart. README/tool/compatibility guidance
+  explains transient `SERVER_BUSY` without promising retry success.
+  This bounds concurrent pipelines, not total memory.
 
 ## [0.6.0-beta.1] - 2026-11-13
 

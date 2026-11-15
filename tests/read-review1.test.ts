@@ -143,7 +143,7 @@ it.each(malformedPdfs())(
   async ({ bytes }) => {
     const getDocument = vi.mocked(pdfjs.getDocument);
     getDocument.mockClear();
-    expect(() => preflightPdf(bytes, 16777216, [1])).toThrow();
+    await expect(preflightPdf(bytes, 16777216, [1])).rejects.toThrow();
     await expect(
       extractPdf({
         bytes,

@@ -1,6 +1,14 @@
 // F-014 AC-14 (BR-205) and AC-15 (BR-206).
 import { createHash } from "node:crypto";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { createKdriveAdapter, derivedETag } from "../../src/kdrive/adapter.js";
+import * as transportModule from "../../src/kdrive/transport.js";
+import { createNavigationController } from "../../src/navigation.js";
+import {
+  contentFixture,
+  contentError,
+  contentResult,
+} from "../helpers/content.js";
 import { strongETag } from "../../src/content.js";
 import { brandedRead } from "../../src/read-retry.js";
 import {
@@ -26,6 +34,7 @@ afterEach(async () => {
   nav = undefined;
   await fixture?.close();
   fixture = undefined;
+  vi.restoreAllMocks();
 });
 const target = { driveId: DRIVE, id: 12 };
 const derived = (etag: string) =>
@@ -394,4 +403,202 @@ describe("BR-206 open and the bounded body reader", () => {
       ).rejects.toThrow(/^READ_UNAVAILABLE$/u);
     },
   );
+});
+
+// F-038: exercise the production adapter with an in-memory transport, no sockets.
+async function validatorFixture(
+  descriptorETag: string | undefined,
+  ...openValidator: [string | undefined] | []
+) {
+  const openETag = openValidator.length ? openValidator[0] : descriptorETag;
+  const f = await contentFixture({}, BYTES);
+  type Transport = ReturnType<typeof transportModule.createTransport>;
+  const bodies: {
+    read: ReturnType<typeof vi.fn<transportModule.Download["body"]["read"]>>;
+    close: ReturnType<typeof vi.fn>;
+  }[] = [];
+  const json = vi.fn<Transport["json"]>().mockResolvedValue({
+    kind: "success",
+    value: {
+      data: { id: 3, drive_id: 7, type: "file", status: "ok", size: 16 },
+    },
+  });
+  const download = vi
+    .fn<Transport["download"]>()
+    .mockImplementation((_route, range) => {
+      const probe = range === "bytes=0-0";
+      const bytes = probe ? BYTES.subarray(0, 1) : BYTES;
+      let offset = 0;
+      const body = {
+        read: vi
+          .fn<transportModule.Download["body"]["read"]>()
+          .mockImplementation((max) => {
+            if (offset === bytes.length) return Promise.resolve(null);
+            const chunk = bytes.subarray(offset, offset + max);
+            offset += chunk.length;
+            return Promise.resolve(chunk);
+          }),
+        close: vi.fn(),
+      };
+      bodies.push(body);
+      return Promise.resolve({
+        status: 206,
+        contentRange: probe ? "bytes 0-0/16" : "bytes 0-15/16",
+        contentLength: String(bytes.length),
+        etag: probe ? descriptorETag : openETag,
+        body,
+      });
+    });
+  vi.spyOn(transportModule, "createTransport").mockReturnValue({
+    json,
+    download,
+    record: vi.fn<Transport["record"]>(),
+    mutate: vi.fn<Transport["mutate"]>(),
+  });
+  const adapter = createKdriveAdapter({
+    token: "SYNTHETIC",
+    lookup: () => Promise.reject(new Error("Unexpected lookup")),
+    connect: () => {
+      throw new Error("Unexpected connection");
+    },
+  });
+  const content = {
+    describe: vi.fn(
+      (...args: Parameters<typeof adapter.dependencies.content.describe>) =>
+        adapter.dependencies.content.describe(...args),
+    ),
+    open: vi.fn(
+      (...args: Parameters<typeof adapter.dependencies.content.open>) =>
+        adapter.dependencies.content.open(...args),
+    ),
+  };
+  const c = createNavigationController(f.config, {
+    ...f.dependencies,
+    content,
+  });
+  return { c, content, json, download, bodies };
+}
+const validatorTarget = { driveId: 7, id: 3 };
+const validatorRange = {
+  target: validatorTarget,
+  start: 0,
+  end: 15,
+  size_bytes: 16,
+  etag: derived('"x"'),
+};
+
+it.each(['W/"x"', undefined])(
+  "TestBR205_v2_AC07_weak_descriptor_matches_absent_validator %s",
+  async (etag) => {
+    const h = await validatorFixture(etag);
+    try {
+      expect(await h.content.describe(validatorTarget, signal())).toEqual({
+        target: validatorTarget,
+        size_bytes: 16,
+        etag: null,
+        version_bound: false,
+      });
+      expect(h.bodies[0]!.close).toHaveBeenCalledOnce();
+      expect(h.bodies[0]!.read).not.toHaveBeenCalled();
+      expect(await h.c.invoke("kdrive_download", { file_id: 3 })).toEqual(
+        contentError("VERSION_UNAVAILABLE"),
+      );
+      expect(h.content.open).not.toHaveBeenCalled();
+      expect(h.download).toHaveBeenCalledTimes(2);
+      for (const body of h.bodies) {
+        expect(body.close).toHaveBeenCalledOnce();
+        expect(body.read).not.toHaveBeenCalled();
+      }
+    } finally {
+      h.c.close();
+    }
+  },
+);
+
+it.each(['W/"x"', undefined])(
+  "TestBR205_v2_AC08_weak_open_matches_absent_validator %s",
+  async (etag) => {
+    const h = await validatorFixture('"x"', etag);
+    try {
+      const direct = (await h.content.open(validatorRange, signal())) as {
+        body: Body;
+        etag: string | null;
+      };
+      try {
+        expect(direct).toEqual({
+          ...validatorRange,
+          status: 206,
+          etag: null,
+          body: direct.body,
+        });
+      } finally {
+        direct.body.close();
+      }
+      h.content.open.mockClear();
+      h.download.mockClear();
+      h.bodies.length = 0;
+      expect(await h.c.invoke("kdrive_download", { file_id: 3 })).toEqual(
+        contentError("CONTENT_UNAVAILABLE"),
+      );
+      expect(h.content.describe).toHaveBeenCalledOnce();
+      expect(h.content.open).toHaveBeenCalledOnce();
+      expect(h.download).toHaveBeenCalledTimes(2);
+      expect(h.bodies).toHaveLength(2);
+      for (const body of h.bodies) {
+        expect(body.read).not.toHaveBeenCalled();
+        expect(body.close).toHaveBeenCalledOnce();
+      }
+    } finally {
+      h.c.close();
+    }
+  },
+);
+
+it.each([
+  'W/"x"',
+  "W/",
+  undefined,
+  '"x"',
+  'w/"x"',
+  "e".repeat(256),
+  "e".repeat(257),
+])(
+  "TestBR205_v2_AC09_prefix_is_case_sensitive_and_strong_derivation_unchanged %s",
+  (etag) => {
+    const expected =
+      etag === undefined || etag.startsWith("W/") || etag.length > 256
+        ? null
+        : derived(etag);
+    expect(derivedETag(etag)).toBe(expected);
+  },
+);
+
+it("TestBR205_v2_AC09_prefix_is_case_sensitive_and_strong_derivation_unchanged strong_download", async () => {
+  const h = await validatorFixture('"x"');
+  try {
+    expect(await h.content.describe(validatorTarget, signal())).toEqual({
+      target: validatorTarget,
+      size_bytes: 16,
+      etag: derived('"x"'),
+      version_bound: true,
+    });
+    expect(await h.c.invoke("kdrive_download", { file_id: 3 })).toEqual(
+      contentResult({
+        drive_id: 7,
+        file_id: 3,
+        offset_bytes: 0,
+        bytes_read: 16,
+        size_bytes: 16,
+        etag: derived('"x"'),
+        encoding: "base64",
+        data: BYTES.toString("base64"),
+        has_more: false,
+      }),
+    );
+    expect(h.content.open).toHaveBeenCalledOnce();
+    expect(h.bodies.at(-1)!.read).toHaveBeenCalledTimes(2);
+    for (const body of h.bodies) expect(body.close).toHaveBeenCalledOnce();
+  } finally {
+    h.c.close();
+  }
 });

@@ -119,7 +119,7 @@ describe("BR-313 docs/oauth-proxy.md states the persistent OAuth state (F-019 AC
     for (const phrase of [
       "no integrity check",
       "honour `fsync`",
-      "refresh requests are limited only by the process-wide window",
+      "refresh requests use per-peer windows and a global ceiling",
       "removed from the allowlist",
       "crash or dropped connection",
       "<path>-wal",

@@ -39,6 +39,24 @@ both OpenID Connect discovery paths. It is not an OpenID provider configuration
 (it lacks required members such as `jwks_uri`), so a strict OIDC client may
 reject the alias; owner acceptance should attribute such a failure to this.
 
+## Code refusal events (F-036, accepted 2026-11-15)
+
+[F-036 v1](../features/F-036-refused-code-event.md),
+[BR-137 v3](../business-rules/BR-137.md): after client authentication, each
+refused authorization-code redemption emits exactly one `token_refused` to the
+optional logger with only `{ handler: "token", error, status }`. Normal refusals
+have `status: 400` and `error: "invalid_grant"`; a resource mismatch after the
+earlier checks pass has `error: "invalid_target"`. No `reason` or request value
+is included. Without a logger, no output is added.
+
+The restored events add no state change or commit; the existing in-memory
+client-last-use update remains. A matching replay before code expiry still
+revokes its remaining refresh family and emits `refresh_family_revoked` with
+only `{ handler: "token" }`, followed by one `token_refused`. Store failures
+retain their single refusal with `status: 503` and
+`error: "temporarily_unavailable"`, alongside existing store/revocation events.
+Validation order, responses, code consumption and lifetime remain unchanged.
+
 ## Restart and persisted state (F-019, pending acceptance)
 
 - Without `OAUTH_STATE_FILE` all state is in memory in one instance. A restart
@@ -154,8 +172,9 @@ server never repairs, replaces or deletes the file.
   an older copy (see "The state file is a credential store").
 - A power loss during a commit is covered by SQLite's journal only on file
   systems that honour `fsync`; use a local file system.
-- Refresh requests are limited only by the process-wide window of F-012 BR-162
-  (see "HTTP server" below). Each store still holds at most 1,000 entries.
+- Refresh requests use per-peer windows and a global ceiling (F-035 pending
+  acceptance; see "HTTP server" below). Each store still holds at most 1,000
+  entries.
 - A revocation that was not committed is lost at the next restart.
 - A crash or dropped connection after a refresh commit but before the client
   receives the response makes the client present its old token, which revokes
@@ -332,7 +351,45 @@ binds `127.0.0.1`, serves only the MCP endpoint and verifies no credential.
 - The reverse proxy's idle timeout for upstream keep-alive connections must be
   below 5 seconds (the server's `keepAliveTimeout`), or a reused socket can
   produce an intermittent 502.
-- The server does not handle `X-Forwarded-*` headers, CORS or TLS.
+- The server reads `X-Forwarded-For` only when the socket address is trusted.
+  `Forwarded`, `X-Real-IP` and other `X-Forwarded-*` headers are ignored; the
+  server handles neither CORS nor TLS.
+
+**F-035 pending acceptance.** `MCP_HTTP_TRUSTED_PROXIES` is optional and empty
+by default; the Compose example passes `${MCP_HTTP_TRUSTED_PROXIES:-}`.
+Use exact proxy addresses or a dedicated access-controlled proxy-only network.
+Every trusted hop must append the upstream address it observed as the last
+`X-Forwarded-For` element. Trusting a whole shared network trusts every
+container on it, including containers connecting directly to the server.
+
+An untrusted container on a listed shared network can connect directly to the
+server and send a victim's address in `X-Forwarded-For`. This selects the
+victim's peer and can exhaust its window: socket `CONTAINER_ADDRESS`, header
+`X-Forwarded-For: VICTIM_ADDRESS`. Exact proxy addresses or an isolated
+proxy-only network prevent that trust mistake. Do not list a shared network
+merely because Traefik belongs to it, and never list client addresses as proxies.
+
+A residential `/56` or `/48` supplies 256 or 65,536 `/64` peers, so one home
+line can cross the two-peer or twenty-peer global barriers. Per-peer admission
+therefore reduces single-peer interference but cannot prevent global lockout.
+
+The setting is proxy-only (authenticated HTTP), with option
+`--http-trusted-proxies` and YAML `httpTrustedProxies`. It accepts at most 64
+canonical IPv4/IPv6 addresses or network prefixes, with lengths from `/8` to
+`/32` or `/128`; host bits must be zero. IPv6 settings must be lowercase and
+compressed, without zones, brackets or mapped IPv4. Duplicate prefixes are
+refused; overlapping prefixes of different lengths are allowed. An explicit
+empty value is still refused outside proxy mode. Changes require a restart.
+
+At most 32 elements are examined from the right, skipping trusted hops and
+stopping at the first untrusted address. Raw header elements are validated
+before normalisation: an empty or invalid element (including a zone, bracket
+or port) stops the walk at the nearest valid hop, or the socket if none was
+valid. Full addresses are compared with the trusted list before grouping.
+Socket zones are removed, and IPv4-mapped IPv6 becomes IPv4. IPv6 addresses
+are grouped by their first 64 bits (`/64`); IPv4 peers are individual addresses.
+With an empty list, forwarding headers are ignored and the socket is the peer.
+No peer address is included in a response or log.
 
 ### Routes
 
@@ -380,16 +437,41 @@ clients in `auto` negotiation fall back to `initialize` after a 400 on their
 - Bodies: 262,144 bytes on the MCP endpoint, 32,768 bytes on registration,
   consent and token; headers 16,384 bytes; request target 8,192 bytes;
   `headersTimeout` 10 s, `requestTimeout` 30 s, at most 256 connections.
-- Process-wide windows for the unauthenticated routes: `/oauth/register` 30 per
-  hour; `/oauth/authorize`, `/oauth/consent` and `/oauth/callback` 30 per minute
-  each; `/oauth/token` 60 per minute. Behind a reverse proxy the peer address is
-  the proxy's, so these are not per-client. An attacker who sustains more than a
-  window's count keeps that route closed to the owner for as long as it does
-  (registration after a restart and token refresh are then blocked). The same
-  applies to the connection cap: a client holding 256 connections within the
-  timeouts keeps new connections out. Add per-client-IP request and connection
-  limits at the reverse proxy. MCP requests have no shared window, so invalid
-  tokens never block a valid one.
+- OAuth admission (F-035 pending acceptance) uses the windows below. Each
+  opens at its first counted request. Invalid admitted requests count too;
+  refusals count in neither window. A 429 includes `Retry-After` rounded up
+  to seconds, and its `request_refused` event includes `window: peer` or
+  `window: global`. Peer windows are checked first. Tables are in memory,
+  expired entries are removed before insertion, and restart clears them.
+
+| Route       | Per peer | Global | Window  | Maximum peer-table entries |
+| ----------- | -------- | ------ | ------- | -------------------------- |
+| `register`  | 30       | 60     | 3,600 s | 119                        |
+| `authorize` | 30       | 60     | 60 s    | 119                        |
+| `consent`   | 30       | 60     | 60 s    | 119                        |
+| `callback`  | 30       | 60     | 60 s    | 119                        |
+| `token`     | 60       | 1,200  | 60 s    | 2,399                      |
+
+- A shared hosted-client egress gets only 60 token requests per minute even
+  with spare global capacity. Its 61st legitimate refresh is refused, and
+  another user of that service can fill the shared peer window.
+- An empty trusted-proxy list behind one reverse proxy retains the previous
+  shared lockout. Two peers can fill most global windows; token requires
+  twenty peers. This is a request ceiling, not verified persisted-refresh
+  throughput: a refresh authenticates, scans family/client state, commits a
+  rotation and signs an ES256 access token.
+- A wrong trust list lets an attacker select a victim's peer and exhaust it
+  with 30 requests (60 on token); a listed range containing clients also
+  skips those clients during the forwarded-header walk.
+- Doubling the registration ceiling halves the minimum time to evict an idle
+  client and its refresh families from the 1,000-client store: at least
+  16 hours from an empty window instead of 33 hours (about 16.7 versus 33.3
+  hours at a steady rate). At most 11 windows of 60 intersect a 600-second
+  pending-entry lifetime, giving a conservative bound of 660 live entries.
+- A client holding 256 connections within the timeouts keeps new connections
+  out. Add per-client-IP request and connection limits at the reverse proxy.
+  MCP requests have no shared OAuth window, so invalid tokens never block a
+  valid one; the MCP and health limits are unchanged.
 - Nothing bounds the duration of a call inside the MCP server (BACKLOG).
 
 ### Owner-run acceptance composition

@@ -10,11 +10,11 @@ class NoExternalFactory {
     return Promise.reject(new Error("EXTERNAL_UNAVAILABLE"));
   }
 }
-/** BR-115/122: only bounded canonical plain streams and a closed font/operator profile. */
+/** BR-114 v2/BR-115/BR-122: PDF.js reads only the bounded canonical projection of F-034. */
 // eslint-disable-next-line sonarjs/cognitive-complexity -- F-011: pre-existing complex function; splitting it is deferred to keep reviewed control flow unchanged in this ticket (BACKLOG.md)
 export async function extractPdf(request: WorkerRequest) {
   const pages = request.args.pages ?? [1],
-    plan = preflightPdf(request.bytes, request.budget, pages);
+    plan = await preflightPdf(request.bytes, request.budget, pages);
   const options = {
     data: Uint8Array.from(plan.bytes),
     isEvalSupported: false,

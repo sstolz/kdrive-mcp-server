@@ -90,15 +90,41 @@ Binary controls and unsupported representations refuse explicitly. Successful
 text JSON includes `text`, `offset`, `characters_read`, `total_characters`,
 `has_more` and, only when unfinished, `next_offset`, plus owner/version/size.
 
-PDF adds optional ordered unique `pages` (1–10, default[1]). Only a conservative
-single-revision classic-xref profile is supported: direct stream lengths,
-unfiltered/single-Flate streams, one unique content stream per page, simple
-Helvetica/WinAnsi text operators and bounded raw RGB/gray image XObjects.
-Object/xref streams, indirect lengths, predictors, Forms, embedded/CID/Type3
-fonts, custom mappings, encryption, annotations and incremental PDFs refuse.
-Many common valid PDFs therefore return `UNSUPPORTED_FORMAT`. All stream and
-text-production admission precedes PDF.js; it receives a separately bounded
-canonical uncompressed PDF. Selected page text follows dependency item order,
+PDF adds optional ordered unique `pages` (1–10, default[1]). PDF.js only
+receives a canonical projection built from what text extraction needs (F-034,
+ADR-012): the page tree with each page's `MediaBox`, and for the selected pages
+the fonts their content selects, under canonical names `/K1`, `/K2`, … (the 12
+standard Latin names excepted), and one re-serialized content stream that keeps
+the text operators with Form XObjects inlined. Metadata, annotations, actions,
+JavaScript, outlines, structure, forms, images, attachments and font programs
+are never emitted.
+
+- Container: classic cross-reference tables and cross-reference streams,
+  hybrid files, incremental updates and linearized files through a bounded
+  `/Prev` chain, object streams, indirect `/Length` and `%PDF-2.0` headers. No
+  object scanning or repair runs.
+- Filters on the streams the projection needs: none, FlateDecode with PNG
+  predictors 10–15, ASCII85Decode or ASCIIHexDecode, alone or before
+  FlateDecode; other streams are never decoded.
+- Content: `q`, `Q`, `cm`, the text state and text operators are kept; paths,
+  colours, marked content, `gs`, image `Do` and inline images of known length
+  are dropped; Forms are inlined under 8 levels, 256 distinct Forms and 4,096
+  executions.
+- Fonts: Type 1, MMType1 and TrueType fonts whose shown codes map through an
+  encoding, a Type 1 built-in encoding read from the program's cleartext part
+  or `ToUnicode`; Type0 Identity-H/V fonts with a `ToUnicode` CMap that maps
+  every shown code; Type3 fonts projected without their glyph procedures.
+
+Encryption, LZW, RunLength, DCT and other filters on text streams, predefined
+CMaps, CFF built-in encodings, fonts whose text depends on their program, text
+operators outside `BT`/`ET`, `q`/`Q`/`cm` inside it and inline images of unknown
+length refuse with `UNSUPPORTED_FORMAT`; a file that contradicts its own
+structure refuses with `CONTENT_UNAVAILABLE`, and a ceiling with
+`LIMIT_EXCEEDED`. The first failing check in processing order decides. A
+refused file can still be fetched with `kdrive_download`. All stream and
+text-production admission precedes PDF.js; every decoded byte, including each
+reuse of a content or Form stream, counts against the extraction budget.
+Selected page text follows dependency item order,
 with LF/FF/LF between pages, without a layout/table-order guarantee. Blank or
 image-only selections use `NO_EXTRACTABLE_TEXT`; no OCR or scan detection runs.
 
@@ -114,8 +140,19 @@ resources retain their complete raw blob representation.
 Complete sources fit min(maxReadBytes,8MiB). Logical expanded streams, canonical
 PDF and decoded UTF-8 text each obey min(maxExtractBytes,16MiB); structural,
 pixel, producer/item and finite scratch limits are separate, not an RSS claim.
-Owned workers obey min(extractTimeoutMs, remaining10-second invocation deadline)
-and terminate before releasing the slot. Full serialized MCP results count
+Owned workers obey min(extractTimeoutMs, remaining10-second invocation deadline).
+An extraction that finishes, fails or is cancelled before its invocation
+deadline emits neither the detach nor the release diagnostic. With the default
+`extractTimeoutMs`, an extraction that reaches its invocation deadline is
+detached at that deadline: it emits the detach line and releases the session
+slot, then emits the release line when its worker exits. Only a detach line
+with no following release line indicates a stuck worker, subject to best-effort
+diagnostic delivery. Failed or overdue termination also releases the session
+slot by its deadline while a detached watcher keeps
+the process-wide extraction permit and identity charged until exit (F-040;
+[capacity and recovery](../SECURITY.md#process-wide-extraction-admission-f-040)).
+During that interval, new extraction calls for the same identity get `SERVER_BUSY`.
+Full serialized MCP results count
 both JSON escaping layers, image base64 expansion and all block overhead against
 262144 UTF-8 bytes and maxOutputChars UTF-16 units. Oversize containers refuse
 before partial extraction; text truncates only at whole code points.
@@ -356,8 +393,11 @@ Each write gets one JSON line before it is sent (`intent`) and one after
 carry the time, the identity (`stdio`, the OAuth issuer and subject, or
 `insecure`), the tool, the operation kind and the drive and item IDs, never
 names, paths, content or secrets. If the intent cannot be written, nothing is
-sent. Only HTTP 429 is retried; a timeout, a lost response or a 5xx returns
-`uncertain` (verify the item before retrying).
+sent. Each mutation run makes at most one upstream attempt. A valid HTTP 429
+returns `failed` / `RATE_LIMITED`, status 429, attempts 1, without a retry or
+a `Retry-After` wait. Every new client invocation requires fresh admission and
+full authorization. A timeout, a lost response or a 5xx returns `uncertain`
+and is never replayed; verify the item's state before any new attempt.
 
 - In a container, a file audit log needs a writable mount (the root file system
   is read-only) and `stop_grace_period` must be at least 75 s in `write` and

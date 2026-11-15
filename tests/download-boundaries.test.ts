@@ -219,9 +219,12 @@ describe("raw/version/range boundaries", () => {
         Promise.resolve({ ...request, status: 206, body }),
       );
       const c = createNavigationController(f.config, f.dependencies);
-      expect((await c.invoke("kdrive_download", { file_id: 3 })).isError).toBe(
-        true,
+      expect(await c.invoke("kdrive_download", { file_id: 3 })).toEqual(
+        contentError(
+          kind === "throw" ? "READ_UNAVAILABLE" : "CONTENT_UNAVAILABLE",
+        ),
       );
+      expect(body.read).toHaveBeenCalledTimes(kind === "extra" ? 2 : 1);
       expect(f.content.open).toHaveBeenCalledOnce();
       expect(body.close).toHaveBeenCalledOnce();
       c.close();
@@ -626,3 +629,79 @@ describe("policy, output and representation bounds", () => {
     expect(resourceTarget("kdrive://7/file/3")).toEqual({ driveId: 7, id: 3 });
   });
 });
+
+it("TestBR070_v4_AC03_stream_byte_evidence_remains_bounded", async () => {
+  for (const kind of [
+    "oversize",
+    "empty",
+    "early_EOF",
+    "extra_after_600_fragments",
+  ]) {
+    const f = await contentFixture({}, Buffer.alloc(600));
+    const body = {
+      read: vi.fn<(max: number) => Promise<unknown>>(() =>
+        Promise.resolve(null),
+      ),
+      close: vi.fn(),
+    };
+    if (kind === "oversize") body.read.mockResolvedValue(Buffer.alloc(601));
+    if (kind === "empty") body.read.mockResolvedValue(Buffer.alloc(0));
+    // Migrate the old endless-one-byte fixture: it now reaches its EOF check.
+    if (kind === "extra_after_600_fragments")
+      body.read.mockResolvedValue(Buffer.alloc(1));
+    f.content.open.mockImplementation((request) =>
+      Promise.resolve({ ...request, status: 206, body }),
+    );
+    const c = createNavigationController(f.config, f.dependencies);
+    try {
+      expect(await c.invoke("kdrive_download", { file_id: 3 }), kind).toEqual(
+        contentError("CONTENT_UNAVAILABLE"),
+      );
+      expect(body.read).toHaveBeenCalledTimes(
+        kind === "extra_after_600_fragments" ? 601 : 1,
+      );
+      expect(body.read.mock.calls[0]).toEqual([600, expect.any(AbortSignal)]);
+      if (kind === "extra_after_600_fragments")
+        expect(body.read.mock.calls.at(-1)).toEqual([
+          1,
+          expect.any(AbortSignal),
+        ]);
+      expect(body.close).toHaveBeenCalledOnce();
+      expect(f.content.describe).toHaveBeenCalledOnce();
+      expect(f.content.open).toHaveBeenCalledOnce();
+    } finally {
+      c.close();
+    }
+  }
+});
+
+it.each(["data", "EOF"])(
+  "TestBR070_v4_AC03_rejected_data_and_EOF_are_not_retried %s",
+  async (stage) => {
+    vi.useFakeTimers();
+    const f = await contentFixture({}, Buffer.alloc(600));
+    const body = {
+      read: vi.fn<(max: number) => Promise<unknown>>(() =>
+        Promise.reject(new ReadFailure(503)),
+      ),
+      close: vi.fn(),
+    };
+    if (stage === "EOF") body.read.mockResolvedValueOnce(f.bytes);
+    f.content.open.mockImplementation((request) =>
+      Promise.resolve({ ...request, status: 206, body }),
+    );
+    const c = createNavigationController(f.config, f.dependencies);
+    try {
+      const pending = c.invoke("kdrive_download", { file_id: 3 });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(await pending).toEqual(contentError("READ_UNAVAILABLE"));
+      await vi.advanceTimersByTimeAsync(10000);
+      expect(body.read).toHaveBeenCalledTimes(stage === "EOF" ? 2 : 1);
+      expect(body.close).toHaveBeenCalledOnce();
+      expect(f.content.describe).toHaveBeenCalledOnce();
+      expect(f.content.open).toHaveBeenCalledOnce();
+    } finally {
+      c.close();
+    }
+  },
+);

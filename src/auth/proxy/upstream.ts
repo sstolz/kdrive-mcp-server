@@ -25,21 +25,46 @@ export type Fetch = (
 export const UPSTREAM_DEADLINE_MS = 10_000;
 export const UPSTREAM_MAX_BYTES = 65_536;
 
-async function readBounded(response: Response): Promise<string> {
-  if (!response.body) return "";
-  const reader = response.body.getReader();
+interface ExchangeBody {
+  body: ReadableStream<Uint8Array> | null;
+  reader?: ReadableStreamDefaultReader<Uint8Array>;
+  ended: boolean;
+}
+
+/** BR-131 v2: abort and cancellation are independent, best-effort cleanup. */
+function abandon(controller: AbortController, state: ExchangeBody): void {
+  try {
+    controller.abort();
+  } catch {
+    // A cleanup failure cannot replace the exchange's original error.
+  }
+  if (state.ended) return;
+  try {
+    const cancellation = state.reader
+      ? state.reader.cancel()
+      : state.body?.cancel();
+    void cancellation?.catch(() => undefined);
+  } catch {
+    // Includes synchronous throws from a duck-typed body or reader.
+  }
+}
+
+async function readBounded(state: ExchangeBody): Promise<string> {
+  if (!state.body) return "";
+  const reader = state.body.getReader();
+  state.reader = reader;
   const chunks: Uint8Array[] = [];
   let total = 0;
   for (;;) {
     const { done, value } = await reader.read();
     if (done) break;
     total += value.byteLength;
-    if (total > UPSTREAM_MAX_BYTES) {
-      await reader.cancel().catch(() => undefined);
+    if (total > UPSTREAM_MAX_BYTES)
       throw new Error("Upstream response too large.");
-    }
     chunks.push(value);
   }
+  state.ended = true;
+  reader.releaseLock();
   return new TextDecoder().decode(Buffer.concat(chunks));
 }
 
@@ -59,10 +84,10 @@ async function exchange(
   if (new URL(url).protocol !== "https:")
     throw new Error("Upstream URL is not https.");
   const controller = new AbortController();
+  const state: ExchangeBody = { body: null, ended: false };
   let timer: ReturnType<typeof setTimeout> | undefined;
   const deadline = new Promise<never>((_resolve, reject) => {
     timer = setTimeout(() => {
-      controller.abort();
       reject(new Error("Upstream deadline exceeded."));
     }, UPSTREAM_DEADLINE_MS);
   });
@@ -72,6 +97,12 @@ async function exchange(
       redirect: "manual",
       signal: controller.signal,
     });
+    state.body = response.body;
+    // A fetch implementation may resolve after its deadline despite abort.
+    if (controller.signal.aborted) {
+      abandon(controller, state);
+      throw new Error("Upstream deadline exceeded.");
+    }
     if (
       response.type === "opaqueredirect" ||
       (response.status >= 300 && response.status < 400)
@@ -79,11 +110,14 @@ async function exchange(
       throw new Error("Upstream redirect refused.");
     return {
       status: response.status,
-      json: parseJson(await readBounded(response)),
+      json: parseJson(await readBounded(state)),
     };
   })();
   try {
     return await Promise.race([request, deadline]);
+  } catch (error) {
+    abandon(controller, state);
+    throw error;
   } finally {
     clearTimeout(timer);
     request.catch(() => undefined);

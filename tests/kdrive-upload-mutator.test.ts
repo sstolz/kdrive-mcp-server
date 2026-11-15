@@ -1,10 +1,11 @@
 // F-018 AC-07, AC-08 (BR-190 v3, BR-266 v2, BR-284–BR-286, BR-268): the
 // upload-new and replace mutators against a raw loopback TLS server.
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createStderrSink } from "../src/audit/sink.js";
 import {
   NotSent,
   createMutationGate,
+  type GateResult,
   type Mutator,
 } from "../src/mutation-gate.js";
 import { createKdriveAdapter } from "../src/kdrive/index.js";
@@ -24,6 +25,7 @@ const PARENT = 40;
 const TARGET = 41;
 let cleanup: (() => Promise<void>)[] = [];
 afterEach(async () => {
+  vi.useRealTimers();
   for (const step of cleanup.toReversed()) await step();
   cleanup = [];
 });
@@ -40,8 +42,10 @@ function setup(s: Awaited<ReturnType<typeof rawServer>>) {
     connect: s.connect,
     onRequest: (method, template) => observed.push([method, template]),
   });
+  const lines: string[] = [];
   const sink = createStderrSink({
-    write(_chunk, callback) {
+    write(chunk, callback) {
+      lines.push(chunk);
       callback();
       return true;
     },
@@ -57,6 +61,7 @@ function setup(s: Awaited<ReturnType<typeof rawServer>>) {
   });
   return {
     observed,
+    records: () => lines.map((line): unknown => JSON.parse(line)),
     run: (operation: Operation, payload: Buffer) =>
       gate.run({
         tool: "kdrive_upload",
@@ -246,18 +251,71 @@ describe("AC-08 response checks", () => {
       });
       expect(s.requests).toHaveLength(1);
     });
-    it(`TestBR248_${kind}_429_then_200_resends_identical_bytes`, async () => {
-      let n = 0;
-      const s = await server(() =>
-        n++ === 0
-          ? json(429, { result: "error" }, { "Retry-After": "0" })
-          : ok(file(kind, 3)),
+    it(`TestBR248_v2_${kind}_429_then_200_stops_after_one_request`, async () => {
+      const accepted = ok(file(kind, 3));
+      const replies = [
+        json(429, { result: "error" }, { "Retry-After": "0" }),
+        accepted,
+      ];
+      const s = await server(() => replies.shift()!);
+      vi.useFakeTimers({
+        toFake: ["setTimeout", "clearTimeout", "performance"],
+      });
+      const u = setup(s);
+      const payload = Buffer.from("abc");
+      let result: GateResult | undefined;
+      const pending = u.run(OPS[kind], payload).then((value) => {
+        result = value;
+      });
+      for (let i = 0; i < 2000 && result === undefined; i++)
+        await new Promise((resolve) => setImmediate(resolve));
+      const expected = {
+        result: "failed",
+        op: "0".repeat(32),
+        code: "RATE_LIMITED",
+        attempts: 1,
+        status: 429,
+      };
+      expect(result).toEqual(expected);
+      await pending;
+      const base = {
+        v: 1,
+        ts: "2026-11-10T10:00:00.000Z",
+        op: "0".repeat(32),
+        identity: { kind: "stdio" },
+        tool: "kdrive_upload",
+        kind,
+        drive: D,
+        ids: {
+          ...(kind === "replace" ? { target: TARGET } : {}),
+          destination: PARENT,
+        },
+      };
+      const records = [
+        { ...base, event: "intent" },
+        {
+          ...base,
+          event: "outcome",
+          result: "failed",
+          attempts: 1,
+          ms: 0,
+          status: 429,
+          code: "RATE_LIMITED",
+        },
+      ];
+      expect(u.records()).toEqual(records);
+      await vi.advanceTimersByTimeAsync(60_001);
+      expect(result).toEqual(expected);
+      expect(u.records()).toEqual(records);
+      expect(s.requests).toHaveLength(1);
+      expect(s.requests[0]?.method).toBe("POST");
+      expect(s.requests[0]?.body).toEqual(payload);
+      expect(s.requests[0]?.path).toBe(
+        mutationRoutes.upload(D, PARENT, NAME, payload.length, CONFLICT[kind])
+          .target,
       );
-      const result = await setup(s).run(OPS[kind], Buffer.from("abc"));
-      expect(result).toMatchObject({ result: "succeeded", attempts: 2 });
-      expect(s.requests).toHaveLength(2);
-      expect(s.requests[0]!.body.equals(s.requests[1]!.body)).toBe(true);
-      expect(s.requests[0]!.path).toBe(s.requests[1]!.path);
+      expect(u.observed).toEqual([["POST", "/3/drive/{d}/upload"]]);
+      expect(replies).toEqual([accepted]);
     });
   }
 });

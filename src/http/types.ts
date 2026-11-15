@@ -40,7 +40,11 @@ export interface HttpHandlerOptions {
 }
 
 export interface HttpHandler {
-  handle(request: Request, target: string): Promise<Response>;
+  handle(
+    request: Request,
+    target: string,
+    remoteAddress?: string,
+  ): Promise<Response>;
   /** BR-167: the route name a request target matches, `unknown` otherwise. */
   routeOf(target: string): RouteName;
   /** BR-169 v2 step (2): closes the sessions; the OAuth state store stays open. */

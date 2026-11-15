@@ -89,6 +89,7 @@ describe("BR-226 scripts/ci-changes.sh", () => {
     "tsconfig.json",
     "tsconfig.build.json",
     "LICENSE",
+    "LICENSES/Apache-2.0.txt",
     "NOTICE",
     "README.md",
     "Makefile",

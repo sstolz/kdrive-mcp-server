@@ -61,7 +61,8 @@ stages:
   without optional native packages, and removes its npm cache.
 - `runtime` starts from the digest-pinned `node:26.13.0-bookworm-slim` image
   and only copies `dist/`, `node_modules/`, `package.json`,
-  `package-lock.json`, `LICENSE`, `NOTICE` and `README.md` into `/app`. Its
+  `package-lock.json`, `LICENSE`, `NOTICE`, `README.md` and
+  `LICENSES/Apache-2.0.txt` into `/app`. Its
   files belong to root and are not writable by the runtime user. It runs as
   UID/GID 1000, sets `NODE_ENV=production`, `STOPSIGNAL SIGTERM`,
   `EXPOSE 3000`, and its entrypoint is `node /app/dist/cli.js`.
@@ -106,9 +107,10 @@ runtime image:
 
 Both select the `http` transport and the OAuth `proxy` mode. `0.0.0.0` is the
 container-internal bind address, so the reverse proxy reaches port 3000 over
-the container network; no host port is published. Every installation-specific
-value in `compose.yaml` is a required `${NAME:?…}` variable, so Compose refuses
-to start until it is set. The public URL, for example
+the container network; no host port is published. Required installation-specific
+values in `compose.yaml` use `${NAME:?…}`, so Compose refuses to start until
+they are set. Optional values such as `MCP_HTTP_TRUSTED_PROXIES` may be empty.
+The public URL, for example
 `https://mcp.example.com/mcp`, must match the host name of the Traefik rule.
 
 `restart: on-failure:3` bounds a crash loop. The examples run the container
@@ -181,8 +183,8 @@ every future share tool (#20) uses. It changes deployment in `write` and
 `share` modes only; `read` mode opens no audit sink.
 
 - **Grace period.** On SIGTERM the server closes the transport first, then
-  waits for each write already past its audit intent to finish and record its
-  outcome (at most a 60 s run deadline plus two 5 s file appends), then exits.
+  waits for each write already past its audit intent to reach its classified
+  result and bounded outcome attempt, then closes the sink and exits.
   Set `stop_grace_period` to at least 75 s in `write` and `share` modes; a
   shorter period lets the engine send SIGKILL and leaves an intent record
   without its outcome.
@@ -204,21 +206,45 @@ every future share tool (#20) uses. It changes deployment in `write` and
   [state file requirements](oauth-proxy.md#state-file-requirements)). It is a credential store: protect the
   mount like the signing key and never restore it from a backup. See the
   [OAuth proxy notes](oauth-proxy.md).
-- **Audit outcome is authoritative.** A request whose write is in flight when
-  shutdown starts receives HTTP 503, and an MCP response can be dropped after a
-  client cancellation. Neither says whether the write was performed: the audit
-  `outcome` record for that `op` is the authority. An `intent` without an
-  `outcome` means the result is unknown; check the item in kDrive before any new
-  attempt. Such an `intent` can also come from an intent append that timed out
-  after 5,000 ms: that run returned `AUDIT_UNAVAILABLE` and sent nothing, but
-  the check is still advised.
 - **stderr durability.** With the default `KDRIVE_MCP_AUDIT_LOG=stderr`, records
-  are as durable as whatever collects the container's stderr, and a collector
-  that stops reading holds the write that waits for its record. Use a file on a
+  are as durable as whatever collects the container's stderr. Use a file on a
   writable mount for a durable trail.
 - **Received shares.** `KDRIVE_MCP_SHARED_WRITE=1` authorizes no write inside a
   received share yet: every received-share mutation stays denied until a later
   ticket qualifies it.
+
+[F-039](../features/F-039-bounded-audit-sink.md) bounds asynchronous audit appends
+for both stderr and files to 5,000 ms from the call, including queue time,
+write and callback or `fdatasync`. Sink close has one 5,000 ms budget for drain
+and file release. Any stream/write/sync error or timeout permanently latches
+the sink until restart; pending appends reject and later writes are refused.
+The first latch offers one fixed best-effort diagnostic without waiting for
+its delivery. A failed intent sends nothing upstream; a failed outcome
+preserves the mutation result with `audit:"outcome_unrecorded"`.
+
+Timed-out bytes may still arrive later. An intent without an outcome is
+ambiguous: it proves neither dispatch nor its absence. The client's mutation
+result is the authority; a shutdown HTTP 503 does not determine whether a
+write occurred. Consult a recorded outcome or verify the item's state before
+any new attempt; never automatically replay an uncertain write.
+
+Shutdown closes transport, then gate, then exits the dedicated process.
+Gate close is bounded by 45,000 ms under the production policy and sole-attempt
+bounds; the deployment grace remains at least 75 s in write/share modes.
+The shared production exit helper waits for both output streams with a ref'd
+250 ms flush cap, shortened to the remaining stdio shutdown budget. Output
+still queued on a stalled pipe at that cap may be lost. Without a run past
+intent, stdio shares one 1,000 ms allowance from EOF/signal handling across
+transport close, non-committed appends, file release and exit flushing.
+Owned/library compositions close without terminating their host.
+
+These are asynchronous wait bounds. Synchronous fd 2 writes to a file or TTY
+can block the event loop, prevent timers from firing and remain unbounded.
+A write or `fdatasync` stuck in the libuv threadpool can cause an unbounded
+OS/runtime teardown stall even after `process.exit` is called. File release
+never races an in-flight port operation: if it outlives close's budget, the
+retained descriptor stays open until actual process termination, including in
+library hosts. No timer guarantees actual termination or durable delivery.
 
 ## Settings of an HTTP deployment
 
@@ -226,37 +252,39 @@ This table lists the settings of the Compose path below, taken from the
 [configuration reference](../features/F-002-configuration.md),
 [`examples/compose.yaml`](../examples/compose.yaml) and
 [`examples/config.yaml`](../examples/config.yaml). Every example value is
-fake: replace it with yours. "Set by the example" means that
+illustrative: replace installation-specific values with yours. The Infomaniak
+issuer is real. "Set by the example" means that
 `examples/compose.yaml` already sets the value and you normally keep it.
 
 Server settings (the `environment` of the service; the server reads no
 `.env` file):
 
-| Variable                            | Role                                                                                         | Required?                                                    | Fake example                          |
-| ----------------------------------- | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------ | ------------------------------------- |
-| `KDRIVE_MCP_TRANSPORT`              | `stdio` or `http`.                                                                           | Yes for HTTP (default `stdio`); set by the example           | `http`                                |
-| `OAUTH_MODE`                        | Authentication mode; this guide uses the OAuth `proxy`.                                      | Yes for authenticated HTTP; set by the example               | `proxy`                               |
-| `MCP_HTTP_HOST`                     | Bind address inside the container.                                                           | Yes in a container (default `127.0.0.1`); set by the example | `0.0.0.0`                             |
-| `MCP_HTTP_PORT`                     | Listening port, also used by the health check.                                               | No (default `3000`); set by the example                      | `3000`                                |
-| `MCP_PUBLIC_URL`                    | Public HTTPS URL of the MCP endpoint, with a path.                                           | Yes                                                          | `https://mcp.example.com/mcp`         |
-| `KDRIVE_TOKEN_FILE`                 | Path, inside the container, of the file holding the kDrive API token.                        | Yes (or `KDRIVE_TOKEN`, not for Compose); set by the example | `/run/secrets/kdrive-token`           |
-| `KDRIVE_ID`                         | The drive to serve.                                                                          | Yes, or `KDRIVE_IDS`                                         | `123456`                              |
-| `KDRIVE_IDS`                        | Several drives, comma-separated; the first is the default.                                   | Instead of `KDRIVE_ID`                                       | `123456,234567`                       |
-| `KDRIVE_MCP_MODE`                   | `read`, `write` or `share`.                                                                  | No (default `read`); set by the example                      | `read`                                |
-| `KDRIVE_MCP_ROOTS`                  | Root folders per drive, by ID or path; must cover every configured drive.                    | No (default: folder 1 of each drive)                         | `123456:/Documents`                   |
-| `KDRIVE_MCP_DENY`                   | Comma-separated, case-sensitive path patterns to hide.                                       | No                                                           | `/Private/**`                         |
-| `KDRIVE_MCP_SHARED_WITH_ME`         | `1` to read items other users shared with you.                                               | No (default `0`)                                             | `0`                                   |
-| `KDRIVE_MCP_AUDIT_LOG`              | Write audit log: `stderr` or an absolute file path.                                          | No (default `stderr`); a file is advised in `write` mode     | `/audit/audit.jsonl`                  |
-| `OAUTH_ISSUER`                      | Issuer URL of the upstream OpenID Connect provider, exactly as its discovery document gives. | Yes                                                          | `https://login.example.com`           |
-| `OAUTH_UPSTREAM_CLIENT_ID`          | Client ID of the OAuth client registered at the provider.                                    | Yes                                                          | `00000000-fake-client-id`             |
-| `OAUTH_UPSTREAM_CLIENT_SECRET_FILE` | Path, inside the container, of the file holding that client's secret.                        | Yes; set by the example                                      | `/run/secrets/upstream-client-secret` |
-| `OAUTH_SIGNING_KEY_FILE`            | Path, inside the container, of the EC P-256 signing key.                                     | Yes; set by the example                                      | `/run/secrets/signing-key.pem`        |
-| `OAUTH_ALLOWED_EMAILS`              | Comma-separated emails allowed to log in.                                                    | Yes, or `OAUTH_ALLOWED_SUBJECTS`                             | `you@example.com`                     |
-| `OAUTH_ALLOWED_SUBJECTS`            | Comma-separated provider subjects (`sub`) allowed to log in.                                 | Instead of, or with, the emails                              | `00000000-fake-subject`               |
-| `OAUTH_ALLOWED_REDIRECT_URIS`       | Callback URLs of your AI clients, compared byte for byte.                                    | Yes                                                          | `https://client.example.org/callback` |
-| `OAUTH_AUDIENCE`                    | Token audience.                                                                              | No (defaults to `MCP_PUBLIC_URL`)                            | leave unset                           |
-| `OAUTH_STATE_FILE`                  | SQLite file that keeps clients and logins across restarts.                                   | No                                                           | `/audit/oauth-state.sqlite`           |
-| `OAUTH_ALLOWED_CLIENT_ID_ORIGINS`   | Origins allowed for Client ID Metadata Documents; not in the published beta.                 | No (empty by default)                                        | leave unset                           |
+| Variable                            | Role                                                                                            | Required?                                                    | Example                               |
+| ----------------------------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------ | ------------------------------------- |
+| `KDRIVE_MCP_TRANSPORT`              | `stdio` or `http`.                                                                              | Yes for HTTP (default `stdio`); set by the example           | `http`                                |
+| `OAUTH_MODE`                        | Authentication mode; this guide uses the OAuth `proxy`.                                         | Yes for authenticated HTTP; set by the example               | `proxy`                               |
+| `MCP_HTTP_HOST`                     | Bind address inside the container.                                                              | Yes in a container (default `127.0.0.1`); set by the example | `0.0.0.0`                             |
+| `MCP_HTTP_TRUSTED_PROXIES`          | Trusted proxy addresses or CIDRs for peer admission; configure only after the checks in step 4. | No (empty by default)                                        | leave unset                           |
+| `MCP_HTTP_PORT`                     | Listening port, also used by the health check.                                                  | No (default `3000`); set by the example                      | `3000`                                |
+| `MCP_PUBLIC_URL`                    | Public HTTPS URL of the MCP endpoint, with a path.                                              | Yes                                                          | `https://mcp.example.com/mcp`         |
+| `KDRIVE_TOKEN_FILE`                 | Path, inside the container, of the file holding the kDrive API token.                           | Yes (or `KDRIVE_TOKEN`, not for Compose); set by the example | `/run/secrets/kdrive-token`           |
+| `KDRIVE_ID`                         | The drive to serve.                                                                             | Yes, or `KDRIVE_IDS`                                         | `123456`                              |
+| `KDRIVE_IDS`                        | Several drives, comma-separated; the first is the default.                                      | Instead of `KDRIVE_ID`                                       | `123456,234567`                       |
+| `KDRIVE_MCP_MODE`                   | `read`, `write` or `share`.                                                                     | No (default `read`); set by the example                      | `read`                                |
+| `KDRIVE_MCP_ROOTS`                  | Root folders per drive, by ID or path; must cover every configured drive.                       | No (default: folder 1 of each drive)                         | `123456:/Documents`                   |
+| `KDRIVE_MCP_DENY`                   | Comma-separated, case-sensitive path patterns to hide.                                          | No                                                           | `/Private/**`                         |
+| `KDRIVE_MCP_SHARED_WITH_ME`         | `1` to read items other users shared with you.                                                  | No (default `0`)                                             | `0`                                   |
+| `KDRIVE_MCP_AUDIT_LOG`              | Write audit log: `stderr` or an absolute file path.                                             | No (default `stderr`); a file is advised in `write` mode     | `/audit/audit.jsonl`                  |
+| `OAUTH_ISSUER`                      | Issuer URL of the upstream OpenID Connect provider, exactly as its discovery document gives.    | Yes                                                          | `https://login.example.com`           |
+| `OAUTH_UPSTREAM_CLIENT_ID`          | Client ID of the OAuth client registered at the provider.                                       | Yes                                                          | `00000000-fake-client-id`             |
+| `OAUTH_UPSTREAM_CLIENT_SECRET_FILE` | Path, inside the container, of the file holding that client's secret.                           | Yes; set by the example                                      | `/run/secrets/upstream-client-secret` |
+| `OAUTH_SIGNING_KEY_FILE`            | Path, inside the container, of the EC P-256 signing key.                                        | Yes; set by the example                                      | `/run/secrets/signing-key.pem`        |
+| `OAUTH_ALLOWED_EMAILS`              | Comma-separated emails allowed to log in.                                                       | Yes, or `OAUTH_ALLOWED_SUBJECTS`                             | `you@example.com`                     |
+| `OAUTH_ALLOWED_SUBJECTS`            | Comma-separated provider subjects (`sub`) allowed to log in.                                    | Instead of, or with, the emails                              | `00000000-fake-subject`               |
+| `OAUTH_ALLOWED_REDIRECT_URIS`       | Callback URLs of your AI clients, compared byte for byte.                                       | Yes                                                          | `https://client.example.org/callback` |
+| `OAUTH_AUDIENCE`                    | Token audience.                                                                                 | No (defaults to `MCP_PUBLIC_URL`)                            | leave unset                           |
+| `OAUTH_STATE_FILE`                  | SQLite file that keeps clients and logins across restarts.                                      | No                                                           | `/audit/oauth-state.sqlite`           |
+| `OAUTH_ALLOWED_CLIENT_ID_ORIGINS`   | Origins allowed for Client ID Metadata Documents; not in the published beta.                    | No (empty by default)                                        | leave unset                           |
 
 `OAUTH_ALLOWED_EMAILS` and `OAUTH_ALLOWED_SUBJECTS` together need at least one
 entry. The callback URL of each client is in the
@@ -268,7 +296,7 @@ reason; the configuration reference gives every setting, bound and error code.
 Compose variables (read only by Compose, from the shell or a `.env` file next
 to `compose.yaml`; they hold no secret value):
 
-| Variable                      | Role                                                                   | Required?                    | Fake example                                                    |
+| Variable                      | Role                                                                   | Required?                    | Example                                                         |
 | ----------------------------- | ---------------------------------------------------------------------- | ---------------------------- | --------------------------------------------------------------- |
 | `KDRIVE_MCP_IMAGE`            | Runtime image: the published beta pinned by digest, or your local tag. | Yes                          | `ghcr.io/sstolz/kdrive-mcp-server:0.6.0-beta.1@sha256:<digest>` |
 | `MCP_PUBLIC_URL`              | Passed to the server (see above).                                      | Yes                          | `https://mcp.example.com/mcp`                                   |
@@ -278,6 +306,7 @@ to `compose.yaml`; they hold no secret value):
 | `OAUTH_UPSTREAM_CLIENT_ID`    | Passed to the server (see above).                                      | Yes                          | `00000000-fake-client-id`                                       |
 | `OAUTH_ALLOWED_EMAILS`        | Passed to the server (see above).                                      | Yes                          | `you@example.com`                                               |
 | `OAUTH_ALLOWED_REDIRECT_URIS` | Passed to the server (see above).                                      | Yes                          | `https://client.example.org/callback`                           |
+| `MCP_HTTP_TRUSTED_PROXIES`    | Passed to the server; read at startup (see step 4).                    | No (empty by default)        | leave unset                                                     |
 | `TRAEFIK_NETWORK`             | External Docker network that Traefik and the container share.          | Yes                          | `proxy`                                                         |
 | `TRAEFIK_ENTRYPOINT`          | Traefik HTTPS entrypoint name.                                         | Yes                          | `websecure`                                                     |
 | `KDRIVE_TOKEN_SECRET_FILE`    | Host path of the kDrive token file.                                    | Yes                          | `./secrets/kdrive-token`                                        |
@@ -363,10 +392,10 @@ time of writing.
    MCP URL (step 3): the application needs it. In the Manager, open
    **Utilisateurs et profils** → **Mon profil** → **Développeur** →
    **Application API** → **Créer une nouvelle application**, type
-   **Application**, any name, and the application URL
+   **Application** and any name. The application URL field is the OAuth
+   redirect (callback) URI. For this deployment, enter
    `<MCP_PUBLIC_URL>/oauth/callback`, here
    `https://mcp.example.com/mcp/oauth/callback`.
-   <!-- owner: confirm which URL Infomaniak expects in this field -->
    Keep its client ID and client secret (step 4). Then open **Développeur** →
    **Tokens API** → **Créer un token**: select that application, the scope
    **drive — Produits Drive** and a validity (1 day to unlimited). Log in as
@@ -374,21 +403,25 @@ time of writing.
    startup checks the role and stops with `[DRIVE_NOT_ALLOWED]` otherwise. The
    token is shown once; it goes into `secrets/kdrive-token` in step 3, never
    into a variable or a file you commit.
-2. **The drive ID.** <!-- owner: confirm Infomaniak UI paths -->
-   Each kDrive has a numeric ID (for example `123456`), which becomes
-   `KDRIVE_ID`. Look for it in your kDrive account; the README gives a read
-   only API call that lists the drives a token can access. A wrong ID stops
-   the server at startup, with `[DRIVE_NOT_ALLOWED]` or `[PREFLIGHT_FAILED]`.
+2. **The drive ID.** `KDRIVE_ID` is the number in the kDrive web app URL
+   after `/kdrive/app/drive/`: for example, a path that contains
+   `/kdrive/app/drive/123456/` gives `123456`.
+   The README also gives a read-only API call that lists the drives a token
+   can access. A wrong ID stops the server at startup, with
+   `[DRIVE_NOT_ALLOWED]` or `[PREFLIGHT_FAILED]`.
 3. **The public MCP URL.** Choose it before registering the client. It needs
    a path, for example `https://mcp.example.com/mcp`; an origin-only URL is
    refused.
 4. **The OAuth client.** With Infomaniak as the provider, it is the API
    application of item 1: its client ID becomes `OAUTH_UPSTREAM_CLIENT_ID` and
-   its client secret goes into the client secret file. With another provider,
-   register a confidential OAuth 2.0 / OpenID Connect client with the redirect
-   URI `<MCP_PUBLIC_URL>/oauth/callback`. Note the issuer URL exactly as the
-   provider's `/.well-known/openid-configuration` gives it (a trailing slash
-   matters). <!-- owner: confirm the Infomaniak issuer value -->
+   its client secret goes into the client secret file. Set `OAUTH_ISSUER` to
+   the Infomaniak issuer given in the
+   [README](../README.md#values-from-the-infomaniak-side), without a trailing
+   slash.
+   With another provider, register a confidential OAuth 2.0 / OpenID Connect
+   client with the redirect URI `<MCP_PUBLIC_URL>/oauth/callback`. Take its
+   issuer URL exactly as the provider's `/.well-known/openid-configuration`
+   gives it (a trailing slash matters).
 
 ### 3. Provision the three secret files
 
@@ -452,8 +485,8 @@ Set its variables (see
 [Settings of an HTTP deployment](#settings-of-an-http-deployment)) in the
 shell or in a `.env` file next to it (Compose reads that file; the server
 itself reads none). The `.env` file holds no secret, only the paths to the
-secret files, relative to the deployment directory. Every value below is
-fake:
+secret files, relative to the deployment directory. The installation-specific
+values below are fake; the issuer is the real Infomaniak issuer:
 
 ```sh
 # Published beta pinned by digest (step 1), or kdrive-mcp-server:runtime-amd64
@@ -512,8 +545,32 @@ http:
         idleConnTimeout: 4s
 ```
 
-Check the file with `docker compose config`; Compose names any variable still
-unset.
+**F-035 pending acceptance.** `MCP_HTTP_TRUSTED_PROXIES` is optional and
+empty by default; the Compose example passes `${MCP_HTTP_TRUSTED_PROXIES:-}`.
+Use exact proxy addresses or a dedicated access-controlled proxy-only network.
+Every trusted hop must append the upstream address it observed as the last
+`X-Forwarded-For` element. Trusting a whole shared network trusts every
+container on it, including containers connecting directly to the server.
+
+An untrusted container on a listed shared network can connect directly to the
+server and send a victim's address in `X-Forwarded-For`. This selects the
+victim's peer and can exhaust its window: socket `CONTAINER_ADDRESS`, header
+`X-Forwarded-For: VICTIM_ADDRESS`. Exact proxy addresses or an isolated
+proxy-only network prevent that trust mistake. Do not list a shared network
+merely because Traefik belongs to it, and never list client addresses as proxies.
+
+A residential `/56` or `/48` supplies 256 or 65,536 `/64` peers, so one home
+line can cross the two-peer or twenty-peer global barriers. Per-peer admission
+therefore reduces single-peer interference but cannot prevent global lockout.
+
+Required installation-specific values use `${NAME:?…}`; optional values may
+use `${NAME:-}` with an empty default. Credentials remain file secrets only.
+Leaving the trusted-proxy list empty behind Traefik retains one shared peer
+window. Set the comma-separated list only after checking the proxy addresses,
+network isolation and header-append policy; it is read at startup.
+
+Check the file with `docker compose config`; Compose names any required
+variable still unset.
 
 ### 5. Start in `read` mode
 

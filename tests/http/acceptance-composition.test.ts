@@ -183,7 +183,13 @@ describe("BR-171 acceptance composition", () => {
     const pkg = JSON.parse(readFileSync("package.json", "utf8")) as {
       files: string[];
     };
-    expect(pkg.files).toEqual(["dist/", "LICENSE", "NOTICE", "README.md"]);
+    expect(pkg.files).toEqual([
+      "dist/",
+      "LICENSE",
+      "LICENSES/",
+      "NOTICE",
+      "README.md",
+    ]);
     const build = JSON.parse(readFileSync("tsconfig.build.json", "utf8")) as {
       include: string[];
     };

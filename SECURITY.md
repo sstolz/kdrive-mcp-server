@@ -103,7 +103,13 @@ refuse before policy/content work. No content cache or grant is retained.
 
 Central retries use only a private runtime error brand for429/500–599 pre-body
 failures, with at most three starts and100/200ms waits. Every start shares the
-same invocation/list/deadline counters; body reads count too. Arbitrary thrown
+same invocation/list/deadline counters. Reads of an already-open response body,
+including EOF probes, do not spend the 512-operation budget; byte bounds,
+deadline, cancellation and cleanup still apply, and body reads never retry.
+Reads that issue or resume upstream requests remain charged. Provider validators
+starting with the case-sensitive prefix `W/` follow the absent-validator path:
+`VERSION_UNAVAILABLE` at describe, or `CONTENT_UNAVAILABLE` at open after a
+strong descriptor, without publishing bytes. Arbitrary thrown
 objects are not inspected for status or message. Abstract policy dispatch and
 execute do not acquire retries. Resource errors use fixed code-32000/messages
 without error.data; credentials, headers, URLs, ETags and content never appear in
@@ -119,25 +125,112 @@ separate owned streams. These bounds do not prove cancellation of an underlying
 real provider request: no production adapter is qualified. Received-list cache
 age and multi-step resolution retain the existing revocation/concurrency limits.
 
+## Process-wide extraction admission (F-040)
+
+All `kdrive_read` formats, including continuations and empty sources, acquire one
+of two process-wide permits before source acquisition or buffering. At most four
+calls wait, with at most one active permit and one live waiter per trusted
+identity, serving the oldest eligible waiter. HTTP uses the exact verified
+issuer/subject pair across sessions; stdio and identity-free embedded controllers
+share one identity, and insecure HTTP uses a separate shared identity. Waiting
+spends the original invocation deadline and conveys no authorization. Raw
+downloads and resource reads retain their existing bounds.
+
+SERVER_BUSY is a transient admission refusal before source work, including
+extraction queue saturation, an identity's waiting limit or a detached worker
+holding its permit. The server does not automatically retry; a later client
+invocation requires fresh admission and authorization. Capacity may remain
+unavailable until a stuck worker exits or the process restarts.
+
+A permit covers source cleanup, worker exit, projection and final authorization.
+If termination fails or is still pending at the invocation deadline, a detached
+exit watcher retains the permit and identity charge; the invocation releases its
+session slot by that deadline. A live termination rejection still requires
+bounded fresh final authorization before `CONTENT_UNAVAILABLE`; denial returns
+`ACCESS_DENIED`, expiry `REQUEST_TIMEOUT`, and earlier cancel/close keeps
+`ACCESS_DENIED`. No late result is published.
+
+A detached identity's existing waiter and later extraction calls refuse
+`SERVER_BUSY`; if both permits are detached, every new extraction caller refuses
+immediately. Other existing waiters retain their deadlines. Permanently stuck
+workers reduce capacity until restart: two stop all extraction, and one blocks
+the shared stdio identity. Other tools remain available. This bounds concurrent
+pipelines, not total memory or RSS; external buffers, parser scratch and garbage
+collection remain outside worker heap limits.
+
+The process-owned stderr sink in both HTTP and stdio survives session close and
+offers exactly these payload-free lines once per detached worker:
+
+```text
+Extraction worker detached; capacity remains charged until exit.
+Detached extraction worker exited; capacity released.
+```
+
+Delivery is best effort, without waiting for a callback/drain or retrying.
+Blocked stderr can prevent delivery. No identity, path, content, error text or
+stack appears in either line. An extraction that finishes, fails or is cancelled
+before its invocation deadline emits neither diagnostic, as do admission
+refusals. With the default `extractTimeoutMs`, an extraction that reaches its
+invocation deadline is detached at that deadline and emits the detach line,
+then emits the release line when its worker exits. Until that exit, new
+extraction calls for the same identity get `SERVER_BUSY`. Only a detach line
+with no following release line indicates a stuck worker, subject to the
+best-effort delivery limits above; a detach/release pair also occurs on normal
+deadline expiry. These diagnostics are not audit events.
+
 ## Mutation audit gate (F-016)
 
 Every write and share tool runs through one gate (#17). Before any
 upstream write the gate writes a durable `intent` record (JSONL: time, identity,
 tool, operation kind, drive and item IDs; never names, paths, content, tokens,
 URLs or provider text), and after it an `outcome` record. If the intent cannot be
-written, nothing is sent. Only HTTP 429 is retried; a timeout, a lost response or
-a 5xx returns `uncertain` and is never replayed. If the outcome cannot be written,
+written, nothing is sent. Each mutation run makes at most one upstream attempt.
+A valid HTTP 429 returns `failed` / `RATE_LIMITED`, status 429, attempts 1,
+without a retry or a `Retry-After` wait. Every new client invocation requires
+fresh admission and full authorization. A timeout, a lost response or a 5xx
+returns `uncertain` and is never replayed; verify the item's state before any
+new attempt. If the outcome cannot be written,
 the client still gets the real result, marked `audit:"outcome_unrecorded"`, and
 every later write is refused until restart.
+
+Authorization is not atomic: the first-attempt window remains after policy
+validation. Intent append may take up to 5,000 ms, followed by transport queue,
+DNS and TLS within the 30,000 ms attempt timer. These separate bounds can total
+35,000 ms after the policy check; a target or ancestor may move before the first
+write. Stopping 429 retries does not close this window or add a provider-side
+version precondition.
+
+"429 means not applied" remains the unmeasured F-016 D-16-5 assumption, not a
+provider guarantee: [write evidence](docs/kdrive-write-evidence.md#not-measured)
+reports that none of the 85 measured responses was a 429. If a write takes
+effect before a 429, a later explicit invocation could duplicate it; this
+change adds no idempotency guarantee.
 
 - File sink: opened with `O_APPEND | O_NOFOLLOW`, created `0600`; an existing
   file must be owned by the server's user with no group or other permission bit.
   The server never changes its mode. Each record is followed by `fdatasync`; a
-  write or sync failure, or a sync slower than 5 s, stops further writes.
+  write or sync failure, or a total append wait of 5,000 ms or more, stops further writes.
 - stderr sink (default): durability is that of the stderr collector; a file on a
   writable mount is recommended for a durable trail.
 - After an HTTP 503 at shutdown or a dropped response after a cancellation, the
   audit outcome is the authority on whether a write happened.
+- F-039 bounds asynchronous file and stderr appends, including queue time, to
+  5,000 ms; sink close shares a separate 5,000 ms budget for drain and release.
+  Stream errors reject pending appends immediately. The first failure latches
+  permanently until restart and offers one fixed best-effort diagnostic.
+  Timed-out bytes may arrive later: an intent without an outcome is ambiguous.
+  The client's mutation result is authoritative; a shutdown HTTP 503 is not
+  such a result and does not establish whether a write occurred.
+- File release never races an in-flight write or sync. If it remains pending
+  at close expiry, the descriptor is retained until actual process termination.
+  Synchronous fd 2 file/TTY writes can block the event loop and its timers;
+  libuv threadpool write/fdatasync stalls can hold OS/runtime teardown even
+  after `process.exit`. Both remain unbounded.
+- The shared production exit helper has a ref'd 250 ms flush cap, shortened
+  to the remaining 1,000 ms no-intent stdio budget (non-committed appends,
+  release and flushing included). Queued output on a stalled pipe may be lost.
+  Owned/library closure never terminates its host. Keep the 75 s deployment
+  grace; see [shutdown guidance](docs/deployment.md#write-and-share-modes-audit-log).
 - Received-share writes stay denied even with `KDRIVE_MCP_SHARED_WRITE=1`.
 
 ## Controlled tree mutations (F-017)
@@ -210,7 +303,7 @@ checked against the deny patterns.
   client) can be refused by the transport below 524,288 bytes: over HTTP the
   request gets HTTP 413; over stdio a frame above 1 MiB terminates the server
   with `STDIO_INPUT_FAILED` and no MCP error. An upload already in flight
-  completes and its outcome is recorded in the audit log before exit, but its
+  reaches its classified result and bounded outcome append before exit, but its
   tool result is not delivered. Use `base64` for large or non-ASCII content.
 - Residual risk R-18-1: the `conflict=error` refusal is not proven under every
   interleaving; a concurrent writer could still win a race this server cannot

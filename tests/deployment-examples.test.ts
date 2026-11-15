@@ -15,6 +15,7 @@ import {
   HEALTH_CHECK_PHRASES,
   V1_STATUS_SENTENCE,
   validateComposeHealth,
+  validateComposeAdmission,
   validateDeploymentDoc,
   validateHygiene,
 } from "./helpers/deployment.js";
@@ -152,7 +153,9 @@ describe("F-013 AC-07 deployment examples", () => {
     for (const [name, value] of Object.entries(service.environment))
       env[name] = VARIABLE.test(value)
         ? (SAMPLE[name] ?? "")
-        : (files[value] ?? value);
+        : value === "${MCP_HTTP_TRUSTED_PROXIES:-}"
+          ? ""
+          : (files[value] ?? value);
     const config = await loadConfiguration({ argv: [], env, cwd: directory });
     expect(config.transport).toBe("http");
     expect(config.oauthMode).toBe("proxy");
@@ -375,4 +378,141 @@ describe("F-021 AC-10 health check deployment", () => {
       validateDeploymentDoc(mutated);
     }).toThrow();
   });
+});
+
+it("BR-184 v3 AC-21 the Compose example passes an optional empty trusted-proxy list", async () => {
+  expect(service.environment.MCP_HTTP_TRUSTED_PROXIES).toBe(
+    "${MCP_HTTP_TRUSTED_PROXIES:-}",
+  );
+  expect(() => {
+    validateComposeAdmission(composeText);
+  }).not.toThrow();
+  const files = credentials();
+  for (const trusted of ["", "192.0.2.0/24"]) {
+    const env = Object.fromEntries(
+      Object.entries(service.environment).map(([name, value]) => [
+        name,
+        name === "MCP_HTTP_TRUSTED_PROXIES"
+          ? trusted
+          : VARIABLE.test(value)
+            ? (SAMPLE[name] ?? "")
+            : (files[value] ?? value),
+      ]),
+    );
+    const config = await loadConfiguration({ argv: [], env, cwd: directory });
+    expect(config.httpTrustedProxies).toEqual(trusted ? [trusted] : []);
+  }
+  const withoutComment = composeText
+    .split("\n")
+    .filter(
+      (line) =>
+        !(
+          line.trimStart().startsWith("#") &&
+          line.includes("MCP_HTTP_TRUSTED_PROXIES")
+        ),
+    )
+    .join("\n");
+  expect(withoutComment).not.toBe(composeText);
+  expect(() => {
+    validateComposeAdmission(withoutComment);
+  }).toThrow();
+  expect(() => {
+    validateComposeAdmission(
+      composeText.replace(
+        "${MCP_HTTP_TRUSTED_PROXIES:-}",
+        "${MCP_HTTP_TRUSTED_PROXIES:?set proxies}",
+      ),
+    );
+  }).toThrow();
+});
+
+it("BR-186 v2 AC-21 required and optional variables match the Compose header", () => {
+  expect(() => {
+    validateHygiene("examples/compose.yaml", composeText);
+  }).not.toThrow();
+  const mutations = [
+    composeText.replace(/\$\{MCP_PUBLIC_URL:\?[^}]+\}/u, "${MCP_PUBLIC_URL:-}"),
+    composeText.replace(
+      "${MCP_HTTP_TRUSTED_PROXIES:-}",
+      "${MCP_HTTP_TRUSTED_PROXIES:-127.0.0.1}",
+    ),
+    composeText.replace(
+      /^# Required installation-specific values.*$/mu,
+      "# Every installation-specific value is a required variable.",
+    ),
+  ];
+  for (const text of mutations) {
+    expect(text).not.toBe(composeText);
+    expect(() => {
+      validateHygiene("examples/compose.yaml", text);
+    }).toThrow();
+  }
+});
+
+// F-039 AC-11: inspect operator guidance, never the frozen proposal or indexes.
+describe("F-039 audit shutdown documentation", () => {
+  it.each([
+    {
+      path: "README.md",
+      headings: ["Limits and risks", "Connect an AI client"],
+    },
+    {
+      path: "docs/deployment.md",
+      headings: ["Shutdown", "Write and share modes: audit log"],
+    },
+  ])(
+    "TestBR259_v2_AC11_docs_state_audit_bounds_and_ambiguity ($path)",
+    ({ path, headings }) => {
+      const text = readFileSync(path, "utf8");
+      const guidance = headings
+        .map((heading) => {
+          const marker = `\n## ${heading}\n`;
+          const start = text.indexOf(marker);
+          expect(start, `${path}: ${heading}`).toBeGreaterThanOrEqual(0);
+          const content = text.slice(start + marker.length);
+          const end = content.indexOf("\n## ");
+          return end < 0 ? content : content.slice(0, end);
+        })
+        .join(" ")
+        .replaceAll(/\s+/gu, " ");
+      for (const required of [
+        /(?:5,?000\s*ms|5\s*seconds?)/iu,
+        /append/iu,
+        /close/iu,
+        /asynchronous/iu,
+        /(?:permanent|until restart|restart.*(?:latch|refus))/iu,
+        /best.effort.*diagnostic|diagnostic.*best.effort/iu,
+        /(?:late|timed.out).*(?:byte|write|deliver)|(?:byte|write).*(?:later|late)/iu,
+        /75\s*s/iu,
+        /synchronous.*fd\s*2/iu,
+        /(?:file|TTY).*event loop|event loop.*(?:file|TTY)/iu,
+        /timer.*(?:cannot|prevent|not fire)|(?:prevent|block).*timer/iu,
+        /unbounded/iu,
+        /intent.*(?:without|no).*outcome.*ambiguous/iu,
+        /client.*mutation result.*authorit/iu,
+        /(?:shutdown.*HTTP 503|HTTP 503.*shutdown)/iu,
+        /(?:write|fdatasync).*libuv/iu,
+        /threadpool/iu,
+        /(?:teardown|termination).*unbounded|unbounded.*(?:teardown|termination)/iu,
+        /process\.exit/iu,
+        /(?:retain|descriptor|fd).*actual.*terminat/iu,
+        /(?:shared|production).*exit.*(?:helper|flush)/iu,
+        /ref.d.*250\s*ms|250\s*ms.*ref.d/iu,
+        /remaining.*stdio.*budget|stdio.*remaining.*budget/iu,
+        /(?:lost|loss).*stalled pipe|stalled pipe.*(?:lost|loss)/iu,
+        /1,?000\s*ms/iu,
+        /non.committed/iu,
+        /release/iu,
+        /dedicated/iu,
+        /owned|library/iu,
+        /without.*(?:terminat|exit).*host|(?:never|not).*terminat.*host/iu,
+      ])
+        expect
+          .soft(required.test(guidance), `${path}: ${String(required)}`)
+          .toBe(true);
+      expect(guidance).not.toMatch(
+        /stderr[^.]*wait[^.]*unlimited|unlimited[^.]*stderr/iu,
+      );
+    },
+  );
 });

@@ -28,7 +28,9 @@ export interface MainDependencies {
     on(name: Signal, listener: () => void): unknown;
     off(name: Signal, listener: () => void): unknown;
   };
-  readonly exit: (code: number) => void;
+  readonly exit: (code: number, shutdownDeadline?: number) => void;
+  /** Non-terminating status notification for owned stdio hosts. */
+  readonly setExitCode?: (code: number) => void;
   /** Monotonic milliseconds (BR-217 windows). */
   readonly now: () => number;
   readonly lookup: Lookup;
@@ -197,9 +199,9 @@ async function stdio(
           input: owned.input,
           output: owned.output,
           signals: false,
-          setExitCode: deps.exit,
+          setExitCode: deps.setExitCode ?? (() => undefined),
         }
-      : { signals: true }),
+      : { signals: true, exit: deps.exit }),
     diagnostic: (message: string) => {
       deps.stderr.write(message);
     },

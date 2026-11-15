@@ -52,12 +52,12 @@ it("TestBR114_canonical_equivalence removes Flate without changing text", async 
     b = await extractPdf(request(compressed));
   expect(a.text).toBe(b.text);
   expect(a.text).toContain("€ café");
-  const plan = preflightPdf(compressed, 16777216, [1]);
+  const plan = await preflightPdf(compressed, 16777216, [1]);
   expect(Buffer.from(plan.bytes).toString("latin1")).not.toContain(
     "/FlateDecode",
   );
 });
-it("TestBR114_pdf_framing rejects alternate containers before parser", () => {
+it("TestBR114_pdf_framing rejects alternate containers before parser", async () => {
   for (const bytes of [
     Buffer.concat([classicPdf(), Buffer.from("x")]),
     classicPdf().subarray(0, 40),
@@ -71,15 +71,26 @@ it("TestBR114_pdf_framing rejects alternate containers before parser", () => {
     classicPdf(["x"], false, "/F1 Do"),
     classicPdf(["x"], false, "BT /F1 12 Tf <00> Tj ET"),
   ])
-    expect(() => preflightPdf(bytes, 16777216, [1])).toThrow();
+    await expect(preflightPdf(bytes, 16777216, [1])).rejects.toThrow();
 });
-it("TestBR114_pdf_bombs fails aggregate/expansion before PDF.js", () => {
+it("TestBR114_pdf_bombs BR-114 v2 fails aggregate/expansion before PDF.js", async () => {
   const bomb = pdfObjects([
     "<< /Type /Catalog /Pages 2 0 R >>",
     "<< /Type /Pages /Count 0 /Kids [] >>",
     stream(Buffer.alloc(4097, 65), true),
   ]);
-  expect(() => preflightPdf(bomb, 4096, [1])).toThrow("LIMIT_EXCEEDED");
+  // BR-114 v2: a stream no page needs is never inflated; the empty tree refuses.
+  await expect(preflightPdf(bomb, 4096, [1])).rejects.toThrow(
+    "UNSUPPORTED_FORMAT",
+  );
+  const content = classicPdf(
+    [""],
+    true,
+    `BT /F1 12 Tf (a) Tj ET ${"0 0 m ".repeat(700)}`,
+  );
+  await expect(preflightPdf(content, 4096, [1])).rejects.toThrow(
+    "LIMIT_EXCEEDED",
+  );
 });
 it("TestBR114_pdf_producer_admission bounds repeated TJ text at small budgets", async () => {
   const many = classicPdf(
@@ -87,12 +98,12 @@ it("TestBR114_pdf_producer_admission bounds repeated TJ text at small budgets", 
     true,
     `BT /F1 12 Tf [${Array.from({ length: 1200 }, () => "(a) 1").join(" ")}] TJ ET`,
   );
-  expect(() => preflightPdf(many, 4096, [1])).toThrow("LIMIT_EXCEEDED");
-  expect(() =>
+  await expect(preflightPdf(many, 4096, [1])).rejects.toThrow("LIMIT_EXCEEDED");
+  await expect(
     preflightPdf(classicPdf(["x".repeat(4097)]), 16777216, [1]),
-  ).toThrow("LIMIT_EXCEEDED");
+  ).rejects.toThrow("LIMIT_EXCEEDED");
   const bytes = classicPdf(["a".repeat(500)]);
-  const plan = preflightPdf(bytes, 16777216, [1]);
+  const plan = await preflightPdf(bytes, 16777216, [1]);
   expect(plan.producerBytes).toBeGreaterThan(500);
   const actual = await extractPdf(request(bytes));
   expect(Buffer.byteLength(actual.text)).toBeLessThanOrEqual(
@@ -136,7 +147,7 @@ it.each([false, true])(
   },
 );
 
-it("TestBR114_pdf_framing rejects arrays/reuse, duplicate keys, embedded font and Forms", () => {
+it("TestBR114_pdf_framing BR-114 v2 admits arrays/reuse and ToUnicode, still rejects duplicate keys and malformed Type3", async () => {
   const make = (
     contents: string,
     font = "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
@@ -149,19 +160,24 @@ it("TestBR114_pdf_framing rejects arrays/reuse, duplicate keys, embedded font an
       `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents ${contents} ${extra} >>`,
       stream(Buffer.from("BT /F1 12 Tf (hello) Tj ET"), true),
     ]);
+  // BR-114 v2 (F-034 AC-10): content arrays, a ToUnicode CMap with no
+  // entries and a content stream shared by two pages are admitted.
   for (const bytes of [
     make("[5 0 R]"),
-    make("5 0 R", undefined, "/Contents 5 0 R"),
     make(
       "5 0 R",
       "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding /ToUnicode 5 0 R >>",
     ),
+  ])
+    expect((await extractPdf(request(bytes))).text).toBe("hello");
+  for (const bytes of [
+    make("5 0 R", undefined, "/Contents 5 0 R"),
     make(
       "5 0 R",
       "<< /Type /Font /Subtype /Type3 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
     ),
   ])
-    expect(() => preflightPdf(bytes, 16777216, [1])).toThrow();
+    await expect(preflightPdf(bytes, 16777216, [1])).rejects.toThrow();
   const reused = pdfObjects([
     "<< /Type /Catalog /Pages 2 0 R >>",
     "<< /Type /Pages /Count 2 /Kids [4 0 R 6 0 R] >>",
@@ -170,8 +186,8 @@ it("TestBR114_pdf_framing rejects arrays/reuse, duplicate keys, embedded font an
     stream(Buffer.from("BT /F1 12 Tf (one) Tj ET")),
     "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 5 0 R >>",
   ]);
-  expect(() => preflightPdf(reused, 16777216, [1, 2])).toThrow(
-    "UNSUPPORTED_FORMAT",
+  expect((await extractPdf(request(reused, 16777216, [1, 2]))).text).toBe(
+    "one\n\f\none",
   );
 });
 it("TestBR114_pdf_framing never treats delimiter-like strings as object boundaries", async () => {

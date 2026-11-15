@@ -3,6 +3,20 @@ import { existsSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PassThrough } from "node:stream";
+import { EventEmitter } from "node:events";
+import * as auditModule from "../src/audit/sink.js";
+import * as gateModule from "../src/mutation-gate.js";
+import * as configModule from "../src/config.js";
+import * as adapterModule from "../src/kdrive/index.js";
+import * as httpModule from "../src/http/index.js";
+import * as stdioTransportModule from "../src/stdio-transport.js";
+import { main } from "../src/main.js";
+import {
+  FlushPort,
+  processPorts,
+  observed,
+  microtasks,
+} from "./helpers/f039-composition.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/server";
@@ -10,6 +24,7 @@ import { createStderrSink, type AuditSink } from "../src/audit/sink.js";
 import {
   createMutationGate,
   gatedDependencies,
+  type GateResult,
   type Mutator,
 } from "../src/mutation-gate.js";
 import {
@@ -17,8 +32,13 @@ import {
   navigationBinding,
 } from "../src/navigation.js";
 import { startStdioNavigation } from "../src/stdio.js";
-import type { PolicyDependencies } from "../src/policy/index.js";
-import { navigationFixture } from "./helpers/navigation.js";
+import { createPolicy, type PolicyDependencies } from "../src/policy/index.js";
+import type { Operation } from "../src/policy/operation.js";
+import {
+  navigationFixture,
+  plainItem,
+  plainRoot,
+} from "./helpers/navigation.js";
 import { httpFixture } from "./helpers/http.js";
 import { UPSTREAM } from "./helpers/proxy.js";
 import {
@@ -904,7 +924,7 @@ describe("BR-258 and BR-070 v2 mutation invocation lifecycle", () => {
     });
   });
 
-  it("TestBR258_TestBR070_a_429_at_8000_ms_retried_after_5_s_succeeds", async () => {
+  it("TestBR248_v2_AC06_429_at_8000_ms_finishes_without_a_navigation_retry", async () => {
     vi.useFakeTimers();
     let calls = 0;
     const h = await controllerWith(() =>
@@ -913,14 +933,57 @@ describe("BR-258 and BR-070 v2 mutation invocation lifecycle", () => {
         : Promise.resolve(ok()),
     );
     let result: unknown;
-    void h.c
+    let settledAt: number | undefined;
+    const start = performance.now();
+    const pending = h.c
       .mutate("kdrive_rename", renameFile, { kind: "stdio" })
-      .then((r) => (result = r));
-    await vi.advanceTimersByTimeAsync(14_000);
-    expect(result).toEqual({
+      .then((value) => {
+        result = value;
+        settledAt = performance.now() - start;
+      });
+    await vi.advanceTimersByTimeAsync(7_999);
+    expect(result).toBeUndefined();
+    await vi.advanceTimersByTimeAsync(1);
+    const expected = {
       ok: true,
-      value: { result: "succeeded", op: OP, attempts: 2, status: 200 },
-    });
+      value: {
+        result: "failed",
+        op: OP,
+        code: "RATE_LIMITED",
+        attempts: 1,
+        status: 429,
+      },
+    };
+    const base = {
+      v: 1,
+      ts: "2026-11-09T10:00:00.000Z",
+      op: OP,
+      identity: { kind: "stdio" },
+      tool: "kdrive_rename",
+      kind: "rename",
+      drive: 7,
+      ids: { target: 3 },
+    };
+    const records = [
+      { ...base, event: "intent" },
+      {
+        ...base,
+        event: "outcome",
+        result: "failed",
+        attempts: 1,
+        ms: 8_000,
+        status: 429,
+        code: "RATE_LIMITED",
+      },
+    ];
+    expect(result).toEqual(expected);
+    expect(settledAt).toBe(8_000);
+    expect(h.m.records()).toEqual(records);
+    await pending;
+    await vi.advanceTimersByTimeAsync(52_001);
+    expect(h.mutator).toHaveBeenCalledTimes(1);
+    expect(result).toEqual(expected);
+    expect(h.m.records()).toEqual(records);
   });
 
   it("TestBR258_mutate_waits_while_another_invocation_is_active", async () => {
@@ -1020,4 +1083,1359 @@ describe("BR-258 and BR-070 v2 mutation invocation lifecycle", () => {
       value: { result: "succeeded", op: OP, attempts: 1, status: 200 },
     });
   });
+});
+
+// F-037: the real guarded policy, mutable complete evidence and injected writes.
+describe("BR-248 v2 fresh authorization after a rate-limited invocation", () => {
+  const ref = (id: number) => ({ driveId: 101, id });
+  const rename: Operation = {
+    kind: "rename",
+    target: ref(42),
+    name: "renamed",
+  };
+  const limited = (op: string) => ({
+    result: "failed",
+    op,
+    code: "RATE_LIMITED",
+    attempts: 1,
+    status: 429,
+  });
+  const baseFor = (tool: string, operation: Operation, op: string) => ({
+    v: 1,
+    ts: "2026-11-09T10:00:00.000Z",
+    op,
+    identity: { kind: "stdio" },
+    tool,
+    kind: operation.kind,
+    drive: 101,
+    ids: {
+      ...(operation.target ? { target: operation.target.id } : {}),
+      ...(operation.destination
+        ? { destination: operation.destination.id }
+        : {}),
+    },
+  });
+  const limitedRecords = (base: ReturnType<typeof baseFor>) => [
+    { ...base, event: "intent" },
+    {
+      ...base,
+      event: "outcome",
+      result: "failed",
+      attempts: 1,
+      ms: 0,
+      status: 429,
+      code: "RATE_LIMITED",
+    },
+  ];
+
+  function fixture() {
+    const drive = plainRoot(101);
+    const root = plainItem(10, "/r", "dir", [drive], 101);
+    const parent = plainItem(11, "/r/open", "dir", [drive, root], 101);
+    const destination = plainItem(12, "/r/dest", "dir", [drive, root], 101);
+    const secret = plainItem(13, "/r/secret", "dir", [drive, root], 101);
+    const outside = plainItem(20, "/outside", "dir", [drive], 101);
+    const target = plainItem(
+      42,
+      "/r/open/a",
+      "file",
+      [drive, root, parent],
+      101,
+    );
+    const nodes = new Map(
+      [drive, root, parent, destination, secret, outside, target].map(
+        (node) => [node.id, node],
+      ),
+    );
+    const replies = [ok(429, { retryAfter: "5" }), ok()];
+    const mutator = vi.fn<Mutator>(() => Promise.resolve(replies.shift()));
+    let sequence = 0;
+    const defaults = {
+      KDRIVE_ID: "101",
+      KDRIVE_IDS: "101",
+      KDRIVE_MCP_ROOTS: "101:10",
+      KDRIVE_MCP_DENY: "/r/secret/**",
+      KDRIVE_MCP_MODE: "share",
+      KDRIVE_MCP_ALLOW_PUBLIC_LINKS: "1",
+      KDRIVE_MCP_INVITE_DOMAINS: "example.test",
+    };
+    async function compose(env: Record<string, string> = {}) {
+      const f = await navigationFixture({ ...defaults, ...env });
+      const inspect = vi.fn<PolicyDependencies["inspect"]>(
+        (reference, location) => {
+          const node = nodes.get(reference.id);
+          if (!node || reference.driveId !== 101)
+            return Promise.resolve({ status: "missing" });
+          // Original-trash evidence has a historical parent chain in its own
+          // namespace. The live parent remains separately inspectable.
+          return Promise.resolve(
+            structuredClone(
+              location === "original-trash"
+                ? {
+                    ...node,
+                    location,
+                    lifecycle: "trashed",
+                    treeRootId: node.id,
+                    parents: node.parents.map((ancestor) => ({
+                      ...ancestor,
+                      location,
+                    })),
+                  }
+                : node,
+            ),
+          );
+        },
+      );
+      const m = memory();
+      const gate = createMutationGate({
+        mode: f.config.mode,
+        ...(f.config.mode === "read" ? {} : { sink: m.sink }),
+        // Sharing remains injected even for the reconstructed write-mode gate.
+        mutators: Object.fromEntries(
+          [
+            "rename",
+            "move",
+            "replace",
+            "restore",
+            "share-link",
+            "share-invite",
+          ].map((kind) => [kind, mutator]),
+        ),
+        random: (n) => {
+          const offset = sequence++ * 16;
+          return Uint8Array.from({ length: n }, (_, index) => index + offset);
+        },
+        clock: () => new Date("2026-11-09T10:00:00.000Z"),
+        now: () => performance.now(),
+        diagnostic: () => undefined,
+      });
+      const dependencies: PolicyDependencies = {
+        ...f.dependencies,
+        inspect,
+        children: (request) =>
+          Promise.resolve({
+            ...request,
+            status: "complete",
+            entries: [],
+            terminal: true,
+          }),
+      };
+      const policy = createPolicy(
+        f.config,
+        gatedDependencies(dependencies, gate),
+      );
+      const dispatch = vi.fn((operation: Operation) =>
+        policy.dispatch(operation),
+      );
+      return {
+        m,
+        policy,
+        inspect,
+        dispatch,
+        run: (tool: string, operation: Operation) =>
+          gate.run({ tool, operation, identity: { kind: "stdio" }, dispatch }),
+      };
+    }
+    function move(id: number, parentId: number) {
+      const node = nodes.get(id)!;
+      const nextParent = nodes.get(parentId)!;
+      nodes.set(
+        id,
+        plainItem(
+          id,
+          `${nextParent.path}/${node.name}`,
+          node.type,
+          [...nextParent.parents, nextParent],
+          101,
+        ),
+      );
+    }
+    return { compose, nodes, move, mutator, replies };
+  }
+
+  function start(
+    h: Awaited<ReturnType<ReturnType<typeof fixture>["compose"]>>,
+    tool: string,
+    operation: Operation,
+  ) {
+    const state: { result?: GateResult; settledAt?: number } = {};
+    const beginning = performance.now();
+    const pending = h.run(tool, operation).then((value) => {
+      state.result = value;
+      state.settledAt = performance.now() - beginning;
+    });
+    return { state, pending };
+  }
+
+  it("TestBR248_v2_AC02_target_moves_into_denied_directory_during_retry_after", async () => {
+    vi.useFakeTimers();
+    const f = fixture();
+    const h = await f.compose();
+    const base = baseFor("kdrive_rename", rename, OP);
+    const first = start(h, "kdrive_rename", rename);
+    await vi.advanceTimersByTimeAsync(0);
+    // Soft assertions also expose the old code's second upstream call below.
+    expect.soft(first.state.result).toEqual(limited(OP));
+    expect.soft(first.state.settledAt).toBe(0);
+    expect.soft(h.m.records()).toEqual(limitedRecords(base));
+    await vi.advanceTimersByTimeAsync(1_000);
+    f.move(42, 13);
+    await vi.advanceTimersByTimeAsync(4_000);
+    expect(f.mutator).toHaveBeenCalledTimes(1);
+    expect(h.dispatch).toHaveBeenCalledTimes(1);
+    await first.pending;
+    expect(first.state.result).toEqual(limited(OP));
+    expect(h.m.records()).toEqual(limitedRecords(base));
+    const before = h.inspect.mock.calls.length;
+    const second = await h.run("kdrive_rename", rename);
+    const nextOp = "101112131415161718191a1b1c1d1e1f";
+    expect(second).toEqual({
+      result: "denied",
+      op: nextOp,
+      code: "ACCESS_DENIED",
+      attempts: 0,
+    });
+    expect(h.inspect.mock.calls.slice(before)).toEqual([[ref(42), "live"]]);
+    expect(h.m.records().slice(0, 2)).toEqual(limitedRecords(base));
+    expect(h.m.records().slice(2)).toEqual([
+      {
+        ...baseFor("kdrive_rename", rename, nextOp),
+        event: "denied",
+        code: "ACCESS_DENIED",
+      },
+    ]);
+    // This is deny matching on consistent ancestry, not an evidence refusal.
+    expect(await h.policy.check(rename)).toEqual({
+      allowed: false,
+      code: "DENIED_PATH",
+    });
+    await vi.advanceTimersByTimeAsync(55_001);
+    expect(f.mutator).toHaveBeenCalledTimes(1);
+    expect(h.dispatch).toHaveBeenCalledTimes(2);
+    expect(h.m.records()).toEqual([
+      ...limitedRecords(base),
+      {
+        ...baseFor("kdrive_rename", rename, nextOp),
+        event: "denied",
+        code: "ACCESS_DENIED",
+      },
+    ]);
+  });
+
+  it("TestBR248_v2_AC03_unchanged_target_requires_a_new_authorized_invocation", async () => {
+    vi.useFakeTimers();
+    const f = fixture();
+    const h = await f.compose();
+    const base = baseFor("kdrive_rename", rename, OP);
+    const first = start(h, "kdrive_rename", rename);
+    await vi.advanceTimersByTimeAsync(0);
+    expect.soft(first.state.result).toEqual(limited(OP));
+    expect.soft(first.state.settledAt).toBe(0);
+    expect.soft(h.m.records()).toEqual(limitedRecords(base));
+    await vi.advanceTimersByTimeAsync(5_001);
+    expect(f.mutator).toHaveBeenCalledTimes(1);
+    expect(h.dispatch).toHaveBeenCalledTimes(1);
+    await first.pending;
+    expect(first.state.result).toEqual(limited(OP));
+    expect(h.m.records()).toEqual(limitedRecords(base));
+    const before = h.inspect.mock.calls.length;
+    const second = await h.run("kdrive_rename", rename);
+    const nextOp = "101112131415161718191a1b1c1d1e1f";
+    expect(second).toEqual({
+      result: "succeeded",
+      op: nextOp,
+      attempts: 1,
+      status: 200,
+    });
+    expect(h.inspect.mock.calls.slice(before)).toEqual([[ref(42), "live"]]);
+    const nextBase = baseFor("kdrive_rename", rename, nextOp);
+    const records = [
+      { ...nextBase, event: "intent" },
+      {
+        ...nextBase,
+        event: "outcome",
+        result: "succeeded",
+        attempts: 1,
+        ms: 0,
+        status: 200,
+      },
+    ];
+    expect(h.m.records().slice(0, 2)).toEqual(limitedRecords(base));
+    expect(h.m.records().slice(2)).toEqual(records);
+    await vi.advanceTimersByTimeAsync(55_000);
+    expect(f.mutator).toHaveBeenCalledTimes(2);
+    expect(h.dispatch).toHaveBeenCalledTimes(2);
+    expect(h.m.records()).toEqual([...limitedRecords(base), ...records]);
+  });
+
+  const cases: [string, string, Operation, Record<string, string>, string][] = [
+    ["target_outside_root", "kdrive_rename", rename, {}, "OUTSIDE_SCOPE"],
+    [
+      "destination_denied",
+      "kdrive_move",
+      { kind: "move", target: ref(42), destination: ref(12) },
+      {},
+      "DENIED_PATH",
+    ],
+    [
+      "destination_outside_root",
+      "kdrive_move",
+      { kind: "move", target: ref(42), destination: ref(12) },
+      {},
+      "OUTSIDE_SCOPE",
+    ],
+    [
+      "replacement_parent_changed",
+      "kdrive_upload",
+      { kind: "replace", target: ref(42), destination: ref(11), name: "a" },
+      {},
+      "INVALID_OPERATION",
+    ],
+    [
+      "restore_parent_denied",
+      "kdrive_restore",
+      { kind: "restore", target: ref(42) },
+      { KDRIVE_MCP_DENY: "/r/open" },
+      "DENIED_PATH",
+    ],
+    [
+      "configured_root_target",
+      "kdrive_rename",
+      rename,
+      { KDRIVE_MCP_ROOTS: "101:42" },
+      "INVALID_OPERATION",
+    ],
+    [
+      "share_mode_removed",
+      "kdrive_share_link",
+      { kind: "share-link", target: ref(42) },
+      { KDRIVE_MCP_MODE: "write" },
+      "LEVEL_REQUIRED",
+    ],
+    [
+      "domain_removed",
+      "kdrive_share_access",
+      { kind: "share-invite", target: ref(42), domain: "example.test" },
+      { KDRIVE_MCP_INVITE_DOMAINS: "other.test" },
+      "SHARE_RESTRICTED",
+    ],
+    [
+      "public_links_disabled",
+      "kdrive_share_link",
+      { kind: "share-link", target: ref(42) },
+      { KDRIVE_MCP_ALLOW_PUBLIC_LINKS: "0" },
+      "SHARE_RESTRICTED",
+    ],
+    [
+      "read_mode",
+      "kdrive_rename",
+      rename,
+      { KDRIVE_MCP_MODE: "read" },
+      "LEVEL_REQUIRED",
+    ],
+  ];
+  it.each(cases)(
+    "TestBR248_v2_AC04_new_invocation_after_%s_uses_current_authorization",
+    async (row, tool, operation, env, refusal) => {
+      vi.useFakeTimers();
+      const f = fixture();
+      if (row === "configured_root_target") f.nodes.get(42)!.type = "dir";
+      const h = await f.compose();
+      const base = baseFor(tool, operation, OP);
+      const first = start(h, tool, operation);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(first.state.result).toEqual(limited(OP));
+      expect(first.state.settledAt).toBe(0);
+      expect(h.m.records()).toEqual(limitedRecords(base));
+      await first.pending;
+      await vi.advanceTimersByTimeAsync(1_000);
+      const moves: Record<string, [number, number]> = {
+        target_outside_root: [42, 20],
+        destination_denied: [12, 13],
+        destination_outside_root: [12, 20],
+        replacement_parent_changed: [42, 12],
+      };
+      const move = moves[row];
+      if (move) f.move(...move);
+      // Changed configuration is captured by a newly constructed policy/gate.
+      const next = Object.keys(env).length ? await f.compose(env) : h;
+      await vi.advanceTimersByTimeAsync(59_001);
+      expect(f.mutator).toHaveBeenCalledTimes(1);
+      expect(first.state.result).toEqual(limited(OP));
+      expect(h.m.records()).toEqual(limitedRecords(base));
+      const recordOffset = next.m.records().length;
+      const second = await next.run(tool, operation);
+      const nextOp = "101112131415161718191a1b1c1d1e1f";
+      expect(second).toEqual(
+        row === "read_mode"
+          ? { result: "failed", code: "ACCESS_DENIED", attempts: 0 }
+          : {
+              result: "denied",
+              op: nextOp,
+              code: "ACCESS_DENIED",
+              attempts: 0,
+            },
+      );
+      const records =
+        row === "read_mode"
+          ? []
+          : [
+              {
+                ...baseFor(tool, operation, nextOp),
+                event: "denied",
+                code: "ACCESS_DENIED",
+              },
+            ];
+      expect(next.m.records().slice(recordOffset)).toEqual(records);
+      expect(h.m.records().slice(0, 2)).toEqual(limitedRecords(base));
+      // Check the exact policy reason, isolating binding, scope and config
+      // rules from malformed evidence or an unavailable share mutator.
+      expect(await next.policy.check(operation)).toEqual({
+        allowed: false,
+        code: refusal,
+      });
+      expect(f.mutator).toHaveBeenCalledTimes(1);
+      expect(f.replies).toEqual([ok()]);
+      expect(h.m.records()).toEqual([
+        ...limitedRecords(base),
+        ...(next === h ? records : []),
+      ]);
+      if (next !== h) expect(next.m.records()).toEqual(records);
+    },
+  );
+});
+
+// F-039: real gate/sinks with only clocks, process ports and upstream facades injected.
+const F039_RENAME = {
+  kind: "rename",
+  target: { driveId: 101, id: 42 },
+  name: "renamed",
+};
+const F039_FAILED = {
+  result: "failed",
+  op: OP,
+  code: "AUDIT_UNAVAILABLE",
+  attempts: 0,
+};
+function f039Sink(
+  kind: "stderr" | "write" | "sync" | "release",
+  order: string[] = [],
+  releaseRejects = false,
+) {
+  const records: auditModule.AuditRecord[] = [];
+  const callbacks: (() => void)[] = [];
+  const portOperations: (() => void)[] = [];
+  let blocked = true;
+  let releaseCalls = 0;
+  const releases: (() => void)[] = [];
+  const release = () => {
+    releaseCalls++;
+    order.push("release");
+    return releaseRejects
+      ? Promise.reject(new Error("SYNTHETIC_RELEASE_FAILURE"))
+      : new Promise<void>((resolve) => releases.push(resolve));
+  };
+  const port: auditModule.AuditFilePort = {
+    open: () => Promise.resolve(3),
+    fstat: () =>
+      Promise.resolve({ isFile: () => true, uid: 1000, mode: 0o100600 }),
+    geteuid: () => 1000,
+    write: async (_fd, bytes) => {
+      records.push(
+        JSON.parse(Buffer.from(bytes).toString()) as auditModule.AuditRecord,
+      );
+      if (kind === "write" && blocked)
+        await new Promise<void>((resolve) => portOperations.push(resolve));
+      return bytes.length;
+    },
+    fdatasync: async () => {
+      if (kind === "sync" && blocked)
+        await new Promise<void>((resolve) => portOperations.push(resolve));
+    },
+    close: release,
+  };
+  const pending =
+    kind === "stderr"
+      ? Promise.resolve(
+          createStderrSink({
+            write(text, callback) {
+              records.push(JSON.parse(text) as auditModule.AuditRecord);
+              callbacks.push(() => {
+                callback();
+              });
+              if (!blocked) callback();
+              return false;
+            },
+          }),
+        )
+      : auditModule.openFileSink("/synthetic/f039-audit", { port });
+  return {
+    records,
+    callbacks,
+    portOperations,
+    releases,
+    releaseCalls: () => releaseCalls,
+    unblock() {
+      blocked = false;
+      callbacks.at(-1)?.();
+      portOperations.at(-1)?.();
+    },
+    block() {
+      blocked = true;
+    },
+    sink: pending.then(
+      (sink) =>
+        new Proxy({} as AuditSink, {
+          get(_target, key) {
+            const target = sink;
+            if (key === "close")
+              return (...args: unknown[]) => {
+                order.push("sink-close");
+                const close: (deadline?: number) => Promise<void> =
+                  target.close.bind(target);
+                return close(args[0] as number | undefined);
+              };
+            return Reflect.get(target, key, target) as unknown;
+          },
+        }),
+    ),
+  };
+}
+function f039Gate(
+  sink: AuditSink,
+  mutator: Mutator = () => Promise.resolve(ok(200, { value: { id: 42 } })),
+) {
+  const diagnostics: string[] = [];
+  const attempt = vi.fn(mutator);
+  const gate = createMutationGate({
+    mode: "write",
+    sink,
+    mutators: { rename: attempt },
+    random: (n) => Uint8Array.from({ length: n }, (_, i) => i),
+    clock: () => new Date("2026-11-09T10:00:00.000Z"),
+    now: () => performance.now(),
+    diagnostic: (text) => {
+      diagnostics.push(text);
+    },
+  });
+  const run = (dispatch?: (operation: Operation) => Promise<unknown>) =>
+    gate.run({
+      tool: "kdrive_rename",
+      operation: F039_RENAME,
+      identity: { kind: "stdio" },
+      dispatch:
+        dispatch ??
+        (async (operation) => ({
+          ok: true,
+          value: await gate.execute(operation),
+        })),
+    });
+  return { gate, run, attempt, diagnostics };
+}
+
+/** Inject only the startup/upstream/OS ports; retain main -> stdio -> real exit routing. */
+async function f039Main(
+  sink: AuditSink,
+  options: {
+    owned?: boolean;
+    http?: boolean;
+    order?: string[];
+    startFailure?: boolean;
+    transportMs?: number;
+  } = {},
+) {
+  const order = options.order ?? [];
+  const fixture = await navigationFixture({
+    KDRIVE_MCP_MODE: "write",
+    ...(options.http
+      ? { KDRIVE_MCP_TRANSPORT: "http", KDRIVE_MCP_INSECURE_NO_AUTH: "1" }
+      : {}),
+  });
+  const out = new PassThrough();
+  const frames: Record<string, unknown>[] = [];
+  let wireBuffer = "";
+  out.on("data", (bytes: Buffer) => {
+    wireBuffer += bytes.toString();
+    for (;;) {
+      const end = wireBuffer.indexOf("\n");
+      if (end < 0) break;
+      frames.push(
+        JSON.parse(wireBuffer.slice(0, end)) as Record<string, unknown>,
+      );
+      wireBuffer = wireBuffer.slice(end + 1);
+    }
+  });
+  const runs: ReturnType<typeof observed<GateResult>>[] = [];
+  const err = new FlushPort();
+  const ports = processPorts(out, err, () => order.push("exit"));
+  const listeners = new Map(
+    ["SIGINT", "SIGTERM"].map((signal) => [signal, process.listeners(signal)]),
+  );
+  const signals = new EventEmitter();
+  const setExitCode = vi.fn();
+  const originalAdapter = adapterModule.createKdriveAdapter;
+  const originalGate = gateModule.createMutationGate;
+  const mocks: { mockRestore(): void }[] = [
+    vi
+      .spyOn(configModule, "preflightConfiguration")
+      .mockResolvedValue(fixture.config),
+    vi
+      .spyOn(adapterModule, "createKdriveAdapter")
+      .mockImplementation((options_) => {
+        const adapter = originalAdapter(options_);
+        return {
+          ...adapter,
+          dependencies: { ...adapter.dependencies, ...fixture.dependencies },
+        };
+      }),
+    vi.spyOn(auditModule, "openAuditSink").mockResolvedValue(sink),
+  ];
+  let gate!: gateModule.MutationGate;
+  mocks.push(
+    vi
+      .spyOn(gateModule, "createMutationGate")
+      .mockImplementation((options_) => {
+        const real = originalGate({
+          ...options_,
+          random: (n) => Uint8Array.from({ length: n }, (_, i) => i),
+        });
+        gate = new Proxy({} as gateModule.MutationGate, {
+          get(_target, key) {
+            if (key === "run")
+              return async (request: gateModule.GateRun) => {
+                const pending = real.run(request);
+                runs.push(observed(pending));
+                const result = await pending;
+                if (result.audit === "outcome_unrecorded")
+                  order.push("outcome-failure");
+                return result;
+              };
+            if (key === "close")
+              return async (...args: unknown[]) => {
+                const close: (deadline?: number) => Promise<void> =
+                  real.close.bind(real);
+                await close(args[0] as number | undefined);
+                order.push("gate-close");
+              };
+            return Reflect.get(real, key, real) as unknown;
+          },
+        });
+        return gate;
+      }),
+  );
+  if (options.transportMs) {
+    const realTransport = stdioTransportModule.createOwnedStdioTransport;
+    mocks.push(
+      vi
+        .spyOn(stdioTransportModule, "createOwnedStdioTransport")
+        .mockImplementation((...args) => {
+          const transport = realTransport(...args);
+          let notify: (() => void) | undefined;
+          Object.defineProperty(transport, "onclose", {
+            configurable: true,
+            get: () => () => {
+              setTimeout(() => notify?.(), options.transportMs);
+            },
+            set: (listener: (() => void) | undefined) => {
+              notify = listener;
+            },
+          });
+          const close = transport.close.bind(transport);
+          transport.close = async () => {
+            await close();
+            await new Promise<void>((resolve) =>
+              setTimeout(resolve, options.transportMs),
+            );
+          };
+          return transport;
+        }),
+    );
+  }
+  let handler: httpModule.HttpHandler | undefined;
+  if (options.http)
+    mocks.push(
+      vi.spyOn(httpModule, "startHttpServer").mockImplementation((args) => {
+        handler = httpModule.createHttpHandler(args);
+        return Promise.resolve({
+          address: { address: "127.0.0.1", family: "IPv4", port: 3000 },
+          close: async () => {
+            await handler?.close();
+            order.push("transport-close");
+          },
+        });
+      }),
+    );
+  if (options.startFailure) {
+    // Fail an injected input port during the real transport's start.
+    const on = ports.input.on.bind(ports.input);
+    mocks.push(
+      vi.spyOn(ports.input, "on").mockImplementation((event, listener) => {
+        if (event === "data") throw new Error("SYNTHETIC_START_FAILURE");
+        return on(event, listener);
+      }),
+    );
+  }
+  out.on("close", () => order.push("transport-close"));
+  const restore = () => {
+    for (const signal of ["SIGINT", "SIGTERM"])
+      for (const listener of process.listeners(signal))
+        if (!listeners.get(signal)?.includes(listener))
+          process.off(signal, listener);
+    for (const mock of mocks.toReversed()) mock.mockRestore();
+    out.destroy();
+    ports.restore();
+  };
+  try {
+    const handle = await main({
+      ...ports.dependencies,
+      argv: [],
+      env: {
+        KDRIVE_ID: "7",
+        KDRIVE_TOKEN: "SYNTHETIC",
+        KDRIVE_MCP_MODE: "write",
+        ...(options.http
+          ? { KDRIVE_MCP_TRANSPORT: "http", KDRIVE_MCP_INSECURE_NO_AUTH: "1" }
+          : {}),
+      },
+      ...(options.owned
+        ? { protocol: { input: ports.input, output: out }, setExitCode }
+        : {}),
+      signals: {
+        on: (name, fn) => signals.on(name, fn),
+        off: (name, fn) => signals.off(name, fn),
+      },
+      mutators: {
+        rename: () => Promise.resolve(ok(200, { value: { id: 42 } })),
+      },
+    });
+    return {
+      ports,
+      out,
+      err,
+      setExitCode,
+      gate,
+      handle,
+      handler,
+      fixture,
+      frames,
+      runs,
+      async wireMutation(deny = false) {
+        if (deny) fixture.inspect.mockResolvedValue({ status: "absent" });
+        const send = (frame: unknown) => {
+          ports.input.write(`${JSON.stringify(frame)}\n`);
+        };
+        send({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "initialize",
+          params: {
+            protocolVersion: "2025-06-18",
+            capabilities: {},
+            clientInfo: { name: "f039", version: "1" },
+          },
+        });
+        await vi.advanceTimersByTimeAsync(0);
+        await microtasks();
+        expect(frames.some((frame) => frame.id === 1)).toBe(true);
+        send({ jsonrpc: "2.0", method: "notifications/initialized" });
+        await vi.advanceTimersByTimeAsync(0);
+        hooks.operation = {
+          kind: "rename",
+          target: { driveId: 7, id: 3 },
+          name: "b",
+        };
+        send({
+          jsonrpc: "2.0",
+          id: 39,
+          method: "tools/call",
+          params: { name: "test_mutate", arguments: {} },
+        });
+        await vi.advanceTimersByTimeAsync(0);
+        await microtasks();
+        expect(runs).toHaveLength(1);
+        return runs[0]!;
+      },
+      restore,
+      order,
+      signal(name: "EOF" | "SIGINT" | "SIGTERM") {
+        if (name === "EOF") ports.input.end();
+        else if (options.http || options.owned) signals.emit(name);
+        else
+          for (const listener of process.listeners(name))
+            if (!listeners.get(name)?.includes(listener)) listener(name);
+      },
+      runDenied: () =>
+        gate.run({
+          tool: "kdrive_rename",
+          operation: F039_RENAME,
+          identity: { kind: "stdio" },
+          dispatch: () => Promise.resolve({ ok: false, code: "ACCESS_DENIED" }),
+        }),
+      run: () =>
+        gate.run({
+          tool: "kdrive_rename",
+          operation: F039_RENAME,
+          identity: { kind: "stdio" },
+          dispatch: async (operation) => ({
+            ok: true,
+            value: await gate.execute(operation),
+          }),
+        }),
+    };
+  } catch (error) {
+    restore();
+    throw error;
+  }
+}
+
+describe("F-039 bounded audit composition", () => {
+  it.each(["stalled-intent", "pre-intent"] as const)(
+    "TestBR254_v2_AC08_gate_close_preserves_attempt_and_bounds_audit_waits [%s]",
+    async (row) => {
+      vi.useFakeTimers();
+      const s = f039Sink("stderr");
+      const h = f039Gate(await s.sink);
+      let policyDone!: () => void;
+      const policy = new Promise<void>((resolve) => {
+        policyDone = resolve;
+      });
+      const result = observed(
+        h.run(
+          row === "pre-intent"
+            ? async (operation) => {
+                await policy;
+                return { ok: true, value: await h.gate.execute(operation) };
+              }
+            : undefined,
+        ),
+      );
+      await microtasks();
+      const closing = observed(h.gate.close());
+      if (row === "pre-intent") {
+        await vi.advanceTimersByTimeAsync(100);
+        policyDone();
+      }
+      await vi.advanceTimersByTimeAsync(row === "pre-intent" ? 0 : 5000);
+      expect(result.value).toEqual(
+        row === "pre-intent"
+          ? { result: "failed", op: OP, code: "CANCELLED", attempts: 0 }
+          : F039_FAILED,
+      );
+      expect(closing).toEqual({ settled: true, value: undefined });
+      expect(performance.now()).toBeLessThanOrEqual(45000);
+      expect(h.attempt).not.toHaveBeenCalled();
+      expect(s.records.map((record) => record.event)).toEqual(
+        row === "pre-intent" ? [] : ["intent"],
+      );
+      expect(await h.run()).toEqual({
+        result: "failed",
+        code: "AUDIT_UNAVAILABLE",
+        attempts: 0,
+      });
+    },
+  );
+
+  it("TestBR070_v5_AC08_shutdown_keeps_committed_result_semantics", async () => {
+    vi.useFakeTimers();
+    const s = f039Sink("sync");
+    let late!: (value: unknown) => void;
+    let signal: AbortSignal | undefined;
+    const h = f039Gate(
+      await s.sink,
+      async (_operation, _payload, cancellation) => {
+        signal = cancellation;
+        return new Promise((resolve) => {
+          late = resolve;
+        });
+      },
+    );
+    const result = observed(h.run());
+    await vi.advanceTimersByTimeAsync(4999);
+    s.unblock();
+    await microtasks();
+    s.block();
+    expect(h.attempt).toHaveBeenCalledTimes(1);
+    const at = performance.now(),
+      closing = observed(h.gate.close());
+    await vi.advanceTimersByTimeAsync(29999);
+    expect(signal?.aborted).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(signal?.aborted).toBe(true);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(result.value).toEqual({
+      result: "uncertain",
+      op: OP,
+      code: "UPSTREAM_UNCERTAIN",
+      attempts: 1,
+      audit: "outcome_unrecorded",
+      message: gateModule.UNCERTAIN_MESSAGE,
+    });
+    // Settle the already-issued sync so file release can legally start, then stall release.
+    s.portOperations.at(-1)?.();
+    await microtasks();
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(closing).toEqual({ settled: true, value: undefined });
+    expect(performance.now() - at).toBeLessThanOrEqual(45000);
+    expect(s.releaseCalls()).toBe(1);
+    late(ok(200));
+    await microtasks();
+    expect(result.value?.result).toBe("uncertain");
+    expect(await h.run()).toEqual({
+      result: "failed",
+      code: "AUDIT_UNAVAILABLE",
+      attempts: 0,
+    });
+  });
+
+  it("TestBR070_v5_AC11_audit_timeout_releases_navigation_slot", async () => {
+    vi.useFakeTimers();
+    const fixture = await navigationFixture({ KDRIVE_MCP_MODE: "write" });
+    const s = f039Sink("stderr"),
+      h = f039Gate(await s.sink);
+    const controller = createNavigationController(
+      fixture.config,
+      gatedDependencies(fixture.dependencies, h.gate),
+      undefined,
+      { gate: h.gate },
+    );
+    const result = observed(
+      controller.mutate(
+        "kdrive_rename",
+        { kind: "rename", target: { driveId: 7, id: 3 }, name: "b" },
+        { kind: "stdio" },
+      ),
+    );
+    await microtasks();
+    const read = observed(controller.invoke("kdrive_info", { file_id: 3 }));
+    await vi.advanceTimersByTimeAsync(4999);
+    expect(read.settled).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(result.value).toEqual({ ok: true, value: F039_FAILED });
+    expect(read.settled).toBe(true);
+    expect(read.value?.isError).toBeUndefined();
+    expect(h.attempt).not.toHaveBeenCalled();
+    controller.close();
+  });
+});
+
+const F039_SIGNALS = ["EOF", "SIGINT", "SIGTERM"] as const;
+describe("F-039 dedicated and owned shutdown", () => {
+  it("TestBR070_v5_AC13_commit_during_transport_close_omits_exit_deadline", async () => {
+    vi.useFakeTimers();
+    const s = f039Sink("stderr");
+    const h = await f039Main(await s.sink, { transportMs: 200 });
+    try {
+      let commit!: () => void;
+      const dispatched = new Promise<void>((resolve) => {
+        commit = resolve;
+      });
+      const result = observed(
+        h.gate.run({
+          tool: "kdrive_rename",
+          operation: F039_RENAME,
+          identity: { kind: "stdio" },
+          dispatch: async (operation) => {
+            await dispatched;
+            return h.gate.execute(operation);
+          },
+        }),
+      );
+      expect(h.gate.hasCommitted).toBe(false);
+      h.signal("SIGTERM");
+      await vi.advanceTimersByTimeAsync(100);
+      commit();
+      await microtasks();
+      expect(h.gate.hasCommitted).toBe(true);
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(result.value).toEqual(F039_FAILED);
+      expect(h.order).toContain("gate-close");
+      expect(h.ports.exits).toEqual([]);
+      expect(h.err.callbacks).toHaveLength(1);
+      await vi.advanceTimersByTimeAsync(249);
+      expect(h.ports.exits).toEqual([]);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(h.ports.exits).toEqual([{ code: 0, at: 5350 }]);
+    } finally {
+      h.restore();
+    }
+  });
+
+  it("TestBR254_v2_AC09_throwing_shorten_deadline_drains_run_and_releases_file_before_close", async () => {
+    vi.useFakeTimers();
+    const s = f039Sink("release");
+    const sink = await s.sink;
+    const shortenDeadline = vi.fn(() => {
+      throw new Error("SYNTHETIC_SHORTEN_FAILURE");
+    });
+    const close = vi.fn((deadline?: number) => sink.close(deadline));
+    const h = f039Gate({
+      append: (record) => sink.append(record),
+      get latched() {
+        return sink.latched;
+      },
+      latch: () => {
+        sink.latch();
+      },
+      close,
+      onLatch: (listener) => sink.onLatch?.(listener),
+      shortenDeadline,
+    });
+    let policyDone!: () => void;
+    const policy = new Promise<void>((resolve) => {
+      policyDone = resolve;
+    });
+    const result = observed(
+      h.run(async (operation) => {
+        await policy;
+        return { ok: true, value: await h.gate.execute(operation) };
+      }),
+    );
+    await microtasks();
+    expect(result.settled).toBe(false);
+    const deadline = performance.now() + 1000;
+    const closing = observed(h.gate.close(deadline));
+    await microtasks();
+    expect(shortenDeadline).toHaveBeenCalledExactlyOnceWith(deadline);
+    expect(sink.latched).toBe(true);
+    expect(h.diagnostics).toEqual([gateModule.OUTCOME_UNRECORDED_DIAGNOSTIC]);
+    expect(closing.settled).toBe(false);
+    expect(close).not.toHaveBeenCalled();
+    expect(s.releaseCalls()).toBe(0);
+
+    policyDone();
+    await microtasks();
+    expect(result.value).toEqual({
+      result: "failed",
+      op: OP,
+      code: "CANCELLED",
+      attempts: 0,
+    });
+    expect(h.attempt).not.toHaveBeenCalled();
+    expect(close).toHaveBeenCalledExactlyOnceWith(deadline);
+    expect(s.releaseCalls()).toBe(1);
+    expect(closing.settled).toBe(false);
+
+    s.releases[0]!();
+    await microtasks();
+    expect(closing).toEqual({ settled: true, value: undefined });
+  });
+
+  it("TestBR254_v2_AC09_throwing_shorten_deadline_still_reaches_stdio_exit", async () => {
+    vi.useFakeTimers();
+    const s = f039Sink("stderr");
+    const sink = await s.sink;
+    const shortenDeadline = vi.fn(() => {
+      throw new Error("SYNTHETIC_SHORTEN_FAILURE");
+    });
+    const h = await f039Main({
+      append: (record) => sink.append(record),
+      get latched() {
+        return sink.latched;
+      },
+      latch: () => {
+        sink.latch();
+      },
+      close: (deadline) => sink.close(deadline),
+      onLatch: (listener) => sink.onLatch?.(listener),
+      shortenDeadline,
+    });
+    try {
+      const closing = observed(h.handle!.close());
+      await vi.advanceTimersByTimeAsync(250);
+      expect(closing).toEqual({ settled: true, value: undefined });
+      expect(shortenDeadline).toHaveBeenCalledTimes(1);
+      expect(sink.latched).toBe(true);
+      expect(h.err.writes).toContain(gateModule.OUTCOME_UNRECORDED_DIAGNOSTIC);
+      expect(h.ports.exits).toEqual([{ code: 0, at: 250 }]);
+      await h.handle!.close();
+      expect(shortenDeadline).toHaveBeenCalledTimes(1);
+    } finally {
+      h.restore();
+    }
+  });
+
+  it.each(
+    F039_SIGNALS.flatMap((signal) =>
+      [false, true].map((rejects) => ({ signal, rejects })),
+    ),
+  )(
+    "TestBR070_v5_AC09_idle_stdio_exit_bound_is_unchanged [$signal releaseRejects=$rejects]",
+    async ({ signal, rejects }) => {
+      vi.useFakeTimers();
+      const order: string[] = [],
+        s = f039Sink("release", order, rejects);
+      const h = await f039Main(await s.sink, { order });
+      try {
+        h.signal(signal);
+        await vi.advanceTimersByTimeAsync(999);
+        if (!rejects) expect(h.ports.exits).toEqual([]);
+        await vi.advanceTimersByTimeAsync(1);
+        expect(h.ports.exits).toHaveLength(1);
+        expect(h.ports.exits[0]?.code).toBe(0);
+        expect(h.ports.exits[0]?.at).toBeLessThanOrEqual(1000);
+        expect(order.indexOf("sink-close")).toBeLessThan(
+          order.indexOf("gate-close"),
+        );
+        expect(s.releaseCalls()).toBe(1);
+        expect(observed(h.gate.close()).error).toBeUndefined();
+      } finally {
+        h.restore();
+      }
+    },
+  );
+
+  const deniedRows = F039_SIGNALS.flatMap((signal) =>
+    ["stderr", "write", "sync", "release", "positive-flush"].map((kind) => ({
+      signal,
+      kind,
+    })),
+  );
+  it.each(deniedRows)(
+    "TestBR070_v5_AC13_denied_append_shares_remaining_stdio_shutdown_budget [$signal $kind]",
+    async ({ signal, kind }) => {
+      vi.useFakeTimers();
+      const sinkKind =
+        kind === "positive-flush" || kind === "release"
+          ? "sync"
+          : (kind as "stderr" | "write" | "sync" | "release");
+      const s = f039Sink(sinkKind),
+        h = await f039Main(await s.sink, { transportMs: 200 });
+      try {
+        const result = await h.wireMutation(true);
+        await vi.advanceTimersByTimeAsync(100);
+        h.signal(signal);
+        await vi.advanceTimersByTimeAsync(200);
+        if (kind === "release" || kind === "positive-flush") {
+          // Acknowledge at 400ms, leaving 700ms for release and flush.
+          await vi.advanceTimersByTimeAsync(100);
+          s.unblock();
+          await microtasks();
+          if (kind === "positive-flush") {
+            await vi.advanceTimersByTimeAsync(600);
+            s.releases[0]?.();
+            await microtasks();
+          }
+        }
+        // A repeated signal cannot extend either shutdown deadline.
+        if (signal !== "EOF") h.signal(signal);
+        await vi.advanceTimersByTimeAsync(1099 - performance.now());
+        expect(h.ports.exits).toEqual([]);
+        if (!["release", "positive-flush"].includes(kind))
+          expect(result.settled).toBe(false);
+        await vi.advanceTimersByTimeAsync(1);
+        expect(result.value).toEqual({
+          result: "denied",
+          op: OP,
+          code: "ACCESS_DENIED",
+          attempts: 0,
+        });
+        expect(s.records.map((record) => record.event)).toEqual(["denied"]);
+        expect(h.ports.exits).toEqual([{ code: 0, at: 1100 }]);
+        const diagnostics = h.err.writes.filter(
+          (text) => text === gateModule.OUTCOME_UNRECORDED_DIAGNOSTIC,
+        );
+        expect(diagnostics).toHaveLength(kind === "positive-flush" ? 0 : 1);
+        if (kind === "write" || kind === "sync")
+          expect(s.releaseCalls()).toBe(0);
+        // Destroyed stdout is already complete; stderr's flush proves shared-helper routing.
+        if (kind === "positive-flush") expect(h.err.callbacks).toHaveLength(1);
+        s.unblock();
+        s.releases[0]?.();
+        await vi.advanceTimersByTimeAsync(5000);
+        expect(h.ports.exits).toHaveLength(1);
+        expect(h.frames.filter((frame) => frame.id === 39)).toEqual([]);
+      } finally {
+        h.restore();
+      }
+    },
+  );
+
+  it.each(["healthy", "output-failed", "start-failed"] as const)(
+    "TestBR070_v5_AC13_denied_append_shares_remaining_stdio_shutdown_budget [owned %s]",
+    async (row) => {
+      vi.useFakeTimers();
+      const s = f039Sink("stderr");
+      s.unblock();
+      const h = await f039Main(await s.sink, {
+        owned: true,
+        startFailure: row === "start-failed",
+      });
+      try {
+        if (row === "output-failed")
+          h.out.emit("error", new Error("SYNTHETIC_OUTPUT_FAILURE"));
+        else h.signal("EOF");
+        await vi.advanceTimersByTimeAsync(1000);
+        const closed = observed(h.handle?.close() ?? Promise.resolve());
+        await microtasks();
+        expect(closed).toEqual({ settled: true, value: undefined });
+        expect(h.ports.exits).toEqual([]);
+        expect(process.exitCode).toBeUndefined();
+        expect(h.setExitCode.mock.calls).toEqual(
+          row === "healthy" ? [] : [[1]],
+        );
+        expect(h.err.callbacks).toHaveLength(0);
+      } finally {
+        h.restore();
+      }
+    },
+  );
+
+  it.each(["output-failed", "start-failed"] as const)(
+    "TestBR070_v5_AC13_denied_append_shares_remaining_stdio_shutdown_budget [dedicated %s code1]",
+    async (row) => {
+      vi.useFakeTimers();
+      const s = f039Sink("stderr");
+      s.unblock();
+      const h = await f039Main(await s.sink, {
+        startFailure: row === "start-failed",
+      });
+      try {
+        if (row === "output-failed")
+          h.out.emit("error", new Error("SYNTHETIC_OUTPUT_FAILURE"));
+        await vi.advanceTimersByTimeAsync(1000);
+        expect(h.err.writes).toContain(
+          row === "output-failed"
+            ? "STDIO_OUTPUT_FAILED\n"
+            : "STDIO_START_FAILED\n",
+        );
+        expect(h.ports.exits).toHaveLength(1);
+        expect(h.ports.exits[0]?.code).toBe(1);
+        expect(h.err.callbacks).toHaveLength(1);
+      } finally {
+        h.restore();
+      }
+    },
+  );
+});
+
+const F039_OUTCOME_ROWS = [
+  ...F039_SIGNALS.flatMap((signal) =>
+    [false, true].map((rejects) => ({ transport: "stdio", signal, rejects })),
+  ),
+  ...(["SIGINT", "SIGTERM"] as const).flatMap((signal) =>
+    [false, true].map((rejects) => ({ transport: "http", signal, rejects })),
+  ),
+];
+describe("F-039 production shutdown ordering", () => {
+  it.each(F039_OUTCOME_ROWS)(
+    "TestBR254_v2_AC09_stdio_and_HTTP_shutdown_do_not_wait_for_stderr [$transport $signal releaseRejects=$rejects]",
+    async ({ transport, signal, rejects }) => {
+      vi.useFakeTimers();
+      const order: string[] = [];
+      const s = f039Sink(rejects ? "sync" : "stderr", order, rejects);
+      const h = await f039Main(await s.sink, {
+        http: transport === "http",
+        order,
+      });
+      try {
+        let wire: ReturnType<typeof observed<Response>> | undefined;
+        let result: ReturnType<typeof observed<GateResult>> | undefined;
+        if (transport === "http") {
+          const send = (body: unknown, session?: string) =>
+            h.handler!.handle(
+              new Request("http://127.0.0.1:3000/", {
+                method: "POST",
+                headers: {
+                  host: "127.0.0.1:3000",
+                  accept: "application/json, text/event-stream",
+                  "content-type": "application/json",
+                  ...(session
+                    ? {
+                        "mcp-session-id": session,
+                        "mcp-protocol-version": "2025-06-18",
+                      }
+                    : {}),
+                },
+                body: JSON.stringify(body),
+              }),
+              "/",
+              "127.0.0.1",
+            );
+          const init = await send({
+            jsonrpc: "2.0",
+            id: 1,
+            method: "initialize",
+            params: {
+              protocolVersion: "2025-06-18",
+              capabilities: {},
+              clientInfo: { name: "f039", version: "1" },
+            },
+          });
+          const session = init.headers.get("mcp-session-id") ?? "";
+          await init.text();
+          await (
+            await send(
+              { jsonrpc: "2.0", method: "notifications/initialized" },
+              session,
+            )
+          ).text();
+          hooks.operation = {
+            kind: "rename",
+            target: { driveId: 7, id: 3 },
+            name: "b",
+          };
+          wire = observed(
+            send(
+              {
+                jsonrpc: "2.0",
+                id: 2,
+                method: "tools/call",
+                params: { name: "test_mutate", arguments: {} },
+              },
+              session,
+            ),
+          );
+        } else result = await h.wireMutation();
+        await microtasks();
+        // Acknowledge intent only, then hold outcome's stderr callback or file sync.
+        s.callbacks[0]?.();
+        s.portOperations[0]?.();
+        await microtasks();
+        expect(s.records.map((record) => record.event)).toEqual([
+          "intent",
+          "outcome",
+        ]);
+        h.signal(signal);
+        await vi.advanceTimersByTimeAsync(0);
+        if (wire) {
+          expect(wire.value?.status).toBe(503);
+          await wire.value?.text();
+        }
+        expect(h.ports.exits).toEqual([]);
+        await vi.advanceTimersByTimeAsync(5000);
+        if (result)
+          expect(result.value).toEqual({
+            result: "succeeded",
+            op: OP,
+            attempts: 1,
+            status: 200,
+            value: { id: 42 },
+            audit: "outcome_unrecorded",
+          });
+        if (rejects) {
+          s.portOperations.at(-1)?.();
+          await microtasks();
+        }
+        await vi.advanceTimersByTimeAsync(250);
+        expect(h.ports.exits).toHaveLength(1);
+        expect(h.ports.exits[0]?.code).toBe(0);
+        expect(order.filter((step) => step !== "release")).toEqual([
+          "transport-close",
+          "outcome-failure",
+          "sink-close",
+          "gate-close",
+          "exit",
+        ]);
+        // A rejecting release is contained: gate close resolves and the real helper is reached.
+        const closing = observed(h.gate.close());
+        await microtasks();
+        expect(closing).toEqual({ settled: true, value: undefined });
+        expect(h.err.callbacks.length).toBeGreaterThanOrEqual(1);
+        if (transport === "stdio")
+          expect(h.frames.filter((frame) => frame.id === 39)).toEqual([]);
+      } finally {
+        h.restore();
+      }
+    },
+  );
 });

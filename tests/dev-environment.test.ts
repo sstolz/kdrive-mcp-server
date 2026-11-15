@@ -329,7 +329,13 @@ it("BR-014 scanner-only credential mount and writable cache/work preserve dev is
   );
   expect(
     JSON.parse(readFileSync("package.json", "utf8")) as { files: string[] },
-  ).toHaveProperty("files", ["dist/", "LICENSE", "NOTICE", "README.md"]);
+  ).toHaveProperty("files", [
+    "dist/",
+    "LICENSE",
+    "LICENSES/",
+    "NOTICE",
+    "README.md",
+  ]);
 });
 
 it("BR-014 outer shared deadline terminates invocation-owned containers and prevents later upload", () => {

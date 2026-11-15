@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import * as proxyModule from "../../src/auth/proxy/index.js";
 import type { ProxyResponse } from "../../src/auth/proxy/index.js";
 import { proxyStateSnapshot } from "../../src/auth/proxy/proxy.js";
 import type {
@@ -16,6 +17,7 @@ import {
   SECOND,
   UPSTREAM_SECRET,
   b64url,
+  counterRandom,
   harness,
   header,
   json,
@@ -28,6 +30,7 @@ import {
   s256,
   type Harness,
   type HarnessOptions,
+  type Login,
 } from "../helpers/proxy.js";
 import { createClientMetadataFetch } from "../../src/auth/proxy/client-metadata-fetch.js";
 import {
@@ -46,6 +49,218 @@ import {
 afterEach(() => {
   removeStateFiles();
   vi.restoreAllMocks();
+});
+
+// F-036: exercise each refusal-table branch with and without the optional logger.
+const CODE_REFUSALS = [
+  "absent",
+  "empty",
+  "unknown",
+  "expired fresh",
+  "expired consumed",
+  "client",
+  "redirect",
+  "verifier",
+  "resource",
+  "replay with family",
+  "replay after deletion",
+  "replay without refresh grant",
+] as const;
+type CodeRefusal = (typeof CODE_REFUSALS)[number];
+const CODE_GRANT_REFUSED = {
+  name: "token_refused",
+  fields: { handler: "token", error: "invalid_grant", status: 400 },
+};
+const CODE_TARGET_REFUSED = {
+  name: "token_refused",
+  fields: { handler: "token", error: "invalid_target", status: 400 },
+};
+const CODE_FAMILY_REVOKED = {
+  name: "refresh_family_revoked",
+  fields: { handler: "token" },
+};
+const CODE_REDIRECT = "https://synthetic-code-client.test/callback";
+const CODE_SUBJECT = "SYNTHETIC-CODE-SUBJECT";
+const CODE_EMAIL = "synthetic-code-owner@example.test";
+const CODE_RESOURCE = "https://synthetic-code-resource.test/mcp";
+const CODE_UNKNOWN = "SYNTHETIC-UNKNOWN-AUTHORIZATION-CODE";
+const CODE_VERIFIER = `SYNTHETIC-WRONG-VERIFIER-${"w".repeat(24)}`;
+
+async function codeRefusalHarness(logger: boolean) {
+  const options: HarnessOptions = {
+    redirects: [CODE_REDIRECT],
+    subjects: [CODE_SUBJECT],
+    emails: [CODE_EMAIL],
+    random: counterRandom("F036-SYNTHETIC-REQUEST-VALUES"),
+  };
+  if (logger) return harness(options);
+  // Keep the shared harness intact; omit only the factory's optional logger.
+  const create = proxyModule.createOAuthProxy;
+  const factory = vi
+    .spyOn(proxyModule, "createOAuthProxy")
+    .mockImplementation((input) => {
+      const withoutLogger = { ...input };
+      delete withoutLogger.logger;
+      return create(withoutLogger);
+    });
+  try {
+    return await harness(options);
+  } finally {
+    factory.mockRestore();
+  }
+}
+
+function codeRefusalExtra(
+  kind: CodeRefusal,
+): Record<string, string | undefined> {
+  switch (kind) {
+    case "absent":
+      return { code: undefined };
+    case "empty":
+      return { code: "" };
+    case "unknown":
+      return { code: CODE_UNKNOWN };
+    case "redirect":
+      return { redirect_uri: `${CODE_REDIRECT}/wrong` };
+    case "verifier":
+      return { code_verifier: CODE_VERIFIER };
+    case "resource":
+      return { resource: CODE_RESOURCE };
+    default:
+      return {};
+  }
+}
+
+async function prepareCodeRefusal(h: Harness, kind: CodeRefusal, done: Login) {
+  const tokens: string[] = [];
+  if (kind.startsWith("replay") || kind === "expired consumed") {
+    const accepted = await h.redeem(done);
+    expect(accepted.status).toBe(200);
+    const issued = json(accepted);
+    tokens.push(issued.access_token as string);
+    if (typeof issued.refresh_token === "string")
+      tokens.push(issued.refresh_token);
+  }
+  if (kind === "replay after deletion") {
+    expect((await h.redeem(done)).status).toBe(400);
+  }
+  if (kind.startsWith("expired")) h.clock.advance(60_000);
+  return tokens;
+}
+
+async function captureCodeRefusal(kind: CodeRefusal, logger: boolean) {
+  const h = await codeRefusalHarness(logger);
+  const registration = {
+    redirect_uris: [CODE_REDIRECT],
+    token_endpoint_auth_method: "client_secret_post",
+    grant_types:
+      kind === "replay without refresh grant"
+        ? ["authorization_code"]
+        : ["authorization_code", "refresh_token"],
+  };
+  const client = await h.register(registration);
+  const other = await h.register(registration);
+  const done = await h.login(client, {
+    sub: CODE_SUBJECT,
+    email: CODE_EMAIL,
+    email_verified: true,
+  });
+  const tokens = await prepareCodeRefusal(h, kind, done);
+  const extra = codeRefusalExtra(kind);
+  h.logs.length = 0;
+  const response = await h.redeem(
+    done,
+    extra,
+    kind === "client" ? other : client,
+  );
+  const expected =
+    kind === "replay with family"
+      ? [CODE_FAMILY_REVOKED, CODE_GRANT_REFUSED]
+      : [kind === "resource" ? CODE_TARGET_REFUSED : CODE_GRANT_REFUSED];
+  const state = proxyStateSnapshot(h.proxy) as {
+    codes: unknown;
+    families: unknown;
+    clients: unknown;
+  };
+  return {
+    response,
+    logs: h.logs,
+    expected,
+    state: {
+      codes: state.codes,
+      families: state.families,
+      clients: state.clients,
+    },
+    values: [
+      done.code,
+      done.verifier,
+      client.clientId,
+      client.clientSecret!,
+      other.clientId,
+      other.clientSecret!,
+      CODE_REDIRECT,
+      CODE_SUBJECT,
+      CODE_EMAIL,
+      PUBLIC_URL,
+      CODE_RESOURCE,
+      CODE_UNKNOWN,
+      CODE_VERIFIER,
+      UPSTREAM_SECRET,
+      ...tokens,
+    ],
+  };
+}
+
+it("BR-137 v3 BR-143 v4 AC-06 code refusal events contain only fixed fields", async () => {
+  for (const kind of CODE_REFUSALS) {
+    const captured = await captureCodeRefusal(kind, true);
+    expect(captured.response.status).toBe(400);
+    expect(captured.response.body).toBe(
+      JSON.stringify({
+        error: kind === "resource" ? "invalid_target" : "invalid_grant",
+      }),
+    );
+    expect(header(captured.response, "cache-control")).toBe("no-store");
+    expect(header(captured.response, "pragma")).toBe("no-cache");
+    expect(captured.logs).toEqual(captured.expected);
+    const serialized = JSON.stringify(captured.logs);
+    expect(serialized).not.toContain('"reason"');
+    for (const value of captured.values)
+      expect(serialized).not.toContain(value);
+  }
+});
+
+it("BR-137 v3 AC-06 code refusals work without a logger", async () => {
+  const stdout = vi
+    .spyOn(process.stdout, "write")
+    .mockImplementation(() => true);
+  const stderr = vi
+    .spyOn(process.stderr, "write")
+    .mockImplementation(() => true);
+  const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+  const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+  try {
+    for (const kind of CODE_REFUSALS) {
+      const captured = await captureCodeRefusal(kind, true);
+      const silent = await captureCodeRefusal(kind, false);
+      expect(silent.response).toEqual(captured.response);
+      expect(silent.state).toEqual(captured.state);
+      expect(silent.logs).toEqual([]);
+      expect(captured.logs).toEqual(captured.expected);
+    }
+    expect(stdout).not.toHaveBeenCalled();
+    expect(stderr).not.toHaveBeenCalled();
+    expect(log).not.toHaveBeenCalled();
+    expect(warn).not.toHaveBeenCalled();
+    expect(error).not.toHaveBeenCalled();
+  } finally {
+    stdout.mockRestore();
+    stderr.mockRestore();
+    log.mockRestore();
+    warn.mockRestore();
+    error.mockRestore();
+  }
 });
 
 const EVENTS = [

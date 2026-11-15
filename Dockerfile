@@ -26,6 +26,7 @@ WORKDIR /app
 COPY --from=build /build/dist/ /app/dist/
 COPY --from=deps /deps/node_modules/ /app/node_modules/
 COPY --chmod=0644 package.json package-lock.json LICENSE NOTICE README.md /app/
+COPY --chmod=0644 LICENSES/Apache-2.0.txt /app/LICENSES/
 STOPSIGNAL SIGTERM
 EXPOSE 3000
 # F-021 BR-327: liveness probe of the HTTP runtime (docs/deployment.md, Health check).
