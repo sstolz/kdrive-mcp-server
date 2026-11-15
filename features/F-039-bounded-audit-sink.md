@@ -52,7 +52,10 @@ rewriting a known successful upstream result as a failed operation.
   audit schema changes, new event types, rotation, reconciliation or replay.
 - Stronger stderr durability, cancelling bytes already handed to the OS,
   a worker/process isolation redesign, or a hard real-time guarantee during
-  synchronous event-loop blockage or process suspension.
+  synchronous event-loop blockage or process suspension. In particular,
+  Node's synchronous fd 2 writes to a file or TTY can block the event loop
+  so no timer can fire; these waits are unbounded and outside the append
+  and shutdown guarantees. README/deployment guidance must name them.
 - Source/test edits, test execution, Docker, network, commits, review,
   freeze, PR publication, implementation, acceptance and release in this
   assignment. The owner explicitly authorizes Codex to author this draft;
@@ -74,14 +77,19 @@ rewriting a known successful upstream result as a failed operation.
   callback; unresolved work at or after that deadline rejects and latches.
   Intent rejection gives BR-244; outcome rejection gives BR-252. The gate
   also refuses dispatch when intent acknowledgement is observed at or after
-  5,000 ms from its append call. Verified by: AC-01–AC-05, AC-07, AC-10.
+  5,000 ms from its append call. Synchronous fd 2 writes to a file or TTY
+  that block the event loop remain unbounded. Verified by: AC-01–AC-05,
+  AC-07, AC-10, AC-11.
 - **BR-254 v2** — Gate close refuses new runs, lets in-flight runs reach
   their bounded result/outcome failure, then closes the sink. Sink close
   settles within 5,000 ms from its first call, including tail drain and file
   release; on expiry it latches, rejects outstanding appends and resolves
-  closed without claiming a flush. Gate close in the production composition
-  is bounded by 45,000 ms from its call under the existing guarded policy
-  and sole-attempt contracts. Transport → gate → exit and HTTP 503 semantics
+  closed without claiming a flush. File release waits for the underlying
+  port operation itself to settle, never merely its append timeout; if it
+  remains pending at close expiry, leave the fd open until process exit.
+  Synchronous fd 2 blockage is outside these bounds. Gate close in the
+  production composition is bounded by 45,000 ms from its call under the
+  existing guarded policy and sole-attempt contracts. Transport → gate → exit and HTTP 503 semantics
   remain unchanged. Verified by: AC-07–AC-09.
 - **BR-070 v5** — v4 holds with the stderr shutdown exception replaced by
   BR-259 v2's append bounds and BR-254 v2's gate/sink closure bounds. The
@@ -146,7 +154,12 @@ events remain exactly `intent`, `outcome`, `denied`.
 - Failed/timed-out intent: `failed`, `AUDIT_UNAVAILABLE`, `attempts:0`, the
   admitted `op`, no upstream call and no outcome append. The one attempted
   `intent` line might eventually reach the collector; it is not an
-  acknowledged record. A later invocation is an admission refusal with
+  acknowledged record. An intent with no outcome is ambiguous: it can be
+  this late delivery without dispatch or a dispatched run with no recorded
+  outcome. It proves neither dispatch nor its absence; the client's mutation
+  result is the authority. An HTTP shutdown 503 is not such a result and
+  retains BR-254's existing semantics. README/deployment guidance must state
+  this ambiguity and authority. A later invocation is an admission refusal with
   `failed`, `AUDIT_UNAVAILABLE`, `attempts:0`, no `op`, no policy call and
   no record.
 - Failed/timed-out outcome: preserve result, code, status, value, attempts
@@ -173,8 +186,18 @@ events remain exactly `intent`, `outcome`, `denied`.
 Sink `close()` stops admission immediately, refuses queued records not yet
 written, and waits only for an active append and owned file release within
 one `AUDIT_CLOSE_TIMEOUT_MS = 5000` budget from the first close call. It
-attempts owned file close once after the active append settles or fails;
-that release gets only the remaining close budget, not another 5,000 ms.
+attempts owned file close at most once, only after the underlying
+`port.write` or `port.fdatasync` operation itself has settled, successfully
+or with an error, and no port operation is still in flight. Rejection of
+the append's timeout wrapper does not establish that settlement: the port
+operation may still be queued in the libuv threadpool. Never race it with
+`close(fd)`, which could free the fd number for reuse by an unrelated file
+before the late operation runs. Start no further write or sync after the
+sink latches. If the underlying operation settles before the close deadline,
+release gets only the remaining close budget, not another 5,000 ms. If it
+is still pending at close expiry, skip release and leave the fd open until
+process exit, even if that operation later settles; library compositions
+retain that descriptor until their host process exits.
 Expiry latches the sink and resolves close; it does not report durable
 delivery. Concurrent/repeated closes share completion, do not reset the
 deadline and do not close a descriptor twice. Errors from release are
@@ -305,40 +328,55 @@ diagnostic writes. All returned objects below are exact (no extra members).
   and resolves/latches at 5,000 ms; file close was called once. Also cover
   immediate release rejection and idle healthy close (immediate, no latch).
   Concurrent/repeated closes never return early or extend the bound;
-  late callbacks/rejections cause no extra release or event. Verified by
+  late callbacks/rejections cause no extra release or event. Given a file
+  append at 0 ms with `port.write` or `port.fdatasync` still pending after
+  its 5,000 ms append timeout, When close starts at 5,000 ms, Then no file
+  release occurs while that port operation remains pending. If it settles
+  (success or rejection) at 6,000 ms, release may start once afterwards
+  with only the remaining 4,000 ms close budget; no further write or sync
+  starts. If it is still pending at 10,000 ms, close resolves/latches with
+  zero release calls and the fd retained until process exit; settlement at
+  11,000 ms or no settlement and repeated close calls still cause zero
+  release calls, no new I/O and no unhandled rejection. This pins underlying
+  port settlement independently of append-promise rejection. Verified by
   `TestBR254_v2_AC07_sink_close_bounds_drain_and_release`
   in `tests/audit-sink.test.ts`.
 - **AC-08** (BR-254 v2, BR-070 v5) — Given a real bounded sink and gate,
   When gate close starts during a stalled intent, Then AC-01's result and
-  close settle by 5,000 ms with no dispatch. Given intent success at
+  close settle by 5,000 ms with no dispatch. Given a pre-intent guarded
+  policy wait, When gate close starts and the policy completes at 100 ms,
+  before its existing 10,000 ms guard, Then the run returns exactly
+  `{result:"failed",op:OP,code:"CANCELLED",attempts:0}` with no record or
+  upstream attempt after close. Both rows are verified only by
+  `TestBR254_v2_AC08_gate_close_preserves_attempt_and_bounds_audit_waits`
+  in `tests/mutation-composition.test.ts`. Given intent success at
   4,999 ms, an already-started attempt that never settles, a blocked
   outcome and a file release that never settles, When close starts just
   after dispatch, Then the attempt aborts at 30,000 ms from its start,
   its result is exactly
   `{result:"uncertain",op:OP,code:"UPSTREAM_UNCERTAIN",attempts:1,audit:"outcome_unrecorded",message:"The upstream result is unknown; verify the item's state before any new attempt."}`
   after the 5,000 ms outcome bound, and close completes after at most
-  5,000 ms more. Every case fits 45,000 ms from gate close; no new
-  invocation is admitted, and a late 200 changes nothing. Also close
-  during a pre-intent guarded policy wait that completes at 100 ms, before
-  its existing 10,000 ms guard: the run returns exactly
-  `{result:"failed",op:OP,code:"CANCELLED",attempts:0}` with no record or
-  upstream attempt after close.
-  Verified by `TestBR254_v2_AC08_gate_close_preserves_attempt_and_bounds_audit_waits`
-  in `tests/mutation-composition.test.ts` and
-  `TestBR070_v5_AC08_shutdown_keeps_committed_result_semantics` in that file.
+  5,000 ms more; a late 200 changes nothing. This committed-run row is
+  verified only by `TestBR070_v5_AC08_shutdown_keeps_committed_result_semantics`
+  in that file. Each test asserts its rows fit 45,000 ms from gate close
+  and admit no new invocation.
 - **AC-09** (BR-254 v2, BR-070 v5, BR-169, BR-210) — Given the production
   stdio/HTTP compositions with injected upstream, clocks, streams and exit,
   When EOF (stdio), SIGINT or SIGTERM arrives during an outcome stall,
   Then observable order is transport close, outcome failure, sink close,
   gate close, process exit; HTTP receives its existing 503 and exits 0;
   stdio with no prior error retains exit 0 and publishes no closed-session
-  result. Neither awaits the diagnostic callback or stderr drain. Without
-  a run past intent, stdio still closes within 1,000 ms, including a file
-  sink whose idle release never settles. Verified by
+  result. Neither awaits the diagnostic callback or stderr drain. Repeat
+  these outcome-stall rows using a rejecting file release; exit still
+  follows gate completion, never an unhandled rejection. These rows are
+  verified only by
   `TestBR254_v2_AC09_stdio_and_HTTP_shutdown_do_not_wait_for_stderr`
-  and `TestBR070_v5_AC09_idle_stdio_exit_bound_is_unchanged` in
-  `tests/mutation-composition.test.ts`. Repeat using a rejecting release;
-  exit still follows gate completion, never an unhandled rejection.
+  in `tests/mutation-composition.test.ts`. Given stdio without a run past
+  intent and a file sink whose idle release either stalls indefinitely or rejects,
+  When EOF, SIGINT or SIGTERM starts closure, Then stdio still closes within
+  1,000 ms, and exit follows gate completion without an unhandled rejection.
+  These idle rows are verified only by
+  `TestBR070_v5_AC09_idle_stdio_exit_bound_is_unchanged` in that file.
 - **AC-10** (BR-240 v2, BR-241 v2, BR-259 v2, BR-234–BR-239, BR-242) —
   Given healthy sinks, When a successful rename completes, Then its exact
   gate result is AC-04's 200 result without `audit`; records are exactly
@@ -358,10 +396,18 @@ diagnostic writes. All returned objects below are exact (no extra members).
   releases its slot and the read runs; no navigation timeout replaces the
   audit result. Verified by
   `TestBR070_v5_AC11_audit_timeout_releases_navigation_slot`
-  in `tests/mutation-composition.test.ts`. At implementation review, check
-  `README.md` and `docs/deployment.md` state the 5,000 ms append/close
-  bounds, permanent latch, best-effort diagnostics, late-byte possibility
-  and unchanged 75 s grace; no claim of unlimited stderr wait remains.
+  in `tests/mutation-composition.test.ts`. Given `README.md` and
+  `docs/deployment.md`, When their audit/shutdown guidance is checked,
+  Then both state the 5,000 ms append/close bounds for asynchronous waits,
+  permanent latch, best-effort diagnostics, late-byte possibility and
+  unchanged 75 s grace. Both explicitly state that synchronous fd 2 writes
+  to a file or TTY can block the event loop, prevent timers from firing and
+  remain unbounded; an intent without an outcome is ambiguous and the
+  client's mutation result is the authority, while a shutdown HTTP 503
+  does not determine whether a write occurred. Neither claims asynchronous
+  stderr waits are unlimited. This documentation row is verified only by
+  `TestBR259_v2_AC11_docs_state_audit_bounds_and_ambiguity`
+  in `tests/deployment-examples.test.ts`.
 
 ## Test plan
 
@@ -379,6 +425,13 @@ diagnostic writes. All returned objects below are exact (no extra members).
    expectation of a later outcome and
    `TestBR259_a_stderr_intent_resolving_at_5000_ms_proceeds` success
    expectation with AC-06's versioned refusal assertions.
+   For AC-11's named documentation test, follow the existing content-check
+   pattern in `tests/deployment-examples.test.ts` and
+   `tests/helpers/deployment.ts`: read the tracked Markdown from the tree
+   and assert required guidance in the relevant sections. README content
+   assertions also exist in `TestBR387_docs_describe_queue_and_retryable_SERVER_BUSY`
+   in `tests/invocation-queue.test.ts`. These are planned implementation
+   checks, not a manual review substituted for an AC test.
 3. Implement only the frozen contract. Recheck every `AuditSink` caller,
    `close`, `latch`, diagnostic writer and shutdown path, including
    pending appends from multiple HTTP sessions. Keep outcome failure
@@ -413,7 +466,10 @@ limits in the ticket at freeze and closure rather than inventing totals.
   through the broken sink, and pretending a known performed write failed.
 - **D-3 — Bound close without truncating upstream classification.** Give
   sink drain plus file release one 5,000 ms budget, with idempotent resolved
-  closure on failure. The derived gate ceiling is 45,000 ms with lot A's
+  closure on failure. Release only after the underlying port operation
+  settles; retain the fd until process exit if it outlives close's budget.
+  Accept that bounded resource retention to prevent fd-reuse corruption.
+  The derived gate ceiling is 45,000 ms with lot A's
   sole 30,000 ms attempt; retain its 60,000 ms outer deadline without using
   it to justify another wait. Reject a blanket 5 s gate timeout that could
   discard a dispatched write's result. Keep 75 s deployment grace and
@@ -439,10 +495,14 @@ limits in the ticket at freeze and closure rather than inventing totals.
 
 - A timed-out OS write or file release may finish later. A late intent can
   exist without an attempt, and a reported unrecorded outcome can eventually
-  appear. Do not promise absence, durable completion, retry safety or repaired
-  partial lines. Keep F-016's local-filesystem and stderr durability limits.
-- A timeout cannot preempt a synchronous blocking stream implementation or
-  a suspended event loop. Bounds mean settlement at the first runnable
+  appear. An intent with no outcome is ambiguous; the client's mutation
+  result is the authority, subject to the shutdown HTTP 503 exception above.
+  Do not promise absence, durable completion, retry safety or repaired partial
+  lines. Keep F-016's local-filesystem and stderr durability limits.
+- A timeout cannot preempt Node's synchronous fd 2 writes to a file or TTY:
+  a stalled device blocks the event loop, prevents timers from firing and
+  leaves the wait unbounded. A suspended event loop is also outside the
+  guarantee. Bounds mean settlement at the first runnable
   deadline turn, with monotonic checks preventing late dispatch/acknowledgement;
   this repair bounds asynchronous waits, not OS scheduling.
 - Queued append deadlines deliberately reduce availability during collector
@@ -462,4 +522,36 @@ None. The ticket authorizes the timer, failure and shutdown decisions above.
 
 ## Stress-test
 
-Not reviewed.
+### Review 1 dispositions
+
+The owner supplied this review for this revision; the entries below record
+its verdict and the disposition of every finding, not a new review or an
+approval of the revised head. Reviewer model/effort and token counters were
+not supplied (unknown); no usage is inferred. This revision remains draft v1.
+
+### 47c-spec-review-1-reviewer — verdict: changes
+
+1. **Major — file descriptor release race. Retained, fixed in this revision.**
+   Shutdown and pending BR-254 v2 require underlying port settlement before
+   release, with the fd retained until process exit if close expires first.
+   AC-07 covers pending write/sync, timely and late settlement, rejection
+   and no settlement; an append timeout never permits a racing close.
+2. **Minor — synchronous fd 2 limits. Retained, fixed in this revision.**
+   Scope, risks and pending bounds explicitly exclude blocking synchronous
+   file/TTY stderr writes as unbounded; AC-11 requires both operator docs
+   to explain that no timer can fire while the event loop is blocked.
+3. **Minor — orphan intent ambiguity. Retained, fixed in this revision.**
+   Caller behavior and risks distinguish a late undispatched intent from a
+   dispatched run with no outcome: the record alone cannot decide which.
+   AC-11 requires the docs to identify the client's mutation result as the
+   authority, preserving the existing shutdown HTTP 503 exception.
+4. **Minor — AC-08/AC-09 row ownership. Retained, fixed in this revision.**
+   AC-08 assigns stalled-intent/pre-intent rows to its BR-254 test and the
+   committed-run row to its BR-070 test. AC-09 assigns outcome-stall rows
+   to its BR-254 test and idle stdio rows to its BR-070 test, including
+   release-rejection variants. Each row has exactly one named test.
+5. **Minor — AC-11 manual documentation check. Retained, fixed in this revision.**
+   Replaced the manual check with a named planned documentation test,
+   following existing deployment and README content-test patterns. The
+   test plan records those patterns; no source or test file was changed
+   and no tests were run.
