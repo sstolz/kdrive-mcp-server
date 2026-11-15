@@ -168,8 +168,15 @@ Detached extraction worker exited; capacity released.
 
 Delivery is best effort, without waiting for a callback/drain or retrying.
 Blocked stderr can prevent delivery. No identity, path, content, error text or
-stack appears in either line. Ordinary cleanup and admission refusals emit
-neither diagnostic; these are not audit events.
+stack appears in either line. An extraction that finishes, fails or is cancelled
+before its invocation deadline emits neither diagnostic, as do admission
+refusals. With the default `extractTimeoutMs`, an extraction that reaches its
+invocation deadline is detached at that deadline and emits the detach line,
+then emits the release line when its worker exits. Until that exit, new
+extraction calls for the same identity get `SERVER_BUSY`. Only a detach line
+with no following release line indicates a stuck worker, subject to the
+best-effort delivery limits above; a detach/release pair also occurs on normal
+deadline expiry. These diagnostics are not audit events.
 
 ## Mutation audit gate (F-016)
 

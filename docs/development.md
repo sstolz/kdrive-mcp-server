@@ -140,11 +140,18 @@ resources retain their complete raw blob representation.
 Complete sources fit min(maxReadBytes,8MiB). Logical expanded streams, canonical
 PDF and decoded UTF-8 text each obey min(maxExtractBytes,16MiB); structural,
 pixel, producer/item and finite scratch limits are separate, not an RSS claim.
-Owned workers obey min(extractTimeoutMs, remaining10-second invocation deadline)
-and ordinarily exit before releasing the slot. Failed or overdue termination
-instead releases the session slot by its deadline while a detached watcher keeps
+Owned workers obey min(extractTimeoutMs, remaining10-second invocation deadline).
+An extraction that finishes, fails or is cancelled before its invocation
+deadline emits neither the detach nor the release diagnostic. With the default
+`extractTimeoutMs`, an extraction that reaches its invocation deadline is
+detached at that deadline: it emits the detach line and releases the session
+slot, then emits the release line when its worker exits. Only a detach line
+with no following release line indicates a stuck worker, subject to best-effort
+diagnostic delivery. Failed or overdue termination also releases the session
+slot by its deadline while a detached watcher keeps
 the process-wide extraction permit and identity charged until exit (F-040;
 [capacity and recovery](../SECURITY.md#process-wide-extraction-admission-f-040)).
+During that interval, new extraction calls for the same identity get `SERVER_BUSY`.
 Full serialized MCP results count
 both JSON escaping layers, image base64 expansion and all block overhead against
 262144 UTF-8 bytes and maxOutputChars UTF-16 units. Oversize containers refuse
