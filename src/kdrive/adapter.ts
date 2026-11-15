@@ -68,7 +68,8 @@ function readUnavailable(): Error {
 }
 /** BR-205: `"kd1-` + base64url(SHA-256(provider ETag bytes)) + `"`. */
 export function derivedETag(value: string | undefined): string | null {
-  if (value === undefined || !ETAG_SYNTAX.test(value)) return null;
+  if (value === undefined || value.startsWith("W/") || !ETAG_SYNTAX.test(value))
+    return null;
   const digest = createHash("sha256")
     .update(Buffer.from(value, "latin1"))
     .digest("base64url");
