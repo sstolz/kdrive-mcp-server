@@ -2,7 +2,7 @@
 id: F-039
 title: Bound audit append waits and shutdown drain
 ticket: "#47"
-status: draft
+status: frozen
 version: 1
 ---
 
@@ -14,7 +14,19 @@ Base: branch `fix/47-c-audit-sink`, supplied main and cached `origin/main`
 IDs: F-039; BR-070 v5 and BR-240, BR-241, BR-254, BR-259 v2;
 AC-01–AC-15. No new BR ID or ADR. The base index gives next free IDs
 F-039, BR-423, ADR-013. Local `main` is stale at `7fdc7b3`; allocation uses
-the supplied base, not that ref. Recheck current main before freeze and PR.
+the supplied base, not that ref. Freeze recheck on 2026-11-15: local main
+remains `7fdc7b3`; cached `origin/main` remains `c39a77a`, with F-039,
+BR-423 and ADR-013 free. Current head `5b9ca98` already allocates F-039;
+next free IDs are F-040, BR-423, ADR-013. No IDs are added or reused.
+Recheck current main before the PR; no network check is authorized.
+
+Frozen v1 on 2026-11-15 at the owner's explicit instruction, from reviewed
+base `5b9ca98`, with supplied review verdicts `47c-spec-review-3-reviewer`
+(changes), `47c-spec-review-4-reviewer` (changes, minors) and
+`47c-spec-decision-2-fable` (approve, minors), and all corrections below.
+This uncommitted freeze revision has no new SHA. Implementation, code review,
+CI and actual-main acceptance remain pending. Review token totals and actual
+reviewer model/effort were not supplied; no retrospective usage is inferred.
 
 ## Context
 
@@ -64,10 +76,11 @@ rewriting a known successful upstream result as a failed operation.
   threadpool can also hold OS/runtime teardown after `process.exit` is
   called; this unbounded OS-level stall is documented, not fixed.
   README/deployment guidance must name both limits.
-- Source/test edits, test execution, Docker, network, commits, review,
-  freeze, PR publication, implementation, acceptance and release in this
-  assignment. The owner explicitly authorizes Codex to author this draft;
-  the later independent reviews remain required.
+- Source implementation, Docker, network, commits, PR publication,
+  acceptance and release in this assignment. The owner authorizes this
+  freeze revision followed by tests-first authoring in `tests/` only,
+  including local compilation and execution against unchanged sources.
+  Required later independent code reviews and CI remain pending.
 
 ## Business rules
 
@@ -107,9 +120,13 @@ rewriting a known successful upstream result as a failed operation.
   remain unchanged for dedicated processes; owned/library compositions
   settle closure without terminating their host. Dedicated stdio uses the
   same production exit helper as HTTP and other production exit callers.
-  That helper sets the requested exit code and races completion of both
-  stdout/stderr flush callbacks against a fixed ref'd 250 ms timer, capped
-  by any remaining stdio shutdown budget; the first completion calls
+  Gate close resolves and never rejects. That helper sets the requested
+  exit code and races completion of both stdout/stderr streams against a
+  fixed ref'd 250 ms timer armed before writes, capped by an optional
+  absolute monotonic shutdown deadline. Destroyed streams, callback errors
+  and synchronous write throws count as that stream's completion; flush
+  errors never throw, emit an unhandled error or change the requested code.
+  The helper is idempotent: its first call fixes code/deadline and calls
   `process.exit` once. Verified by: AC-07–AC-09, AC-11–AC-13;
   AC-11's documentation row maps to
   `TestBR259_v2_AC11_docs_state_audit_bounds_and_ambiguity` in
@@ -253,7 +270,10 @@ contained and latch the sink; late release settlement cannot reopen it.
 Sink close emits no new audit event. A close failure offers the same fixed
 diagnostic through the first-latch path, once in total per gate.
 
-The gate drains runs before calling sink close; do not race an entire
+Gate close always resolves, including sink close/release failures; it never
+rejects and therefore cannot bypass the dedicated stdio continuation that
+invokes the exit helper. The gate drains runs before calling sink close;
+do not race an entire
 mutation against a 5,000 ms shutdown timer. With lot A accepted, a committed
 run has at most 5,000 ms intent + 30,000 ms sole attempt + 5,000 ms outcome
 = 40,000 ms remaining. Concurrent runs share the sink, but each append's
@@ -272,21 +292,39 @@ new promise about unrelated OAuth store or OS shutdown stalls. Preserve the
 existing normal signal exit code (HTTP 0; stdio's existing exit status).
 At this revision's base, dedicated stdio cleanup in `src/stdio.ts` uses
 `setImmediate(() => process.exit(...))`; it bypasses `src/production.ts`.
-The owned-stream path selected in `src/main.ts` settles shutdown without
-calling a process exit primitive. Replace the dedicated stdio exit with
-the same production helper used by HTTP and other production exit callers,
-leaving owned/library compositions responsible only for closure. There is
-one production process-exit path; owned/test closure alone is not evidence
-that the dedicated path called it.
+The owned-stream path currently wires `setExitCode: deps.exit` in
+`src/main.ts`, so transport failure can terminate the host. Replace that
+wiring with an exit-code setter that never calls the process exit primitive:
+owned/library paths only set the exit code, including transport failures,
+and settle closure without host termination. Replace the dedicated stdio
+exit with the same production helper used by HTTP and other production
+exit callers. `src/main.ts` passes that real `deps.exit` helper explicitly
+to `startStdioNavigation` in `src/stdio.ts` for dedicated termination,
+separately from the exit-code setter. The helper accepts
+`exit(code, shutdownDeadline?)`, where `shutdownDeadline` is an absolute
+monotonic timestamp in the helper clock's domain. Dedicated stdio forwards
+its earliest no-intent shutdown deadline; HTTP, non-shutdown callers and
+committed-run shutdown omit that optional argument. There is one production
+process-exit path; owned/test closure alone is not evidence that the
+dedicated path called it. `STDIO_OUTPUT_FAILED` and `STDIO_START_FAILED`
+set code 1 before closure; the dedicated helper receives that code unchanged.
 
-The real helper in `src/production.ts` sets `process.exitCode`, issues
-empty stdout/stderr flush writes behind already-queued output, and races
-completion of both callbacks against a fixed ref'd 250 ms timer from helper
-entry. Call `process.exit(code)` exactly once when both callbacks complete
-or the timer expires, whichever is first; clear the timer on callback
-completion and ignore late callbacks after exit. During stdio shutdown,
-cap the wait at the non-negative remaining shutdown budget when one
-applies; an exhausted budget calls exit immediately without a new wait.
+The real helper in `src/production.ts` is idempotent: the first call wins
+and fixes the requested code and optional deadline; subsequent calls,
+including two signals, cannot reset the timer, write again, change the code
+or invoke exit again. It sets `process.exitCode`, then arms the fixed ref'd
+250 ms timer before issuing either empty stdout/stderr flush write behind
+already-queued output. It races completion of both streams against that
+timer from helper entry. An error-free callback, an error callback, an
+already-destroyed stream (including stdout destroyed by transport close),
+or a synchronous write throw counts as that stream's completion. Contain
+flush errors: they never throw, emit an unhandled `error`, or change the
+requested exit code. Retain bounded error handling for late stream errors.
+Call `process.exit(code)` exactly once when both streams complete or the
+timer expires, whichever is first; clear the timer when streams win and
+ignore late callbacks after exit. With `shutdownDeadline`, use
+`max(0, min(250, shutdownDeadline - now()))` milliseconds; an exhausted
+budget calls exit immediately without a new wait.
 The timer stays ref'd so a pending exit is not lost when no other handle
 keeps the process alive. No timed-out file release is awaited here.
 This permits fire-and-forget startup/fatal stderr messages followed by
@@ -460,7 +498,10 @@ diagnostic writes. All returned objects below are exact (no extra members).
   result. Sink/gate closure never awaits the diagnostic callback or stderr
   drain; process exit adds only AC-12's capped flush wait. Repeat
   these outcome-stall rows using a rejecting file release; exit still
-  follows gate completion, never an unhandled rejection. These rows are
+  follows gate completion, never an unhandled rejection. Pin one rejecting
+  sink-close/release row where gate close resolves (never rejects) and the
+  real helper is still reached through the dedicated stdio continuation.
+  These rows are
   verified only by
   `TestBR254_v2_AC09_stdio_and_HTTP_shutdown_do_not_wait_for_stderr`
   in `tests/mutation-composition.test.ts`. Given stdio without a run past
@@ -523,6 +564,16 @@ diagnostic writes. All returned objects below are exact (no extra members).
     at 99 ms, exactly one exit at 100 ms. With zero remaining budget, exit
     immediately without another wait. Timely callbacks still win before
     the shortened cap.
+  - Stdout is already destroyed by transport close: count it complete;
+    stderr completion at 10 ms exits promptly with the requested code.
+  - Either stream reports a callback error or throws synchronously on
+    write: count only that stream complete, wait for the other callback
+    or cap, and contain subsequent `error` events without changing code.
+    With both streams completing synchronously (including errors), the
+    timer was armed before the first write and is cleared with no leak.
+  - Call twice before completion with different codes/deadlines (the two-
+    signal case), then again after exit: only the first code/deadline wins,
+    one flush pair is issued and the primitive runs exactly once.
   Include queued fire-and-forget stderr output followed by exit(1) and a
   queued fixed audit diagnostic; the prompt-callback row observes those
   bytes before exit. Exercise the actual helper, not a replacement
@@ -559,7 +610,12 @@ diagnostic writes. All returned objects below are exact (no extra members).
   only its injected primitive performs exit; do not substitute the helper
   or select the owned-stream branch merely to inject streams. A separate
   owned/library closure control settles transport and gate with no process
-  exit call; it cannot satisfy the dedicated exit assertion.
+  exit call; repeat with a failing transport and assert only the exit-code
+  setter receives 1, never the helper or exit primitive. It cannot satisfy
+  the dedicated exit assertion. Add dedicated `STDIO_OUTPUT_FAILED` and
+  `STDIO_START_FAILED` rows: after gate close the real helper's primitive
+  receives 1, preserving the existing failure status rather than defaulting
+  to 0. Two signals still cause one primitive call through helper idempotence.
   Verified only by
   `TestBR070_v5_AC13_denied_append_shares_remaining_stdio_shutdown_budget`
   in `tests/mutation-composition.test.ts`.
@@ -577,19 +633,20 @@ diagnostic writes. All returned objects below are exact (no extra members).
   in `tests/mutation-gate.test.ts`; count diagnostics separately from audit
   writes, and keep AC-01/AC-04/AC-05 result assertions unchanged.
 - **AC-15** (BR-259 v2) — Given a child using the supported production
-  Node runtime on Linux (the CI platform, with non-blocking POSIX pipes)
-  and the real stderr sink, with fd 2 connected to a
-  pipe the parent immediately pauses and never reads, When the child
+  Node runtime on Linux (the CI platform) and the real stderr sink,
+  with fd 2 connected to a Node child-process pipe (a non-blocking Unix
+  socketpair, not a FIFO) the parent immediately pauses and never reads, When the child
   prefills stderr with a fixed maximum of 8 MiB of synthetic bytes then
   starts one valid audit append, Then that append rejects with
   `AuditUnavailable`/`AUDIT_UNAVAILABLE` and latches after the 5,000 ms
-  budget despite the blocked pipe. Use real monotonic time; assert no
-  early timeout and settlement within 5,500 ms from append (500 ms test
-  scheduling tolerance, not an extended product budget), with the write
+  budget despite the blocked pipe. Use real monotonic time; assert
+  settlement not before 5,000 ms and within 6,500 ms from append (1,500 ms
+  test scheduling tolerance, not an extended product budget), with the write
   callback still pending when timeout wins. Report only fixed status and
   elapsed time over a separate IPC channel. The parent enforces a
-  10,000 ms watchdog from spawn, sends SIGKILL on expiry or after the
-  assertion (also on assertion failure), and waits at most 1,000 ms for
+  10,000 ms watchdog starting at the child's append-start IPC message;
+  independently bound startup to 10,000 ms from spawn so missing IPC cannot
+  hang the suite. It sends SIGKILL on expiry or after the assertion (also on assertion failure), and waits at most 1,000 ms for
   cleanup before failing; no unbounded fill loop, reads from the stderr
   pipe or reliance on natural child exit. Failure to reach the
   timeout assertion is a test failure, never a skip or evidence of support.
@@ -639,10 +696,11 @@ diagnostic writes. All returned objects below are exact (no extra members).
    Evidence and exposed usage counters belong in #47/its PR, scoped to lot C;
    this lot alone does not authorize closing other lots or releasing.
 
-Only documentation is authored now. No tests, Docker gate, CI, independent
-review, acceptance or remote ticket-state update is claimed. No per-agent
-usage counters are exposed for this draft; record available usage and its
-limits in the ticket at freeze and closure rather than inventing totals.
+The authorized sequence is this documentation freeze, then tests first
+against unchanged sources. No Docker gate, CI, new independent review,
+acceptance or remote ticket-state update is claimed by this freeze record.
+No per-agent usage counters were supplied; record available usage and its
+limits in the ticket at closure rather than inventing totals.
 
 ## Decisions
 
@@ -728,7 +786,7 @@ limits in the ticket at freeze and closure rather than inventing totals.
   remain open indefinitely; this unbounded OS-level stall is documented,
   not fixed by append/close timers or the bounded-flush exit helper.
 - Pipe bounds require asynchronous fd 2 writes on the supported Node
-  runtime on Linux (the CI platform with non-blocking POSIX pipes).
+  runtime on Linux (the CI platform; Node child pipes use socketpairs).
   Planned evidence is
   `TestBR259_v2_AC15_unread_child_stderr_pipe_keeps_append_timeout_runnable`
   (`tests/audit-sink.test.ts`, AC-15), using an unread pipe, independent
@@ -748,7 +806,7 @@ limits in the ticket at freeze and closure rather than inventing totals.
 - Existing implementation docs still describe unlimited stderr waits. Their
   later update is part of implementation acceptance, while frozen F-016
   remains historical. No current implementation guarantee follows from this
-  draft or its pending records.
+  frozen specification or its pending records.
 
 ## Open questions
 
@@ -761,7 +819,7 @@ None. The ticket authorizes the timer, failure and shutdown decisions above.
 The owner supplied this review for this revision; the entries below record
 its verdict and the disposition of every finding, not a new review or an
 approval of the revised head. Reviewer model/effort and token counters were
-not supplied (unknown); no usage is inferred. This revision remains draft v1.
+not supplied (unknown); no usage is inferred. That revision was draft v1.
 
 ### 47c-spec-review-1-reviewer — verdict: changes
 
@@ -846,9 +904,40 @@ not supplied (unknown); no usage is inferred. This revision remains draft v1.
     AC-15 and Risks name Linux, the CI platform with non-blocking POSIX
     pipes, as the supported runtime for this row; the probe remains planned.
 
+### 47c-spec-review-4-reviewer — verdict: changes, minors
+
+15. **R4-1 Minor — destroyed stdout and flush failures. Retained, fixed.**
+    A destroyed stream, error callback or synchronous write throw counts as
+    that stream's completion. Flush errors cannot throw, emit an unhandled
+    error or alter the exit code. AC-12 includes destroyed stdout.
+16. **R4-2 Minor — helper budget and wiring. Retained, fixed.**
+    Name the optional absolute monotonic `shutdownDeadline` input and the
+    `src/main.ts` → `src/stdio.ts` helper injection. HTTP and non-shutdown
+    callers omit the deadline; AC-13 pins propagation.
+17. **R4-3 Minor — owned transport failure terminates host. Retained, fixed.**
+    Replace owned `setExitCode: deps.exit` with a non-terminating setter.
+    AC-13's owned failing-transport control sets 1 without process exit.
+
+### 47c-spec-decision-2-fable — verdict: approve, minors
+
+18. **F-1 Minor — timer ordering and idempotence. Retained, fixed.**
+    Arm the ref'd timer before writes; errors count as stream completion.
+    The first helper call wins code/deadline, including two signals.
+    AC-12 covers synchronous completion/throw, callback error and repeats.
+19. **F-2 Minor — dedicated failure exit code. Retained, fixed.**
+    AC-13 asserts the real helper's primitive receives 1 after
+    `STDIO_OUTPUT_FAILED` or `STDIO_START_FAILED`.
+20. **F-3 Minor — child timing and pipe type. Retained, fixed.**
+    Start the append watchdog on append-start IPC, separately bound startup,
+    allow 1,500 ms scheduling tolerance but never settle before 5,000 ms,
+    and identify Node's child pipe as a socketpair, not a FIFO.
+21. **F-4 Minor — gate close rejection bypasses exit. Retained, fixed.**
+    Gate close always resolves. AC-09 pins a failing sink close/release
+    where the dedicated continuation still reaches the real helper.
+
 These review identifiers and verdicts were supplied by the owner, not
 produced by a new agent review. Decision-pass model: Fable 5.2 per
 PROJECT.md; actual reported model/effort and token counters: unknown/not
-supplied. This revision remains draft v1, with all proposed BR versions
-pending acceptance. No tests, Docker, network, commits, freeze or forge
-publication were performed for these dispositions.
+supplied. Frozen v1 includes these dispositions at the owner's explicit
+instruction; all proposed BR versions remain pending acceptance. The
+freeze itself performs no Docker, network, commits or forge publication.

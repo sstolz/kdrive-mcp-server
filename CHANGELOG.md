@@ -125,7 +125,7 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
   strong descriptor). Specification frozen; implementation and acceptance
   are pending.
 
-- #47 lot C / F-039 v1 (draft, pending acceptance): bound file and stderr
+- #47 lot C / F-039 v1 (frozen, pending acceptance): bound file and stderr
   audit appends to 5,000 ms including queue wait, reject stream errors without
   waiting for a callback, refuse later writes until restart, and bound audit
   shutdown drain/release. Intent failure prevents dispatch; outcome failure
