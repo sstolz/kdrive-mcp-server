@@ -2,7 +2,7 @@
 id: F-043
 title: Queue documentation changelog release sections
 ticket: "#67"
-status: frozen
+status: done
 version: 1
 ---
 

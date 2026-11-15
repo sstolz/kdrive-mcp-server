@@ -172,8 +172,8 @@ server never repairs, replaces or deletes the file.
   an older copy (see "The state file is a credential store").
 - A power loss during a commit is covered by SQLite's journal only on file
   systems that honour `fsync`; use a local file system.
-- Refresh requests use per-peer windows and a global ceiling (F-035 pending
-  acceptance; see "HTTP server" below). Each store still holds at most 1,000
+- Refresh requests use per-peer windows and a global ceiling (F-035, accepted
+  on main `703bece`; see "HTTP server" below). Each store still holds at most 1,000
   entries.
 - A revocation that was not committed is lost at the next restart.
 - A crash or dropped connection after a refresh commit but before the client
@@ -355,7 +355,7 @@ binds `127.0.0.1`, serves only the MCP endpoint and verifies no credential.
   `Forwarded`, `X-Real-IP` and other `X-Forwarded-*` headers are ignored; the
   server handles neither CORS nor TLS.
 
-**F-035 pending acceptance.** `MCP_HTTP_TRUSTED_PROXIES` is optional and empty
+**F-035 accepted on main `703bece`.** `MCP_HTTP_TRUSTED_PROXIES` is optional and empty
 by default; the Compose example passes `${MCP_HTTP_TRUSTED_PROXIES:-}`.
 Use exact proxy addresses or a dedicated access-controlled proxy-only network.
 Every trusted hop must append the upstream address it observed as the last
@@ -437,7 +437,7 @@ clients in `auto` negotiation fall back to `initialize` after a 400 on their
 - Bodies: 262,144 bytes on the MCP endpoint, 32,768 bytes on registration,
   consent and token; headers 16,384 bytes; request target 8,192 bytes;
   `headersTimeout` 10 s, `requestTimeout` 30 s, at most 256 connections.
-- OAuth admission (F-035 pending acceptance) uses the windows below. Each
+- OAuth admission (F-035, accepted on main `703bece`) uses the windows below. Each
   opens at its first counted request. Invalid admitted requests count too;
   refusals count in neither window. A 429 includes `Retry-After` rounded up
   to seconds, and its `request_refused` event includes `window: peer` or
@@ -501,6 +501,9 @@ and `OAUTH_ALLOWED_REDIRECT_URIS` in the environment. The port
 (`HTTP_ACCEPTANCE_PORT`, default 3000) is published on the host's `127.0.0.1`
 only; point your HTTPS reverse proxy or tunnel at it. The upstream client
 secret is refused inline. Events are written to stderr as JSON lines.
+F-040 extraction detach/release diagnostics are plain-text stderr lines in
+HTTP mode too; they are not audit events. See the fixed lines and delivery
+limits in [SECURITY.md](../SECURITY.md#process-wide-extraction-admission-f-040).
 
 Persisted state across restarts (F-029): `HTTP_ACCEPTANCE_STATE_DIR` is
 optional. Without it the proxy keeps its state in memory, so a restart loses

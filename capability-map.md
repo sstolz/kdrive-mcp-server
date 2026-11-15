@@ -1,12 +1,12 @@
 # Capability map
 
-## Provisional — queue changelog release sections
+## Accepted — queue changelog release sections
 
-[F-043 v1](features/F-043-queue-changelog-release-sections.md) (#67), frozen
-2026-11-15, [BR-387 v2](business-rules/BR-387.md): release-aware location for the
+[F-043 v1](features/F-043-queue-changelog-release-sections.md) (#67) (accepted 2026-11-15),
+[BR-387 v2](business-rules/BR-387.md): release-aware location for the
 #16 Fixed entry, with Unreleased fallback and the BR-321 v4 archive cutoff.
-BR-387 v1 remains active and unchanged. Implementation and
-acceptance are pending; no new working capability is claimed.
+Accepted on actual main `f72a15b` on 2026-11-15 (#67 comment `6902168340`).
+BR-387 v2 is active; no new BR or ADR.
 
 ## Accepted — MCP tool and parameter descriptions
 
@@ -527,7 +527,10 @@ tests; PR #84 CI green; evidence (archived evidence `runs/17-acceptance-1.md`)):
 BR-069 v2 and BR-070 v2. In `write` and `share` modes the
 CLI opens a JSONL audit sink (stderr or a private file) and binds the policy
 `execute` dependency to a gate that records an intent before and an outcome after
-each upstream write, retries 429 only and reports timeouts and 5xx as `uncertain`.
+each upstream write and reports timeouts and 5xx as `uncertain`.
+Accepted F-037 supersedes the original 429 retry policy: a write receiving 429
+ends as `failed` / `RATE_LIMITED` without automatic retry; a later client
+invocation requires fresh admission and authorization (BR-248 v2).
 No write tool is registered yet and no mutator exists (#18–#20); received-share
 writes stay denied.
 

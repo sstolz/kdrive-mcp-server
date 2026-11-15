@@ -9,7 +9,7 @@ const prose = (text: string) => text.replaceAll(/\s+/gu, " ");
 it("BR-421 BR-162 v3 AC-20 the operator documentation describes peer admission", () => {
   for (const text of [oauth, deployment].map(prose)) {
     for (const statement of [
-      "F-035 pending acceptance",
+      "F-035 accepted on main `703bece`",
       "`MCP_HTTP_TRUSTED_PROXIES` is optional and empty by default",
       "Use exact proxy addresses or a dedicated access-controlled proxy-only network",
       "Every trusted hop must append the upstream address it observed as the last `X-Forwarded-For` element",

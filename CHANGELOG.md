@@ -4,6 +4,8 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
 
 ## [Unreleased]
 
+## [0.6.0-beta.2] - 2026-11-15
+
 ### Added
 
 - #12 / F-027 v2 (accepted 2026-11-14): `make install-check` packs the package,
@@ -120,10 +122,9 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
   byte caps and deadlines so valid fragmented content can complete; treat
   case-sensitive `W/` validators exactly as absent validators in both
   descriptor and range responses, preserving existing strong derivation.
-  Files readable today with weak validators will intentionally be refused
+  Files with weak validators, previously readable, are now refused
   (`VERSION_UNAVAILABLE` at describe; `CONTENT_UNAVAILABLE` at open after a
-  strong descriptor). Specification frozen; implementation and acceptance
-  are pending.
+  strong descriptor).
 
 - #47 lot C / F-039 v1 (accepted 2026-11-15): bound file and stderr
   audit appends to 5,000 ms including queue wait, reject stream errors without
@@ -138,8 +139,7 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
   host. Output still queued after 250 ms on a stalled pipe may be lost
   (earlier with a shorter remaining stdio budget). Synchronous fd 2 blockage and libuv file
   operations stuck during OS teardown remain unbounded and documented; a
-  bounded Linux unread-pipe child test is planned as runtime evidence. No
-  implementation or acceptance is claimed.
+  bounded Linux unread-pipe child test covers the runtime behavior.
 
 - #47 lot D / F-040 v1 (accepted 2026-11-15): limit concurrent
   `kdrive_read` extractions to two process-wide, admitted before source buffering, with at most
@@ -171,7 +171,7 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
   Preserve existing unofficial/untrusted-content notices and mutation
   cautions; fixed trusted text only, with no validation or behavior change.
 
-- #67 / F-043 v1 (frozen 2026-11-15; implementation and acceptance pending): specify
+- #67 / F-043 v1 (accepted 2026-11-15): implement
   release-aware validation of the queue-fix changelog entry under BR-387 v2,
   retaining the README and compatibility documentation requirements.
 
