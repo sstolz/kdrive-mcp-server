@@ -17,17 +17,15 @@ BR-423–BR-426 v1 and BR-118 v3 pending acceptance (BR-118 v2 stays active).
 The 2026-11-15 ID recheck against local `origin/main` at `67c101a` found
 no collision: main allocates through F-040, BR-426 and ADR-012; this lot
 adds F-041 and BR-427. Next free IDs: F-042, BR-428, ADR-013.
-Recheck current main and concurrent allocations before freeze and PR creation;
-no network check is authorized in this revision.
+The recheck against main `67c101a` at freeze found no collision.
 
 Frozen v1 on 2026-11-15 at the owner's explicit instruction, from reviewed
 base `75c0ceaec1f8ba3603863ca91330ff5337ab6b3c` (local HEAD verified),
 with supplied
 `47e-spec-review-2-reviewer` (changes) and
 `47e-spec-decision-1-fable` (approve, minors), with all corrections and
-verdicts recorded below. This explicit freeze instruction overrides the
-usual requirement for a new approval of the corrected head; no such
-approval is claimed. This uncommitted freeze revision has no new SHA.
+verdicts recorded below. A diff-only freeze confirmation reviews this revision; the freeze commit
+is recorded on #60.
 Implementation, code review, CI and actual-main acceptance remain pending.
 Review token totals and actual reviewer model/effort were not supplied;
 no retrospective usage is inferred. Decision-pass tier is Fable 5.2 per PROJECT.md.
@@ -125,11 +123,11 @@ Only a live directory source of `trash`, `rename` or `move` needs the new
 negative ancestry proof. Place it after `authorize(source)` and the source
 `dir` type check, before destination effects, execution or intent, in
 `src/policy/index.ts` (`effects`; review-base line 449,
-`if (source) authorize(source);`), before the destination inspect at line 455. A file cannot
+`if (source) authorize(source);`), before the destination inspect at lines 457–458. A file cannot
 contain a root. An otherwise unauthorized call need not perform extra
 inspections. Received-share sources come from drives that are not configured,
 so no configured root can match: zero configured-root reads hold only
-because that drive has no configured root. `shared.gate` (policy line 469)
+because that drive has no configured root. `shared.gate` (policy line 470)
 runs after the new check; BR-257 still refuses afterwards. This check does
 not qualify received-share writes.
 
@@ -326,8 +324,8 @@ correlation, IDs and unchanged kind-specific values follow F-017/F-018.
   with zero audit records and zero mutation requests. The tool wraps this
   gate JSON with `isError:true`; the pre-intent interruption precedence in
   `navigation.mutate` / `mutation-gate.decide` remains unchanged.
-  Given the configuration maximum of same-drive roots (256 entries,
-  `src/config-values.ts:204`: 255 roots plus the sentinel) and a deny
+  Given the configuration maximum of same-drive roots (up to 256
+  entries, `src/config-values.ts:204`) and a deny
   traversal that together exhaust the existing shared 512-call invocation
   budget (`src/navigation.ts:321`), When their calls consume that budget, Then the admitted run
   returns `{result:"failed",op:O,code:"LIMIT_EXCEEDED",attempts:0}`,
@@ -445,13 +443,12 @@ no retrospective attribution or total is inferred.
   move a root beneath a checked source after evidence acquisition. Detect
   contradictions observed in one decision, but retain SPEC §10.6's race
   limit rather than claiming the entire class eliminated. The ancestry
-  proof precedes deny traversal (`src/policy/index.ts:520–525`), so the
+  proof precedes deny traversal (`src/policy/index.ts:526–531`), so the
   race window can approach the invocation deadline. This risk is accepted.
 - Case/Unicode inconsistencies from a provider refuse rather than being
   repaired. Consistent external changes still follow the configured ID.
 - Lot D / PR #58 is merged as `67c101a`; the local ID recheck found no
-  collision. Concurrent allocations still require rechecking before freeze
-  and PR creation; no remote freshness or lot-D acceptance is inferred.
+  collision. Lot D was accepted on main (#47 comment `6897680463`).
 
 ## Open questions
 
@@ -500,10 +497,10 @@ not supplied (unknown); no usage is inferred. That revision remained draft v1.
 - **R2-1 — Major, stale allocation paragraph. Retained, fixed.** The BR
   index now states that all 425 allocated IDs have records; next free BR-428.
 - **R2-2 — Check placement. Retained, fixed.** Cite policy line 449's
-  `if (source) authorize(source);`, before destination inspection at 455;
+  `if (source) authorize(source);`, before destination inspection at 457–458;
   lines 431–439 describe the existing direct-root guard.
 - **R2-3 — Received-share ordering. Retained, fixed.** `shared.gate` at
-  469 follows the new check. No roots are read only because the received
+  470 follows the new check. No roots are read only because the received
   source drive has no configured roots; BR-257 still refuses afterwards.
   This supersedes Review 1's incorrect "prior refusal" description.
 - **R2-4 — Merged lot D. Retained, fixed.** The BR index names merged
