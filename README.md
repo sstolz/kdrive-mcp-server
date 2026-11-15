@@ -27,11 +27,19 @@ them, since they live in another user's drive. It also has no tool to:
 - list the available drives (`kdrive_list_drives`);
 - list the items you shared (`kdrive_my_shared`).
 
-This server adds authenticated HTTP behind an OAuth proxy, several drives
-(`KDRIVE_IDS`), opt-in reading of items shared with you
-(`KDRIVE_MCP_SHARED_WITH_ME`), those tools, and guardrails: configured roots,
-deny patterns and a write audit log. Share tools are not available yet
-(`share` mode registers none, #20); the official server has them.
+This server adds:
+
+- authenticated Streamable HTTP behind an OAuth proxy, for remote clients;
+- several drives (`KDRIVE_IDS`) and opt-in reading of items shared with you
+  (`KDRIVE_MCP_SHARED_WITH_ME`);
+- the tools above;
+- configured root folders: nothing outside them is visible;
+- deny patterns (`KDRIVE_MCP_DENY`, for example `/Private/**`): matching paths
+  are hidden from listings, search and reads, and cannot be written;
+- an audit log of every write, recorded before and after it is sent.
+
+Share tools are not available yet (`share` mode registers none, #20); the
+official server has them.
 
 **Status:** beta `0.6.0-beta.1` ([VERSION](VERSION)). The container image is
 published on GHCR as `ghcr.io/sstolz/kdrive-mcp-server:0.6.0-beta.1`
