@@ -61,7 +61,7 @@ BR-167 v3 forbids peer addresses in responses and events.
 ## Business rules
 
 - **BR-137 v3** — v2 holds except for refusal logging. After BR-136, each
-  refusal at steps (1)–(5) emits exactly one `token_refused` to the optional
+  refusal at steps (1)–(5) without a BR-299 failure emits exactly one `token_refused` to the optional
   logger with exactly `{ handler: "token", error, status: 400 }`, where
   `error` is `invalid_target` only at step (4), otherwise `invalid_grant`.
   Step (5) with a remaining family retains its existing single
@@ -269,8 +269,9 @@ implementation phase. This draft makes no passing-test or CI claim.
 - Logs regain attempt counts but intentionally do not identify a client or
   distinguish expiry from a bad verifier or unknown code. This is the
   existing privacy tradeoff, not evidence that a refusal proves theft.
-- Restoring logging increases volume under abuse. Existing HTTP admission
-  bounds remain; no sampling, new log storage or rate-limit change is added.
+- Restoring logging increases volume under abuse. BR-162 v3's per-peer and
+  global `/oauth/token` windows bound the events per minute; no sampling, new
+  log storage or rate-limit change is added.
 
 ## Open questions
 
