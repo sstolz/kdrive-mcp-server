@@ -546,7 +546,7 @@ http:
         idleConnTimeout: 4s
 ```
 
-**F-035 pending acceptance.** `MCP_HTTP_TRUSTED_PROXIES` is optional and
+**F-035 accepted on main `703bece`.** `MCP_HTTP_TRUSTED_PROXIES` is optional and
 empty by default; the Compose example passes `${MCP_HTTP_TRUSTED_PROXIES:-}`.
 Use exact proxy addresses or a dedicated access-controlled proxy-only network.
 Every trusted hop must append the upstream address it observed as the last

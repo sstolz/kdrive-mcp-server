@@ -4,7 +4,7 @@
 # Required installation-specific values use ${NAME:?…}; Compose refuses unset values.
 # optional values may use ${NAME:-} with an empty default.
 # Credentials are file secrets only.
-# F-035 pending acceptance: optional trusted proxies below.
+# F-035 accepted on main 703bece: optional trusted proxies below.
 
 services:
   kdrive-mcp:

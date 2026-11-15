@@ -527,7 +527,10 @@ tests; PR #84 CI green; evidence (archived evidence `runs/17-acceptance-1.md`)):
 BR-069 v2 and BR-070 v2. In `write` and `share` modes the
 CLI opens a JSONL audit sink (stderr or a private file) and binds the policy
 `execute` dependency to a gate that records an intent before and an outcome after
-each upstream write, retries 429 only and reports timeouts and 5xx as `uncertain`.
+each upstream write and reports timeouts and 5xx as `uncertain`.
+Accepted F-037 supersedes the original 429 retry policy: a write receiving 429
+ends as `failed` / `RATE_LIMITED` without automatic retry; a later client
+invocation requires fresh admission and authorization (BR-248 v2).
 No write tool is registered yet and no mutator exists (#18–#20); received-share
 writes stay denied.
 
