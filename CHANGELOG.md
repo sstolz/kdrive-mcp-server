@@ -128,12 +128,16 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
 - #47 lot D / F-040 v1 (draft; pending acceptance): propose two process-wide
   `kdrive_read` extractions, admitted before source buffering, and at most
   four waiters, served by oldest eligible identity, with one active permit
-  per identity. A full queue returns `LIMIT_EXCEEDED` without automatic
+  and one live waiter per identity. Queue/identity refusal uses `SERVER_BUSY` without automatic
   retry; queued waits count against the existing invocation deadline and
   obey cancel/close. Failed/overdue termination releases the invocation slot
   within its deadline; a detached watcher retains the permit/identity until
-  worker exit. README/tool guidance will explain transient queue saturation.
-  This bounds concurrent pipelines, not total memory. Review, freeze,
+  worker exit (pending BR-118 v3; v2 stays active). Final authorization is
+  preserved. Detached identities refuse immediately with `SERVER_BUSY`; fixed
+  payload-free detach/release diagnostics signal capacity loss/recovery.
+  Permanently stuck workers reduce capacity until restart. README/tool guidance
+  will explain transient `SERVER_BUSY` without promising retry success.
+  This bounds concurrent pipelines, not total memory. Revised review, freeze,
   implementation and acceptance are pending.
 
 ## [0.6.0-beta.1] - 2026-11-13

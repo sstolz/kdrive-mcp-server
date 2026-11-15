@@ -4,22 +4,26 @@
 
 [F-040 draft v1](features/F-040-process-wide-extraction-admission.md)
 (#47 lot D), [BR-423 v1](business-rules/BR-423.md),
-[BR-424 v1](business-rules/BR-424.md),
-[BR-425 v1](business-rules/BR-425.md) and
-[BR-426 v1](business-rules/BR-426.md): proposed admission for all
-`kdrive_read` formats uses two process-wide permits before source buffering
-with at most one permit per identity and four waiters, serving the oldest
-waiter whose identity holds no active permit. Queue overflow returns `LIMIT_EXCEEDED`
-without automatic retry; waiting spends the running invocation's deadline,
-with `REQUEST_TIMEOUT` on expiry and `ACCESS_DENIED` on cancel/close.
-Failed/overdue worker termination settles the invocation within its deadline
-and releases its session slot; a detached exit watcher keeps the permit and
-identity charged until exit. Live termination rejection returns
-`CONTENT_UNAVAILABLE`; expiry uses `REQUEST_TIMEOUT` (earlier cancel/close
-keeps `ACCESS_DENIED`). README/tool wording will explain transient saturation.
-Raw downloads and resource reads keep their existing contracts. This limits
-concurrent extraction pipelines, not total process memory. Review 1 is
-dispositioned; revised approval, freeze, implementation and acceptance are pending; existing capabilities remain unchanged.
+[BR-424 v1](business-rules/BR-424.md), [BR-425 v1](business-rules/BR-425.md),
+[BR-426 v1](business-rules/BR-426.md) and pending [BR-118 v3](business-rules/BR-118.md)
+(v2 remains active): proposed admission for all `kdrive_read` formats uses two
+process-wide permits before source buffering, at most one permit and one live
+waiter per identity, and four waiters globally, serving the oldest eligible
+waiter. Queue/identity saturation returns `SERVER_BUSY` without automatic retry;
+waiting spends the invocation deadline, with `REQUEST_TIMEOUT` on expiry and
+`ACCESS_DENIED` on cancel/close. Failed/overdue worker termination releases the
+session slot by its deadline; a detached watcher keeps the permit and identity
+charged until exit. That identity's existing waiter and later extraction calls
+refuse immediately with `SERVER_BUSY` (earlier liveness causes still prevail).
+Live termination rejection preserves final authorization before
+`CONTENT_UNAVAILABLE`; expiry uses `REQUEST_TIMEOUT`, earlier cancel/close
+keeps `ACCESS_DENIED`. Fixed payload-free detach/release diagnostics signal
+lost/recovered capacity; permanently stuck workers reduce capacity until restart
+(two block all extraction, one blocks the shared stdio identity). README/tool
+wording will explain transient `SERVER_BUSY` and its recovery limits. Raw
+and resource reads retain their contracts. This limits concurrent pipelines,
+not total process memory. Reviews 1–2 and Decision 1 are dispositioned; revised
+approval, freeze, implementation and acceptance remain pending.
 Lot C's F-039 reservation and pending rule versions remain separate.
 
 ## Accepted — fragmented reads and defensive validator handling

@@ -13,15 +13,16 @@ Base: branch `fix/47-d-extraction-limit`, supplied main
 `c39a77a3f4e996541732d8a6c036f63e4df40a4c` (original draft base).
 Review-1 revision base: `6fab436e414ca9a1eb3eb6cb7fde8eb04e7b8773`
 (local HEAD verified; no commit created).
-IDs: F-040; new BR-423–BR-426 v1; AC-01–AC-12. No existing BR version or ADR.
+Review-2 / Decision-1 revision base: `13b0f8d` (local HEAD verified; no commit created).
+IDs: F-040; new BR-423–BR-426 v1; pending BR-118 v3; AC-01–AC-12. No new ADR.
 The owner reserves F-039 for lot C on `fix/47-c-audit-sink`, not yet merged,
 including BR-070 v5 and pending versions of BR-240, BR-241, BR-254 and
 BR-259. This draft does not edit or version those rules. Next IDs after this
 allocation: F-041, BR-427, ADR-013. Recheck current main and concurrent
 allocations before freeze and PR; no remote check is authorized here.
 
-This assignment authors the draft and pending records only. Review 1 dispositions are recorded below; revised-spec approval,
-decision pass, freeze, tests, implementation and acceptance are pending.
+This assignment authors the draft and pending records only. Review 1, Review 2 and Decision 1 dispositions are recorded below; revised-spec
+approval, decision pass, freeze, tests, implementation and acceptance are pending.
 The supplied finding and owner brief are the ticket context; no GitHub access
 or ticket-state update is performed under the no-network instruction.
 
@@ -50,9 +51,12 @@ owned cleanup, and to bound the calls waiting for them, across sessions.
   and runtime in that process for all `kdrive_read` formats: text, PDF and image,
   including continuation calls and empty sources.
 - Two active extraction permits, at most one per identity, and at most four
-  waiters ordered by oldest eligible identity, acquired
+  waiters with at most one live waiter per identity, ordered by oldest eligible
+  identity, acquired
   before `content.complete`, with explicit overload, deadline and cancellation
-  outcomes and release on every terminal path.
+  outcomes and release on every terminal path with confirmed worker exit.
+- Fixed, payload-free diagnostics on detach and eventual permit release;
+  immediate refusal while an identity holds a detached permit.
 - Preserve per-call source, decoded, structural, worker, output and time
   bounds, fresh authorization, byte evidence and worker isolation.
 - Prepare new pending BR records, indexes, provisional capability and changelog.
@@ -77,9 +81,10 @@ owned cleanup, and to bound the calls waiting for them, across sessions.
   permits before entering complete-source acquisition, with at most one held
   permit per identity. Verified by: AC-01, AC-02, AC-09, AC-10, AC-11.
 - **BR-424 v1** — Contended extraction admission uses at most four live
-  waiters, serving the oldest whose identity holds no active permit, and
-  immediately refuses a caller unable to obtain an eligible permit or queue
-  place with `LIMIT_EXCEEDED`,
+  waiters, at most one per identity, serving the oldest whose identity holds
+  no active permit; it immediately refuses an identity with a detached permit,
+  a second live waiter of one identity, or a caller unable to obtain an eligible
+  permit or queue place with `SERVER_BUSY`,
   without an automatic retry. Verified by: AC-02, AC-03, AC-09, AC-11, AC-12.
 - **BR-425 v1** — Extraction waiting uses the running invocation's existing
   deadline and cancellation state, removing dead waiters before they can
@@ -87,17 +92,21 @@ owned cleanup, and to bound the calls waiting for them, across sessions.
 - **BR-426 v1** — Every granted permit remains charged until owned source cleanup
   and confirmed worker exit, then releases exactly once; failed or overdue
   termination transfers ownership to a detached exit watcher while the
-  invocation settles no later than its deadline and releases its session slot.
+  invocation settles no later than its deadline and releases its session slot;
+  detach and eventual release each offer one fixed, payload-free diagnostic.
   Verified by: AC-06, AC-07, AC-08.
+- **BR-118 v3** (pending; v2 remains active) — Ordinary owned-worker exit
+  precedes session-slot release; failed/overdue termination instead detaches
+  permit ownership and releases the session slot no later than the deadline,
+  without releasing the extraction permit before exit or publishing late data.
+  Verified by: AC-07, AC-08.
 
-Dependencies (unchanged except the proposed BR-118 lifecycle exception): [BR-070 v4](../business-rules/BR-070.md) (invocation
+Dependencies (unchanged; BR-118 v3 above versions the lifecycle exception): [BR-070 v4](../business-rules/BR-070.md) (invocation
 bounds; lot C reserves v5), [BR-084](../business-rules/BR-084.md) and
 [BR-089](../business-rules/BR-089.md) (exact body evidence and ownership),
 [BR-109](../business-rules/BR-109.md) (fresh authorization),
 [BR-111](../business-rules/BR-111.md) (complete source),
 [BR-117](../business-rules/BR-117.md) (per-invocation bounds),
-[BR-118 v2](../business-rules/BR-118.md) (accepted owned-worker baseline;
-F-040 proposes the explicit failed/overdue-termination exception below),
 [BR-120](../business-rules/BR-120.md) (fixed redacted errors),
 [BR-121](../business-rules/BR-121.md) (own-data projections),
 [BR-122 v3](../business-rules/BR-122.md) and
@@ -106,7 +115,7 @@ F-040 proposes the explicit failed/overdue-termination exception below),
 invocation deadline). BR-112–BR-116, BR-390–BR-391 and BR-412–BR-420 retain
 their text/PDF/image behavior. F-040 adds aggregate admission; it changes
 none of the byte/time bounds or F-026's per-session queue. The sole lifecycle
-exception to BR-118 v2 is recorded in D-4; do not describe it as unchanged.
+exception to active BR-118 v2 is recorded in pending BR-118 v3 and D-4.
 
 ## Contract details
 
@@ -114,7 +123,8 @@ exception to BR-118 v2 is recorded in D-4; do not describe it as unchanged.
 
 Use fixed internal constants `MAX_ACTIVE_EXTRACTIONS = 2` and
 `MAX_WAITING_EXTRACTIONS = 4` and
-`MAX_ACTIVE_EXTRACTIONS_PER_IDENTITY = 1`. The default composition shares one admission
+`MAX_ACTIVE_EXTRACTIONS_PER_IDENTITY = 1` and
+`MAX_WAITING_EXTRACTIONS_PER_IDENTITY = 1`. The default composition shares one admission
 owner in the parent process; constructing a controller, HTTP session or
 runtime never creates or resets its capacity. Separate server processes
 have separate capacity. A test seam may isolate state, but production has
@@ -144,15 +154,22 @@ Embedded controllers without identity use the single stdio fallback, never
 a new identity per controller. No identity is exposed in errors or diagnostics.
 
 Retire cancelled/expired waiters before counting capacity or granting; no
-queue entry remains as a tombstone. A waiter is eligible only when its
+queue entry remains as a tombstone. After checking liveness, immediately
+refuse a caller whose identity holds a detached permit with `SERVER_BUSY`,
+without enqueueing. A second live waiter of an identity also refuses immediately
+with `SERVER_BUSY`. On detach, remove and settle any already-queued waiter of
+that identity with `SERVER_BUSY` (unless its earlier abort/deadline dictates
+its existing liveness code); this prevents an earlier waiter from remaining
+stranded behind detached ownership. A waiter is eligible only when its
 identity holds no active permit, including permits held by detached exit
 watchers. Whenever capacity is free, serve the oldest live eligible waiter,
 repeating while another permit and eligible waiter remain. Skip an ineligible
 waiter without moving its queue position: FIFO is preserved among eligible
 identities, and skipped callers retain their original age. A newcomer may
 start only after older eligible waiters have been served and only if its
-identity holds no active permit. Otherwise enqueue if fewer than four live
-waiters remain; with four, refuse immediately. An ineligible queue head must
+identity holds no active permit. Otherwise enqueue only if fewer than four
+live waiters remain, the identity has no live waiter and it holds no detached
+permit; if any condition fails, refuse immediately with `SERVER_BUSY`. An ineligible queue head must
 not leave capacity idle when an eligible waiter exists. If all waiters are
 ineligible, the spare permit stays idle. Release the old identity's charge
 and assign the next identity atomically with the permit handoff.
@@ -160,8 +177,13 @@ and assign the next identity atomically with the permit handoff.
 With distinct identities, two active calls plus four waiters are admitted;
 the seventh caller (fifth would-be waiter) refuses. A second extraction from
 an active identity waits even if the other global permit is free; it uses
-one of the same four queue places. Queue saturation may therefore occur
-with only one active permit. There is no per-identity queue reservation.
+one of the same four queue places; a third call of that identity refuses
+`SERVER_BUSY` instead of adding a second waiter. There is no per-identity
+queue reservation. With a spare permit, at most one waiter can be ineligible:
+only the other permit holder can have an ineligible waiter. Four ineligible
+waiters cannot coexist under the two-permit and one-waiter-per-identity caps.
+A full queue does not bar an immediate eligible grant after older eligible
+waiters have been served.
 
 After grant, recheck liveness before entering `content.complete`; its existing
 fresh policy and descriptor/version checks run then. Waiting conveys no
@@ -182,19 +204,23 @@ worker termination/exit, release its permit, then release the session slot.
 A termination request or rejection is not proof of exit.
 
 If termination rejects before exit while the invocation is live, transfer
-its permit and identity charge to a detached exit watcher and settle the
-invocation immediately as `E("CONTENT_UNAVAILABLE")`, releasing its session
-slot. This is the existing termination-rejection code in `src/extraction.ts`.
-It is a fixed lifecycle failure, carries no content, and requires no new
-policy/dependency call before settlement. If termination is still pending
-at the invocation deadline, detach the same ownership and settle exactly
-as `E("REQUEST_TIMEOUT")` at that deadline. A previously recorded cancel/
-close retains `E("ACCESS_DENIED")`; a closed session publishes no wire result.
-Liveness is checked before choosing the failure: at or beyond the deadline,
-with no earlier recorded abort cause, `REQUEST_TIMEOUT` wins over a late
-termination rejection. No success or content-dependent result is published
-while exit is unconfirmed, and no termination promise can extend the 10 s
-invocation deadline. This is an explicit exception to BR-118 v2's ordinary
+its permit and identity charge to a detached exit watcher. Preserve the
+existing final authorization at `src/navigation.ts:556–562` before returning
+`E("CONTENT_UNAVAILABLE")`: check liveness, authorize afresh, then check
+liveness again. Authorization denial returns `E("ACCESS_DENIED")`. This
+final authorization is bounded by the original invocation deadline; if it
+stalls, settle `E("REQUEST_TIMEOUT")` at that deadline and discard any late
+completion. Release the session slot on settlement, never later than the
+deadline. No policy call starts after abort/deadline/close. BR-109 is unchanged.
+If termination is still pending at the invocation deadline, detach the same
+ownership and settle exactly as `E("REQUEST_TIMEOUT")` at that deadline.
+A previously recorded cancel/close retains `E("ACCESS_DENIED")`; a closed
+session publishes no wire result. Liveness is checked before choosing the
+failure: at or beyond the deadline, with no earlier recorded abort cause,
+`REQUEST_TIMEOUT` wins over a late termination rejection. No success or
+content-dependent result is published while exit is unconfirmed, and no
+termination or authorization promise can extend the 10 s invocation deadline.
+This is pending BR-118 v3's explicit exception to active v2's ordinary
 exit-before-slot-release ordering, not to memory accounting.
 
 Install the exit observer before requesting termination; transfer ownership
@@ -208,6 +234,18 @@ A fulfilled termination acknowledgment counts only when it confirms exit;
 a rejection never does. If the worker never exits, its permit and identity
 remain charged indefinitely, but its invocation and session slot do not.
 At most two such watchers can exist because each owns a global permit.
+At detach, offer exactly `Extraction worker detached; capacity remains charged until exit.\n`
+once per watcher to the existing diagnostic port (stderr in production).
+On its eventual confirmed exit and permit release, offer exactly
+`Detached extraction worker exited; capacity released.\n` once for that
+watcher. These are fixed constants, without paths, IDs, names, counts,
+error messages, stacks, source bytes or other payloads. Use F-039's fixed
+best-effort diagnostic style: set each once guard before the attempt, contain
+synchronous throws/reentrant errors, never await a callback/drain or retry,
+and never let diagnostic failure delay settlement/release or change a result.
+Blocked stderr may prevent delivery. Ordinary exit without detach emits neither
+line; immediate admission refusals emit neither line. These are diagnostics,
+not audit events, and do not change lot C's audit contracts.
 Garbage collection/RSS reduction is not a release prerequisite or asserted
 outcome. The bounded final tool result can remain for transport publication.
 
@@ -247,27 +285,35 @@ fields: `E(code) = {isError:true,content:[{type:"text",text:code}]}`.
 
 | Condition | Exact controller result | Content work for that caller |
 | --- | --- | --- |
-| Four live waiting and no immediate eligible grant | `E("LIMIT_EXCEEDED")` | None; no retry or retry timer |
+| Four live waiting and no immediate eligible grant | `E("SERVER_BUSY")` | None; no retry or retry timer |
+| Identity holds a detached permit, or already has a live waiter | `E("SERVER_BUSY")` immediately | None; no enqueue or retry |
+| Existing live waiter when its identity detaches | `E("SERVER_BUSY")` immediately | None; removed from queue |
 | Queued invocation reaches its deadline | `E("REQUEST_TIMEOUT")` | None; removed from queue |
 | Queued invocation cancelled or session closed | `E("ACCESS_DENIED")` | None; removed from queue |
-| Live invocation: termination rejects before worker exit | `E("CONTENT_UNAVAILABLE")` immediately | Session slot released; detached watcher retains permit/identity until exit |
+| Live invocation: termination rejects before worker exit | `E("CONTENT_UNAVAILABLE")` after successful final authorization; denial gives `E("ACCESS_DENIED")`, expiry gives `E("REQUEST_TIMEOUT")` | Session slot released on settlement by its deadline; detached watcher retains permit/identity until exit |
 | Termination still pending at invocation deadline, no earlier cancel/close | `E("REQUEST_TIMEOUT")` by t=10,000 ms | Session slot released; detached watcher retains permit/identity until exit |
 | Other admitted extraction failure | Existing fixed failure code | Existing cleanup and authorization rules |
 
-A closed session publishes no wire result. No new diagnostic, audit event,
-HTTP status, `Retry-After`, queue position/count, target identifier or
-dependency message is emitted by extraction admission. In particular, a
-full queue is not `SERVER_BUSY`, whose per-session retry guidance stays
-unchanged. The server does not automatically retry any admission refusal;
-a later client invocation is a new admission with fresh authorization.
-Existing download retries after successful admission retain their contract.
+A closed session publishes no wire result. Admission refusal emits no
+diagnostic or audit event, new HTTP status, `Retry-After`, queue position/count,
+target identifier or dependency message. Only detached lifecycle transitions
+offer the two fixed diagnostics above. Queue saturation reuses `SERVER_BUSY`,
+already returned by `src/navigation.ts` for per-session queue saturation or
+wait expiry before upstream work; README describes that refusal as safe to
+retry once earlier work completes. The server does not automatically retry
+any admission refusal; a later client invocation is a new admission with
+fresh authorization. Existing download retries after successful admission
+retain their contract. Size limits and worker error/exit retain `LIMIT_EXCEEDED`.
 
 The README `kdrive_read` guidance and its registered tool description must
-both include: "LIMIT_EXCEEDED may be transient when the extraction queue is
-saturated. The server does not automatically retry; a later client invocation
-requires fresh admission and authorization." Retain the existing meaning for
-permanent size limits and worker error/exit; this code alone does not identify
-the cause or promise success on retry. Verify both surfaces with AC-12.
+both include: "SERVER_BUSY is a transient admission refusal before source
+work, including extraction queue saturation, an identity's waiting limit or
+a detached worker holding its permit. The server does not automatically retry;
+a later client invocation requires fresh admission and authorization. Capacity
+may remain unavailable until a stuck worker exits or the process restarts."
+Transient describes capacity rather than a permanent size/content limit; it
+promises neither recovery time nor success on retry. Verify both surfaces
+with AC-12; retain the existing per-session retry guidance.
 
 ## Acceptance criteria
 
@@ -304,12 +350,12 @@ encoding:"utf-8"})` for `{file_id:3,format:"text"}`.
   pipeline/worker counts never exceed two. Verified by
   `TestBR424_v1_AC02_four_waiters_are_FIFO_without_barging`.
 - **AC-03** (BR-424 v1) — Given two active and four live queued calls,
-  When a seventh caller (fifth would-be waiter) arrives, Then it returns exactly `E("LIMIT_EXCEEDED")`
+  When a seventh caller (fifth would-be waiter) arrives, Then it returns exactly `E("SERVER_BUSY")`
   without advancing time, with zero content calls, buffering and worker
   starts for that call. Free a slot and advance controlled time: that
   refused call never starts again and schedules no retry. A new invocation
   can join once capacity exists. Verified by
-  `TestBR424_v1_AC03_seventh_caller_fifth_waiter_refuses_LIMIT_EXCEEDED_without_retry`.
+  `TestBR424_v1_AC03_seventh_caller_fifth_waiter_refuses_SERVER_BUSY_without_retry`.
 - **AC-04** (BR-425 v1, BR-384 v2) — Given a running invocation with
   session-slot start at t=0 that joins extraction waiting at t=2,000 ms,
   When it still waits at t=9,999, Then it remains pending; at t=10,000 it
@@ -345,7 +391,7 @@ encoding:"utf-8"})` for `{file_id:3,format:"text"}`.
   grant again. Verified by
   `TestBR425_v1_AC06_dead_waiter_cannot_win_permit_handoff`
   (rows `abort-before`, `abort-after`, `deadline-before`, `deadline-after`).
-- **AC-07** (BR-426 v1, BR-118 v2) — Given two active pipelines and a
+- **AC-07** (BR-426 v1, BR-118 v3) — Given two active pipelines and a
   third queued, When one active pipeline takes each terminal path below,
   Then it has the exact result listed, any opened body closes once, a
   created worker exits before permit reuse, and the third starts once and
@@ -369,7 +415,7 @@ encoding:"utf-8"})` for `{file_id:3,format:"text"}`.
   | `cancel` | Active worker's invocation is aborted | `E("ACCESS_DENIED")` |
   | `close` | Active worker's session closes | `E("ACCESS_DENIED")`; no wire result |
 
-- **AC-08** (BR-426 v1) — Given two held permits for identities A and B
+- **AC-08** (BR-426 v1, BR-118 v3, BR-424 v1, BR-109) — Given two held permits for identities A and B
   and a queued extraction C, When A's real started worker begins cleanup,
   Then enforce the following exact outcomes with slot start t=0. Verified by
   `TestBR426_v1_AC08_worker_exit_precedes_permit_reuse` in
@@ -378,24 +424,43 @@ encoding:"utf-8"})` for `{file_id:3,format:"text"}`.
   | Parameter row | Controlled termination/exit | Exact result and ownership |
   | --- | --- | --- |
   | `success`, `error`, `timeout`, `cancel`, `close` | Hold acknowledgment, then confirm exit before t=10,000 | Until exit the permit and session slot stay held and C never starts; on exit settle once with respectively `S`, `E("LIMIT_EXCEEDED")`, `E("REQUEST_TIMEOUT")`, `E("ACCESS_DENIED")`, `E("ACCESS_DENIED")` (close: no wire result), release once and start C once |
-  | `termination-rejection` | Reject termination at t=1,000 while A's worker keeps running beyond t=10,000, with no abort | At t=1,000 settle exactly `E("CONTENT_UNAVAILABLE")` and release A's session slot; a detached watcher keeps A's permit and identity charged; at t=10,000 C still has zero starts and A has no second result |
+  | `termination-rejection` | Reject termination at t=1,000 while A's worker keeps running beyond t=10,000, with no abort | Final authorization succeeds immediately at t=1,000; settle exactly `E("CONTENT_UNAVAILABLE")` and release A's session slot; a detached watcher keeps A's permit and identity charged; at t=10,000 C still has zero starts and A has no second result |
   | `termination-pending-at-deadline` | Termination neither resolves nor rejects, worker has not exited at t=10,000 | At t=10,000 settle exactly `E("REQUEST_TIMEOUT")`, release the session slot and transfer permit/identity to the watcher; C stays unstarted |
   | `cancel-pending-at-deadline`, `close-pending-at-deadline` | Record cancel/close at t=1,000; hold termination/exit through t=10,000 | By t=10,000 settle exactly `E("ACCESS_DENIED")` and release the slot; close publishes no wire result; watcher retains permit/identity |
 
-  In detached rows, start B and C at t=500 (their deadlines are t=10,500).
-  For a session still open, a same-session metadata call completes after settlement;
-  a new extraction for A in an open session waits with zero content starts.
-  Release B at t=10,001: C starts once while A still cannot acquire.
-  At t=10,002 explicitly stop A's test worker and confirm exit: its permit/identity
-  release once and A's oldest eligible waiter starts. Inject duplicate late
-  message/error/exit and late termination rejection after timeout; observe
-  no extra grant/result or retained invocation timer/listener. Cover exit
-  immediately before and after ownership transfer. Use the existing owned-
-  worker harness with a wall watchdog and clean up every real test worker;
+  In these detached rows, start B and C at t=500 (deadlines t=10,500).
+  For an open session, a same-session metadata call completes after settlement.
+  In `termination-rejection`, A's second extraction has session-slot start
+  t=1,500 (deadline t=11,500); it returns `E("SERVER_BUSY")` immediately with
+  zero content starts and no queue entry. In the other detached rows, make
+  the same attempt in another open A session at t=10,000 after detach
+  (deadline t=20,000); it also refuses immediately. Release B at t=10,001:
+  C starts once. At t=10,002 explicitly stop A's test worker and confirm exit:
+  its permit/identity release once; previously refused calls never restart.
+  A fresh A invocation at t=10,003 can start once on the released permit.
+  Inject duplicate late message/error/exit and late termination rejection;
+  observe no extra grant/result or retained invocation timer/listener. Cover
+  exit immediately before and after ownership transfer. Use the existing
+  owned-worker harness with a wall watchdog and clean up every real worker;
   "never exits" is simulated until explicit harness teardown.
+
+  Add these rows to the same AC-08 test; also assert BR-118 v3 explicitly
+  with `TestBR118_v3_AC08_detached_exit_preserves_deadline_and_slot_reuse`
+  over all detached rows in `tests/read-worker-lifecycle.test.ts`:
+
+  | Parameter row | Given / When | Then |
+  | --- | --- | --- |
+  | `termination-rejection-final-denial` | Termination rejects at t=1,000; final authorization denies at t=1,001 | Exactly `E("ACCESS_DENIED")`, session slot released; detached permit remains charged until exit |
+  | `termination-rejection-final-auth-deadline` | Termination rejects at t=1,000; final authorization stays pending through t=10,000 | Exactly `E("REQUEST_TIMEOUT")` at t=10,000, session slot released; late authorization success/failure cannot publish; permit remains charged until exit |
+  | `detach-removes-existing-waiter` | A1 owns a permit and A2 waits in another session; A1 detaches while A2 is live | A2 immediately returns `E("SERVER_BUSY")`, leaves the queue with zero content starts, and never restarts after A1 exits |
+  | `detach-diagnostics` | Each detached row above, with canary paths, IDs, names, errors and payloads; later confirm exit and inject duplicate events | Exactly one offer of the fixed detach line, then exactly one offer of the fixed release line; no other text or audit event, no canary; ordinary exit and immediate admission refusals offer neither line |
+  | `diagnostic-failure` | Repeat detach/release with a diagnostic port that throws, reenters or never acknowledges | Each line is attempted once; settlement and release keep their original timing/results without waiting, retry or unhandled failure |
+  | `two-stuck-workers` | A and B detach and remain alive; a new distinct identity C requests extraction | A/B requests refuse `SERVER_BUSY` immediately; C can wait but starts no content and reaches its own `REQUEST_TIMEOUT`; two detach lines, no release lines until explicit worker teardown; no permit is recycled early |
+  | `stdio-stuck-worker` | The shared stdio/fallback identity's worker detaches and remains alive | Every later stdio/fallback extraction refuses `SERVER_BUSY` immediately despite the free second permit; metadata still runs; one detach line, no release line until explicit worker teardown |
+
 - **AC-09** (BR-424 v1, BR-120, BR-109) — Given a full queue and canary
   target/source/dependency values, When admission refuses, Then the complete
-  result equals `E("LIMIT_EXCEEDED")`, with no canary, retry field, queue
+  result equals `E("SERVER_BUSY")`, with no canary, retry field, queue
   field, new diagnostic or audit event. Queued deadline/cancel give only
   their exact codes above. Given a queued read whose authority is revoked
   before grant, When a permit becomes available, Then it returns exactly
@@ -446,7 +511,8 @@ encoding:"utf-8"})` for `{file_id:3,format:"text"}`.
   | `same-identity` | A1 runs; another session A2 requests extraction | A2 waits with zero content/worker starts although the second permit is free; after A1 exits A2 starts once and returns `S` |
   | `oldest-eligible` | A1 and B1 run; enqueue A2, C1, B2, D1 in that order; release B1 | Skip A2; start C1 only. Release C1: B2 starts before D1. Release A1: A2 starts before D1. Remaining completions return `S` |
   | `no-barging` | Same queue; a newcomer E1 arrives during B1's release | C1 starts first, E1 joins behind A2, B2 and D1; no older eligible waiter is overtaken |
-  | `eight-http-sessions` | Bind eight sessions to the same verified issuer/subject; A1 runs, A2–A5 queue; A6–A8 request extraction | One permit held by A, four waiters, A6–A8 each return `E("LIMIT_EXCEEDED")`; after cancelling queued A2 to free a queue place, distinct identity B starts on the spare permit while A1 remains held |
+  | `eight-http-sessions` | Bind eight sessions to the same verified issuer/subject; A1 runs, A2 waits, A3–A8 request extraction; while A2 remains queued and the second permit is free, distinct B arrives | One A permit and one A waiter; A3–A8 each return `E("SERVER_BUSY")` immediately; B starts at once without cancelling A2; A2 retains its age and starts once after A1 exits |
+  | `one-waiter-per-identity` | A1 and B1 run; enqueue C1, then C2 in another session of C while three queue places remain | C2 returns `E("SERVER_BUSY")` immediately with zero source/worker starts and no queue entry; C1 retains its position; after cancelling C1, a fresh C3 may enqueue once |
   | `identity-key` | Separate identity objects have equal issuer/subject; another has a different issuer or subject | Equal pairs share one allowance across sessions; either differing component permits overlap up to two globally |
   | `stdio-and-fallback` | Separate stdio controllers and controllers without identity request extraction | They share one process-local identity and serialize; the spare permit cannot be used by another stdio/fallback call |
   | `insecure-http` | Two insecure HTTP sessions request extraction | They share one insecure identity and serialize |
@@ -458,12 +524,14 @@ encoding:"utf-8"})` for `{file_id:3,format:"text"}`.
   the actual `kdrive_read` description returned by tool listing, When the
   documentation contract is checked, Then both contain the transient queue
   saturation, no automatic retry, and fresh admission/authorization wording
-  above; neither claims that every `LIMIT_EXCEEDED` is permanent or transient.
-  Verified by `TestBR424_v1_AC12_docs_explain_transient_queue_saturation` in
+  above, including the identity/detached refusal and recovery caveat; neither
+  assigns extraction queue saturation to `LIMIT_EXCEEDED`.
+  Verified by `TestBR424_v1_AC12_docs_explain_transient_SERVER_BUSY` in
   `tests/extraction-admission-docs.test.ts`. Follow
   `tests/deployment-examples.test.ts`: read files without Git, validate the
   required statements, and seed mutations removing each required statement
-  or adding "LIMIT_EXCEEDED always means a permanent size limit" on each
+  or substituting "LIMIT_EXCEEDED means extraction queue saturation" or
+  "SERVER_BUSY guarantees success on retry" on each
   surface; every mutated fixture must fail the validator. Do not merely
   search source code for the tool-description string.
 
@@ -502,7 +570,7 @@ encoding:"utf-8"})` for `{file_id:3,format:"text"}`.
    is needed for this process-local invariant.
 
 No test or gate is run in this spec-only, no-Docker assignment; document
-content checks are not `make check` or CI. The supplied Review 1 is recorded below; no new review, approval or token
+content checks are not `make check` or CI. The supplied Reviews 1–2 and Decision 1 are recorded below; no new review, approval or token
 counter is claimed. Review/usage evidence belongs in the ticket/PR when
 those phases occur, not in a new per-run repository file.
 
@@ -522,8 +590,8 @@ those phases occur, not in a new per-run repository file.
   approach 10 s); identity conflicts and detached workers can extend it
   further. Choose four to bound retained work, without claiming deadline
   completion. Each waiter expires on its own original deadline. One active
-  permit per identity prevents one identity's eight sessions from holding
-  both permits; oldest-eligible ordering avoids head-of-line blocking while
+  permit and one live waiter per identity prevent one identity's eight sessions
+  from holding both permits or all queue places; oldest-eligible ordering avoids head-of-line blocking while
   preserving age across identities. One active globally would serialize all extraction; four would double these
   concurrent contributions without measured need. Sixty-four active or
   waiting and an unbounded queue retain too much work. Configurability and
@@ -539,22 +607,23 @@ those phases occur, not in a new per-run repository file.
 - **D-3 — Existing deadline and non-retried fixed refusal.** Use the
   running invocation deadline for queue waiting; a fresh deadline at grant
   would extend existing work bounds. Retain the worker-specific timeout's
-  current start and cap. Choose `LIMIT_EXCEEDED` for aggregate queue
-  saturation, avoiding new public error codes or `SERVER_BUSY`'s retry
-  guidance. `src/extraction.ts` also uses this code for worker error/exit;
-  existing size limits keep their permanent meaning. Require the README and
-  tool description to state that queue saturation may be transient (AC-12),
-  without exposing a cause discriminator or encouraging automatic retries.
-  The exact tool error is the observable signal; adding an event
-  catalogue or logging caller data is unnecessary.
+  current start and cap. Choose existing `SERVER_BUSY` for aggregate queue
+  saturation, a second waiter of an identity and a detached charged identity:
+  all refuse before source work, matching the existing transient admission
+  meaning. `LIMIT_EXCEEDED` remains the size/worker failure code; overloading
+  it for queue capacity is rejected. Require README and tool-description
+  guidance (AC-12): no server retry, fresh admission/authorization on a later
+  client call, and no recovery-time promise. The two fixed lifecycle
+  diagnostics signal detached capacity to operators without caller data.
 - **D-4 — Aggregate ownership with a bounded settlement exception.**
   BR-423–BR-426 add process-wide admission. BR-117's per-invocation ceilings
   and BR-384's pre-invocation queue remain unchanged. BR-118 v2 remains the
   accepted baseline, but the owner explicitly chooses to release a session
   slot on failed/overdue termination while a detached watcher owns the
   worker's permit until exit. Preserve ordinary exit-before-settlement;
-  record this narrow exception in a pending BR-118 version before freeze
-  (its canonical record is not edited in this draft revision). Indefinitely
+  record this narrow exception now in pending BR-118 v3, preserving active
+  v2 and its evidence. Termination rejection retains BR-109 final authorization
+  within the deadline; it is not an authorization bypass. Indefinitely
   holding the invocation violates its deadline; recycling the permit before
   exit loses external-memory accounting. Neither alternative is accepted.
   BR-070 remains untouched, so F-039's v5 requires no follow-on v6 or semantic
@@ -570,8 +639,9 @@ those phases occur, not in a new per-run repository file.
 - Slow downloads hold scarce permits before workers start. That is intentional
   to cover source memory. One permit per identity prevents monopolizing both
   permits; oldest-eligible FIFO gives ordering, not guaranteed completion.
-  One identity can still fill the four queue places, so queue refusal can
-  affect others. No queue reservation or starvation-free throughput is claimed.
+  One identity can hold at most one live waiter; four different identities
+  can still fill the queue and refuse others. Detached identities are refused
+  immediately. No queue reservation or starvation-free throughput is claimed.
 - Moving admission after a metadata/open/buffering step, creating one owner
   per session, or releasing on worker-message rather than exit would miss
   the finding. Integration tests need separate controllers, shared production
@@ -580,13 +650,19 @@ those phases occur, not in a new per-run repository file.
   This may reduce capacity; recycling it early breaks the active bound.
   The detached watcher retains the permit and identity until exit, potentially
   indefinitely; the invocation still settles and releases its slot within
-  10 s. Both stuck permits can halt all extraction admission, but waiting
-  calls still time out and other tool paths can run. No process-crash recovery guarantee is added.
+  10 s. Permanently stuck workers reduce capacity until process restart:
+  two halt all extraction, and one blocks all stdio/fallback extraction because
+  it shares a single identity. Charged identities get immediate `SERVER_BUSY`;
+  other identities may queue and time out. The fixed detach diagnostic is the
+  operator signal; the fixed release diagnostic signals eventual recovery.
+  Both are best effort and blocked stderr can prevent delivery. Other tools
+  still run; no automatic restart or process-crash recovery guarantee is added.
 - Global test state can leak between cases. Settle/close every controller and
   owned worker; use an isolated internal test owner where needed, and keep
   explicit tests of the shared default. Do not add a production reset hook.
 - Bursts previously running concurrently will now wait or refuse. Reusing
-  `LIMIT_EXCEEDED` intentionally gives no fine-grained capacity diagnosis;
+  `SERVER_BUSY` uses the existing transient admission meaning and gives no
+  fine-grained capacity diagnosis;
   it reveals neither another user's activity nor protected content details.
 
 ## Open questions
@@ -631,3 +707,47 @@ not supplied (unknown); no usage is inferred. This revision remains draft v1.
    AC-03 and BR-424 E-02 both name the seventh caller, fifth would-be waiter,
    with two active distinct identities and four queued calls. The exact test
    name is `TestBR424_v1_AC03_seventh_caller_fifth_waiter_refuses_LIMIT_EXCEEDED_without_retry`.
+
+
+### Review 2 / Decision 1 dispositions
+
+The owner supplied `47d-spec-review-2-reviewer` and
+`47d-spec-decision-1-fable` for this revision. Both require changes; these
+entries record supplied findings and decisions, not a new review or approval.
+Reviewer model/effort and token counters were not supplied (unknown).
+Decision-pass model: Fable 5.2 per PROJECT.md; actual reported model/effort
+and usage remain unknown. No forge publication is performed. F-040 stays draft v1.
+The seven dispositions below supersede conflicting Review 1 choices, including
+its deferred BR-118 record and its LIMIT_EXCEEDED admission code/test name.
+
+1. **Major — both reviews: missing BR-118 version. Retained, fixed.**
+   Add pending BR-118 v3 now, with active v2 preserved, detached AC-08 examples,
+   verification and History. Business rules, AC-07/08 and the BR index cite v3;
+   the index counts four new pending rules plus one pending existing-rule version.
+2. **Major — Decision 1 F-2: silent permanent capacity loss. Retained, fixed.**
+   Detach/release each offers one fixed payload-free diagnostic; detached
+   identities and their already-live waiters refuse SERVER_BUSY. AC-08 pins
+   diagnostics, failed delivery, two stuck workers and the single stdio identity;
+   Risks names restart as recovery for permanently stuck workers.
+3. **Major — Decision 1 F-3: one identity fills the queue. Retained, fixed.**
+   At most one live waiter per identity; a second refuses SERVER_BUSY even
+   with free queue places. AC-11 verifies this limit and cancellation recovery.
+4. **Minor — both reviews: spare permit behind ineligible waiters. Retained
+   with a reachable scenario.** Four ineligible waiters are impossible with
+   two permits and one waiter per identity. AC-11's eight-session row keeps
+   A2 queued behind A1 while B arrives and immediately takes the spare permit;
+   AC-02/03 separately retain the four-distinct-waiter saturation boundary.
+5. **Minor — Review 2: AC-08 second-extraction timing. Retained, fixed.**
+   A's second extraction in the rejection row starts its slot at t=1,500,
+   deadline t=11,500, and now refuses immediately under the detached-identity
+   decision. Other detached rows use t=10,000; a fresh post-exit call starts
+   at t=10,003. No refused call is later resumed.
+6. **Minor — Decision 1 F-5: final authorization. Retained, fixed.**
+   Preserve navigation's final authorization before CONTENT_UNAVAILABLE,
+   with liveness before/after and deadline-bounded settlement. AC-08 covers
+   approval, denial and stalled authorization; BR-109 stays unchanged.
+7. **Minor — Decision 1 F-6: admission error meaning. Retained, fixed.**
+   Existing navigation/README SERVER_BUSY means refusal before upstream work
+   and is retryable by a later client call. Use it for queue/identity capacity,
+   synchronize BRs, ACs, test names and AC-12 documentation requirements, and
+   correct Risks; LIMIT_EXCEEDED remains the size/worker failure code.
