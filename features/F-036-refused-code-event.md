@@ -2,7 +2,7 @@
 id: F-036
 title: Refused authorization-code redemption events restored
 ticket: "#49"
-status: frozen
+status: done
 version: 1
 ---
 
