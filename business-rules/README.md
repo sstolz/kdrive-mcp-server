@@ -956,10 +956,12 @@ HTTP request is out of scope.
 
 [F-040 draft v1](../features/F-040-process-wide-extraction-admission.md)
 (#47 lot D) allocates BR-423–BR-426 v1. All four are pending acceptance;
-no existing BR is versioned. Independent review, freeze, implementation and
-actual-main acceptance remain pending. BR-070, BR-117, BR-118 and BR-384
-keep their current contracts: aggregate extraction admission adds a distinct
-constraint inside the running invocation.
+no existing BR is versioned in this revision. Review 1 is dispositioned;
+revised approval, freeze, implementation and actual-main acceptance remain
+pending. BR-070, BR-117 and BR-384 retain their bounds. F-040 D-4 explicitly
+proposes a failed/overdue-termination exception to BR-118 v2: release the
+invocation slot within its deadline while a detached exit watcher retains
+the permit/identity until exit. Synchronize the pending BR-118 version before freeze.
 
 The owner reserves F-039 for lot C on `fix/47-c-audit-sink`, not yet merged,
 with BR-070 v5 and pending versions of BR-240, BR-241, BR-254 and BR-259.
@@ -967,9 +969,9 @@ Those versions are not in this checkout and do not change its canonical-rule
 counts. Preserve lot C's clauses when reconciling the shared records; lot D
 neither versions those rules nor depends on a BR-070 v6.
 
-| ID                  | Version | Rule                                                                              | Source                                                             | Status                    |
-| ------------------- | ------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------ | ------------------------- |
-| [BR-423](BR-423.md) | v1      | Two process-wide extraction permits, acquired before complete-source buffering.   | [F-040 v1](../features/F-040-process-wide-extraction-admission.md) | Pending acceptance; draft |
-| [BR-424](BR-424.md) | v1      | Eight FIFO waiters; overflow returns fixed `LIMIT_EXCEEDED` without retry.        | [F-040 v1](../features/F-040-process-wide-extraction-admission.md) | Pending acceptance; draft |
-| [BR-425](BR-425.md) | v1      | Extraction waiting spends the running invocation deadline and obeys cancel/close. | [F-040 v1](../features/F-040-process-wide-extraction-admission.md) | Pending acceptance; draft |
-| [BR-426](BR-426.md) | v1      | Release exactly once after owned source/worker cleanup on every terminal path.    | [F-040 v1](../features/F-040-process-wide-extraction-admission.md) | Pending acceptance; draft |
+| ID                  | Version | Rule                                                                                           | Source                                                             | Status                    |
+| ------------------- | ------- | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ | ------------------------- |
+| [BR-423](BR-423.md) | v1      | Two process-wide permits before buffering; at most one per identity.                           | [F-040 v1](../features/F-040-process-wide-extraction-admission.md) | Pending acceptance; draft |
+| [BR-424](BR-424.md) | v1      | Four waiters, oldest eligible identity first; overflow returns `LIMIT_EXCEEDED` without retry. | [F-040 v1](../features/F-040-process-wide-extraction-admission.md) | Pending acceptance; draft |
+| [BR-425](BR-425.md) | v1      | Extraction waiting spends the running invocation deadline and obeys cancel/close.              | [F-040 v1](../features/F-040-process-wide-extraction-admission.md) | Pending acceptance; draft |
+| [BR-426](BR-426.md) | v1      | Release once after worker exit; detach permit ownership on failed/overdue termination.         | [F-040 v1](../features/F-040-process-wide-extraction-admission.md) | Pending acceptance; draft |

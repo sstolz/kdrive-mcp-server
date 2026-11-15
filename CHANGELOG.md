@@ -127,9 +127,12 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
 
 - #47 lot D / F-040 v1 (draft; pending acceptance): propose two process-wide
   `kdrive_read` extractions, admitted before source buffering, and at most
-  eight FIFO waiters. A full queue returns `LIMIT_EXCEEDED` without automatic
+  four waiters, served by oldest eligible identity, with one active permit
+  per identity. A full queue returns `LIMIT_EXCEEDED` without automatic
   retry; queued waits count against the existing invocation deadline and
-  obey cancel/close. Release follows owned cleanup on every exit path.
+  obey cancel/close. Failed/overdue termination releases the invocation slot
+  within its deadline; a detached watcher retains the permit/identity until
+  worker exit. README/tool guidance will explain transient queue saturation.
   This bounds concurrent pipelines, not total memory. Review, freeze,
   implementation and acceptance are pending.
 
