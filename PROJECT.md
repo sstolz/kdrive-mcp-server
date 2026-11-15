@@ -146,9 +146,12 @@ Owner decisions that set the parameters above, with their date and source.
     checked like any author's.
   - **Evidence.** A Codex review uses the identifier
     `<ticket>-<act>-<round>-codex` and is posted verbatim by the orchestrator
-    like the reviewer tool's reports, with the Codex version and model. Its
-    findings are weighed like any reviewer's: accepted, rejected with a
-    reason, or sent to the owner.
+    like the reviewer tool's reports, with the Codex version, model and
+    reasoning effort (`unknown` if not reported). Its findings are weighed
+    like any reviewer's: accepted, rejected with a reason, or sent to the
+    owner. A Codex round does not count toward the round limit of AGENTS.md
+    §3 and its approval never stands in for the strong-tier approval; its
+    accepted findings go to the next strong-tier round.
   - **Limits.** Prompts follow the public-content rule: no secrets, tokens,
     private data or session links. Codex never pushes, merges, comments on the
     forge or changes the environment; the orchestrator does those. Its usage
