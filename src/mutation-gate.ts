@@ -553,12 +553,18 @@ export function createMutationGate(options: MutationGateOptions): MutationGate {
     },
     close(deadline?: number) {
       closed = true;
+      // Later deadlines are ignored; current callers close once with a deadline.
       closing ??= (async () => {
-        try {
-          if (deadline !== undefined && !hasCommitted()) {
-            shutdownDeadline = Math.min(shutdownDeadline ?? Infinity, deadline);
+        if (deadline !== undefined && !hasCommitted()) {
+          shutdownDeadline = Math.min(shutdownDeadline ?? Infinity, deadline);
+          try {
             sink?.shortenDeadline?.(shutdownDeadline);
+          } catch {
+            sink?.latch();
+            diagnose();
           }
+        }
+        try {
           while (inflight.size) await Promise.allSettled([...inflight]);
           await sink?.close(shutdownDeadline);
         } catch {

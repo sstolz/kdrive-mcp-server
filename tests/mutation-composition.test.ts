@@ -2060,6 +2060,66 @@ describe("F-039 dedicated and owned shutdown", () => {
     }
   });
 
+  it("TestBR254_v2_AC09_throwing_shorten_deadline_drains_run_and_releases_file_before_close", async () => {
+    vi.useFakeTimers();
+    const s = f039Sink("release");
+    const sink = await s.sink;
+    const shortenDeadline = vi.fn(() => {
+      throw new Error("SYNTHETIC_SHORTEN_FAILURE");
+    });
+    const close = vi.fn((deadline?: number) => sink.close(deadline));
+    const h = f039Gate({
+      append: (record) => sink.append(record),
+      get latched() {
+        return sink.latched;
+      },
+      latch: () => {
+        sink.latch();
+      },
+      close,
+      onLatch: (listener) => sink.onLatch?.(listener),
+      shortenDeadline,
+    });
+    let policyDone!: () => void;
+    const policy = new Promise<void>((resolve) => {
+      policyDone = resolve;
+    });
+    const result = observed(
+      h.run(async (operation) => {
+        await policy;
+        return { ok: true, value: await h.gate.execute(operation) };
+      }),
+    );
+    await microtasks();
+    expect(result.settled).toBe(false);
+    const deadline = performance.now() + 1000;
+    const closing = observed(h.gate.close(deadline));
+    await microtasks();
+    expect(shortenDeadline).toHaveBeenCalledExactlyOnceWith(deadline);
+    expect(sink.latched).toBe(true);
+    expect(h.diagnostics).toEqual([gateModule.OUTCOME_UNRECORDED_DIAGNOSTIC]);
+    expect(closing.settled).toBe(false);
+    expect(close).not.toHaveBeenCalled();
+    expect(s.releaseCalls()).toBe(0);
+
+    policyDone();
+    await microtasks();
+    expect(result.value).toEqual({
+      result: "failed",
+      op: OP,
+      code: "CANCELLED",
+      attempts: 0,
+    });
+    expect(h.attempt).not.toHaveBeenCalled();
+    expect(close).toHaveBeenCalledExactlyOnceWith(deadline);
+    expect(s.releaseCalls()).toBe(1);
+    expect(closing.settled).toBe(false);
+
+    s.releases[0]!();
+    await microtasks();
+    expect(closing).toEqual({ settled: true, value: undefined });
+  });
+
   it("TestBR254_v2_AC09_throwing_shorten_deadline_still_reaches_stdio_exit", async () => {
     vi.useFakeTimers();
     const s = f039Sink("stderr");
