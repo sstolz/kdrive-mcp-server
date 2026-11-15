@@ -1,9 +1,17 @@
 # Deployment
 
 This guide covers the container image and the deployment examples of
-[F-013](../features/F-013-http-image.md), and gives a step-by-step
-[personal server](#personal-server-step-by-step) installation. Read
-[Current status](#current-status) first.
+[F-013](../features/F-013-http-image.md), lists the
+[settings of an HTTP deployment](#settings-of-an-http-deployment), and gives a
+step-by-step [personal server](#personal-server-step-by-step) installation
+with Docker Compose behind Traefik. Read [Current status](#current-status)
+first.
+
+This project is unofficial and is not affiliated with, endorsed by or
+supported by Infomaniak. Where a step happens in an Infomaniak interface,
+this guide says what to look for; the official pages are linked from the
+[README](../README.md#values-from-the-infomaniak-side), and the exact menu
+paths are still to be confirmed by the maintainer.
 
 ## Current status
 
@@ -16,11 +24,31 @@ write tools of `write` mode ([F-017](../features/F-017-controlled-tree-mutations
 ([F-016](../features/F-016-mutation-audit-gate.md)). `share` mode registers no
 share tool yet (#20).
 
-The image is built locally; nothing is published to a registry. The runtime image has a `HEALTHCHECK`
+There are two ways to get the runtime image:
+
+- **Published beta.** `0.6.0-beta.1` is published on GHCR as
+  `ghcr.io/sstolz/kdrive-mcp-server:0.6.0-beta.1`, for `linux/amd64` and
+  `linux/arm64`. A beta never gets the `latest` tag, and image tags can be
+  overwritten, so pin the image by its digest
+  ([publishing](publishing.md#versions), and step 1 below). The beta predates
+  the changes listed under Unreleased in the [changelog](../CHANGELOG.md):
+  among them the bounded queue for parallel tool calls (#16), Client ID
+  Metadata Documents with `OAUTH_ALLOWED_CLIENT_ID_ORIGINS` (#3), the
+  redesigned and translated consent pages (#23, #31) and the consent
+  double-click fix (#33). The beta does not know
+  `OAUTH_ALLOWED_CLIENT_ID_ORIGINS` and refuses to start with
+  `[UNKNOWN_SETTING]` when it is set, even empty, so leave it out of the
+  environment with that image.
+- **Build from source.** `make image` builds the image from a checkout of
+  `main`, with every merged change ([Build](#build)). A local build loads the
+  image into the local engine only; nothing is published to a registry by
+  it.
+
+The runtime image has a `HEALTHCHECK`
 ([F-021](../features/F-021-container-health-check.md), see
-[Health check](#health-check)). On a successful start the HTTP runtime prints nothing; it writes
-one line on stderr when startup fails (see [Troubleshooting](#troubleshooting))
-and JSON event lines while it runs.
+[Health check](#health-check)). On a successful start the HTTP runtime prints
+nothing; it writes one line on stderr when startup fails (see
+[Troubleshooting](#troubleshooting)) and JSON event lines while it runs.
 
 ## Build
 
@@ -79,9 +107,10 @@ runtime image:
 
 Both select the `http` transport and the OAuth `proxy` mode. `0.0.0.0` is the
 container-internal bind address, so the reverse proxy reaches port 3000 over
-the container network; no host port is published. Every installation-specific
-value in `compose.yaml` is a required `${NAME:?…}` variable, so Compose refuses
-to start until it is set. The public URL, for example
+the container network; no host port is published. Required installation-specific
+values in `compose.yaml` use `${NAME:?…}`, so Compose refuses to start until
+they are set. Optional values such as `MCP_HTTP_TRUSTED_PROXIES` may be empty.
+The public URL, for example
 `https://mcp.example.com/mcp`, must match the host name of the Traefik rule.
 
 `restart: on-failure:3` bounds a crash loop. The examples run the container
@@ -217,6 +246,77 @@ never races an in-flight port operation: if it outlives close's budget, the
 retained descriptor stays open until actual process termination, including in
 library hosts. No timer guarantees actual termination or durable delivery.
 
+## Settings of an HTTP deployment
+
+This table lists the settings of the Compose path below, taken from the
+[configuration reference](../features/F-002-configuration.md),
+[`examples/compose.yaml`](../examples/compose.yaml) and
+[`examples/config.yaml`](../examples/config.yaml). Every example value is
+illustrative: replace installation-specific values with yours. The Infomaniak
+issuer is given in the [README](../README.md#values-from-the-infomaniak-side). "Set by the example" means that
+`examples/compose.yaml` already sets the value and you normally keep it.
+
+Server settings (the `environment` of the service; the server reads no
+`.env` file):
+
+| Variable                            | Role                                                                                            | Required?                                                    | Example                               |
+| ----------------------------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------ | ------------------------------------- |
+| `KDRIVE_MCP_TRANSPORT`              | `stdio` or `http`.                                                                              | Yes for HTTP (default `stdio`); set by the example           | `http`                                |
+| `OAUTH_MODE`                        | Authentication mode; this guide uses the OAuth `proxy`.                                         | Yes for authenticated HTTP; set by the example               | `proxy`                               |
+| `MCP_HTTP_HOST`                     | Bind address inside the container.                                                              | Yes in a container (default `127.0.0.1`); set by the example | `0.0.0.0`                             |
+| `MCP_HTTP_TRUSTED_PROXIES`          | Trusted proxy addresses or CIDRs for peer admission; configure only after the checks in step 4. | No (empty by default)                                        | leave unset                           |
+| `MCP_HTTP_PORT`                     | Listening port, also used by the health check.                                                  | No (default `3000`); set by the example                      | `3000`                                |
+| `MCP_PUBLIC_URL`                    | Public HTTPS URL of the MCP endpoint, with a path.                                              | Yes                                                          | `https://mcp.example.com/mcp`         |
+| `KDRIVE_TOKEN_FILE`                 | Path, inside the container, of the file holding the kDrive API token.                           | Yes (or `KDRIVE_TOKEN`, not for Compose); set by the example | `/run/secrets/kdrive-token`           |
+| `KDRIVE_ID`                         | The drive to serve.                                                                             | Yes, or `KDRIVE_IDS`                                         | `123456`                              |
+| `KDRIVE_IDS`                        | Several drives, comma-separated; the first is the default.                                      | Instead of `KDRIVE_ID`                                       | `123456,234567`                       |
+| `KDRIVE_MCP_MODE`                   | `read`, `write` or `share`.                                                                     | No (default `read`); set by the example                      | `read`                                |
+| `KDRIVE_MCP_ROOTS`                  | Root folders per drive, by ID or path; must cover every configured drive.                       | No (default: folder 1 of each drive)                         | `123456:/Documents`                   |
+| `KDRIVE_MCP_DENY`                   | Comma-separated, case-sensitive path patterns to hide.                                          | No                                                           | `/Private/**`                         |
+| `KDRIVE_MCP_SHARED_WITH_ME`         | `1` to read items other users shared with you.                                                  | No (default `0`)                                             | `0`                                   |
+| `KDRIVE_MCP_AUDIT_LOG`              | Write audit log: `stderr` or an absolute file path.                                             | No (default `stderr`); a file is advised in `write` mode     | `/audit/audit.jsonl`                  |
+| `OAUTH_ISSUER`                      | Issuer URL of the upstream OpenID Connect provider, exactly as its discovery document gives.    | Yes                                                          | `https://login.example.com`           |
+| `OAUTH_UPSTREAM_CLIENT_ID`          | Client ID of the OAuth client registered at the provider.                                       | Yes                                                          | `00000000-fake-client-id`             |
+| `OAUTH_UPSTREAM_CLIENT_SECRET_FILE` | Path, inside the container, of the file holding that client's secret.                           | Yes; set by the example                                      | `/run/secrets/upstream-client-secret` |
+| `OAUTH_SIGNING_KEY_FILE`            | Path, inside the container, of the EC P-256 signing key.                                        | Yes; set by the example                                      | `/run/secrets/signing-key.pem`        |
+| `OAUTH_ALLOWED_EMAILS`              | Comma-separated emails allowed to log in.                                                       | Yes, or `OAUTH_ALLOWED_SUBJECTS`                             | `you@example.com`                     |
+| `OAUTH_ALLOWED_SUBJECTS`            | Comma-separated provider subjects (`sub`) allowed to log in.                                    | Instead of, or with, the emails                              | `00000000-fake-subject`               |
+| `OAUTH_ALLOWED_REDIRECT_URIS`       | Callback URLs of your AI clients, compared byte for byte.                                       | Yes                                                          | `https://client.example.org/callback` |
+| `OAUTH_AUDIENCE`                    | Token audience.                                                                                 | No (defaults to `MCP_PUBLIC_URL`)                            | leave unset                           |
+| `OAUTH_STATE_FILE`                  | SQLite file that keeps clients and logins across restarts.                                      | No                                                           | `/audit/oauth-state.sqlite`           |
+| `OAUTH_ALLOWED_CLIENT_ID_ORIGINS`   | Origins allowed for Client ID Metadata Documents; not in the published beta.                    | No (empty by default)                                        | leave unset                           |
+
+`OAUTH_ALLOWED_EMAILS` and `OAUTH_ALLOWED_SUBJECTS` together need at least one
+entry. The callback URL of each client is in the
+[client compatibility matrix](mcp-client-compatibility.md); the example value
+above is a placeholder, not a real client. Size and time limits
+(`KDRIVE_MCP_MAX_READ_BYTES` and others) keep their defaults unless you have a
+reason; the configuration reference gives every setting, bound and error code.
+
+Compose variables (read only by Compose, from the shell or a `.env` file next
+to `compose.yaml`; they hold no secret value):
+
+| Variable                      | Role                                                                   | Required?                    | Example                                                         |
+| ----------------------------- | ---------------------------------------------------------------------- | ---------------------------- | --------------------------------------------------------------- |
+| `KDRIVE_MCP_IMAGE`            | Runtime image: the published beta pinned by digest, or your local tag. | Yes                          | `ghcr.io/sstolz/kdrive-mcp-server:0.6.0-beta.1@sha256:<digest>` |
+| `MCP_PUBLIC_URL`              | Passed to the server (see above).                                      | Yes                          | `https://mcp.example.com/mcp`                                   |
+| `MCP_HOSTNAME`                | Host name of the Traefik rule; the host of `MCP_PUBLIC_URL`.           | Yes                          | `mcp.example.com`                                               |
+| `KDRIVE_ID`                   | Passed to the server (see above).                                      | Yes                          | `123456`                                                        |
+| `OAUTH_ISSUER`                | Passed to the server (see above).                                      | Yes                          | `https://login.example.com`                                     |
+| `OAUTH_UPSTREAM_CLIENT_ID`    | Passed to the server (see above).                                      | Yes                          | `00000000-fake-client-id`                                       |
+| `OAUTH_ALLOWED_EMAILS`        | Passed to the server (see above).                                      | Yes                          | `you@example.com`                                               |
+| `OAUTH_ALLOWED_REDIRECT_URIS` | Passed to the server (see above).                                      | Yes                          | `https://client.example.org/callback`                           |
+| `MCP_HTTP_TRUSTED_PROXIES`    | Passed to the server; read at startup (see step 4).                    | No (empty by default)        | leave unset                                                     |
+| `TRAEFIK_NETWORK`             | External Docker network that Traefik and the container share.          | Yes                          | `proxy`                                                         |
+| `TRAEFIK_ENTRYPOINT`          | Traefik HTTPS entrypoint name.                                         | Yes                          | `websecure`                                                     |
+| `KDRIVE_TOKEN_SECRET_FILE`    | Host path of the kDrive token file.                                    | Yes                          | `./secrets/kdrive-token`                                        |
+| `UPSTREAM_CLIENT_SECRET_FILE` | Host path of the upstream client secret file.                          | Yes                          | `./secrets/upstream-client-secret`                              |
+| `SIGNING_KEY_FILE`            | Host path of the signing key file.                                     | Yes                          | `./secrets/signing-key.pem`                                     |
+| `AUDIT_DIR`                   | Host directory mounted at `/audit` once you uncomment the `volumes`.   | Only with the `volumes` line | `./audit`                                                       |
+
+The secret files hold the values themselves, for example a kDrive token file
+containing `example-token-not-real`; step 3 below writes them.
+
 ## Personal server, step by step
 
 This path runs one container on your own server, behind a TLS reverse proxy
@@ -226,8 +326,8 @@ your kDrive and to a remote AI client. The values below
 
 You need:
 
-- a server with Docker Engine, the Compose and Buildx plugins, Git and GNU
-  Make 3.81 or later;
+- a server with Docker Engine and the Compose plugin; to build from source,
+  also the Buildx plugin, Git and GNU Make 3.81 or later;
 - a reverse proxy that terminates TLS for a public host name, for example
   `mcp.example.com`, on a Docker network the container can join;
 - an OpenID Connect provider where you can register a confidential OAuth
@@ -235,7 +335,30 @@ You need:
 - an Infomaniak API token for kDrive from an account with the **admin** role
   on every configured drive: startup checks the role and refuses otherwise.
 
-### 1. Build the image on the server
+### 1. Get the image
+
+Either pull the published beta, or build from source (see
+[Current status](#current-status) for the difference).
+
+**Published beta, pinned by digest.** Read the digest of the multi-platform
+image, then pull it by that digest:
+
+```sh
+docker buildx imagetools inspect ghcr.io/sstolz/kdrive-mcp-server:0.6.0-beta.1
+docker pull ghcr.io/sstolz/kdrive-mcp-server:0.6.0-beta.1@sha256:<digest>
+```
+
+`<digest>` is the hexadecimal value after `sha256:` on the `Digest:` line of
+the first command. Use the same reference as `KDRIVE_MCP_IMAGE` in step 4.
+
+Then create a deployment directory that you own and run every later step
+from it:
+
+```sh
+mkdir kdrive-mcp && cd kdrive-mcp
+```
+
+**Build from source on the server.**
 
 ```sh
 git clone <repository URL> kdrive-mcp-server
@@ -257,15 +380,48 @@ cd .. && mkdir kdrive-mcp && cd kdrive-mcp
 Keeping it outside the checkout keeps the secrets and the audit log out of
 the image build context.
 
-### 2. Register the OAuth client at your provider
+### 2. Collect the Infomaniak values and register the OAuth client
 
-Choose the public MCP URL first. It needs a path, for example
-`https://mcp.example.com/mcp`; an origin-only URL is refused. Register a
-confidential client at your OpenID Connect provider with the redirect URI
-`<MCP_PUBLIC_URL>/oauth/callback`, here
-`https://mcp.example.com/mcp/oauth/callback`. Note the issuer URL exactly as
-the provider's `/.well-known/openid-configuration` gives it (a trailing slash
-matters), the client ID and the client secret.
+Collect four things before you configure anything. The official Infomaniak
+pages for each are linked from the
+[README](../README.md#values-from-the-infomaniak-side). The menu paths in
+the Infomaniak Manager are given in French, as the Manager shows them at the
+time of writing.
+
+1. **The API application and the kDrive API token.** First choose the public
+   MCP URL (item 3): the application needs it. In the Manager, open
+   **Utilisateurs et profils** → **Mon profil** → **Développeur** →
+   **Application API** → **Créer une nouvelle application**, type
+   **Application** and any name. The application URL field is the OAuth
+   redirect (callback) URI. For this deployment, enter
+   `<MCP_PUBLIC_URL>/oauth/callback`, here
+   `https://mcp.example.com/mcp/oauth/callback`.
+   Keep its client ID and client secret (step 4). Then open **Développeur** →
+   **Tokens API** → **Créer un token**: select that application, the scope
+   **drive — Produits Drive** and a validity (1 day to unlimited). Log in as
+   an account that has the **admin** role on every drive you will configure:
+   startup checks the role and stops with `[DRIVE_NOT_ALLOWED]` otherwise. The
+   token is shown once; it goes into `secrets/kdrive-token` in step 3, never
+   into a variable or a file you commit.
+2. **The drive ID.** `KDRIVE_ID` is the number in the kDrive web app URL
+   after `/kdrive/app/drive/`: for example, a path that contains
+   `/kdrive/app/drive/123456/` gives `123456`.
+   The README also gives a read-only API call that lists the drives a token
+   can access. A wrong ID stops the server at startup, with
+   `[DRIVE_NOT_ALLOWED]` or `[PREFLIGHT_FAILED]`.
+3. **The public MCP URL.** Choose it before registering the client. It needs
+   a path, for example `https://mcp.example.com/mcp`; an origin-only URL is
+   refused.
+4. **The OAuth client.** With Infomaniak as the provider, it is the API
+   application of item 1: its client ID becomes `OAUTH_UPSTREAM_CLIENT_ID` and
+   its client secret goes into the client secret file. Set `OAUTH_ISSUER` to
+   the Infomaniak issuer given in the
+   [README](../README.md#values-from-the-infomaniak-side), without a trailing
+   slash.
+   With another provider, register a confidential OAuth 2.0 / OpenID Connect
+   client with the redirect URI `<MCP_PUBLIC_URL>/oauth/callback`. Take its
+   issuer URL exactly as the provider's `/.well-known/openid-configuration`
+   gives it (a trailing slash matters).
 
 ### 3. Provision the three secret files
 
@@ -299,21 +455,50 @@ sudo chmod 0400 secrets/kdrive-token secrets/upstream-client-secret secrets/sign
 
 ### 4. Configure Compose behind the reverse proxy
 
-Copy [`examples/compose.yaml`](../examples/compose.yaml) into the deployment
-directory as `compose.yaml`, and set its variables in the shell
-or in a `.env` file next to it (Compose reads that file; the server itself
-reads none). The `.env` file holds no secret, only the paths to the secret
-files, relative to the deployment directory:
+[`examples/compose.yaml`](../examples/compose.yaml) is the single Compose
+example of this project; this step starts from it and explains it. Copy
+it into the deployment directory as `compose.yaml`, from your checkout or
+from the repository at the tag that matches your image (`v0.6.0-beta.1` for
+the published beta). What it contains:
+
+- **Service hardening.** UID/GID 1000, a read-only root file system, no
+  capabilities, `no-new-privileges`, `init`, `restart: on-failure:3`, and
+  `stop_grace_period: 75s` for the audit drain of `write` mode.
+- **Health check.** The file has no `healthcheck` key, so the image's own
+  `HEALTHCHECK` applies ([Health check](#health-check)); Traefik routes to
+  the container only once Docker reports it `healthy`.
+- **Compose file secrets.** Three `secrets` entries read the host files named
+  by `KDRIVE_TOKEN_SECRET_FILE`, `UPSTREAM_CLIENT_SECRET_FILE` and
+  `SIGNING_KEY_FILE` and mount them under `/run/secrets/`, where the
+  `*_FILE` settings point ([Secrets](#secrets)).
+- **Docker network.** The service joins the external network named by
+  `TRAEFIK_NETWORK`, which your Traefik container must also be attached to.
+  If it does not exist yet, create it once with
+  `docker network create proxy` (or the name you use) and attach Traefik to
+  it; no host port of the server is published.
+- **Traefik labels.** `traefik.enable` turns routing on;
+  `traefik.docker.network` tells Traefik which network to use;
+  the router `kdrive-mcp` matches the host name `MCP_HOSTNAME` on the entrypoint
+  `TRAEFIK_ENTRYPOINT` with TLS; the service sends traffic to port 3000.
+
+Set its variables (see
+[Settings of an HTTP deployment](#settings-of-an-http-deployment)) in the
+shell or in a `.env` file next to it (Compose reads that file; the server
+itself reads none). The `.env` file holds no secret, only the paths to the
+secret files, relative to the deployment directory. The installation-specific
+values below are fake; for the Infomaniak issuer, see the
+[README](../README.md#values-from-the-infomaniak-side):
 
 ```sh
-KDRIVE_MCP_IMAGE=kdrive-mcp-server:runtime-amd64
+# Published beta pinned by digest (step 1), or kdrive-mcp-server:runtime-amd64
+KDRIVE_MCP_IMAGE=ghcr.io/sstolz/kdrive-mcp-server:0.6.0-beta.1@sha256:<digest>
 MCP_PUBLIC_URL=https://mcp.example.com/mcp
 MCP_HOSTNAME=mcp.example.com
 KDRIVE_ID=123456
 OAUTH_ISSUER=https://login.example.com
-OAUTH_UPSTREAM_CLIENT_ID=<client id>
+OAUTH_UPSTREAM_CLIENT_ID=00000000-fake-client-id
 OAUTH_ALLOWED_EMAILS=you@example.com
-OAUTH_ALLOWED_REDIRECT_URIS=<client callback URLs>
+OAUTH_ALLOWED_REDIRECT_URIS=https://client.example.org/callback
 TRAEFIK_NETWORK=proxy
 TRAEFIK_ENTRYPOINT=websecure
 KDRIVE_TOKEN_SECRET_FILE=./secrets/kdrive-token
@@ -341,8 +526,28 @@ SIGNING_KEY_FILE=./secrets/signing-key.pem
   Add per-client-IP rate and connection limits there too
   ([OAuth proxy notes](oauth-proxy.md#limits-and-residual-risks)).
 
-**F-035 pending acceptance.** `MCP_HTTP_TRUSTED_PROXIES` is optional and empty
-by default; the Compose example passes `${MCP_HTTP_TRUSTED_PROXIES:-}`.
+For those Traefik settings, add labels to the `labels` of your copy and a
+servers transport to Traefik's dynamic file configuration. The names
+`letsencrypt` and `kdrive-mcp-transport` are examples; this snippet has not
+yet been verified against a running Traefik with this server:
+
+```yaml
+# Extra labels in compose.yaml (example)
+traefik.http.routers.kdrive-mcp.tls.certresolver: letsencrypt
+traefik.http.services.kdrive-mcp.loadbalancer.serverstransport: kdrive-mcp-transport@file
+```
+
+```yaml
+# Traefik dynamic configuration, file provider (example)
+http:
+  serversTransports:
+    kdrive-mcp-transport:
+      forwardingTimeouts:
+        idleConnTimeout: 4s
+```
+
+**F-035 pending acceptance.** `MCP_HTTP_TRUSTED_PROXIES` is optional and
+empty by default; the Compose example passes `${MCP_HTTP_TRUSTED_PROXIES:-}`.
 Use exact proxy addresses or a dedicated access-controlled proxy-only network.
 Every trusted hop must append the upstream address it observed as the last
 `X-Forwarded-For` element. Trusting a whole shared network trusts every
@@ -428,6 +633,11 @@ In the client, add a custom connector with the URL `MCP_PUBLIC_URL`
 your provider, and the server accepts you only if your email or subject is in
 the allowlist. The connector then lists the read tools, and the write tools in
 `write` mode.
+
+The client's callback URL must be in `OAUTH_ALLOWED_REDIRECT_URIS` before you
+add the connector. The [README](../README.md#connect-an-ai-client) shows how
+to declare the server in Claude Code, Claude Desktop and claude.ai, and which
+of those combinations have been verified with this server.
 
 ## Troubleshooting
 
