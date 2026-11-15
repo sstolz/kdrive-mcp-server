@@ -85,7 +85,7 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
   their status; and `192.31.196.0/24`, `192.52.193.0/24`, `192.175.48.0/24` and
   `2620:4f:8000::/48` are no longer fetched from.
 
-- #46 / F-035 v1 (ready for freeze, pending acceptance): in `proxy` mode a
+- #46 / F-035 v1 (accepted 2026-11-15): in `proxy` mode a
   token request that fails a code's client, redirect URI, PKCE or resource
   binding no longer consumes the code or revokes its refresh family; callbacks
   that arrive together on a cold or rotated upstream key set share one key
