@@ -673,10 +673,11 @@ it("TestBR277_v2_AC10_documented_ancestor_protection_and_residual_status", () =>
     const risk = /^- Residual risk R-17-2\b[^\n]*(?:\n[ \t]+[^\n]*)*/mu
       .exec(raw)?.[0]
       .replace(/\s+/gu, " ");
-    expect(risk).toMatch(/pending.*?acceptance/iu);
-    expect(risk).not.toMatch(
-      /(?:is resolved|has been resolved|accepted on main)/iu,
-    );
+    // BR-277 v2: after acceptance the records PR marks the known-ancestor
+    // bypass addressed with the acceptance link.
+    expect(risk).toMatch(/known-ancestor bypass is addressed/iu);
+    expect(risk).toMatch(/accepted on main `448a48f`/iu);
+    expect(risk).toMatch(/issuecomment-6898895634/u);
   }
   const readme = readFileSync("README.md", "utf8").replace(/\s+/gu, " ");
   expect(readme).toMatch(/check.*?configured roots.*?readable/iu);

@@ -156,13 +156,14 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
   Permanently stuck workers reduce capacity until restart. README/tool/compatibility guidance
   explains transient `SERVER_BUSY` without promising retry success.
   This bounds concurrent pipelines, not total memory.
-- #47 lot E / F-041 v1 (frozen; pending implementation and acceptance):
-  specify refusal of trash, rename and move on source folders containing a
+- #47 lot E / F-041 v1 (accepted 2026-11-15):
+  refuse trash, rename and move on source folders containing a
   configured root, using fresh same-drive ID ancestry and failing closed
   when it cannot be proved. Preserve `ACCESS_DENIED` and the existing denied
   audit event, allow overlapping configuration, and leave move destination
-  handling and copy/upload/create contracts unchanged. R-17-2 remediation
-  is specified but the current bypass remains until acceptance.
+  handling and copy/upload/create contracts unchanged. R-17-2's known-ancestor
+  bypass is addressed; visibility refusals and the external-mutation
+  check-then-act window remain.
 
 ## [0.6.0-beta.1] - 2026-11-13
 
