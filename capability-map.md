@@ -1,19 +1,19 @@
 # Capability map
 
-## Provisional — PDF text extraction for common generator output
+## Accepted — PDF text extraction for common generator output
 
-[F-034 v1](features/F-034-pdf-extraction-profile.md) (#4), BR-412–BR-420 v1
-with BR-114 v2 and ADR-012 (proposed), ready for freeze and pending
-acceptance: `kdrive_read` with `format:"pdf"` reads cross-reference and object
-streams, incremental updates, FlateDecode with PNG predictors and the ASCII
-filters, inherited page
-attributes, content arrays, text inside Form XObjects (OCR layers, overlays,
-imposed pages, figures, transparency groups), pages with inline images of
-known length, and simple, Type0 or Type3 fonts whose shown codes map through an
-encoding, a Type 1 built-in encoding or `ToUnicode`, from a canonical
-projection that holds only the selected pages' text inputs; encrypted files,
-fonts with no mapping outside their program and other filters on text streams
-still refuse, and `kdrive_download` stays the fallback.
+[F-034 v1](features/F-034-pdf-extraction-profile.md) (#4), BR-412–BR-420 v1 with
+BR-114 v2 and ADR-012: `kdrive_read` with `format:"pdf"` reads cross-reference
+and object streams, incremental updates, FlateDecode with PNG predictors and the
+ASCII filters, inherited page attributes, content arrays, text inside Form
+XObjects (OCR layers, overlays, imposed pages, figures, transparency groups),
+pages with inline images of known length, and simple, Type0 or Type3 fonts whose
+shown codes map through an encoding, a Type 1 built-in encoding or `ToUnicode`,
+from a canonical projection that holds only the selected pages' text inputs;
+encrypted files, fonts with no mapping outside their program and other filters
+on text streams still refuse, and `kdrive_download` stays the fallback. Accepted
+on actual main `570c4b2` on 2026-11-15 (#4 comment
+`4-acceptance-1-orchestrator`).
 
 ## Accepted — CIMD document handling hardened
 
