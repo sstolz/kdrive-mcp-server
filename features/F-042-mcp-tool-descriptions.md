@@ -593,7 +593,4 @@ pending.
 - **F2-2 — Minor, stdio validation assertion. Retained, fixed.** Covered
   by R3-1 and AC-03's stdio-level invalid mutation test.
 
-These verdicts were supplied by the owner, not generated in this assignment.
-No corrected-head approval, forge publication or actual-main acceptance is
-claimed. Actual reviewer model/effort and per-agent token counters were not
-supplied; no retrospective attribution is inferred.
+Reviewer model, effort and token counts are not recorded.
