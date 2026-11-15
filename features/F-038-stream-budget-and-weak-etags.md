@@ -2,7 +2,7 @@
 id: F-038
 title: Separate stream reads from operation budgets and refuse weak validators
 ticket: "#47"
-status: frozen
+status: done
 version: 1
 ---
 
