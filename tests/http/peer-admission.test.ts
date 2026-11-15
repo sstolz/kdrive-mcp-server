@@ -213,7 +213,9 @@ it("BR-162 v3 AC-16 persisted refresh workload respects the global ceiling", asy
     expect(signAccessToken).toHaveBeenCalledTimes(1200);
     // Test-run evidence only; this is deliberately not a throughput assertion.
     const elapsed = Math.round(performance.now() - started);
-    console.info(`F-035 AC-16: 1200 persisted refreshes in ${String(elapsed)} ms`);
+    console.info(
+      `F-035 AC-16: 1200 persisted refreshes in ${String(elapsed)} ms`,
+    );
   } finally {
     await handler.close();
     handler.closeStore();

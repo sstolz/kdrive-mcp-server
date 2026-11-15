@@ -153,7 +153,9 @@ describe("F-013 AC-07 deployment examples", () => {
     for (const [name, value] of Object.entries(service.environment))
       env[name] = VARIABLE.test(value)
         ? (SAMPLE[name] ?? "")
-        : value === "${MCP_HTTP_TRUSTED_PROXIES:-}" ? "" : (files[value] ?? value);
+        : value === "${MCP_HTTP_TRUSTED_PROXIES:-}"
+          ? ""
+          : (files[value] ?? value);
     const config = await loadConfiguration({ argv: [], env, cwd: directory });
     expect(config.transport).toBe("http");
     expect(config.oauthMode).toBe("proxy");
@@ -378,33 +380,71 @@ describe("F-021 AC-10 health check deployment", () => {
   });
 });
 
-
 it("BR-184 v3 AC-21 the Compose example passes an optional empty trusted-proxy list", async () => {
-  expect(service.environment.MCP_HTTP_TRUSTED_PROXIES).toBe("${MCP_HTTP_TRUSTED_PROXIES:-}");
-  expect(() => validateComposeAdmission(composeText)).not.toThrow();
+  expect(service.environment.MCP_HTTP_TRUSTED_PROXIES).toBe(
+    "${MCP_HTTP_TRUSTED_PROXIES:-}",
+  );
+  expect(() => {
+    validateComposeAdmission(composeText);
+  }).not.toThrow();
   const files = credentials();
   for (const trusted of ["", "192.0.2.0/24"]) {
-    const env = Object.fromEntries(Object.entries(service.environment).map(([name, value]) => [name,
-      name === "MCP_HTTP_TRUSTED_PROXIES" ? trusted : VARIABLE.test(value) ? SAMPLE[name] ?? "" : files[value] ?? value,
-    ]));
+    const env = Object.fromEntries(
+      Object.entries(service.environment).map(([name, value]) => [
+        name,
+        name === "MCP_HTTP_TRUSTED_PROXIES"
+          ? trusted
+          : VARIABLE.test(value)
+            ? (SAMPLE[name] ?? "")
+            : (files[value] ?? value),
+      ]),
+    );
     const config = await loadConfiguration({ argv: [], env, cwd: directory });
     expect(config.httpTrustedProxies).toEqual(trusted ? [trusted] : []);
   }
-  const withoutComment = composeText.split("\n").filter((line) => !(line.trimStart().startsWith("#") && line.includes("MCP_HTTP_TRUSTED_PROXIES"))).join("\n");
+  const withoutComment = composeText
+    .split("\n")
+    .filter(
+      (line) =>
+        !(
+          line.trimStart().startsWith("#") &&
+          line.includes("MCP_HTTP_TRUSTED_PROXIES")
+        ),
+    )
+    .join("\n");
   expect(withoutComment).not.toBe(composeText);
-  expect(() => validateComposeAdmission(withoutComment)).toThrow();
-  expect(() => validateComposeAdmission(composeText.replace("${MCP_HTTP_TRUSTED_PROXIES:-}", "${MCP_HTTP_TRUSTED_PROXIES:?set proxies}"))).toThrow();
+  expect(() => {
+    validateComposeAdmission(withoutComment);
+  }).toThrow();
+  expect(() => {
+    validateComposeAdmission(
+      composeText.replace(
+        "${MCP_HTTP_TRUSTED_PROXIES:-}",
+        "${MCP_HTTP_TRUSTED_PROXIES:?set proxies}",
+      ),
+    );
+  }).toThrow();
 });
 
 it("BR-186 v2 AC-21 required and optional variables match the Compose header", () => {
-  expect(() => validateHygiene("examples/compose.yaml", composeText)).not.toThrow();
+  expect(() => {
+    validateHygiene("examples/compose.yaml", composeText);
+  }).not.toThrow();
   const mutations = [
     composeText.replace(/\$\{MCP_PUBLIC_URL:\?[^}]+\}/u, "${MCP_PUBLIC_URL:-}"),
-    composeText.replace("${MCP_HTTP_TRUSTED_PROXIES:-}", "${MCP_HTTP_TRUSTED_PROXIES:-127.0.0.1}"),
-    composeText.replace(/^# Required installation-specific values.*$/mu, "# Every installation-specific value is a required variable."),
+    composeText.replace(
+      "${MCP_HTTP_TRUSTED_PROXIES:-}",
+      "${MCP_HTTP_TRUSTED_PROXIES:-127.0.0.1}",
+    ),
+    composeText.replace(
+      /^# Required installation-specific values.*$/mu,
+      "# Every installation-specific value is a required variable.",
+    ),
   ];
   for (const text of mutations) {
     expect(text).not.toBe(composeText);
-    expect(() => validateHygiene("examples/compose.yaml", text)).toThrow();
+    expect(() => {
+      validateHygiene("examples/compose.yaml", text);
+    }).toThrow();
   }
 });

@@ -204,23 +204,53 @@ export function validateDeploymentDoc(text: string): void {
     check(secrets.includes(phrase), `Secrets states ${phrase}`);
 }
 
-
 /** F-035 BR-184 v3 / BR-186 v2: one optional empty Compose variable. */
 export function validateComposeAdmission(text: string): void {
   const lines = text.split("\n");
-  const index = lines.findIndex((line) => line.trimStart().startsWith("MCP_HTTP_TRUSTED_PROXIES:"));
+  const index = lines.findIndex((line) =>
+    line.trimStart().startsWith("MCP_HTTP_TRUSTED_PROXIES:"),
+  );
   check(index > 0, "trusted-proxy setting");
-  check(lines[index]?.trim() === "MCP_HTTP_TRUSTED_PROXIES: ${MCP_HTTP_TRUSTED_PROXIES:-}", "optional empty trusted-proxy variable");
+  check(
+    lines[index]?.trim() ===
+      "MCP_HTTP_TRUSTED_PROXIES: ${MCP_HTTP_TRUSTED_PROXIES:-}",
+    "optional empty trusted-proxy variable",
+  );
   const comment = lines[index - 1] ?? "";
   check(comment.trimStart().startsWith("#"), "trusted-proxy comment");
-  for (const phrase of ["MCP_HTTP_TRUSTED_PROXIES", "exact proxy addresses", "dedicated proxy-only network", "docs/deployment.md"]) check(comment.includes(phrase), "trusted-proxy guidance");
-  check([...comment.matchAll(IP_PATTERN)].length === 0, "no address in setting comment");
+  for (const phrase of [
+    "MCP_HTTP_TRUSTED_PROXIES",
+    "exact proxy addresses",
+    "dedicated proxy-only network",
+    "docs/deployment.md",
+  ])
+    check(comment.includes(phrase), "trusted-proxy guidance");
+  check(
+    [...comment.matchAll(IP_PATTERN)].length === 0,
+    "no address in setting comment",
+  );
   const header = text.slice(0, text.indexOf("\nservices:"));
-  for (const phrase of ["Required installation-specific values use ${NAME:?…}", "optional values may use ${NAME:-} with an empty default", "Credentials are file secrets only"]) check(header.includes(phrase), "required/optional header");
-  check(!header.includes("Every installation-specific value is a required variable"), "old header claim");
-  const settings = lines.filter((line) => !line.trimStart().startsWith("#")).join("\n");
+  for (const phrase of [
+    "Required installation-specific values use ${NAME:?…}",
+    "optional values may use ${NAME:-} with an empty default",
+    "Credentials are file secrets only",
+  ])
+    check(header.includes(phrase), "required/optional header");
+  check(
+    !header.includes(
+      "Every installation-specific value is a required variable",
+    ),
+    "old header claim",
+  );
+  const settings = lines
+    .filter((line) => !line.trimStart().startsWith("#"))
+    .join("\n");
   for (const match of settings.matchAll(/\$\{([^}]+)\}/gu)) {
     const variable = match[1] ?? "";
-    check(variable === "MCP_HTTP_TRUSTED_PROXIES:-" || /^[A-Z][A-Z0-9_]*:\?[^}]+$/u.test(variable), "required variable or optional empty default");
+    check(
+      variable === "MCP_HTTP_TRUSTED_PROXIES:-" ||
+        /^[A-Z][A-Z0-9_]*:\?[^}]+$/u.test(variable),
+      "required variable or optional empty default",
+    );
   }
 }

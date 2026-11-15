@@ -1557,9 +1557,14 @@ it("BR-421 AC-10 loads the list from environment, option and YAML", async () => 
   const configurations = [
     await load({ ...proxy, MCP_HTTP_TRUSTED_PROXIES: list.join(",") }),
     await load(proxy, ["--http-trusted-proxies", list.join(",")]),
-    await load(proxy, ["--config", "settings.yaml"], `httpTrustedProxies: ${JSON.stringify(list)}`),
+    await load(
+      proxy,
+      ["--config", "settings.yaml"],
+      `httpTrustedProxies: ${JSON.stringify(list)}`,
+    ),
   ];
-  for (const config of configurations) expect(config.httpTrustedProxies).toEqual(list);
+  for (const config of configurations)
+    expect(config.httpTrustedProxies).toEqual(list);
 });
 
 it("BR-421 AC-10 an empty value is the empty list", async () => {
@@ -1568,19 +1573,34 @@ it("BR-421 AC-10 an empty value is the empty list", async () => {
     await load({ ...proxy, MCP_HTTP_TRUSTED_PROXIES: "" }),
     await load(proxy, ["--http-trusted-proxies", ""]),
     await load(proxy, ["--config", "settings.yaml"], "httpTrustedProxies: []"),
-  ]) expect(config.httpTrustedProxies).toEqual([]);
+  ])
+    expect(config.httpTrustedProxies).toEqual([]);
 });
 
 it.each(["stdio", "insecure", "delegate"])(
   "BR-421 BR-024 v5 AC-10 refuses the list with %s as CONFLICTING_SETTINGS",
   async (mode) => {
-    const env: Record<string, string> = mode === "stdio" ? {} : mode === "insecure"
-      ? { KDRIVE_MCP_TRANSPORT: "http", KDRIVE_MCP_INSECURE_NO_AUTH: "1" } : http;
+    const env: Record<string, string> =
+      mode === "stdio"
+        ? {}
+        : mode === "insecure"
+          ? { KDRIVE_MCP_TRANSPORT: "http", KDRIVE_MCP_INSECURE_NO_AUTH: "1" }
+          : http;
     for (const list of [[], ["127.0.0.1"]]) {
       const expected = error("CONFLICTING_SETTINGS", "httpTrustedProxies");
-      await expect(load({ ...env, MCP_HTTP_TRUSTED_PROXIES: list.join(",") })).rejects.toMatchObject(expected);
-      await expect(load(env, ["--http-trusted-proxies", list.join(",")])).rejects.toMatchObject(expected);
-      await expect(load(env, ["--config", "settings.yaml"], `httpTrustedProxies: ${JSON.stringify(list)}`)).rejects.toMatchObject(expected);
+      await expect(
+        load({ ...env, MCP_HTTP_TRUSTED_PROXIES: list.join(",") }),
+      ).rejects.toMatchObject(expected);
+      await expect(
+        load(env, ["--http-trusted-proxies", list.join(",")]),
+      ).rejects.toMatchObject(expected);
+      await expect(
+        load(
+          env,
+          ["--config", "settings.yaml"],
+          `httpTrustedProxies: ${JSON.stringify(list)}`,
+        ),
+      ).rejects.toMatchObject(expected);
     }
   },
 );

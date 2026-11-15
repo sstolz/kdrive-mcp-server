@@ -13,7 +13,12 @@ import {
   type Harness,
 } from "../helpers/proxy.js";
 
-import { CIMD_ORIGIN, CIMD_URL, FakeMetadata, cimdDocument } from "../helpers/cimd.js";
+import {
+  CIMD_ORIGIN,
+  CIMD_URL,
+  FakeMetadata,
+  cimdDocument,
+} from "../helpers/cimd.js";
 
 function basic(id: string, secret: string): string {
   // eslint-disable-next-line sonarjs/no-nested-template-literals -- F-011: pre-existing nested template kept unchanged
@@ -267,34 +272,50 @@ describe("BR-137 authorization-code grant", () => {
       { code_verifier: `${"v".repeat(42)}+` },
     ],
     ["another resource", { resource: "https://other.test" }],
-  ])("BR-137 v2 AC-01 refuses %s without consuming the code", async (_l, variant) => {
-    for (const kind of ["registered", "CIMD"]) {
-      const metadata = new FakeMetadata();
-      metadata.serve.set(CIMD_URL, {
-        body: cimdDocument(CIMD_URL, {
-          redirect_uris: [LOOPBACK],
-          grant_types: ["authorization_code", "refresh_token"],
-        }),
-      });
-      const h = await harness({ origins: [CIMD_ORIGIN], clientMetadata: metadata });
-      const client = kind === "registered"
-        ? await h.register({ redirect_uris: [LOOPBACK] })
-        : { clientId: CIMD_URL, method: "none", redirect: LOOPBACK };
-      const done = await h.login({ ...client, redirect: "http://127.0.0.1:5000/callback" });
-      const other = await h.register();
-      h.logs.length = 0;
-      const response = variant === "other"
-        ? await h.redeem(done, {}, other)
-        : await h.redeem(done, variant as Record<string, string | undefined>);
-      const error = typeof variant === "object" && "resource" in variant
-        ? "invalid_target" : "invalid_grant";
-      expectError(response, 400, error);
-      expect(h.logs).toEqual([]);
-      const accepted = await h.redeem(done);
-      expect(accepted.status).toBe(200);
-      expect(json(accepted).refresh_token).toEqual(expect.any(String));
-    }
-  });
+  ])(
+    "BR-137 v2 AC-01 refuses %s without consuming the code",
+    async (_l, variant) => {
+      for (const kind of ["registered", "CIMD"]) {
+        const metadata = new FakeMetadata();
+        metadata.serve.set(CIMD_URL, {
+          body: cimdDocument(CIMD_URL, {
+            redirect_uris: [LOOPBACK],
+            grant_types: ["authorization_code", "refresh_token"],
+          }),
+        });
+        const h = await harness({
+          origins: [CIMD_ORIGIN],
+          clientMetadata: metadata,
+        });
+        const client =
+          kind === "registered"
+            ? await h.register({ redirect_uris: [LOOPBACK] })
+            : { clientId: CIMD_URL, method: "none", redirect: LOOPBACK };
+        const done = await h.login({
+          ...client,
+          redirect: "http://127.0.0.1:5000/callback",
+        });
+        const other = await h.register();
+        h.logs.length = 0;
+        const response =
+          variant === "other"
+            ? await h.redeem(done, {}, other)
+            : await h.redeem(
+                done,
+                variant as Record<string, string | undefined>,
+              );
+        const error =
+          typeof variant === "object" && "resource" in variant
+            ? "invalid_target"
+            : "invalid_grant";
+        expectError(response, 400, error);
+        expect(h.logs).toEqual([]);
+        const accepted = await h.redeem(done);
+        expect(accepted.status).toBe(200);
+        expect(json(accepted).refresh_token).toEqual(expect.any(String));
+      }
+    },
+  );
 
   it("BR-137 an absent or unknown code is invalid_grant", async () => {
     const h = await harness();
@@ -451,27 +472,44 @@ describe("BR-138 access token and BR-141 proxy verifier", () => {
 });
 
 // F-035: registered and CIMD authorization snapshots have the same URI profile.
-async function redirectProfile(profile: string, kind: string, supplied: string) {
-  const uris = profile === "multiple" ? [CLAUDE, LOOPBACK]
-    : [profile === "variable loopback" ? LOOPBACK : CLAUDE];
-  const redirect = profile === "variable loopback"
-    ? "http://127.0.0.1:5000/callback" : CLAUDE;
+async function redirectProfile(
+  profile: string,
+  kind: string,
+  supplied: string,
+) {
+  const uris =
+    profile === "multiple"
+      ? [CLAUDE, LOOPBACK]
+      : [profile === "variable loopback" ? LOOPBACK : CLAUDE];
+  const redirect =
+    profile === "variable loopback" ? "http://127.0.0.1:5000/callback" : CLAUDE;
   const metadata = new FakeMetadata();
-  metadata.serve.set(CIMD_URL, { body: cimdDocument(CIMD_URL, {
-    redirect_uris: uris, grant_types: ["authorization_code", "refresh_token"],
-  }) });
+  metadata.serve.set(CIMD_URL, {
+    body: cimdDocument(CIMD_URL, {
+      redirect_uris: uris,
+      grant_types: ["authorization_code", "refresh_token"],
+    }),
+  });
   const h = await harness({ origins: [CIMD_ORIGIN], clientMetadata: metadata });
-  const client = kind === "CIMD"
-    ? { clientId: CIMD_URL, method: "none", redirect }
-    : { ...await h.register({ redirect_uris: uris }), redirect };
+  const client =
+    kind === "CIMD"
+      ? { clientId: CIMD_URL, method: "none", redirect }
+      : { ...(await h.register({ redirect_uris: uris })), redirect };
   const done = await h.login(client);
   // A later document cannot change the snapshot bound to this code.
-  metadata.serve.set(CIMD_URL, { body: cimdDocument(CIMD_URL, { redirect_uris: [LOOPBACK] }) });
-  const value = supplied === "omitted" ? undefined
-    : supplied === "matching" ? redirect : "";
+  metadata.serve.set(CIMD_URL, {
+    body: cimdDocument(CIMD_URL, { redirect_uris: [LOOPBACK] }),
+  });
+  const value =
+    supplied === "omitted"
+      ? undefined
+      : supplied === "matching"
+        ? redirect
+        : "";
   h.logs.length = 0;
   const result = await h.redeem(done, { redirect_uri: value });
-  const accepted = supplied === "matching" || (supplied === "omitted" && profile === "single");
+  const accepted =
+    supplied === "matching" || (supplied === "omitted" && profile === "single");
   expect(result.status).toBe(accepted ? 200 : 400);
   expect(h.logs).toEqual([]);
   if (!accepted) {
@@ -490,14 +528,21 @@ describe("BR-137 v2 binding order", () => {
     },
   );
 
-  it.each([43, 128])("BR-137 v2 AC-01 accepts a %i-character verifier", async (length) => {
-    const h = await harness();
-    const client = await h.register();
-    const verifier = "v".repeat(length);
-    const flow = await h.approve(client, verifier);
-    const code = location(await h.callback(flow)).searchParams.get("code") ?? "";
-    expect((await h.redeem({ code, verifier, client, redirect: client.redirect })).status).toBe(200);
-  });
+  it.each([43, 128])(
+    "BR-137 v2 AC-01 accepts a %i-character verifier",
+    async (length) => {
+      const h = await harness();
+      const client = await h.register();
+      const verifier = "v".repeat(length);
+      const flow = await h.approve(client, verifier);
+      const code =
+        location(await h.callback(flow)).searchParams.get("code") ?? "";
+      expect(
+        (await h.redeem({ code, verifier, client, redirect: client.redirect }))
+          .status,
+      ).toBe(200);
+    },
+  );
 
   it("BR-137 v2 AC-02 only a replay matching every binding revokes the family", async () => {
     const h = await harness();
@@ -505,21 +550,30 @@ describe("BR-137 v2 binding order", () => {
     const other = await h.register();
     let token = json(await h.redeem(done)).refresh_token as string;
     const variants: Record<string, string | undefined>[] = [
-      { redirect_uri: "" }, { redirect_uri: "http://127.0.0.1:9999/callback" },
-      { code_verifier: "w".repeat(43) }, { code_verifier: "v".repeat(42) },
-      { code_verifier: "v".repeat(129) }, { code_verifier: "v".repeat(42) + "+" },
+      { redirect_uri: "" },
+      { redirect_uri: "http://127.0.0.1:9999/callback" },
+      { code_verifier: "w".repeat(43) },
+      { code_verifier: "v".repeat(42) },
+      { code_verifier: "v".repeat(129) },
+      { code_verifier: "v".repeat(42) + "+" },
       { resource: "https://other.test" },
     ];
     expectError(await h.redeem(done, {}, other), 400, "invalid_grant");
     for (const extra of variants) {
-      expectError(await h.redeem(done, extra), 400, "resource" in extra ? "invalid_target" : "invalid_grant");
+      expectError(
+        await h.redeem(done, extra),
+        400,
+        "resource" in extra ? "invalid_target" : "invalid_grant",
+      );
       expect(h.logs).toEqual([]);
       const refreshed = await h.refresh(done.client, token);
       expect(refreshed.status).toBe(200);
       token = json(refreshed).refresh_token as string;
     }
     expectError(await h.redeem(done), 400, "invalid_grant");
-    expect(h.logs.filter((entry) => entry.name === "refresh_family_revoked")).toHaveLength(1);
+    expect(
+      h.logs.filter((entry) => entry.name === "refresh_family_revoked"),
+    ).toHaveLength(1);
     expectError(await h.refresh(done.client, token), 400, "invalid_grant");
     const client = await h.register({ grant_types: ["authorization_code"] });
     const noFamily = await h.login(client);
@@ -542,13 +596,16 @@ describe("BR-137 v2 binding order", () => {
       const first = h.redeem(done, order === "wrong first" ? wrong : {});
       const second = h.redeem(done, order === "wrong last" ? wrong : {});
       const responses = await Promise.all([first, second]);
-      expect(responses.map((response) => response.status).sort()).toEqual([200, 400]);
-      expect(h.logs.filter((entry) => entry.name === "refresh_family_revoked")).toHaveLength(order === "both valid" ? 1 : 0);
+      expect(responses.map((response) => response.status).sort()).toEqual([
+        200, 400,
+      ]);
+      expect(
+        h.logs.filter((entry) => entry.name === "refresh_family_revoked"),
+      ).toHaveLength(order === "both valid" ? 1 : 0);
       if (order !== "both valid") expect(h.logs).toEqual([]);
     }
   });
 });
-
 
 async function lifetimeCase(elapsed: number, replay: boolean) {
   const h = await harness();
@@ -561,7 +618,9 @@ async function lifetimeCase(elapsed: number, replay: boolean) {
   h.clock.advance(elapsed - (replay ? 1000 : 0));
   const result = await h.redeem(done);
   expect(result.status).toBe(!replay && elapsed < 60_000 ? 200 : 400);
-  const revocations = h.logs.filter((entry) => entry.name === "refresh_family_revoked");
+  const revocations = h.logs.filter(
+    (entry) => entry.name === "refresh_family_revoked",
+  );
   expect(revocations).toHaveLength(replay && elapsed < 60_000 ? 1 : 0);
   if (elapsed === 60_000) expect(h.logs).toEqual([]);
   if (replay) {

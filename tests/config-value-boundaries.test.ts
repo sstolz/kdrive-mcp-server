@@ -1,3 +1,4 @@
+/* eslint-disable sonarjs/no-hardcoded-ip -- F-035 BR-421: trusted-proxy address bounds are tested on literal samples */
 import { expect, it, vi } from "vitest";
 import { loadConfiguration, type LocalConfiguration } from "../src/config.js";
 
@@ -597,19 +598,48 @@ boundary("P-BR291-008 BR-024 v4: refuses the publicUrl origin", {
 });
 
 const trustedAddresses = [
-  "127.0.0.1", "192.0.2.0/24", "10.0.0.0/8", "198.51.100.7/32",
-  "2001:db8::1", "2001:db8::/32", "fd00::/8", "2001:db8::/128",
+  "127.0.0.1",
+  "192.0.2.0/24",
+  "10.0.0.0/8",
+  "198.51.100.7/32",
+  "2001:db8::1",
+  "2001:db8::/32",
+  "fd00::/8",
+  "2001:db8::/128",
 ];
-const sixtyFourProxies = Array.from({ length: 64 }, (_, i) => `192.0.2.${String(i)}`);
+const sixtyFourProxies = Array.from(
+  { length: 64 },
+  (_, i) => `192.0.2.${String(i)}`,
+);
 async function trustedSources(values: string[]) {
-  const common = { cwd: "/work", readFile: () => Promise.resolve(Buffer.from("SYNTHETIC")) };
+  const common = {
+    cwd: "/work",
+    readFile: () => Promise.resolve(Buffer.from("SYNTHETIC")),
+  };
   const env = { ...base, ...proxy };
   return await Promise.all([
-    loadConfiguration({ ...common, argv: [], env: { ...env, MCP_HTTP_TRUSTED_PROXIES: values.join(",") } }),
-    loadConfiguration({ ...common, argv: ["--http-trusted-proxies", values.join(",")], env }),
-    loadConfiguration({ ...common, argv: ["--config", "settings.yaml"], env,
-      readFile: (path) => Promise.resolve(Buffer.from(path === "/work/settings.yaml"
-        ? `httpTrustedProxies: ${JSON.stringify(values)}` : "SYNTHETIC")),
+    loadConfiguration({
+      ...common,
+      argv: [],
+      env: { ...env, MCP_HTTP_TRUSTED_PROXIES: values.join(",") },
+    }),
+    loadConfiguration({
+      ...common,
+      argv: ["--http-trusted-proxies", values.join(",")],
+      env,
+    }),
+    loadConfiguration({
+      ...common,
+      argv: ["--config", "settings.yaml"],
+      env,
+      readFile: (path) =>
+        Promise.resolve(
+          Buffer.from(
+            path === "/work/settings.yaml"
+              ? `httpTrustedProxies: ${JSON.stringify(values)}`
+              : "SYNTHETIC",
+          ),
+        ),
     }),
   ]);
 }
@@ -617,34 +647,75 @@ async function trustedSources(values: string[]) {
 it.each([
   ...trustedAddresses.map((value) => [value, [value]] as const),
   ["64 entries", sixtyFourProxies] as const,
-  ["mixed address families and overlapping IPv6 prefixes", trustedAddresses] as const,
+  [
+    "mixed address families and overlapping IPv6 prefixes",
+    trustedAddresses,
+  ] as const,
   ["overlapping prefixes", ["192.0.2.0/24", "192.0.2.1"]] as const,
 ])("BR-421 BR-023 v4 AC-10 accepts %s", async (_name, values) => {
-  for (const config of await trustedSources([...values])) expect(config.httpTrustedProxies).toEqual(values);
+  for (const config of await trustedSources([...values]))
+    expect(config.httpTrustedProxies).toEqual(values);
 });
 
 it.each([
-  ...["10.0.0.0/7", "fc00::/7", "fd00::/7", "0.0.0.0/0", "::/0",
-    "192.0.2.0/33", "2001:db8::/129", "10.0.0.1/8", "2001:db8::1/32",
-    "192.0.2.0/024", "010.0.0.1", "192.0.2", "2001:DB8::1",
-    "2001:db8:0:0:0:0:0:1", "[2001:db8::1]", "fe80::1%eth0",
-    "::ffff:192.0.2.1", "::ffff:c000:201", "192.0.2.1:80", "proxy.example.com",
+  ...[
+    "10.0.0.0/7",
+    "fc00::/7",
+    "fd00::/7",
+    "0.0.0.0/0",
+    "::/0",
+    "192.0.2.0/33",
+    "2001:db8::/129",
+    "10.0.0.1/8",
+    "2001:db8::1/32",
+    "192.0.2.0/024",
+    "010.0.0.1",
+    "192.0.2",
+    "2001:DB8::1",
+    "2001:db8:0:0:0:0:0:1",
+    "[2001:db8::1]",
+    "fe80::1%eth0",
+    "::ffff:192.0.2.1",
+    "::ffff:c000:201",
+    "192.0.2.1:80",
+    "proxy.example.com",
   ].map((value) => [value, [value]] as const),
   ["65 entries", [...sixtyFourProxies, "192.0.2.64"]] as const,
   ["duplicate prefix", ["192.0.2.1", "192.0.2.1/32"]] as const,
   ["empty entry", ["127.0.0.1", ""]] as const,
-])("BR-421 BR-023 v4 AC-10 refuses %s as INVALID_VALUE", async (_name, values) => {
-  // Exercise each source independently, so one refusal cannot mask another.
-  const text = values.join(",");
-  for (const source of ["environment", "option", "YAML"]) {
-    const operation = loadConfiguration({
-      argv: source === "option" ? ["--http-trusted-proxies", text]
-        : source === "YAML" ? ["--config", "settings.yaml"] : [],
-      env: { ...base, ...proxy, ...(source === "environment" ? { MCP_HTTP_TRUSTED_PROXIES: text } : {}) },
-      cwd: "/work",
-      readFile: (path) => Promise.resolve(Buffer.from(path === "/work/settings.yaml"
-        ? `httpTrustedProxies: ${JSON.stringify(values)}` : "SYNTHETIC")),
-    });
-    await expect(operation).rejects.toMatchObject(invalid("httpTrustedProxies"));
-  }
-});
+])(
+  "BR-421 BR-023 v4 AC-10 refuses %s as INVALID_VALUE",
+  async (_name, values) => {
+    // Exercise each source independently, so one refusal cannot mask another.
+    const text = values.join(",");
+    for (const source of ["environment", "option", "YAML"]) {
+      const operation = loadConfiguration({
+        argv:
+          source === "option"
+            ? ["--http-trusted-proxies", text]
+            : source === "YAML"
+              ? ["--config", "settings.yaml"]
+              : [],
+        env: {
+          ...base,
+          ...proxy,
+          ...(source === "environment"
+            ? { MCP_HTTP_TRUSTED_PROXIES: text }
+            : {}),
+        },
+        cwd: "/work",
+        readFile: (path) =>
+          Promise.resolve(
+            Buffer.from(
+              path === "/work/settings.yaml"
+                ? `httpTrustedProxies: ${JSON.stringify(values)}`
+                : "SYNTHETIC",
+            ),
+          ),
+      });
+      await expect(operation).rejects.toMatchObject(
+        invalid("httpTrustedProxies"),
+      );
+    }
+  },
+);

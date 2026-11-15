@@ -14,7 +14,8 @@ import { verifiesWithKeys } from "../../src/auth/access-token.js";
 import { gate } from "../helpers/http.js";
 
 vi.mock("../../src/auth/access-token.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../../src/auth/access-token.js")>();
+  const actual =
+    await importOriginal<typeof import("../../src/auth/access-token.js")>();
   return { ...actual, verifiesWithKeys: vi.fn(actual.verifiesWithKeys) };
 });
 afterEach(() => vi.mocked(verifiesWithKeys).mockClear());
@@ -235,7 +236,6 @@ describe("BR-133 strict upstream ID-token verification", () => {
   });
 });
 
-
 function holdJwks(h: Harness, outcome: "ok" | "reject" | "status" = "ok") {
   const held = gate();
   const original = h.upstream.fetchJson.bind(h.upstream);
@@ -246,7 +246,12 @@ function holdJwks(h: Harness, outcome: "ok" | "reject" | "status" = "ok") {
     if (outcome === "reject") throw new Error("synthetic JWKS failure");
     return { status: outcome === "status" ? 503 : 200, json: h.upstream.jwks };
   };
-  return { ...held, restore: () => { h.upstream.fetchJson = original; } };
+  return {
+    ...held,
+    restore: () => {
+      h.upstream.fetchJson = original;
+    },
+  };
 }
 
 // Prepare every signed reply before starting concurrent callbacks. The token
@@ -258,13 +263,26 @@ async function preparedCallback(
 ) {
   const flow = await h.approve(await h.register(), verifier);
   const up = location(flow.upstreamRedirect);
-  const token = await h.idToken(up.searchParams.get("nonce") ?? "", claims, {}, key);
+  const token = await h.idToken(
+    up.searchParams.get("nonce") ?? "",
+    claims,
+    {},
+    key,
+  );
   return () => {
-    h.upstream.tokenReply = { status: 200, json: { token_type: "Bearer", id_token: token } };
-    return h.proxy.callback({
-      query: new URLSearchParams({ code: "c", state: up.searchParams.get("state") ?? "" }),
-      cookie: flow.cookie,
-    }).then(location);
+    h.upstream.tokenReply = {
+      status: 200,
+      json: { token_type: "Bearer", id_token: token },
+    };
+    return h.proxy
+      .callback({
+        query: new URLSearchParams({
+          code: "c",
+          state: up.searchParams.get("state") ?? "",
+        }),
+        cookie: flow.cookie,
+      })
+      .then(location);
   };
 }
 
@@ -283,7 +301,8 @@ it("BR-133 v2 AC-05 concurrent callbacks on a cold cache share one JWKS fetch", 
     await verificationStarted();
     expect(held.entered()).toBe(1);
     held.release();
-    for (const target of await Promise.all(pending)) expect(target.searchParams.has("code")).toBe(true);
+    for (const target of await Promise.all(pending))
+      expect(target.searchParams.has("code")).toBe(true);
     expect(h.upstream.count("get", "/jwks")).toBe(1);
   }
 });
@@ -312,14 +331,18 @@ it("BR-133 v2 AC-05 signature verification checks expiry at completion", async (
   await attempt(h, (nonce) => h.idToken(nonce));
   const start = await preparedCallback(h, { exp: h.clock.ms / 1000 + 1 });
   const held = gate();
-  const actual = await vi.importActual<typeof import("../../src/auth/access-token.js")>("../../src/auth/access-token.js");
+  const actual = await vi.importActual<
+    typeof import("../../src/auth/access-token.js")
+  >("../../src/auth/access-token.js");
   vi.mocked(verifiesWithKeys).mockImplementationOnce(async (...args) => {
     const verified = await actual.verifiesWithKeys(...args);
     await held.enter();
     return verified;
   });
   const pending = start();
-  await vi.waitFor(() => expect(held.entered()).toBe(1));
+  await vi.waitFor(() => {
+    expect(held.entered()).toBe(1);
+  });
   h.clock.advance(1000);
   held.release();
   rejected(await pending);
@@ -340,8 +363,13 @@ it("BR-133 v2 AC-06 concurrent callbacks with a rotated kid share one refetch", 
   expect((await old()).searchParams.has("code")).toBe(true);
   expect(held.entered()).toBe(1);
   held.release();
-  for (const target of await Promise.all(pending)) expect(target.searchParams.has("code")).toBe(true);
-  expect((await attempt(h, (nonce) => h.idToken(nonce, {}, {}, rotated))).searchParams.has("code")).toBe(true);
+  for (const target of await Promise.all(pending))
+    expect(target.searchParams.has("code")).toBe(true);
+  expect(
+    (
+      await attempt(h, (nonce) => h.idToken(nonce, {}, {}, rotated))
+    ).searchParams.has("code"),
+  ).toBe(true);
   expect(h.upstream.count("get", "/jwks")).toBe(2);
 });
 
@@ -362,7 +390,9 @@ it("BR-133 v2 AC-07 a shared fetch fails for every waiter and both bounds count 
     rejected(await attempt(h, (nonce) => h.idToken(nonce)));
     expect(h.upstream.count("get", "/jwks")).toBe(1);
     h.clock.advance(1);
-    expect((await attempt(h, (nonce) => h.idToken(nonce))).searchParams.has("code")).toBe(true);
+    expect(
+      (await attempt(h, (nonce) => h.idToken(nonce))).searchParams.has("code"),
+    ).toBe(true);
     expect(h.upstream.count("get", "/jwks")).toBe(2);
   }
   const h = await harness();
@@ -375,9 +405,13 @@ it("BR-133 v2 AC-07 a shared fetch fails for every waiter and both bounds count 
   await pending;
   held.restore();
   h.clock.advance(3_594_999);
-  expect((await attempt(h, (nonce) => h.idToken(nonce))).searchParams.has("code")).toBe(true);
+  expect(
+    (await attempt(h, (nonce) => h.idToken(nonce))).searchParams.has("code"),
+  ).toBe(true);
   expect(h.upstream.count("get", "/jwks")).toBe(1);
   h.clock.advance(1);
-  expect((await attempt(h, (nonce) => h.idToken(nonce))).searchParams.has("code")).toBe(true);
+  expect(
+    (await attempt(h, (nonce) => h.idToken(nonce))).searchParams.has("code"),
+  ).toBe(true);
   expect(h.upstream.count("get", "/jwks")).toBe(2);
 });
