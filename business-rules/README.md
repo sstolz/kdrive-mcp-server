@@ -1025,8 +1025,8 @@ active wording; the new catalog preserves their mandatory text verbatim.
 No existing active rule is replaced. No ADR. Next free IDs: F-043,
 BR-431, ADR-013.
 
-| ID                  | Version | Rule                                                                                            | Source                                                 | Status                     |
-| ------------------- | ------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------ | -------------------------- |
+| ID                  | Version | Rule                                                                                            | Source                                                 | Status |
+| ------------------- | ------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------ | ------ |
 | [BR-428](BR-428.md) | v1      | Exact purpose, result and continuation descriptions for all 16 tools.                           | [F-042 v1](../features/F-042-mcp-tool-descriptions.md) | Active |
 | [BR-429](BR-429.md) | v1      | Exact descriptions of all 58 parameter occurrences and pages.items, consistent with validation. | [F-042 v1](../features/F-042-mcp-tool-descriptions.md) | Active |
 | [BR-430](BR-430.md) | v1      | Fixed trusted text, catalog size budgets and unchanged non-description contracts.               | [F-042 v1](../features/F-042-mcp-tool-descriptions.md) | Active |
