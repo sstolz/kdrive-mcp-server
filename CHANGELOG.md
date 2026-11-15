@@ -104,7 +104,7 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
   Token redemption accepts omitted `redirect_uri` only for an exact single
   registered authorization URI; a supplied value must match exactly. The
   Compose header distinguishes required values from optional empty defaults.
-- #49 / F-036 v1 (draft, pending acceptance): restore `token_refused` for
+- #49 / F-036 v1 (accepted 2026-11-15): restore `token_refused` for
   refused authorization-code redemptions, with only `handler`, OAuth `error`
   and `status`. Validation order, responses and state handling stay unchanged,
   including family revocation on a matching replay; no `reason` field is added.

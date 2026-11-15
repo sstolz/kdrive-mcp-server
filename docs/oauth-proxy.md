@@ -39,7 +39,7 @@ both OpenID Connect discovery paths. It is not an OpenID provider configuration
 (it lacks required members such as `jwks_uri`), so a strict OIDC client may
 reject the alias; owner acceptance should attribute such a failure to this.
 
-## Code refusal events (F-036, pending acceptance)
+## Code refusal events (F-036, accepted 2026-11-15)
 
 [F-036 v1](../features/F-036-refused-code-event.md),
 [BR-137 v3](../business-rules/BR-137.md): after client authentication, each

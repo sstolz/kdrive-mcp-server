@@ -1,13 +1,14 @@
 # Capability map
 
-## Provisional — refused authorization-code redemption events restored
+## Accepted — refused authorization-code redemption events restored
 
 [F-036 v1](features/F-036-refused-code-event.md) (#49),
-[BR-137 v3](business-rules/BR-137.md), frozen and pending acceptance: in
+[BR-137 v3](business-rules/BR-137.md): in
 `proxy` mode every refused code redemption emits exactly one `token_refused`
 with only `handler`, OAuth `error` and `status`, without a `reason` or request
 value. Binding checks, responses and state handling stay as in v2, including
-the existing family revocation on a matching replay. BR-137 v2 remains active.
+the existing family revocation on a matching replay.
+Accepted on actual main `14f5266` on 2026-11-15 (#49 comment `6893052881`).
 
 ## Accepted — OAuth proxy admission and grant handling hardened
 
