@@ -266,7 +266,10 @@ Tree writes (create, rename, move, trash, restore):
   2026-11-10 observed a deletion-time snapshot, so such a restore was denied.
 - Residual risk R-17-2 remains present pending actual-main acceptance of
   [F-041](features/F-041-configured-root-ancestors.md): source-ancestor
-  protection is implemented but not yet accepted. Visibility limits can
+  protection is implemented but not yet accepted. A configured root moved
+  beneath an already-checked folder before the write is not protected, for up
+  to the invocation deadline. Many roots can yield `REQUEST_TIMEOUT` or
+  `LIMIT_EXCEEDED`. Visibility limits can
   cause refusal even for an unrelated folder; the check-then-act window
   remains, including during subsequent deny traversal.
 

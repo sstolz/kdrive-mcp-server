@@ -433,8 +433,10 @@ attempt.
   within that decision and validating their parent chains against the source.
   Unknown ancestry or an inaccessible root causes refusal with `ACCESS_DENIED`.
   Overlapping roots remain valid configuration; move destination handling is
-  unchanged. Root reads share the invocation deadline and operation budget;
-  exhaustion returns `failed` / `LIMIT_EXCEEDED` before intent or mutation.
+  unchanged. Root reads share the invocation deadline and operation budget.
+  Any pre-intent budget exhaustion in a mutation (root reads, deny traversal
+  or an oversized page) returns `failed` / `LIMIT_EXCEEDED` without a `denied`
+  audit record, before intent or mutation.
 - `kdrive_move` stays inside one drive and does not rename.
 - Received-share writes stay refused, even with `KDRIVE_MCP_SHARED_WRITE=1`.
 - A check-then-act window remains (SPEC §10.6): the drive can change between
