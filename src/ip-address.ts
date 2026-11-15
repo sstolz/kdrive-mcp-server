@@ -18,7 +18,7 @@ function ipv6Value(text: string): bigint {
   const words = text.includes("::")
     ? [
         ...head,
-        ...Array<string>(8 - head.length - tail.length).fill("0"),
+        ...new Array<string>(8 - head.length - tail.length).fill("0"),
         ...tail,
       ]
     : head;
