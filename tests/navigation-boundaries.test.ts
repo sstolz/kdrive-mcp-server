@@ -399,7 +399,7 @@ it("BR-070 cancellation/close settle pending evidence, release timers and cannot
   expect(await second).toEqual(error("ACCESS_DENIED"));
   expect(vi.getTimerCount()).toBe(0);
 });
-it("BR-070 dependency call 512 succeeds and 513 refuses without invoking the port", async () => {
+it("TestBR070_v4_AC05_operation_512_succeeds_and_513_never_starts", async () => {
   for (const pageCount of [2, 3]) {
     const f = await receivedFixture();
     const roots = Array.from({ length: 255 }, (_, i) => ({

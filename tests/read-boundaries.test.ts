@@ -2,9 +2,15 @@ import { expect, it, vi } from "vitest";
 import { createNavigationController } from "../src/navigation.js";
 import { readResult } from "../src/extraction.js";
 import { decodeText } from "../src/extraction-text.js";
-import { contentFixture, contentError } from "./helpers/content.js";
+import {
+  contentFixture,
+  contentError,
+  contentResult,
+} from "./helpers/content.js";
 import { payload } from "./helpers/navigation.js";
 import { ReadFailure } from "../src/read-retry.js";
+import { preflightPdf } from "../src/extraction-pdf-profile.js";
+import { pdfObjects, stream } from "./helpers/extraction.js";
 const read = { file_id: 3, format: "text" };
 it.each([
   [Buffer.from("\ufeffa\ufeff"), undefined, "a\ufeff", "utf-8"],
@@ -273,4 +279,130 @@ it("TestBR121_own_data_projection rejects worker accessors without calling hooks
     validateExtracted({ kind: "image", data, width: 1, height: 1 }, 100),
   ).toThrow("CONTENT_UNAVAILABLE");
   expect(hooks).toBe(0);
+});
+
+// F-038 BR-070 v4: complete extraction sources do not spend operations per chunk.
+it("TestBR070_v4_AC01_eight_MiB_in_16_KiB_chunks_succeeds", async () => {
+  const size = 8388608;
+  const f = await contentFixture(
+    {
+      KDRIVE_MCP_MAX_READ_BYTES: String(size),
+      KDRIVE_MCP_MAX_EXTRACT_BYTES: String(size),
+    },
+    Buffer.alloc(size, "a"),
+  );
+  const c = createNavigationController(f.config, f.dependencies);
+  try {
+    expect(await c.invoke("kdrive_read", { ...read, length: 1 })).toEqual(
+      contentResult({
+        drive_id: 7,
+        file_id: 3,
+        etag: f.etag,
+        size_bytes: size,
+        format: "text",
+        offset: 0,
+        characters_read: 1,
+        total_characters: size,
+        text: "a",
+        has_more: true,
+        next_offset: 1,
+        encoding: "utf-8",
+      }),
+    );
+    expect(f.content.describe).toHaveBeenCalledOnce();
+    expect(f.content.open).toHaveBeenCalledOnce();
+    expect(f.bodies[0]!.read.mock.calls.map(([max]) => max)).toEqual([
+      ...Array<number>(512).fill(16384),
+      1,
+    ]);
+    expect(f.bodies[0]!.close).toHaveBeenCalledOnce();
+  } finally {
+    c.close();
+  }
+});
+
+it("TestBR070_v4_AC03_declared_source_over_byte_cap_refuses_before_open", async () => {
+  const f = await contentFixture({
+    KDRIVE_MCP_MAX_READ_BYTES: "8388608",
+    KDRIVE_MCP_MAX_EXTRACT_BYTES: "8388608",
+  });
+  f.content.describe.mockImplementation((target) =>
+    Promise.resolve({
+      target,
+      size_bytes: 8388609,
+      etag: f.etag,
+      version_bound: true,
+    }),
+  );
+  const c = createNavigationController(f.config, f.dependencies);
+  try {
+    expect(await c.invoke("kdrive_read", { ...read, length: 1 })).toEqual(
+      contentError("LIMIT_EXCEEDED"),
+    );
+    expect(f.content.describe).toHaveBeenCalledOnce();
+    expect(f.content.open).not.toHaveBeenCalled();
+  } finally {
+    c.close();
+  }
+});
+
+it("TestBR070_v4_AC01_eight_MiB_PDF_reaches_bounded_extraction_worker", async () => {
+  const size = 8388608;
+  const makePdf = (padding: number) =>
+    pdfObjects([
+      "<< /Type /Catalog /Pages 2 0 R >>",
+      "<< /Type /Pages /Count 1 /Kids [4 0 R] >>",
+      "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
+      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 5 0 R >>",
+      stream(Buffer.from("BT /F1 12 Tf 1 0 0 1 72 720 Tm (a) Tj ET")),
+      // Valid unused stream padding makes the complete source reach the byte cap.
+      stream(Buffer.alloc(padding, 32)),
+    ]);
+  const estimate = size - 1000;
+  const bytes = makePdf(estimate + size - makePdf(estimate).length);
+  expect(bytes).toHaveLength(size);
+  const f = await contentFixture(
+    {
+      KDRIVE_MCP_MAX_READ_BYTES: String(size),
+      KDRIVE_MCP_MAX_EXTRACT_BYTES: String(size),
+    },
+    bytes,
+  );
+  // The existing admission pipeline must accept this synthetic PDF independently
+  // of the new controller path; the worker result is asserted below.
+  await expect(preflightPdf(bytes, size, [1])).resolves.toMatchObject({
+    total_pages: 1,
+  });
+  const c = createNavigationController(f.config, f.dependencies);
+  try {
+    expect(
+      await c.invoke("kdrive_read", {
+        file_id: 3,
+        format: "pdf",
+        pages: [1],
+        length: 1,
+      }),
+    ).toEqual(
+      contentResult({
+        drive_id: 7,
+        file_id: 3,
+        etag: f.etag,
+        size_bytes: size,
+        format: "pdf",
+        offset: 0,
+        characters_read: 1,
+        total_characters: 1,
+        text: "a",
+        has_more: false,
+        pages: [1],
+        total_pages: 1,
+      }),
+    );
+    expect(f.content.describe).toHaveBeenCalledOnce();
+    expect(f.content.open).toHaveBeenCalledOnce();
+    expect(f.bodies[0]!.read).toHaveBeenCalledTimes(513);
+    expect(f.bodies[0]!.close).toHaveBeenCalledOnce();
+  } finally {
+    c.close();
+  }
 });

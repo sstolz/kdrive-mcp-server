@@ -5,9 +5,11 @@ import { createPolicy } from "../src/policy/index.js";
 import {
   contentFixture,
   contentError,
+  contentResult,
   rangeResponse,
 } from "./helpers/content.js";
 import { fixture } from "./helpers/received.js";
+import { createWire, initialize } from "./helpers/navigation-wire.js";
 afterEach(() => vi.useRealTimers());
 
 describe("central read retry and bounded lifecycle", () => {
@@ -79,28 +81,56 @@ describe("central read retry and bounded lifecycle", () => {
     expect(starts).toBe(5);
     c.close();
   });
-  it("TestBR088_shared_retry_budgets body reads share512 actual starts", async () => {
-    const f = await contentFixture({}, Buffer.alloc(600));
-    let response: ReturnType<typeof rangeResponse> | undefined;
-    f.content.open.mockImplementation((request) => {
-      response = rangeResponse(request, f.bytes);
-      response.body.read.mockImplementation(() =>
-        Promise.resolve(Buffer.from([0])),
+  it("TestBR070_v4_AC02_fragmentation_does_not_consume_operations", async () => {
+    for (const fragmentSize of [600, 1]) {
+      const f = await contentFixture({}, Buffer.alloc(600));
+      const response = rangeResponse(
+        {
+          target: { driveId: 7, id: 3 },
+          start: 0,
+          end: 599,
+          size_bytes: 600,
+          etag: f.etag,
+        },
+        f.bytes,
       );
-      return Promise.resolve(response);
-    });
-    const c = createNavigationController(f.config, f.dependencies);
-    expect(await c.invoke("kdrive_download", { file_id: 3 })).toEqual(
-      contentError("LIMIT_EXCEEDED"),
-    );
-    expect(
-      response!.body.read.mock.calls.length +
-        f.inspect.mock.calls.length +
-        f.content.describe.mock.calls.length +
-        f.content.open.mock.calls.length,
-    ).toBe(512);
-    expect(response!.body.close).toHaveBeenCalledOnce();
-    c.close();
+      let offset = 0;
+      response.body.read.mockImplementation((max) => {
+        if (offset === 600) return Promise.resolve(null);
+        const chunk = f.bytes.subarray(
+          offset,
+          offset + Math.min(max, fragmentSize),
+        );
+        offset += chunk.length;
+        return Promise.resolve(chunk);
+      });
+      f.content.open.mockResolvedValue(response);
+      const c = createNavigationController(f.config, f.dependencies);
+      try {
+        expect(await c.invoke("kdrive_download", { file_id: 3 })).toEqual(
+          contentResult({
+            drive_id: 7,
+            file_id: 3,
+            offset_bytes: 0,
+            bytes_read: 600,
+            size_bytes: 600,
+            etag: f.etag,
+            encoding: "base64",
+            data: "A".repeat(800),
+            has_more: false,
+          }),
+        );
+        expect(response.body.read).toHaveBeenCalledTimes(
+          600 / fragmentSize + 1,
+        );
+        expect(response.body.close).toHaveBeenCalledOnce();
+        expect(f.content.describe).toHaveBeenCalledOnce();
+        expect(f.content.open).toHaveBeenCalledOnce();
+        expect(f.inspect).toHaveBeenCalledTimes(4);
+      } finally {
+        c.close();
+      }
+    }
   });
   it("TestBR093_read_only_retry_composition abstract dispatch and execute never retry", async () => {
     const f = await contentFixture();
@@ -338,4 +368,218 @@ describe("received content freshness", () => {
     expect(raw.content.open).toHaveBeenCalledOnce();
     c.close();
   });
+});
+
+// A body with a controllable late completion: no sleeps and no transport I/O.
+async function stalledStream(
+  stage: "data" | "EOF" | "EOF_single" | "progress",
+) {
+  const f = await contentFixture({}, Buffer.alloc(600));
+  let release!: (value: unknown) => void;
+  const held = new Promise<unknown>((resolve) => {
+    release = resolve;
+  });
+  let count = 0;
+  const body = {
+    read: vi.fn<(max: number, signal: AbortSignal) => Promise<unknown>>(() => {
+      count++;
+      if (stage === "EOF" && count <= 600)
+        return Promise.resolve(Buffer.alloc(1));
+      if (stage === "EOF_single" && count === 1)
+        return Promise.resolve(f.bytes);
+      if (stage === "progress" && count <= 2) {
+        const delay = count === 1 ? 5000 : 4999;
+        return new Promise((resolve) => {
+          setTimeout(() => {
+            resolve(Buffer.alloc(300));
+          }, delay);
+        });
+      }
+      return held;
+    }),
+    close: vi.fn(),
+  };
+  f.content.open.mockImplementation((request) =>
+    Promise.resolve({ ...request, status: 206, body }),
+  );
+  return {
+    f,
+    body,
+    release,
+    readCount:
+      stage === "EOF"
+        ? 601
+        : stage === "data"
+          ? 1
+          : stage === "progress"
+            ? 3
+            : 2,
+  };
+}
+
+it.each(["data", "EOF", "EOF_single", "progress"] as const)(
+  "TestBR070_v4_AC04_pending_data_and_EOF_obey_deadline %s",
+  async (stage) => {
+    vi.useFakeTimers();
+    const h = await stalledStream(stage);
+    const c = createNavigationController(h.f.config, h.f.dependencies);
+    const settled = vi.fn();
+    const pending = c
+      .invoke("kdrive_download", { file_id: 3 })
+      .then((value) => {
+        settled(value);
+        return value;
+      });
+    try {
+      await vi.advanceTimersByTimeAsync(9999);
+      expect(settled).not.toHaveBeenCalled();
+      expect(h.body.read).toHaveBeenCalledTimes(h.readCount);
+      const signal = h.body.read.mock.calls.at(-1)![1];
+      expect(signal.aborted).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(await pending).toEqual(contentError("REQUEST_TIMEOUT"));
+      expect(signal.aborted).toBe(true);
+      expect(h.body.close).toHaveBeenCalledOnce();
+      const inspectCalls = h.f.inspect.mock.calls.length;
+      h.release(stage === "data" ? h.f.bytes : null);
+      await vi.advanceTimersByTimeAsync(10000);
+      expect(settled).toHaveBeenCalledOnce();
+      expect(h.body.read).toHaveBeenCalledTimes(h.readCount);
+      expect(h.body.close).toHaveBeenCalledOnce();
+      expect(h.f.inspect).toHaveBeenCalledTimes(inspectCalls);
+      expect(h.f.content.describe).toHaveBeenCalledOnce();
+      expect(h.f.content.open).toHaveBeenCalledOnce();
+      expect(
+        (await c.invoke("kdrive_info", { file_id: 3 })).isError,
+      ).toBeUndefined();
+    } finally {
+      c.close();
+      await pending;
+    }
+  },
+);
+
+it.each([
+  ["data", "cancel"],
+  ["data", "close"],
+  ["EOF", "cancel"],
+  ["EOF", "close"],
+  ["EOF_single", "cancel"],
+  ["EOF_single", "close"],
+] as const)(
+  "TestBR070_v4_AC04_pending_data_and_EOF_obey_cancel_and_close %s %s",
+  async (stage, action) => {
+    vi.useFakeTimers();
+    const h = await stalledStream(stage);
+    const c = createNavigationController(h.f.config, h.f.dependencies);
+    const abort = new AbortController();
+    const settled = vi.fn();
+    const pending = c
+      .invoke("kdrive_download", { file_id: 3 }, abort.signal)
+      .then((value) => {
+        settled(value);
+        return value;
+      });
+    try {
+      await vi.advanceTimersByTimeAsync(0);
+      expect(settled).not.toHaveBeenCalled();
+      expect(h.body.read).toHaveBeenCalledTimes(h.readCount);
+      if (action === "cancel") abort.abort();
+      else c.close();
+      expect(await pending).toEqual(contentError("ACCESS_DENIED"));
+      expect(h.body.read.mock.calls.at(-1)![1].aborted).toBe(true);
+      expect(h.body.close).toHaveBeenCalledOnce();
+      const inspectCalls = h.f.inspect.mock.calls.length;
+      h.release(stage === "data" ? h.f.bytes : null);
+      await vi.advanceTimersByTimeAsync(20000);
+      expect(settled).toHaveBeenCalledOnce();
+      expect(h.body.read).toHaveBeenCalledTimes(h.readCount);
+      expect(h.body.close).toHaveBeenCalledOnce();
+      expect(h.f.inspect).toHaveBeenCalledTimes(inspectCalls);
+      expect(h.f.content.describe).toHaveBeenCalledOnce();
+      expect(h.f.content.open).toHaveBeenCalledOnce();
+      if (action === "cancel")
+        expect(
+          (await c.invoke("kdrive_info", { file_id: 3 })).isError,
+        ).toBeUndefined();
+      else
+        expect(await c.invoke("kdrive_info", { file_id: 3 })).toEqual(
+          contentError("ACCESS_DENIED"),
+        );
+    } finally {
+      c.close();
+      await pending;
+    }
+  },
+);
+
+it.each(["data", "EOF", "EOF_single"] as const)(
+  "TestBR070_v4_AC04_pending_data_and_EOF_obey_cancel_and_close wire_close %s",
+  async (stage) => {
+    const h = await stalledStream(stage);
+    const w = await createWire(h.f.config, h.f.dependencies);
+    vi.useFakeTimers();
+    try {
+      w.send(initialize);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(w.responses().some((r) => r.id === 1)).toBe(true);
+      w.send({ jsonrpc: "2.0", method: "notifications/initialized" });
+      w.send({
+        jsonrpc: "2.0",
+        id: 2,
+        method: "tools/call",
+        params: {
+          name: "kdrive_download",
+          arguments: { file_id: 3 },
+        },
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(h.body.read).toHaveBeenCalledTimes(h.readCount);
+      expect(w.responses().some((r) => r.id === 2)).toBe(false);
+      await w.session.close();
+      expect(h.body.read.mock.calls.at(-1)![1].aborted).toBe(true);
+      expect(h.body.close).toHaveBeenCalledOnce();
+      h.release(stage === "data" ? h.f.bytes : null);
+      await vi.advanceTimersByTimeAsync(20000);
+      expect(w.responses().some((r) => r.id === 2)).toBe(false);
+      expect(h.body.read).toHaveBeenCalledTimes(h.readCount);
+      expect(h.body.close).toHaveBeenCalledOnce();
+      expect(h.f.content.describe).toHaveBeenCalledOnce();
+      expect(h.f.content.open).toHaveBeenCalledOnce();
+    } finally {
+      await w.session.close();
+    }
+  },
+);
+
+it("TestBR070_v4_AC04_immediate_fragments_obey_monotonic_deadline", async () => {
+  vi.useFakeTimers();
+  const f = await contentFixture({}, Buffer.alloc(600));
+  let now = 0;
+  const clock = vi.spyOn(performance, "now").mockImplementation(() => now);
+  const body = {
+    read: vi.fn<(max: number, signal: AbortSignal) => Promise<unknown>>(() => {
+      now = now === 0 ? 9999 : 10000;
+      return Promise.resolve(Buffer.alloc(300));
+    }),
+    close: vi.fn(),
+  };
+  f.content.open.mockImplementation((request) =>
+    Promise.resolve({ ...request, status: 206, body }),
+  );
+  const c = createNavigationController(f.config, f.dependencies);
+  try {
+    expect(await c.invoke("kdrive_download", { file_id: 3 })).toEqual(
+      contentError("REQUEST_TIMEOUT"),
+    );
+    expect(body.read).toHaveBeenCalledTimes(2);
+    expect(body.close).toHaveBeenCalledOnce();
+    expect(body.read.mock.calls[1]![1].aborted).toBe(true);
+    expect(f.inspect).toHaveBeenCalledTimes(3);
+    expect(f.content.describe).toHaveBeenCalledOnce();
+    expect(f.content.open).toHaveBeenCalledOnce();
+  } finally {
+    c.close();
+    clock.mockRestore();
+  }
 });
