@@ -1551,3 +1551,36 @@ describe("BR-291 BR-023 v3 BR-024 v4 CIMD origin list (F-028 AC-01)", () => {
       );
   });
 });
+
+it("BR-421 AC-10 loads the list from environment, option and YAML", async () => {
+  const list = ["127.0.0.1", "192.0.2.0/24", "2001:db8::/32"];
+  const configurations = [
+    await load({ ...proxy, MCP_HTTP_TRUSTED_PROXIES: list.join(",") }),
+    await load(proxy, ["--http-trusted-proxies", list.join(",")]),
+    await load(proxy, ["--config", "settings.yaml"], `httpTrustedProxies: ${JSON.stringify(list)}`),
+  ];
+  for (const config of configurations) expect(config.httpTrustedProxies).toEqual(list);
+});
+
+it("BR-421 AC-10 an empty value is the empty list", async () => {
+  for (const config of [
+    await load(proxy),
+    await load({ ...proxy, MCP_HTTP_TRUSTED_PROXIES: "" }),
+    await load(proxy, ["--http-trusted-proxies", ""]),
+    await load(proxy, ["--config", "settings.yaml"], "httpTrustedProxies: []"),
+  ]) expect(config.httpTrustedProxies).toEqual([]);
+});
+
+it.each(["stdio", "insecure", "delegate"])(
+  "BR-421 BR-024 v5 AC-10 refuses the list with %s as CONFLICTING_SETTINGS",
+  async (mode) => {
+    const env: Record<string, string> = mode === "stdio" ? {} : mode === "insecure"
+      ? { KDRIVE_MCP_TRANSPORT: "http", KDRIVE_MCP_INSECURE_NO_AUTH: "1" } : http;
+    for (const list of [[], ["127.0.0.1"]]) {
+      const expected = error("CONFLICTING_SETTINGS", "httpTrustedProxies");
+      await expect(load({ ...env, MCP_HTTP_TRUSTED_PROXIES: list.join(",") })).rejects.toMatchObject(expected);
+      await expect(load(env, ["--http-trusted-proxies", list.join(",")])).rejects.toMatchObject(expected);
+      await expect(load(env, ["--config", "settings.yaml"], `httpTrustedProxies: ${JSON.stringify(list)}`)).rejects.toMatchObject(expected);
+    }
+  },
+);

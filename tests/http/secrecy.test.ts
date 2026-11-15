@@ -458,3 +458,59 @@ describe("BR-411 replay secrecy", () => {
     await f.handler.close();
   });
 });
+
+const PEER_SENTINELS = ["192.0.2.66", "198.51.100.77", "203.0.113.88"];
+
+function peerSecrecyRequest(f: Fixture, route: string, forwarded: string) {
+  const post = ["register", "consent", "token"].includes(route);
+  return f.send(post ? "POST" : "GET", `/mcp/oauth/${route}`, {
+    remoteAddress: "192.0.2.66",
+    headers: {
+      "x-forwarded-for": forwarded,
+      "content-type": route === "register"
+        ? "application/json" : "application/x-www-form-urlencoded",
+    },
+    ...(post ? { body: route === "register" ? "{}" : "grant_type=x" } : {}),
+  });
+}
+
+async function prefillPeers(f: Fixture, route: string, outcome: string) {
+  if (outcome === "admitted") return;
+  const limit = outcome === "peer"
+    ? (route === "token" ? 60 : 30) : (route === "token" ? 1200 : 60);
+  for (let i = 0; i < limit; i++) {
+    const address = outcome === "peer" ? "203.0.113.88"
+      : `2001:db8:${i.toString(16)}::1`;
+    expect((await peerSecrecyRequest(f, route, address)).status).not.toBe(429);
+  }
+}
+
+async function peerSecrecyCase(route: string, outcome: string) {
+  const f = await httpFixture({ env: { MCP_HTTP_TRUSTED_PROXIES: "192.0.2.66" } });
+  try {
+    await prefillPeers(f, route, outcome);
+    const response = await peerSecrecyRequest(f, route, "198.51.100.77, 203.0.113.88");
+    if (outcome === "admitted") expect(response.status).not.toBe(429);
+    else {
+      expect(response.status).toBe(429);
+      expect(f.events("request_refused").at(-1)?.fields).toEqual({
+        route, status: 429, error: "rate_limited", window: outcome,
+      });
+    }
+    const output = JSON.stringify({
+      headers: [...response.headers], body: await response.text(), logs: f.logs,
+    });
+    for (const sentinel of PEER_SENTINELS) expect(output).not.toContain(sentinel);
+    const refusals = f.events("request_refused").filter((entry) => entry.fields.status === 429);
+    for (const event of refusals)
+      expect(Object.keys(event.fields).sort()).toEqual(["error", "route", "status", "window"]);
+  } finally {
+    await f.handler.close();
+  }
+}
+
+it("BR-167 v3 AC-19 no peer address reaches a response or an event", async () => {
+  for (const route of ["register", "authorize", "consent", "callback", "token"])
+    for (const outcome of ["admitted", "peer", "global"])
+      await peerSecrecyCase(route, outcome);
+});
