@@ -141,6 +141,14 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
   bounded Linux unread-pipe child test is planned as runtime evidence. No
   implementation or acceptance is claimed.
 
+- #47 lot E / F-041 v1 (draft; pending review, implementation and acceptance):
+  specify refusal of trash, rename and move on source folders containing a
+  configured root, using fresh same-drive ID ancestry and failing closed
+  when it cannot be proved. Preserve `ACCESS_DENIED` and the existing denied
+  audit event, allow overlapping configuration, and leave move destination
+  handling and copy/upload/create contracts unchanged. R-17-2 remediation
+  is specified but the current bypass remains until acceptance.
+
 ## [0.6.0-beta.1] - 2026-11-13
 
 ### Added

@@ -214,6 +214,17 @@ The five write tools (#18) — `kdrive_create_folder`, `kdrive_rename`,
   authorized folder of an outer root that contains an inner configured root
   also affects that inner root, and with deny patterns the trashed folder
   cannot be restored through this server.
+  **Status (2026-11-15): remediation specified, still present; review,
+  implementation and actual-main acceptance pending.**
+  [F-041 v1](features/F-041-configured-root-ancestors.md) (#47 lot E)
+  proposes refusing these source-ancestor mutations in write/share modes,
+  using fresh same-drive configured-root ID ancestry and failing closed
+  when ancestry cannot be determined. Overlapping configuration and move
+  destination handling remain unchanged. This draft does not establish
+  runtime protection. After acceptance, the next reviewed records update
+  will link the evidence and mark the known-ancestor bypass addressed;
+  external changes between evidence acquisition and mutation remain within
+  the check-then-act risk (SPEC §10.6).
 
 ## Upload (F-018)
 
