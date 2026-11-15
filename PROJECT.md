@@ -79,16 +79,15 @@ from private systems is summarised without identifiers.
 
 ## Decisions log
 
-Entries state the decision, its date and scope; they do not quote anyone's words.
-
 Owner decisions that set the parameters above, with their date and source.
+Entries state the decision; they do not quote anyone's words.
 
 - **D-1 — 2026-11-01 — Autonomous freeze.** The owner removed the human freeze
   step for this project. The human freeze stays in AGENTS.md §2 as the
   default mode; this project uses the autonomous mode.
-- **D-2 — 2026-11-02 — Autonomous in-scope corrections.** The owner allows
-  routine in-scope corrections without asking. Routine corrections
-  within the approved ticket scope continue regardless of review rounds, bounded by the
+- **D-2 — 2026-11-02 — Autonomous in-scope corrections.** Routine corrections
+  within the approved ticket scope continue without asking the owner,
+  regardless of review rounds, bounded by the
   AGENTS.md §3 round limit and the D-3 budget; every
   corrected head still needs the local gate, CI and a fresh independent review.
   Unresolved product or contract decisions still go to the owner.
@@ -113,9 +112,8 @@ Owner decisions that set the parameters above, with their date and source.
   rounds of the reviewer tool measured about 17–38k (`learnings.md`,
   2026-11-05). The owner may change it.
 - **D-8 — 2026-11-11 — Strongest tier on Fable 5.2.** Recorded in #101. The
-  owner moved the strongest tier from Fable 5.1 to Fable 5.2. The strongest
-  tier maps to Fable 5.2 instead of Fable 5.1;
-  the rest of D-3 is unchanged. The milestone 0.4 global pass was already
+  owner moved the strongest tier from Fable 5.1 to Fable 5.2; the rest of
+  D-3 is unchanged. The milestone 0.4 global pass was already
   served by Fable 5.2 (#100 comment of 2026-11-11).
 - **D-9 — 2026-11-12 — Development in this repository.** The owner moved
   development to this repository (switch ticket #1). The archive is frozen;
@@ -130,7 +128,7 @@ Owner decisions that set the parameters above, with their date and source.
   domain labels sharing one colour, each with a description
   ([docs/issue-labels.md](docs/issue-labels.md)).
 - **D-11 — 2026-11-15 — Codex as a cross-vendor reviewer and helper.** The
-  owner chose to run the Codex CLI on the owner's ChatGPT plan. The Codex CLI
+  owner chose to use the Codex CLI. The Codex CLI
   (`@openai/codex`, installed by the `kdrive-mcp-server` cloud environment's
   setup script) runs signed in with the owner's ChatGPT plan through device
   login (`codex login --device-auth`); the owner enters the code, the token
