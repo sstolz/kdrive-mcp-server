@@ -2,7 +2,7 @@
 id: F-042
 title: Describe every MCP tool and parameter for AI clients
 ticket: "#42"
-status: frozen
+status: done
 version: 1
 ---
 

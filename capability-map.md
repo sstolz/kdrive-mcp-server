@@ -1,18 +1,18 @@
 # Capability map
 
-## Provisional — MCP tool and parameter descriptions
+## Accepted — MCP tool and parameter descriptions
 
-[F-042 v1](features/F-042-mcp-tool-descriptions.md) (#42),
+[F-042 v1](features/F-042-mcp-tool-descriptions.md) (#42) (accepted 2026-11-15),
 [BR-428 v1](business-rules/BR-428.md),
 [BR-429 v1](business-rules/BR-429.md) and
-[BR-430 v1](business-rules/BR-430.md): frozen v1 catalog of purpose, result and
+[BR-430 v1](business-rules/BR-430.md): v1 catalog of purpose, result and
 continuation guidance for all 16 tools, plus units, defaults, bounds and
 cross-field rules for all 58 parameter occurrences and the PDF page item.
 Existing notices and mutation cautions are preserved. Fixed trusted text and
 size assertions accompany a description-only change; schema validation and
-behavior remain unchanged. Supplied review and freeze-decision dispositions
-are recorded in F-042; implementation and actual-main acceptance pending.
-No working capability is claimed.
+behavior remain unchanged.
+Accepted on actual main `3b035b8` on 2026-11-15 (#42 comment `6900828692`).
+BR-428–BR-430 v1 are active.
 
 ## Accepted — process-wide extraction admission
 
