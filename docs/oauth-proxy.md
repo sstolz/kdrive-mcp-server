@@ -172,8 +172,8 @@ server never repairs, replaces or deletes the file.
   an older copy (see "The state file is a credential store").
 - A power loss during a commit is covered by SQLite's journal only on file
   systems that honour `fsync`; use a local file system.
-- Refresh requests use per-peer windows and a global ceiling (F-035 pending
-  acceptance; see "HTTP server" below). Each store still holds at most 1,000
+- Refresh requests use per-peer windows and a global ceiling (F-035, accepted
+  on main `703bece`; see "HTTP server" below). Each store still holds at most 1,000
   entries.
 - A revocation that was not committed is lost at the next restart.
 - A crash or dropped connection after a refresh commit but before the client

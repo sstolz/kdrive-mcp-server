@@ -122,7 +122,7 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
   byte caps and deadlines so valid fragmented content can complete; treat
   case-sensitive `W/` validators exactly as absent validators in both
   descriptor and range responses, preserving existing strong derivation.
-  Files with weak validators are refused
+  Files with weak validators, previously readable, are now refused
   (`VERSION_UNAVAILABLE` at describe; `CONTENT_UNAVAILABLE` at open after a
   strong descriptor).
 

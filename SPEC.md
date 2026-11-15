@@ -190,11 +190,11 @@ de la vérification », et la description de l'outil comme le README le disent.
 ### Reprises
 
 - Lectures : reprise sur 429 et 5xx, avec attente progressive et nombre d'essais plafonné.
-- Writes and shares: HTTP 429 ends the mutation as `failed` / `RATE_LIMITED`, without
-  automatic retry (F-037). A later client invocation requires fresh admission and authorization.
-  After a timeout, lost connection or 5xx, there is no automatic retry: the tool returns
-  `uncertain` and asks the caller to check the item's state before another attempt.
-  The audit log records the outcome.
+- Écritures et partages : un HTTP 429 termine la mutation en `failed` / `RATE_LIMITED`, sans
+  reprise automatique (F-037). Une nouvelle invocation du client repasse par l'admission et
+  l'autorisation. Après un délai dépassé, une connexion perdue ou un 5xx, pas de reprise
+  automatique : l'outil renvoie `uncertain` et demande de vérifier l'état de l'élément avant
+  un nouvel essai. Le journal d'audit enregistre l'issue.
 
 ### Pagination filtrée
 
