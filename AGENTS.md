@@ -57,6 +57,11 @@ Pick the path by impact, not by file type:
 
 - **Full path**: for product behaviour, security, public contracts, or a change
   to the build or CI contract. Spec, BRs, ACs, spec review, freeze, tests first.
+- **Light full path**: for a change limited to tests, checks or docs that must
+  still version a BR. A short spec, strong-tier spec review rounds per §3
+  until `approve`, freeze, tests first, then code review rounds per §3 until
+  `approve`; the reviews check what a full-path review checks (§5). No
+  decision pass unless the ticket is security-sensitive.
 - **Short path**: for docs, admin work, editorial fixes, and verified mechanical
   changes that keep behaviour and contracts intact. There is no spec, no BR, no
   freeze, and no unit test for prose.
@@ -220,7 +225,9 @@ work is complex. `PROJECT.md` maps each tier to a concrete model and effort.
 - A security-sensitive ticket gets one strongest-tier **decision pass** on the
   spec before freeze and one on the code before merge, each after a strong-tier
   approval. A major finding in a decision pass sends the work back to
-  strong-tier iterations.
+  strong-tier iterations. Other tickets get no decision pass: a strong-tier
+  approval is enough. The orchestrator records at the start of each ticket
+  whether it is security-sensitive, and why.
 - Each milestone ends with one strongest-tier global pass over its combined
   changes.
 - Reports record the author's and the reviewer's model and effort. Write
