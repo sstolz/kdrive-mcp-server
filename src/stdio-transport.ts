@@ -74,6 +74,7 @@ function sanitized(message: OutboundMessage): OutboundMessage {
 interface OwnerOptions {
   diagnostic(message: string): void;
   onFailure(): void;
+  onClosing?(): void;
 }
 /** BR-069/070: SDK parsing/dispatch, with only narrow bounded input/output ownership. */
 export function createOwnedStdioTransport(
@@ -118,6 +119,7 @@ export function createOwnedStdioTransport(
   function close(): Promise<void> {
     if (closed) return Promise.resolve();
     closed = true;
+    options.onClosing?.();
     input.off("data", data);
     input.off("end", ended);
     input.off("close", ended);

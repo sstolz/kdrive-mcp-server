@@ -156,11 +156,28 @@ change adds no idempotency guarantee.
 - File sink: opened with `O_APPEND | O_NOFOLLOW`, created `0600`; an existing
   file must be owned by the server's user with no group or other permission bit.
   The server never changes its mode. Each record is followed by `fdatasync`; a
-  write or sync failure, or a sync slower than 5 s, stops further writes.
+  write or sync failure, or a total append wait of 5,000 ms or more, stops further writes.
 - stderr sink (default): durability is that of the stderr collector; a file on a
   writable mount is recommended for a durable trail.
 - After an HTTP 503 at shutdown or a dropped response after a cancellation, the
   audit outcome is the authority on whether a write happened.
+- F-039 bounds asynchronous file and stderr appends, including queue time, to
+  5,000 ms; sink close shares a separate 5,000 ms budget for drain and release.
+  Stream errors reject pending appends immediately. The first failure latches
+  permanently until restart and offers one fixed best-effort diagnostic.
+  Timed-out bytes may arrive later: an intent without an outcome is ambiguous.
+  The client's mutation result is authoritative; a shutdown HTTP 503 is not
+  such a result and does not establish whether a write occurred.
+- File release never races an in-flight write or sync. If it remains pending
+  at close expiry, the descriptor is retained until actual process termination.
+  Synchronous fd 2 file/TTY writes can block the event loop and its timers;
+  libuv threadpool write/fdatasync stalls can hold OS/runtime teardown even
+  after `process.exit`. Both remain unbounded.
+- The shared production exit helper has a ref'd 250 ms flush cap, shortened
+  to the remaining 1,000 ms no-intent stdio budget (non-committed appends,
+  release and flushing included). Queued output on a stalled pipe may be lost.
+  Owned/library closure never terminates its host. Keep the 75 s deployment
+  grace; see [shutdown guidance](docs/deployment.md#write-and-share-modes-audit-log).
 - Received-share writes stay denied even with `KDRIVE_MCP_SHARED_WRITE=1`.
 
 ## Controlled tree mutations (F-017)
@@ -233,7 +250,7 @@ checked against the deny patterns.
   client) can be refused by the transport below 524,288 bytes: over HTTP the
   request gets HTTP 413; over stdio a frame above 1 MiB terminates the server
   with `STDIO_INPUT_FAILED` and no MCP error. An upload already in flight
-  completes and its outcome is recorded in the audit log before exit, but its
+  reaches its classified result and bounded outcome append before exit, but its
   tool result is not delivered. Use `base64` for large or non-ASCII content.
 - Residual risk R-18-1: the `conflict=error` refusal is not proven under every
   interleaving; a concurrent writer could still win a race this server cannot

@@ -1,11 +1,14 @@
 // F-016 mutation gate unit tests: AC-01–AC-03, AC-10–AC-19, AC-21 (gate),
 // AC-22, AC-27, with a synthetic mutator and a fake policy dispatch.
+import { EventEmitter } from "node:events";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createStderrSink,
   openFileSink,
   type AuditFilePort,
   type AuditSink,
+  type AuditRecord,
+  serializeAuditRecord,
 } from "../src/audit/sink.js";
 import {
   NotSent,
@@ -87,6 +90,8 @@ interface HarnessOptions {
   sink?: AuditSink;
   /** Handles write number `index`; `commit` records the line and succeeds. */
   write?: (index: number, commit: () => void, fail: (e: Error) => void) => void;
+  diagnostic?: (message: string) => void;
+  now?: () => number;
   beforeExecute?: (h: { sink: AuditSink }) => void | Promise<void>;
 }
 function harness(options: HarnessOptions = {}) {
@@ -121,9 +126,10 @@ function harness(options: HarnessOptions = {}) {
       options.mutators ?? Object.fromEntries(KINDS.map((k) => [k, mutator])),
     random: (n) => Uint8Array.from({ length: n }, (_, i) => i),
     clock: () => new Date("2026-11-09T10:00:00.000Z"),
-    now: () => performance.now(),
+    now: options.now ?? (() => performance.now()),
     diagnostic: (message) => {
       diagnostics.push(message);
+      options.diagnostic?.(message);
     },
   });
   const policy = vi.fn();
@@ -1540,47 +1546,509 @@ describe("BR-259 slow intent appends", () => {
     });
   });
 
-  it("TestBR259_a_stderr_intent_resolving_after_5000_ms_makes_zero_attempts", async () => {
+  // F-039 replaces the v1 late-outcome and exact-deadline success expectations.
+  it.each([5000, 6000])(
+    "TestBR259_v2_AC06_late_intent_never_dispatches (%i ms)",
+    async (at) => {
+      vi.useFakeTimers();
+      const stream = boundedGateStream();
+      const h = harness({ sink: stream.sink });
+      const result = observeGate(h.run());
+      await vi.advanceTimersByTimeAsync(0);
+      setTimeout(() => {
+        stream.complete(0);
+      }, at);
+      await vi.advanceTimersByTimeAsync(at);
+      expect(result.value).toEqual(auditIntentFailure);
+      expect(result.error).toBeUndefined();
+      expect(h.mutator).not.toHaveBeenCalled();
+      expect(stream.events()).toEqual(["intent"]);
+      expect(stream.sink.latched).toBe(true);
+      expect(h.diagnostics).toEqual([OUTCOME_UNRECORDED_DIAGNOSTIC]);
+    },
+  );
+});
+
+// F-039: capture settlement without awaiting an intentionally stalled old sink.
+function observeGate<T>(pending: Promise<T>) {
+  const state: { value?: T; error?: unknown; settled: boolean } = {
+    settled: false,
+  };
+  void pending.then(
+    (value) => {
+      state.value = value;
+      state.settled = true;
+    },
+    (error: unknown) => {
+      state.error = error;
+      state.settled = true;
+    },
+  );
+  return state;
+}
+function boundedGateStream(
+  onWrite?: (index: number, complete: () => void) => void,
+) {
+  const emitter = new EventEmitter();
+  const attempted: string[] = [],
+    acknowledged: string[] = [];
+  const callbacks: ((error?: Error | null) => void)[] = [];
+  const complete = (index: number, error?: Error) => {
+    const line = attempted[index];
+    if (line !== undefined && error === undefined) acknowledged.push(line);
+    callbacks[index]?.(error);
+  };
+  const sink = createStderrSink({
+    on: (event, listener) => emitter.on(event, listener),
+    write(line, callback) {
+      const index = attempted.length;
+      attempted.push(line);
+      callbacks.push(callback);
+      onWrite?.(index, () => {
+        complete(index);
+      });
+      return false;
+    },
+  });
+  return {
+    sink,
+    emitter,
+    attempted,
+    acknowledged,
+    complete,
+    events: () =>
+      attempted.map((line) => (JSON.parse(line) as { event: string }).event),
+  };
+}
+const auditIntentFailure = {
+  result: "failed",
+  op: OP,
+  code: "AUDIT_UNAVAILABLE",
+  attempts: 0,
+};
+const auditAdmissionFailure = {
+  result: "failed",
+  code: "AUDIT_UNAVAILABLE",
+  attempts: 0,
+};
+const syntheticPrivateError = () =>
+  new Error("SENTINEL_SECRET /private/audit.log underlying-stack");
+
+async function assertAdmissionStillRefused(
+  h: ReturnType<typeof harness>,
+  stream: ReturnType<typeof boundedGateStream>,
+) {
+  const writes = stream.attempted.length,
+    policies = h.policy.mock.calls.length;
+  expect(await h.run()).toEqual(auditAdmissionFailure);
+  expect(stream.attempted).toHaveLength(writes);
+  expect(h.policy).toHaveBeenCalledTimes(policies);
+  expect(h.diagnostics).toEqual([OUTCOME_UNRECORDED_DIAGNOSTIC]);
+}
+
+describe("F-039 bounded gate audit waits", () => {
+  it("TestBR259_v2_AC01_blocked_stderr_intent_fails_closed_at_5000_ms", async () => {
     vi.useFakeTimers();
-    const h = harness({
-      write: (i, commit) => {
-        if (i === 0)
-          setTimeout(() => {
-            commit();
-          }, 6000);
-        else commit();
-      },
-    });
-    const pending = h.run();
-    await vi.advanceTimersByTimeAsync(6000);
-    expect(await pending).toEqual({
-      result: "failed",
-      op: OP,
-      code: "AUDIT_UNAVAILABLE",
-      attempts: 0,
-    });
+    const stream = boundedGateStream();
+    const h = harness({ sink: stream.sink });
+    const result = observeGate(h.run());
+    await vi.advanceTimersByTimeAsync(4999);
+    expect(result.settled).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(result.value).toEqual(auditIntentFailure);
+    expect(result.error).toBeUndefined();
+    expect(stream.events()).toEqual(["intent"]);
+    expect(stream.acknowledged).toEqual([]);
     expect(h.mutator).not.toHaveBeenCalled();
-    expect(
-      h.records().map((r) => [r.event, r.result, r.code, r.attempts]),
-    ).toEqual([
-      ["intent", undefined, undefined, undefined],
-      ["outcome", "failed", "AUDIT_UNAVAILABLE", 0],
-    ]);
+    expect(stream.sink.latched).toBe(true);
+    await assertAdmissionStillRefused(h, stream);
   });
 
-  it("TestBR259_a_stderr_intent_resolving_at_5000_ms_proceeds", async () => {
+  it("TestBR241_v2_AC02_stream_error_without_callback_refuses_dispatch", async () => {
     vi.useFakeTimers();
-    const h = harness({
-      write: (i, commit) => {
-        if (i === 0)
-          setTimeout(() => {
-            commit();
-          }, 5000);
-        else commit();
-      },
-    });
-    const pending = h.run();
-    await vi.advanceTimersByTimeAsync(5000);
-    expect((await pending).result).toBe("succeeded");
+    const stream = boundedGateStream();
+    const h = harness({ sink: stream.sink });
+    const result = observeGate(h.run());
+    await vi.advanceTimersByTimeAsync(100);
+    expect(result.settled).toBe(false);
+    expect(() =>
+      stream.emitter.emit("error", syntheticPrivateError()),
+    ).not.toThrow();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(result.value).toEqual(auditIntentFailure);
+    expect(result.error).toBeUndefined();
+    expect(stream.events()).toEqual(["intent"]);
+    expect(stream.acknowledged).toEqual([]);
+    expect(h.mutator).not.toHaveBeenCalled();
+    await assertAdmissionStillRefused(h, stream);
+    stream.complete(0);
+    stream.complete(0, syntheticPrivateError());
+    stream.emitter.emit("error", syntheticPrivateError());
+    await vi.advanceTimersByTimeAsync(6000);
+    expect(result.value).toEqual(auditIntentFailure);
+    expect(JSON.stringify(result)).not.toContain("SENTINEL_SECRET");
+    expect(h.diagnostics).toEqual([OUTCOME_UNRECORDED_DIAGNOSTIC]);
   });
+
+  const outcomes = [
+    {
+      status: 200,
+      value: {
+        result: "succeeded",
+        op: OP,
+        attempts: 1,
+        status: 200,
+        value: { id: 42 },
+        audit: "outcome_unrecorded",
+      },
+    },
+    {
+      status: 409,
+      value: {
+        result: "failed",
+        op: OP,
+        code: "UPSTREAM_REJECTED",
+        attempts: 1,
+        status: 409,
+        audit: "outcome_unrecorded",
+      },
+    },
+    {
+      status: 429,
+      value: {
+        result: "failed",
+        op: OP,
+        code: "RATE_LIMITED",
+        attempts: 1,
+        status: 429,
+        audit: "outcome_unrecorded",
+      },
+    },
+    {
+      status: 503,
+      value: {
+        result: "uncertain",
+        op: OP,
+        code: "UPSTREAM_UNCERTAIN",
+        attempts: 1,
+        status: 503,
+        audit: "outcome_unrecorded",
+        message: UNCERTAIN_MESSAGE,
+      },
+    },
+  ];
+  const outcomeRows = outcomes.flatMap((outcome) =>
+    ["timeout", "stream-error"].flatMap((failure) =>
+      ["held", "throwing"].map((diagnostic) => ({
+        ...outcome,
+        failure,
+        diagnostic,
+      })),
+    ),
+  );
+  it.each(outcomeRows)(
+    "TestBR259_v2_AC04_outcome_failure_preserves_each_classification ($status, $failure, $diagnostic)",
+    async ({ status, value, failure, diagnostic }) => {
+      vi.useFakeTimers();
+      const stream = boundedGateStream((index, complete) => {
+        if (index === 0) complete();
+      });
+      const h = harness({
+        sink: stream.sink,
+        mutator: () =>
+          Promise.resolve(
+            response(status, status === 200 ? { value: { id: 42 } } : {}),
+          ),
+        diagnostic: () => {
+          if (diagnostic === "throwing") throw syntheticPrivateError();
+          // No callback or drain notification: the gate must not wait for one.
+        },
+      });
+      const result = observeGate(h.run());
+      await vi.advanceTimersByTimeAsync(0);
+      expect(stream.events()).toEqual(["intent", "outcome"]);
+      expect(stream.acknowledged).toHaveLength(1);
+      expect(result.settled).toBe(false);
+      if (failure === "stream-error") {
+        await vi.advanceTimersByTimeAsync(100);
+        stream.emitter.emit("error", syntheticPrivateError());
+        await vi.advanceTimersByTimeAsync(0);
+      } else {
+        await vi.advanceTimersByTimeAsync(4999);
+        expect(result.settled).toBe(false);
+        await vi.advanceTimersByTimeAsync(1);
+      }
+      expect(result.value).toEqual(value);
+      expect(result.error).toBeUndefined();
+      expect(h.mutator).toHaveBeenCalledTimes(1);
+      expect(stream.sink.latched).toBe(true);
+      await assertAdmissionStillRefused(h, stream);
+      stream.complete(1);
+      stream.emitter.emit("error", syntheticPrivateError());
+      await vi.advanceTimersByTimeAsync(0);
+      expect(result.value).toEqual(value);
+      expect(h.diagnostics).toEqual([OUTCOME_UNRECORDED_DIAGNOSTIC]);
+    },
+  );
+
+  it.each(["denied", "cancel-during-intent", "cancel-after-intent"] as const)(
+    "TestBR259_v2_AC05_denied_and_cancelled_runs_settle (%s)",
+    async (row) => {
+      vi.useFakeTimers();
+      const cancel = new AbortController();
+      const stream = boundedGateStream((index, complete) => {
+        if (row === "cancel-after-intent" && index === 0) {
+          complete();
+          cancel.abort();
+        }
+      });
+      const h = harness({ sink: stream.sink, deny: row === "denied" });
+      const result = observeGate(h.run({ cancellation: cancel.signal }));
+      await vi.advanceTimersByTimeAsync(0);
+      if (row === "cancel-during-intent") cancel.abort();
+      await vi.advanceTimersByTimeAsync(4999);
+      expect(result.settled).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(result.value).toEqual(
+        row === "denied"
+          ? { result: "denied", op: OP, code: "ACCESS_DENIED", attempts: 0 }
+          : row === "cancel-during-intent"
+            ? auditIntentFailure
+            : {
+                result: "failed",
+                op: OP,
+                code: "CANCELLED",
+                attempts: 0,
+                audit: "outcome_unrecorded",
+              },
+      );
+      expect(result.error).toBeUndefined();
+      expect(stream.events()).toEqual(
+        row === "denied"
+          ? ["denied"]
+          : row === "cancel-during-intent"
+            ? ["intent"]
+            : ["intent", "outcome"],
+      );
+      expect(stream.acknowledged).toHaveLength(
+        row === "cancel-after-intent" ? 1 : 0,
+      );
+      expect(h.mutator).not.toHaveBeenCalled();
+      expect(stream.sink.latched).toBe(true);
+      expect(h.diagnostics).toEqual([OUTCOME_UNRECORDED_DIAGNOSTIC]);
+    },
+  );
+
+  it("TestBR259_v2_AC06_gate_rejects_stale_acknowledgement", async () => {
+    vi.useFakeTimers();
+    let now = 0;
+    const records: AuditRecord[] = [];
+    const sink: AuditSink = {
+      latched: false,
+      append: (record) => {
+        records.push(record);
+        if (record.event === "intent") now = 5000;
+        return Promise.resolve();
+      },
+      latch() {},
+      close: () => Promise.resolve(),
+    };
+    const h = harness({ sink, now: () => now });
+    expect(await h.run()).toEqual(auditIntentFailure);
+    expect(h.mutator).not.toHaveBeenCalled();
+    expect(records.map((record) => record.event)).toEqual([
+      "intent",
+      "outcome",
+    ]);
+    expect(records[1]).toMatchObject({
+      result: "failed",
+      code: "AUDIT_UNAVAILABLE",
+      attempts: 0,
+      ms: 0,
+    });
+    expect(h.diagnostics).toEqual([]);
+  });
+
+  it("TestBR240_v2_AC10_normal_audit_path_is_unchanged", async () => {
+    vi.useFakeTimers();
+    const h = harness();
+    expect(await h.run()).toEqual({
+      result: "succeeded",
+      op: OP,
+      attempts: 1,
+      status: 200,
+      value: { id: 42 },
+    });
+    const base = `{"v":1,"ts":"2026-11-09T10:00:00.000Z","event":`;
+    const identity = `"op":"${OP}","identity":{"kind":"stdio"},"tool":"kdrive_rename","kind":"rename","drive":101,"ids":{"target":42}`;
+    expect(h.lines).toEqual([
+      `${base}"intent",${identity}}\n`,
+      `${base}"outcome",${identity},"result":"succeeded","attempts":1,"ms":0,"status":200}\n`,
+    ]);
+    expect(h.mutator).toHaveBeenCalledTimes(1);
+    expect(h.sink.latched).toBe(false);
+    expect(h.diagnostics).toEqual([]);
+    await h.gate.close();
+    const read = harness({ mode: "read" });
+    expect(await read.run()).toEqual({
+      result: "failed",
+      code: "ACCESS_DENIED",
+      attempts: 0,
+    });
+    expect(read.lines).toEqual([]);
+    expect(read.policy).not.toHaveBeenCalled();
+  });
+});
+
+describe("F-039 first-latch diagnostic", () => {
+  const failures = [
+    "intent-timeout",
+    "denied-timeout",
+    "outcome-failure",
+    "idle-error",
+    "close-expiry",
+    "release-rejection",
+  ] as const;
+  const rows = failures.flatMap((failure) =>
+    ["held", "throws", "reentrant"].map((writer) => ({ failure, writer })),
+  );
+  it.each(rows)(
+    "TestBR241_v2_AC14_every_first_latch_offers_one_fixed_diagnostic ($failure, $writer)",
+    async ({ failure, writer }) => {
+      vi.useFakeTimers();
+      const stream = boundedGateStream((index, complete) => {
+        if (failure === "outcome-failure" && index === 0) complete();
+      });
+      let releaseCalls = 0;
+      let release!: () => void;
+      const file =
+        failure === "close-expiry" || failure === "release-rejection";
+      const sink = file
+        ? await openFileSink("/synthetic/SENTINEL_SECRET/audit.log", {
+            port: {
+              open: () => Promise.resolve(3),
+              fstat: () =>
+                Promise.resolve({
+                  isFile: () => true,
+                  uid: 1000,
+                  mode: 0o100600,
+                }),
+              geteuid: () => 1000,
+              write: (_fd, data) => Promise.resolve(data.length),
+              fdatasync: () => Promise.resolve(),
+              close: () => {
+                releaseCalls++;
+                if (failure === "release-rejection")
+                  return Promise.reject(syntheticPrivateError());
+                return new Promise<void>((resolve) => {
+                  release = resolve;
+                });
+              },
+            },
+          })
+        : stream.sink;
+      const h = harness({
+        sink,
+        deny: failure === "denied-timeout",
+        diagnostic: () => {
+          if (writer === "throws") throw syntheticPrivateError();
+          if (writer === "reentrant")
+            stream.emitter.emit("error", syntheticPrivateError());
+          // The held writer accepts the attempt and never offers a callback/drain.
+        },
+      });
+      let result: ReturnType<typeof observeGate<GateResult>> | undefined;
+      let closing: ReturnType<typeof observeGate<void>> | undefined;
+      if (file) closing = observeGate(h.gate.close());
+      else if (failure === "idle-error")
+        stream.emitter.emit("error", syntheticPrivateError());
+      else {
+        result = observeGate(h.run());
+        await vi.advanceTimersByTimeAsync(0);
+        if (failure === "outcome-failure")
+          stream.complete(1, syntheticPrivateError());
+      }
+      await vi.advanceTimersByTimeAsync(
+        failure.endsWith("timeout") || failure === "close-expiry" ? 5000 : 0,
+      );
+      expect(h.diagnostics).toEqual([OUTCOME_UNRECORDED_DIAGNOSTIC]);
+      expect(sink.latched).toBe(true);
+      if (result) {
+        expect(result.error).toBeUndefined();
+        const expected: Record<string, object> = {
+          "outcome-failure": {
+            result: "succeeded",
+            op: OP,
+            attempts: 1,
+            status: 200,
+            value: { id: 42 },
+            audit: "outcome_unrecorded",
+          },
+          "denied-timeout": {
+            result: "denied",
+            op: OP,
+            code: "ACCESS_DENIED",
+            attempts: 0,
+          },
+          "intent-timeout": auditIntentFailure,
+        };
+        expect(result.value).toEqual(expected[failure]);
+      }
+      if (closing) {
+        expect(closing.settled).toBe(true);
+        expect(closing.error).toBeUndefined();
+      }
+      expect(await h.run()).toEqual(auditAdmissionFailure);
+      const before = stream.attempted.length;
+      expect(() =>
+        stream.emitter.emit("error", syntheticPrivateError()),
+      ).not.toThrow();
+      if (stream.attempted.length) {
+        stream.complete(stream.attempted.length - 1);
+        stream.complete(stream.attempted.length - 1, syntheticPrivateError());
+      }
+      if (failure === "close-expiry") release();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(stream.attempted).toHaveLength(before);
+      expect(h.diagnostics).toEqual([OUTCOME_UNRECORDED_DIAGNOSTIC]);
+      expect(h.diagnostics.join("")).not.toMatch(
+        /SENTINEL_SECRET|private|stack|"event"/u,
+      );
+      if (file) expect(releaseCalls).toBe(1);
+    },
+  );
+
+  it.each(["healthy-close", "oversize-validation"])(
+    "TestBR241_v2_AC14_every_first_latch_offers_one_fixed_diagnostic (no latch: %s)",
+    async (row) => {
+      const stream = boundedGateStream((_index, complete) => {
+        complete();
+      });
+      const h = harness({ sink: stream.sink });
+      if (row === "oversize-validation") {
+        const record: AuditRecord = {
+          ts: "2026-11-09T10:00:00.000Z",
+          event: "intent",
+          op: OP,
+          identity: { kind: "oauth", iss: "i", sub: "" },
+          tool: "kdrive_rename",
+          kind: "rename",
+          drive: 101,
+          ids: { target: 42 },
+        };
+        const base = Buffer.byteLength(serializeAuditRecord(record));
+        const oversize: AuditRecord = {
+          ...record,
+          identity: { kind: "oauth", iss: "i", sub: "s".repeat(8193 - base) },
+        };
+        await expect(stream.sink.append(oversize)).rejects.toThrow(
+          "AUDIT_UNAVAILABLE",
+        );
+        expect(stream.attempted).toEqual([]);
+      }
+      await h.gate.close();
+      expect(stream.sink.latched).toBe(false);
+      expect(h.diagnostics).toEqual([]);
+    },
+  );
 });

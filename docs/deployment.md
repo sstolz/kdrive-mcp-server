@@ -154,8 +154,8 @@ every future share tool (#20) uses. It changes deployment in `write` and
 `share` modes only; `read` mode opens no audit sink.
 
 - **Grace period.** On SIGTERM the server closes the transport first, then
-  waits for each write already past its audit intent to finish and record its
-  outcome (at most a 60 s run deadline plus two 5 s file appends), then exits.
+  waits for each write already past its audit intent to reach its classified
+  result and bounded outcome attempt, then closes the sink and exits.
   Set `stop_grace_period` to at least 75 s in `write` and `share` modes; a
   shorter period lets the engine send SIGKILL and leaves an intent record
   without its outcome.
@@ -177,21 +177,45 @@ every future share tool (#20) uses. It changes deployment in `write` and
   [state file requirements](oauth-proxy.md#state-file-requirements)). It is a credential store: protect the
   mount like the signing key and never restore it from a backup. See the
   [OAuth proxy notes](oauth-proxy.md).
-- **Audit outcome is authoritative.** A request whose write is in flight when
-  shutdown starts receives HTTP 503, and an MCP response can be dropped after a
-  client cancellation. Neither says whether the write was performed: the audit
-  `outcome` record for that `op` is the authority. An `intent` without an
-  `outcome` means the result is unknown; check the item in kDrive before any new
-  attempt. Such an `intent` can also come from an intent append that timed out
-  after 5,000 ms: that run returned `AUDIT_UNAVAILABLE` and sent nothing, but
-  the check is still advised.
 - **stderr durability.** With the default `KDRIVE_MCP_AUDIT_LOG=stderr`, records
-  are as durable as whatever collects the container's stderr, and a collector
-  that stops reading holds the write that waits for its record. Use a file on a
+  are as durable as whatever collects the container's stderr. Use a file on a
   writable mount for a durable trail.
 - **Received shares.** `KDRIVE_MCP_SHARED_WRITE=1` authorizes no write inside a
   received share yet: every received-share mutation stays denied until a later
   ticket qualifies it.
+
+[F-039](../features/F-039-bounded-audit-sink.md) bounds asynchronous audit appends
+for both stderr and files to 5,000 ms from the call, including queue time,
+write and callback or `fdatasync`. Sink close has one 5,000 ms budget for drain
+and file release. Any stream/write/sync error or timeout permanently latches
+the sink until restart; pending appends reject and later writes are refused.
+The first latch offers one fixed best-effort diagnostic without waiting for
+its delivery. A failed intent sends nothing upstream; a failed outcome
+preserves the mutation result with `audit:"outcome_unrecorded"`.
+
+Timed-out bytes may still arrive later. An intent without an outcome is
+ambiguous: it proves neither dispatch nor its absence. The client's mutation
+result is the authority; a shutdown HTTP 503 does not determine whether a
+write occurred. Consult a recorded outcome or verify the item's state before
+any new attempt; never automatically replay an uncertain write.
+
+Shutdown closes transport, then gate, then exits the dedicated process.
+Gate close is bounded by 45,000 ms under the production policy and sole-attempt
+bounds; the deployment grace remains at least 75 s in write/share modes.
+The shared production exit helper waits for both output streams with a ref'd
+250 ms flush cap, shortened to the remaining stdio shutdown budget. Output
+still queued on a stalled pipe at that cap may be lost. Without a run past
+intent, stdio shares one 1,000 ms allowance from EOF/signal handling across
+transport close, non-committed appends, file release and exit flushing.
+Owned/library compositions close without terminating their host.
+
+These are asynchronous wait bounds. Synchronous fd 2 writes to a file or TTY
+can block the event loop, prevent timers from firing and remain unbounded.
+A write or `fdatasync` stuck in the libuv threadpool can cause an unbounded
+OS/runtime teardown stall even after `process.exit` is called. File release
+never races an in-flight port operation: if it outlives close's budget, the
+retained descriptor stays open until actual process termination, including in
+library hosts. No timer guarantees actual termination or durable delivery.
 
 ## Personal server, step by step
 
