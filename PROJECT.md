@@ -80,14 +80,14 @@ from private systems is summarised without identifiers.
 ## Decisions log
 
 Owner decisions that set the parameters above, with their date and source.
+Entries state the decision; they do not quote anyone's words.
 
-- **D-1 — 2026-11-01 — Autonomous freeze.** Owner's words: “ok go, on va
-  supprimer l'étape de freeze par humain pour ce projet, conserve néanmoins la
-  directive dans AGENTS.md”. The human freeze stays in AGENTS.md §2 as the
+- **D-1 — 2026-11-01 — Autonomous freeze.** The owner removed the human freeze
+  step for this project. The human freeze stays in AGENTS.md §2 as the
   default mode; this project uses the autonomous mode.
-- **D-2 — 2026-11-02 — Autonomous in-scope corrections.** Owner's words: “tu
-  peux corriger et pas besoin de mon avis pour corriger”. Routine corrections
-  within the approved ticket scope continue regardless of review rounds, bounded by the
+- **D-2 — 2026-11-02 — Autonomous in-scope corrections.** Routine corrections
+  within the approved ticket scope continue without asking the owner,
+  regardless of review rounds, bounded by the
   AGENTS.md §3 round limit and the D-3 budget; every
   corrected head still needs the local gate, CI and a fresh independent review.
   Unresolved product or contract decisions still go to the owner.
@@ -106,19 +106,18 @@ Owner decisions that set the parameters above, with their date and source.
   #92 comment of 2026-11-11 (archive issue 92):
   durable knowledge in `docs/observations/`, decision proof in tickets and PRs,
   no per-run files in the product repository (AGENTS.md §9).
-- **D-7 — 2026-11-11 — Diff-only threshold.** #92 asks for "a small token
-  threshold" below which a diff-only confirmation round does not count toward
+- **D-7 — 2026-11-11 — Diff-only threshold.** #92 asks for a small token
+  threshold below which a diff-only confirmation round does not count toward
   the round limit. The orchestrator set it at 50k sub-agent tokens: diff-only
   rounds of the reviewer tool measured about 17–38k (`learnings.md`,
   2026-11-05). The owner may change it.
-- **D-8 — 2026-11-11 — Strongest tier on Fable 5.2.** Recorded in #101. Owner's
-  words: “dans PROJECT.md, la correspondance du niveau le plus fort de Fable 5.1
-  vers Fable 5.2”. The strongest tier maps to Fable 5.2 instead of Fable 5.1;
-  the rest of D-3 is unchanged. The milestone 0.4 global pass was already
+- **D-8 — 2026-11-11 — Strongest tier on Fable 5.2.** Recorded in #101. The
+  owner moved the strongest tier from Fable 5.1 to Fable 5.2; the rest of
+  D-3 is unchanged. The milestone 0.4 global pass was already
   served by Fable 5.2 (#100 comment of 2026-11-11).
-- **D-9 — 2026-11-12 — Development in this repository.** Owner's words:
-  “je pense que c'est mieux de basculer le dev sur le nouveau repo” (switch
-  ticket #1). The archive is frozen; its open tickets were recreated here
+- **D-9 — 2026-11-12 — Development in this repository.** The owner moved
+  development to this repository (switch ticket #1). The archive is frozen;
+  its open tickets were recreated here
   (#2–#8) with neutral text and closed there as moved. The `runs/`
   transitional deviation ends: this repository holds no `runs/` directory.
   The public-export tooling was removed (owner go, 2026-11-12). The rule
@@ -128,8 +127,8 @@ Owner decisions that set the parameters above, with their date and source.
   GitHub's default type labels plus `chore` and `research`, and `area/*`
   domain labels sharing one colour, each with a description
   ([docs/issue-labels.md](docs/issue-labels.md)).
-- **D-11 — 2026-11-15 — Codex as a cross-vendor reviewer and helper.** Owner's
-  words: “je veux utiliser codex sur son abonnement”. The Codex CLI
+- **D-11 — 2026-11-15 — Codex as a cross-vendor reviewer and helper.** The
+  owner chose to use the Codex CLI. The Codex CLI
   (`@openai/codex`, installed by the `kdrive-mcp-server` cloud environment's
   setup script) runs signed in with the owner's ChatGPT plan through device
   login (`codex login --device-auth`); the owner enters the code, the token
