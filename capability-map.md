@@ -1,18 +1,16 @@
 # Capability map
 
-## Provisional — rate-limited mutations stop after one attempt
+## Accepted — rate-limited mutations stop after one attempt
 
-[F-037 v1](features/F-037-mutation-rate-limit-stop.md) (#47 lot A), frozen:
+[F-037 v1](features/F-037-mutation-rate-limit-stop.md) (#47 lot A),
 [BR-248 v2](business-rules/BR-248.md),
 [BR-249 v2](business-rules/BR-249.md),
 [BR-250 v2](business-rules/BR-250.md) and
-[BR-268 v2](business-rules/BR-268.md), pending acceptance; v1 remains active.
-The implementation pending acceptance returns `failed` / `RATE_LIMITED` after the first valid
+[BR-268 v2](business-rules/BR-268.md): the implementation returns `failed` / `RATE_LIMITED` after the first valid
 upstream 429, without an automatic retry or `Retry-After` wait. A later
 client invocation requires fresh admission and complete authorization and
 has its own audit records. Uncertain writes are still never replayed.
-This capability remains provisional; lot A acceptance evidence will be
-recorded in #47 on the actual main SHA.
+Accepted on actual main `8b92e07` on 2026-11-15 (#47 comment `6894142807`).
 
 ## Accepted — refused authorization-code redemption events restored
 

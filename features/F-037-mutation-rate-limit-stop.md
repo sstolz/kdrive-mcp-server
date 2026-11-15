@@ -2,7 +2,7 @@
 id: F-037
 title: Stop rate-limited mutations before stale authorization can be reused
 ticket: "#47"
-status: frozen
+status: done
 version: 1
 ---
 
