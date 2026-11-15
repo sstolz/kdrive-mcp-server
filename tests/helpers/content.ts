@@ -7,6 +7,9 @@ export const contentError = (text: string) => ({
   isError: true,
   content: [{ type: "text", text }],
 });
+export const contentResult = (value: unknown) => ({
+  content: [{ type: "text", text: JSON.stringify(value) }],
+});
 export interface RawPayload {
   drive_id: number;
   file_id: number;

@@ -10,7 +10,17 @@ import {
 } from "../src/mutation-gate.js";
 import { createNavigationController } from "../src/navigation.js";
 import type { PolicyDependencies } from "../src/policy/index.js";
-import { navigationFixture } from "./helpers/navigation.js";
+import {
+  contentFixture,
+  contentError,
+  rangeResponse,
+} from "./helpers/content.js";
+import { fixture as receivedFixture, node } from "./helpers/received.js";
+import {
+  navigationFixture,
+  payload,
+  projection,
+} from "./helpers/navigation.js";
 
 const ok = (status = 200) => ({
   outcome: "response",
@@ -562,4 +572,102 @@ describe("F-026 documentation", () => {
     );
     expect(unreleased).toMatch(/### Fixed\n\n- #16 /);
   });
+});
+
+it("TestBR384_v2_AC06_waiting_and_prior_operations_do_not_spend_stream_deadline", async () => {
+  vi.useFakeTimers();
+  const f = await receivedFixture();
+  const raw = await contentFixture({}, Buffer.alloc(600));
+  const roots = Array.from({ length: 255 }, (_, i) => ({
+    ...node(100 + i, `root${i}`, "dir"),
+    anchorId: 100 + i,
+  }));
+  let pages = 0;
+  f.received.list.mockImplementation(async (request) => {
+    await Promise.resolve();
+    const first = pages++ % 2 === 0;
+    return {
+      ...request,
+      status: "complete",
+      discover: true,
+      entries: first ? [roots[0]!] : roots.slice(1),
+      ...(first ? { next: "page2" } : { terminal: true }),
+    };
+  });
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let inspections = 0;
+  f.received.inspect.mockImplementation(async (target) => {
+    // The second invocation also spends 512 operations, then holds the slot.
+    if (++inspections === 1020) await held;
+    return structuredClone(
+      roots.find((r) => r.id === target.id) ?? { status: "missing" },
+    );
+  });
+  let finishRead!: (value: unknown) => void;
+  const readHeld = new Promise<unknown>((resolve) => {
+    finishRead = resolve;
+  });
+  const response = rangeResponse(
+    {
+      target: { driveId: 7, id: 3 },
+      start: 0,
+      end: 599,
+      size_bytes: 600,
+      etag: raw.etag,
+    },
+    raw.bytes,
+  );
+  response.body.read.mockImplementation(() => readHeld);
+  raw.content.open.mockResolvedValue(response);
+  const c = createNavigationController(f.config, {
+    ...raw.dependencies,
+    received: f.received,
+  });
+  const args = { drive_id: 8, path: "/Shared/root0" };
+  const first = c.invoke("kdrive_resolve_path", args);
+  try {
+    expect(payload(await first)).toEqual({ item: projection(roots[0]!) });
+    expect(f.received.list.mock.calls.length + inspections).toBe(512);
+    // Expire completed evidence; the next invocation must perform another 512 operations.
+    f.clock.value = 60000;
+    const second = c.invoke("kdrive_resolve_path", args);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(f.received.list.mock.calls.length + inspections).toBe(1024);
+    const settled = vi.fn();
+    const stream = c.invoke("kdrive_download", { file_id: 3 }).then((value) => {
+      settled(value);
+      return value;
+    });
+    await vi.advanceTimersByTimeAsync(9000);
+    expect(f.received.list.mock.calls.length + inspections).toBe(1024);
+    expect(raw.content.open).not.toHaveBeenCalled();
+    release();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(payload(await second)).toEqual({ item: projection(roots[0]!) });
+    expect(f.received.list.mock.calls.length + inspections).toBe(1024);
+    expect(response.body.read).toHaveBeenCalledOnce();
+    await vi.advanceTimersByTimeAsync(9999);
+    expect(settled).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(await stream).toEqual(contentError("REQUEST_TIMEOUT"));
+    expect(performance.now()).toBe(19000);
+    expect(response.body.close).toHaveBeenCalledOnce();
+    finishRead(raw.bytes);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(settled).toHaveBeenCalledOnce();
+    expect(response.body.read).toHaveBeenCalledOnce();
+    expect(response.body.close).toHaveBeenCalledOnce();
+    expect(raw.content.describe).toHaveBeenCalledOnce();
+    expect(raw.content.open).toHaveBeenCalledOnce();
+    expect(
+      (await c.invoke("kdrive_info", { file_id: 3 })).isError,
+    ).toBeUndefined();
+  } finally {
+    release();
+    c.close();
+    await first;
+  }
 });

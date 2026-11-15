@@ -303,13 +303,18 @@ export function createNavigationController(
       throw new BoundFailure("REQUEST_TIMEOUT");
     }
   }
-  async function call<T>(port: () => Promise<T>, page = false): Promise<T> {
+  async function call<T>(
+    port: () => Promise<T>,
+    page = false,
+    kind: "operation" | "body" = "operation",
+  ): Promise<T> {
     const inv = current;
     if (!inv) throw new BoundFailure("ACCESS_DENIED");
     alive(inv);
     if (page && inv.paged && inv.lists++ >= 5)
       throw new BoundFailure("LIMIT_EXCEEDED");
-    if (++inv.calls > 512) throw new BoundFailure("LIMIT_EXCEEDED");
+    if (kind === "operation" && ++inv.calls > 512)
+      throw new BoundFailure("LIMIT_EXCEEDED");
     let abort: (() => void) | undefined;
     try {
       const aborted = new Promise<never>((_, reject) => {
@@ -348,6 +353,7 @@ export function createNavigationController(
     page = false,
     retry = true,
     before?: () => Promise<void>,
+    kind: "operation" | "body" = "operation",
   ): Promise<T> {
     const inv = current;
     if (!inv) throw new ContentFailure("ACCESS_DENIED");
@@ -355,7 +361,7 @@ export function createNavigationController(
       alive(inv);
       if (before) await before();
       try {
-        return await call(port, page);
+        return await call(port, page, kind);
       } catch (error) {
         const code =
           (typeof error === "object" && error !== null) ||
@@ -455,6 +461,8 @@ export function createNavigationController(
       if (boundCode) throw new ContentFailure(boundCode);
     },
     call: (port, retry, before) => bounded(port, false, retry, before),
+    // BR-070 v4: consume an already-open body without charging or retrying it.
+    read: (port) => bounded(port, false, false, undefined, "body"),
   });
   async function navigation(
     kind: "read" | "list",

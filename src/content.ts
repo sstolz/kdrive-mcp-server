@@ -59,6 +59,7 @@ interface Body {
 interface Runtime {
   signal(): AbortSignal;
   alive(): void;
+  read<T>(port: () => Promise<T>): Promise<T>;
   call<T>(
     port: () => Promise<T>,
     retry: boolean,
@@ -310,7 +311,7 @@ export function createContentReader(
         let read = 0;
         while (read < count) {
           const max = Math.min(16384, count - read);
-          const chunk = await runtime.call(() => body.read(max, signal), false);
+          const chunk = await runtime.read(() => body.read(max, signal));
           if (
             !(chunk instanceof Uint8Array) ||
             ![Uint8Array.prototype, Buffer.prototype].includes(
@@ -323,7 +324,7 @@ export function createContentReader(
           bytes.set(chunk, read);
           read += byteLength(chunk);
         }
-        if ((await runtime.call(() => body.read(1, signal), false)) !== null)
+        if ((await runtime.read(() => body.read(1, signal))) !== null)
           fail("CONTENT_UNAVAILABLE");
       } finally {
         cleanup();

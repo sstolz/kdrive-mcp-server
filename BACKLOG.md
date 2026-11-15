@@ -4,6 +4,8 @@ Planned delivery tickets live in the GitHub backlog (archive `docs/github-backlo
 Record newly observed out-of-scope work below as one line per item:
 `YYYY-MM-DD — observation — location — why it matters`.
 
+- 2026-11-15 — Track a physical-HTTP-request counter, including metadata, probes and redirect hops — [F-038 D-1](features/F-038-stream-budget-and-weak-etags.md#decisions); src/kdrive/adapter.ts; src/kdrive/transport.ts — Existing dependency-operation charging can admit several physical requests per operation; a separate transport/accounting contract is needed.
+
 - 2026-11-15 — F-037 (#47 lot A) leaves the first-attempt authorization window: intent append up to 5,000 ms plus transport queue, DNS and TLS within the 30,000 ms attempt timer — src/mutation-gate.ts; SECURITY.md — A target or ancestor may move after policy validation and before the first write; track a separate authorization/precondition design, since stopping 429 retries does not make authorization atomic.
 
 - 2026-11-01 — Dev-only minimatch <11.0.1 advisory GHSA-g3hv-75wg-m249 propagates 10 moderate audit findings through pinned ESLint/typescript-eslint; package-lock.json — Track an upstream-compatible update; forced major override/downgrade would change the frozen tooling contract. https://github.com/advisories/GHSA-g3hv-75wg-m249

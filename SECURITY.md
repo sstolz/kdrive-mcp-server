@@ -103,7 +103,13 @@ refuse before policy/content work. No content cache or grant is retained.
 
 Central retries use only a private runtime error brand for429/500–599 pre-body
 failures, with at most three starts and100/200ms waits. Every start shares the
-same invocation/list/deadline counters; body reads count too. Arbitrary thrown
+same invocation/list/deadline counters. Reads of an already-open response body,
+including EOF probes, do not spend the 512-operation budget; byte bounds,
+deadline, cancellation and cleanup still apply, and body reads never retry.
+Reads that issue or resume upstream requests remain charged. Provider validators
+starting with the case-sensitive prefix `W/` follow the absent-validator path:
+`VERSION_UNAVAILABLE` at describe, or `CONTENT_UNAVAILABLE` at open after a
+strong descriptor, without publishing bytes. Arbitrary thrown
 objects are not inspected for status or message. Abstract policy dispatch and
 execute do not acquire retries. Resource errors use fixed code-32000/messages
 without error.data; credentials, headers, URLs, ETags and content never appear in
