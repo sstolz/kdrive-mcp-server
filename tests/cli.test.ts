@@ -1,5 +1,6 @@
 import { resolve } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { FlushPort, processPorts } from "./helpers/f039-composition.js";
 import { runDiagnostic, runGuarded } from "./helpers/diagnostic.js";
 
 describe("BR-016 BR-028 diagnostic executable without network or deployment configuration", () => {
@@ -211,4 +212,151 @@ describe("F-014 in-process main(deps) composition", () => {
     expect(run.stderr()).toBe("Configuration error [UNKNOWN_OPTION] (cli).\n");
     expect(run.exits).toEqual([1]);
   });
+});
+
+function configureFlushStreams(row: string, out: FlushPort, err: FlushPort) {
+  if (row === "destroyed-stdout") out.destroyed = true;
+  if (row.endsWith("-throw"))
+    (row.startsWith("stdout") ? out : err).onWrite = () => {
+      throw new Error("SYNTHETIC_FLUSH_FAILURE");
+    };
+  if (row === "sync-errors") {
+    for (const stream of [out, err])
+      stream.onWrite = (callback) => {
+        expect(vi.getTimerCount()).toBe(1);
+        callback(new Error("SYNTHETIC_FLUSH_FAILURE"));
+      };
+  }
+}
+
+async function completeFlushStreams(
+  row: string,
+  out: FlushPort,
+  err: FlushPort,
+  ports: ReturnType<typeof processPorts>,
+  start: number,
+) {
+  if (
+    row === "prompt" ||
+    row === "remaining-100-prompt" ||
+    row === "stdout-only"
+  ) {
+    await vi.advanceTimersByTimeAsync(5);
+    out.callbacks[0]?.();
+    expect(ports.exits).toEqual([]);
+  }
+  if (row === "stdout-error")
+    out.callbacks[0]?.(new Error("SYNTHETIC_FLUSH_FAILURE"));
+  if (row === "stderr-error")
+    err.callbacks[0]?.(new Error("SYNTHETIC_FLUSH_FAILURE"));
+  const prompt = [
+    "prompt",
+    "remaining-100-prompt",
+    "destroyed-stdout",
+    "stdout-error",
+    "stderr-error",
+    "stdout-throw",
+    "stderr-throw",
+  ].includes(row);
+  if (prompt || row === "stderr-only") {
+    await vi.advanceTimersByTimeAsync(start + 10 - performance.now());
+    if (row === "stderr-error" || row === "stderr-throw") out.callbacks[0]?.();
+    else err.callbacks[0]?.();
+  }
+  return prompt;
+}
+
+// BR-254 v2 / BR-070 v5: only ports are replaced; productionDependencies().exit is real.
+describe("F-039 production exit flush", () => {
+  const rows = [
+    "prompt",
+    "neither",
+    "stdout-only",
+    "stderr-only",
+    "remaining-100",
+    "remaining-100-prompt",
+    "remaining-zero",
+    "destroyed-stdout",
+    "stdout-error",
+    "stderr-error",
+    "stdout-throw",
+    "stderr-throw",
+    "sync-errors",
+    "first-call-wins",
+  ] as const;
+  it.each([0, 1].flatMap((code) => rows.map((row) => ({ code, row }))))(
+    "TestBR254_v2_AC12_real_production_exit_bounds_flush_wait [$code $row]",
+    async ({ code, row }) => {
+      vi.useFakeTimers();
+      const timerSpy = vi.spyOn(globalThis, "setTimeout");
+      const out = new FlushPort(),
+        err = new FlushPort();
+      const ports = processPorts(out, err);
+      try {
+        configureFlushStreams(row, out, err);
+        // Ordinary fire-and-forget output and the diagnostic must precede the flush.
+        err.write("SYNTHETIC_STARTUP_FAILURE\n");
+        err.write(
+          "Audit outcome could not be recorded; further writes are refused until restart.\n",
+        );
+        const start = performance.now();
+        const deadline = row.startsWith("remaining-100")
+          ? start + 100
+          : row === "remaining-zero"
+            ? start
+            : undefined;
+        expect(() => {
+          ports.exit(code, deadline);
+        }).not.toThrow();
+        expect(process.exitCode).toBe(code);
+        if (row === "remaining-zero" || row === "sync-errors") {
+          expect(ports.exits).toEqual([{ code, at: start }]);
+          expect(vi.getTimerCount()).toBe(0);
+          return;
+        }
+        if (row === "first-call-wins") ports.exit(1 - code, start + 50);
+        expect(process.exitCode).toBe(code);
+        // Both writes are issued at entry, so a blocked stdout cannot starve stderr.
+        expect(err.writes).toEqual([
+          "SYNTHETIC_STARTUP_FAILURE\n",
+          "Audit outcome could not be recorded; further writes are refused until restart.\n",
+          "",
+        ]);
+        if (!out.destroyed) expect(out.writes).toEqual([""]);
+        expect(vi.getTimerCount()).toBe(1);
+        const fallbackTimer: unknown = timerSpy.mock.results[0]?.value;
+        expect((fallbackTimer as { hasRef(): boolean }).hasRef()).toBe(true);
+        const prompt = await completeFlushStreams(row, out, err, ports, start);
+        if (prompt) {
+          expect(ports.exits).toEqual([{ code, at: start + 10 }]);
+          expect(vi.getTimerCount()).toBe(0);
+        } else {
+          const cap = row === "remaining-100" ? 100 : 250;
+          await vi.advanceTimersByTimeAsync(
+            start + cap - 1 - performance.now(),
+          );
+          expect(ports.exits).toEqual([]);
+          await vi.advanceTimersByTimeAsync(1);
+          expect(ports.exits).toEqual([{ code, at: start + cap }]);
+        }
+        // Repeated calls and late/error completions must never retry exit or change its code.
+        if (row === "first-call-wins")
+          ports.exit(1 - code, performance.now() + 1000);
+        for (const stream of [out, err]) {
+          stream.callbacks[0]?.();
+          expect(() =>
+            stream.emit("error", new Error("SYNTHETIC_LATE_FLUSH_ERROR")),
+          ).not.toThrow();
+        }
+        await vi.advanceTimersByTimeAsync(500);
+        expect(ports.exits).toHaveLength(1);
+        expect(process.exitCode).toBe(code);
+        expect(vi.getTimerCount()).toBe(0);
+      } finally {
+        ports.restore();
+        timerSpy.mockRestore();
+        vi.useRealTimers();
+      }
+    },
+  );
 });

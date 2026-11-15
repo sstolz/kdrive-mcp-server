@@ -1,5 +1,6 @@
 // F-016 audit sink: AC-01, AC-03, AC-06–AC-09, AC-20, AC-27 (sink side).
 import { spawn, execFileSync } from "node:child_process";
+import { EventEmitter } from "node:events";
 import {
   chmodSync,
   lstatSync,
@@ -15,6 +16,8 @@ import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   AUDIT_OPEN_FAILED_MESSAGE,
+  AuditUnavailable,
+  type AuditSink,
   createStderrSink,
   openAuditSink,
   openFileSink,
@@ -24,6 +27,7 @@ import {
 } from "../src/audit/sink.js";
 
 afterEach(() => {
+  vi.restoreAllMocks();
   vi.useRealTimers();
 });
 
@@ -581,4 +585,599 @@ describe("BR-259 file append bound", () => {
     expect(outcome).toBe("rejected");
     expect(sink.latched).toBe(true);
   });
+});
+
+// F-039: observers attach rejection handlers immediately and never await a promise
+// expected to remain pending on the old implementation.
+function auditDeferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((yes, no) => {
+    resolve = yes;
+    reject = no;
+  });
+  return { promise, resolve, reject };
+}
+function auditObserved(promise: Promise<void>) {
+  const state: {
+    status: "pending" | "resolved" | "rejected";
+    error?: unknown;
+  } = { status: "pending" };
+  void promise.then(
+    () => {
+      state.status = "resolved";
+    },
+    (error: unknown) => {
+      state.status = "rejected";
+      state.error = error;
+    },
+  );
+  return state;
+}
+async function auditTurns() {
+  for (let turn = 0; turn < 20; turn++) await Promise.resolve();
+}
+function auditRejected(state: ReturnType<typeof auditObserved>) {
+  expect(state.status).toBe("rejected");
+  expect(state.error).toBeInstanceOf(AuditUnavailable);
+  expect((state.error as Error).message).toBe("AUDIT_UNAVAILABLE");
+}
+function auditStream() {
+  const events = new EventEmitter();
+  const callbacks: ((error?: Error | null) => void)[] = [];
+  const lines: string[] = [];
+  const end = vi.fn();
+  const destroy = vi.fn();
+  const stream = Object.assign(events, {
+    write: vi.fn((line: string, callback: (error?: Error | null) => void) => {
+      lines.push(line);
+      callbacks.push(callback);
+      return false;
+    }),
+    end,
+    destroy,
+  });
+  return { stream, callbacks, lines, end, destroy };
+}
+type AuditPhase = "stderr" | "write" | "sync";
+async function boundedSinkFixture(phase: AuditPhase) {
+  const stderr = auditStream();
+  const pending: { complete: () => void; reject: (reason: unknown) => void }[] =
+    [];
+  const lines: string[] = [];
+  const calls: string[] = [];
+  const release = auditDeferred<undefined>();
+  const close = vi.fn(() => {
+    calls.push("close");
+    return release.promise;
+  });
+  const port: AuditFilePort = {
+    ...fakePort({ calls: [], writes: [] }),
+    write: (_fd, bytes) => {
+      calls.push("write");
+      lines.push(Buffer.from(bytes).toString());
+      if (phase !== "write") return Promise.resolve(bytes.length);
+      const work = auditDeferred<number>();
+      pending.push({
+        complete: () => {
+          work.resolve(bytes.length);
+        },
+        reject: work.reject,
+      });
+      return work.promise;
+    },
+    fdatasync: () => {
+      calls.push("sync");
+      if (phase !== "sync") return Promise.resolve();
+      const work = auditDeferred<undefined>();
+      pending.push({
+        complete: () => {
+          work.resolve(undefined);
+        },
+        reject: work.reject,
+      });
+      return work.promise;
+    },
+    close,
+  };
+  const sink: AuditSink =
+    phase === "stderr"
+      ? createStderrSink(stderr.stream)
+      : await openFileSink("/synthetic/f039-audit.log", { port });
+  return {
+    sink,
+    stderr,
+    calls,
+    port,
+    close,
+    release,
+    lines: phase === "stderr" ? stderr.lines : lines,
+    complete(index: number, error?: Error) {
+      if (phase === "stderr") stderr.callbacks[index]?.(error);
+      else if (error) pending[index]?.reject(error);
+      else pending[index]?.complete();
+    },
+  };
+}
+
+describe("F-039 bounded audit sink", () => {
+  it.each(["active", "idle"] as const)(
+    "TestBR241_v2_AC02_stream_error_rejects_active_queued_and_future_appends [%s]",
+    async (when) => {
+      vi.useFakeTimers();
+      const f = auditStream();
+      const sink = createStderrSink(f.stream);
+      const states =
+        when === "active"
+          ? [0, 1, 2].map(() => auditObserved(sink.append(intent)))
+          : [];
+      await vi.advanceTimersByTimeAsync(100);
+      expect(f.lines).toHaveLength(when === "active" ? 1 : 0);
+      expect(() =>
+        f.stream.emit("error", new Error("SECRET-STREAM-PAYLOAD")),
+      ).not.toThrow();
+      await auditTurns();
+      for (const state of states) auditRejected(state);
+      const future = auditObserved(sink.append(intent));
+      await auditTurns();
+      auditRejected(future);
+      expect(sink.latched).toBe(true);
+      expect(() => {
+        f.callbacks[0]?.();
+        f.callbacks[0]?.(new Error("LATE"));
+        f.stream.emit("error", new Error("REPEATED"));
+      }).not.toThrow();
+      await auditTurns();
+      expect(f.lines).toHaveLength(when === "active" ? 1 : 0);
+      expect(f.stream.listenerCount("error")).toBeLessThanOrEqual(1);
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
+
+  describe.each(["stderr", "write", "sync"] as const)("%s", (phase) => {
+    it.each(["staggered", "simultaneous"] as const)(
+      "TestBR259_v2_AC03_queue_time_is_inside_each_append_budget [%s]",
+      async (arrival) => {
+        vi.useFakeTimers();
+        const f = await boundedSinkFixture(phase);
+        const a = auditObserved(
+          f.sink.append({ ...intent, op: "a".repeat(32) }),
+        );
+        await auditTurns();
+        if (arrival === "simultaneous") {
+          const b = auditObserved(f.sink.append(intent));
+          const c = auditObserved(f.sink.append(intent));
+          await vi.advanceTimersByTimeAsync(4999);
+          expect([a.status, b.status, c.status]).toEqual([
+            "pending",
+            "pending",
+            "pending",
+          ]);
+          await vi.advanceTimersByTimeAsync(1);
+          for (const state of [a, b, c]) auditRejected(state);
+          expect(f.lines).toHaveLength(1);
+        } else {
+          await vi.advanceTimersByTimeAsync(1000);
+          const b = auditObserved(
+            f.sink.append({ ...intent, op: "b".repeat(32) }),
+          );
+          await vi.advanceTimersByTimeAsync(3000);
+          expect(f.lines).toHaveLength(1);
+          f.complete(0);
+          await auditTurns();
+          expect(a.status).toBe("resolved");
+          expect(
+            f.lines.map((line) => (JSON.parse(line) as { op: string }).op),
+          ).toEqual(["a".repeat(32), "b".repeat(32)]);
+          await vi.advanceTimersByTimeAsync(1999);
+          expect(b.status).toBe("pending");
+          await vi.advanceTimersByTimeAsync(1);
+          auditRejected(b);
+        }
+        expect(f.sink.latched).toBe(true);
+        expect(vi.getTimerCount()).toBe(0);
+      },
+    );
+
+    it.each(
+      [4999, 5000, 6000].flatMap((at) =>
+        ["completion-first", "timer-first"].map((order) => ({ at, order })),
+      ),
+    )(
+      "TestBR240_v2_AC06_success_requires_completion_before_deadline [$at/$order]",
+      async ({ at, order }) => {
+        vi.useFakeTimers();
+        let monotonic = 0;
+        vi.spyOn(performance, "now").mockImplementation(() => monotonic);
+        const f = await boundedSinkFixture(phase);
+        const state = auditObserved(f.sink.append(intent));
+        await auditTurns();
+        monotonic = at;
+        if (order === "timer-first") await vi.advanceTimersByTimeAsync(at);
+        f.complete(0);
+        await auditTurns();
+        if (at < 5000) {
+          expect(state.status).toBe("resolved");
+          expect(f.sink.latched).toBe(false);
+        } else {
+          auditRejected(state);
+          expect(f.sink.latched).toBe(true);
+          const future = auditObserved(f.sink.append(intent));
+          await auditTurns();
+          auditRejected(future);
+          expect(f.lines).toHaveLength(1);
+          f.complete(0, new Error("LATE-FILE-OR-CALLBACK-ERROR"));
+          await auditTurns();
+        }
+        expect(vi.getTimerCount()).toBe(0);
+      },
+    );
+  });
+
+  it.each([
+    "callback-error",
+    "write-throw",
+    "late-file-rejection",
+    "backpressure-success",
+    "backpressure-stall",
+  ] as const)(
+    "TestBR240_v2_AC06_success_requires_completion_before_deadline [%s]",
+    async (row) => {
+      vi.useFakeTimers();
+      if (row === "late-file-rejection") {
+        const f = await boundedSinkFixture("write");
+        const state = auditObserved(f.sink.append(intent));
+        await vi.advanceTimersByTimeAsync(5000);
+        auditRejected(state);
+        f.complete(0, new Error("SECRET-LATE-FILE-REJECTION"));
+        await auditTurns();
+        auditRejected(state);
+        expect(f.calls).toEqual(["write"]);
+        return;
+      }
+      const f = auditStream();
+      if (row === "write-throw")
+        f.stream.write.mockImplementation(() => {
+          throw new Error("SECRET-SYNC-THROW");
+        });
+      const sink = createStderrSink(f.stream);
+      const state = auditObserved(sink.append(intent));
+      await auditTurns();
+      if (row === "callback-error")
+        f.callbacks[0]?.(new Error("SECRET-CALLBACK-ERROR"));
+      if (row === "backpressure-success") {
+        expect(state.status).toBe("pending");
+        await vi.advanceTimersByTimeAsync(4999);
+        f.callbacks[0]?.();
+      }
+      if (row === "backpressure-stall") await vi.advanceTimersByTimeAsync(5000);
+      await auditTurns();
+      if (row === "backpressure-success") {
+        expect(state.status).toBe("resolved");
+        expect(sink.latched).toBe(false);
+      } else {
+        auditRejected(state);
+        expect(sink.latched).toBe(true);
+      }
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
+
+  it("TestBR240_v2_AC06_success_requires_completion_before_deadline [healthy listener and timer controls]", async () => {
+    vi.useFakeTimers();
+    const f = auditStream();
+    const sink = createStderrSink(f.stream);
+    const listeners = f.stream.listenerCount("error");
+    for (let index = 0; index < 24; index++) {
+      const state = auditObserved(sink.append(intent));
+      await auditTurns();
+      f.callbacks[index]?.();
+      await auditTurns();
+      expect(state.status).toBe("resolved");
+      expect(f.stream.listenerCount("error")).toBe(listeners);
+      expect(vi.getTimerCount()).toBe(0);
+    }
+    expect(listeners).toBeLessThanOrEqual(1);
+  });
+
+  it("TestBR254_v2_AC07_sink_close_bounds_drain_and_release [stderr drain]", async () => {
+    vi.useFakeTimers();
+    const f = auditStream();
+    const sink = createStderrSink(f.stream);
+    const active = auditObserved(sink.append(intent));
+    await auditTurns();
+    const queued = auditObserved(sink.append(intent));
+    const first = auditObserved(sink.close());
+    const second = auditObserved(sink.close());
+    await auditTurns();
+    auditRejected(queued);
+    expect(first.status).toBe("pending");
+    expect(second.status).toBe("pending");
+    await vi.advanceTimersByTimeAsync(4999);
+    expect(first.status).toBe("pending");
+    await vi.advanceTimersByTimeAsync(1);
+    auditRejected(active);
+    expect([first.status, second.status]).toEqual(["resolved", "resolved"]);
+    expect(sink.latched).toBe(true);
+    f.callbacks[0]?.();
+    f.callbacks[0]?.(new Error("LATE"));
+    const future = auditObserved(sink.append(intent));
+    await auditTurns();
+    auditRejected(future);
+    expect(f.lines).toHaveLength(1);
+    expect(f.end).not.toHaveBeenCalled();
+    expect(f.destroy).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it.each(["resolve", "reject"] as const)(
+    "TestBR254_v2_AC07_sink_close_bounds_drain_and_release [release late %s]",
+    async (settlement) => {
+      vi.useFakeTimers();
+      const f = await boundedSinkFixture("write");
+      const append = auditObserved(f.sink.append(intent));
+      await auditTurns();
+      const close = auditObserved(f.sink.close());
+      await vi.advanceTimersByTimeAsync(4000);
+      f.complete(0);
+      await auditTurns();
+      expect(append.status).toBe("resolved");
+      expect(f.calls).toEqual(["write", "sync", "close"]);
+      const again = auditObserved(f.sink.close());
+      await auditTurns();
+      expect(again.status).toBe("pending");
+      await vi.advanceTimersByTimeAsync(999);
+      expect(close.status).toBe("pending");
+      await vi.advanceTimersByTimeAsync(1);
+      expect([close.status, again.status]).toEqual(["resolved", "resolved"]);
+      expect(f.sink.latched).toBe(true);
+      if (settlement === "resolve") f.release.resolve(undefined);
+      else f.release.reject(new Error("LATE-RELEASE"));
+      await auditTurns();
+      await f.sink.close();
+      expect(f.close).toHaveBeenCalledTimes(1);
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
+
+  it.each(["stderr-healthy", "file-healthy", "release-reject"] as const)(
+    "TestBR254_v2_AC07_sink_close_bounds_drain_and_release [%s]",
+    async (row) => {
+      vi.useFakeTimers();
+      const f = await boundedSinkFixture(
+        row === "stderr-healthy" ? "stderr" : "write",
+      );
+      const close = auditObserved(f.sink.close());
+      await auditTurns();
+      if (row === "release-reject")
+        f.release.reject(new Error("SECRET-RELEASE-ERROR"));
+      else f.release.resolve(undefined);
+      await auditTurns();
+      expect(close.status).toBe("resolved");
+      expect(f.sink.latched).toBe(row === "release-reject");
+      await f.sink.close();
+      expect(f.close).toHaveBeenCalledTimes(row === "stderr-healthy" ? 0 : 1);
+      expect(f.stderr.end).not.toHaveBeenCalled();
+      expect(f.stderr.destroy).not.toHaveBeenCalled();
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
+
+  describe.each(["write", "sync"] as const)("busy file %s", (phase) => {
+    it.each([
+      "resolve-at-6000",
+      "reject-at-6000",
+      "resolve-at-11000",
+      "reject-at-11000",
+      "never",
+    ] as const)(
+      "TestBR254_v2_AC07_sink_close_bounds_drain_and_release [%s]",
+      async (settlement) => {
+        vi.useFakeTimers();
+        const f = await boundedSinkFixture(phase);
+        const append = auditObserved(f.sink.append(intent));
+        await vi.advanceTimersByTimeAsync(5000);
+        auditRejected(append);
+        const originalCalls = [...f.calls];
+        const close = auditObserved(f.sink.close());
+        await auditTurns();
+        expect(f.close).not.toHaveBeenCalled();
+        if (settlement.endsWith("6000")) {
+          await vi.advanceTimersByTimeAsync(1000);
+          f.complete(
+            0,
+            settlement.startsWith("reject")
+              ? new Error("SECRET-PORT-ERROR")
+              : undefined,
+          );
+          await auditTurns();
+          expect(f.calls).toEqual([...originalCalls, "close"]);
+          expect(f.close).toHaveBeenCalledTimes(1);
+        }
+        const repeated = auditObserved(f.sink.close());
+        await auditTurns();
+        expect(repeated.status).toBe("pending");
+        await vi.advanceTimersByTimeAsync(
+          settlement.endsWith("6000") ? 3999 : 4999,
+        );
+        expect(close.status).toBe("pending");
+        await vi.advanceTimersByTimeAsync(1);
+        expect([close.status, repeated.status]).toEqual([
+          "resolved",
+          "resolved",
+        ]);
+        expect(f.sink.latched).toBe(true);
+        if (!settlement.endsWith("6000")) {
+          expect(f.close).not.toHaveBeenCalled();
+          await vi.advanceTimersByTimeAsync(1000);
+          if (settlement !== "never")
+            f.complete(
+              0,
+              settlement.startsWith("reject")
+                ? new Error("LATE-PORT-ERROR")
+                : undefined,
+            );
+          await auditTurns();
+          await f.sink.close();
+          expect(f.calls).toEqual(originalCalls);
+        } else {
+          f.release.reject(new Error("LATE-RELEASE-ERROR"));
+          await auditTurns();
+          await f.sink.close();
+          expect(f.close).toHaveBeenCalledTimes(1);
+        }
+        expect(vi.getTimerCount()).toBe(0);
+      },
+    );
+  });
+
+  it.each([
+    "size",
+    "short-write",
+    "sync-error",
+    "sync-barrier",
+    "stderr-barrier",
+  ] as const)(
+    "TestBR241_v2_AC10_validation_and_file_failure_controls [%s]",
+    async (row) => {
+      vi.useFakeTimers();
+      if (row === "stderr-barrier" || row === "sync-barrier") {
+        const f = await boundedSinkFixture(
+          row === "stderr-barrier" ? "stderr" : "sync",
+        );
+        const state = auditObserved(f.sink.append(intent));
+        await auditTurns();
+        expect(state.status).toBe("pending");
+        expect(f.lines).toEqual([serializeAuditRecord(intent)]);
+        if (row === "sync-barrier") expect(f.calls).toEqual(["write", "sync"]);
+        f.complete(0);
+        await auditTurns();
+        expect(state.status).toBe("resolved");
+        expect(f.sink.latched).toBe(false);
+        return;
+      }
+      const state: FakePortState = { calls: [], writes: [] };
+      if (row === "short-write")
+        state.write = (data) => Promise.resolve(data.length - 1);
+      if (row === "sync-error")
+        state.fdatasync = () => Promise.reject(new Error("SECRET-SYNC-ERROR"));
+      const sink = await openFileSink("/synthetic/f039-audit.log", {
+        port: fakePort(state),
+      });
+      if (row === "size") {
+        const record = {
+          ...intent,
+          identity: { kind: "oauth", iss: "i", sub: "" },
+        } as const;
+        const base = Buffer.byteLength(serializeAuditRecord(record));
+        const sized = (bytes: number): AuditRecord => ({
+          ...record,
+          identity: { ...record.identity, sub: "s".repeat(bytes - base) },
+        });
+        await expect(sink.append(sized(8193))).rejects.toThrow(
+          "AUDIT_UNAVAILABLE",
+        );
+        expect(state.calls).toEqual([]);
+        expect(sink.latched).toBe(false);
+        await sink.append(sized(8192));
+        expect(state.calls).toEqual(["write", "fdatasync"]);
+        expect(state.writes[0]?.byteLength).toBe(8192);
+      } else {
+        await expect(sink.append(intent)).rejects.toThrow("AUDIT_UNAVAILABLE");
+        expect(sink.latched).toBe(true);
+        await expect(sink.append(intent)).rejects.toThrow("AUDIT_UNAVAILABLE");
+        expect(state.calls).toEqual(
+          row === "short-write" ? ["write"] : ["write", "fdatasync"],
+        );
+        expect(state.writes).toHaveLength(1);
+      }
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
+
+  it("TestBR259_v2_AC15_unread_child_stderr_pipe_keeps_append_timeout_runnable", async () => {
+    vi.useRealTimers();
+    expect(process.platform).toBe("linux");
+    const child = spawn(
+      process.execPath,
+      [resolve("tests/helpers/audit-blocked-stderr-child.mjs")],
+      {
+        stdio: ["ignore", "ignore", "pipe", "ipc"],
+      },
+    );
+    child.stderr?.pause();
+    const childState = { exited: false };
+    const exit = new Promise<void>((done) => {
+      child.once("exit", () => {
+        childState.exited = true;
+        done();
+      });
+      child.once("error", () => {
+        childState.exited = true;
+        done();
+      });
+    });
+    let watchdog: ReturnType<typeof setTimeout> | undefined;
+    let startup: ReturnType<typeof setTimeout> | undefined;
+    let cleanupTimer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const result = await new Promise<{ status: string; elapsed: number }>(
+        (done, fail) => {
+          let started = false;
+          startup = setTimeout(() => {
+            fail(new Error("AC15 child did not announce append start"));
+          }, 10_000);
+          child.once("error", () => {
+            fail(new Error("AC15 child could not start"));
+          });
+          child.once("exit", () => {
+            fail(new Error("AC15 child exited before timeout evidence"));
+          });
+          child.on("message", (message: unknown) => {
+            if (
+              message === null ||
+              typeof message !== "object" ||
+              !("status" in message)
+            )
+              return;
+            if (message.status === "append-start" && !started) {
+              started = true;
+              clearTimeout(startup);
+              watchdog = setTimeout(() => {
+                fail(new Error("AC15 append did not settle within watchdog"));
+              }, 10_000);
+            } else if (
+              started &&
+              typeof message.status === "string" &&
+              "elapsed" in message &&
+              typeof message.elapsed === "number"
+            ) {
+              done({ status: message.status, elapsed: message.elapsed });
+            }
+          });
+        },
+      );
+      expect(result.status).toBe("timeout-latched-callback-pending");
+      expect(result.elapsed).toBeGreaterThanOrEqual(5000);
+      expect(result.elapsed).toBeLessThanOrEqual(6500);
+    } finally {
+      clearTimeout(startup);
+      clearTimeout(watchdog);
+      if (!childState.exited) child.kill("SIGKILL");
+      try {
+        await Promise.race([
+          exit,
+          new Promise<never>((_done, fail) => {
+            cleanupTimer = setTimeout(() => {
+              fail(new Error("AC15 child cleanup exceeded 1000 ms"));
+            }, 1000);
+          }),
+        ]);
+      } finally {
+        clearTimeout(cleanupTimer);
+        if (child.connected) child.disconnect();
+        child.stderr?.destroy();
+      }
+    }
+  }, 23_000);
 });
