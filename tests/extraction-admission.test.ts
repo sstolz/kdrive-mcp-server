@@ -52,6 +52,29 @@ async function recover() {
   expect(vi.getTimerCount()).toBe(0);
 }
 
+it("TestBR426_v1_AC08_duplicate_exit_after_termination_confirmation_keeps_one_drain", async () => {
+  h = admissionHarness();
+  const a = await h.caller("A"),
+    call = a.invoke();
+  await pump();
+  const worker = h.workers[0]!;
+  worker.terminate.mockImplementationOnce(() => {
+    worker.exited = true;
+    Object.defineProperty(worker, "threadId", { value: -1 });
+    return Promise.resolve(0);
+  });
+  worker.success();
+  expect(await call.task).toEqual(safeResult);
+  await pump();
+  const drains = worker.listenerCount("error");
+  // Model Node's exit event arriving after terminate() confirmed threadId -1.
+  worker.emit("exit", 0);
+  await pump();
+  expect(worker.listenerCount("error")).toBe(drains);
+  expect(call.observation.count).toBe(1);
+  await recover();
+});
+
 it.each(["body", "worker"] as const)(
   "TestBR423_v1_AC01_third_extraction_waits_before_source_buffering %s",
   async (row) => {

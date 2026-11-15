@@ -37,7 +37,7 @@ class OwnedWorker {
 
   constructor(
     private readonly worker: Worker,
-    private readonly permit: ExtractionPermit | undefined,
+    private readonly permit: ExtractionPermit,
   ) {
     worker.stdout.on("data", discard);
     worker.stderr.on("data", discard);
@@ -78,12 +78,13 @@ class OwnedWorker {
     this.finish(undefined, "LIMIT_EXCEEDED");
   };
   private readonly onExit = () => {
+    if (this.exited) return;
     // Node removes every Worker listener after emitting exit. Restore only the
     // payload-free error drain after that native cleanup, without retaining us.
     const worker = this.worker;
     queueMicrotask(() => worker.on("error", discard));
     this.exited = true;
-    this.permit?.workerExited();
+    this.permit.workerExited();
     if (!this.stopping) {
       this.stopping = true;
       this.code = "LIMIT_EXCEEDED";
@@ -134,7 +135,7 @@ class OwnedWorker {
     if (this.settled) return;
     this.value = undefined;
     this.code = code;
-    if (!this.exited) this.permit?.detach();
+    if (!this.exited) this.permit.detach();
     this.settle();
   }
 
@@ -164,11 +165,11 @@ export function runOwnedWorker(
   worker: Worker,
   signal: AbortSignal,
   timeout: number,
-  ownership?: ExtractionOwnership,
+  ownership: ExtractionOwnership,
 ) {
-  return new OwnedWorker(worker, ownership?.permit).run(
+  return new OwnedWorker(worker, ownership.permit).run(
     signal,
     timeout,
-    ownership?.deadline ?? performance.now() + timeout,
+    ownership.deadline,
   );
 }

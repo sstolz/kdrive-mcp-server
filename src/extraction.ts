@@ -21,7 +21,7 @@ export async function runExtraction(
   request: WorkerRequest,
   signal: AbortSignal,
   timeout: number,
-  ownership?: ExtractionOwnership,
+  ownership: ExtractionOwnership,
 ): Promise<Extracted> {
   if (signal.aborted) throw new ContentFailure("ACCESS_DENIED");
   const worker = createExtractionWorker(request);
