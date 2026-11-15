@@ -24,7 +24,14 @@ function packageResult(output: string): Packed {
 // eslint-disable-next-line sonarjs/cognitive-complexity -- F-011: pre-existing complex function; splitting it is deferred to keep reviewed control flow unchanged in this ticket (BACKLOG.md)
 it("BR-004 real package allowlist excludes synthetic secrets, source, tests and reports", () => {
   const directory = mkdtempSync(join(tmpdir(), "kdrive-package-"));
-  for (const path of ["dist", "LICENSE", "NOTICE", "README.md", "package.json"])
+  for (const path of [
+    "dist",
+    "LICENSE",
+    "LICENSES",
+    "NOTICE",
+    "README.md",
+    "package.json",
+  ])
     cpSync(path, join(directory, path), { recursive: true });
   const forbidden = [
     // BR-014: only synthetic credential paths are ever inspected by tests.
@@ -51,7 +58,13 @@ it("BR-004 real package allowlist excludes synthetic secrets, source, tests and 
       encoding: "utf8",
     }),
   );
-  for (const file of ["dist/cli.js", "LICENSE", "NOTICE", "README.md"])
+  for (const file of [
+    "dist/cli.js",
+    "LICENSE",
+    "LICENSES/Apache-2.0.txt",
+    "NOTICE",
+    "README.md",
+  ])
     expect(dry.files.map((entry) => entry.path)).toContain(file);
   for (const file of forbidden)
     expect(dry.files.map((entry) => entry.path)).not.toContain(file);
@@ -153,6 +166,23 @@ it("BR-004 records original MIT licensing and accurate deferred upstream provena
   expect(notice).toContain("857272d7fd42c0940ae389b9092b1c4cd2351337");
   expect(notice).toContain("No upstream source code is copied");
   expect(notice).toContain("Apache-2.0");
+  expect(notice).toContain("Adobe Glyph List");
+  expect(notice).toContain("Neither the name of Adobe");
+  // Apache-2.0 4(a): the licence text ships with the package and the image.
+  expect(readFileSync("LICENSES/Apache-2.0.txt", "utf8")).toBe(
+    readFileSync("node_modules/pdfjs-dist/LICENSE", "utf8"),
+  );
+  expect(notice).toContain("LICENSES/Apache-2.0.txt");
+  for (const source of [
+    notice,
+    readFileSync("src/pdf-glyph-list.ts", "utf8"),
+    readFileSync("src/pdf-encoding-tables.ts", "utf8"),
+  ]) {
+    expect(source).toContain("Copyright 2024 Mozilla Foundation");
+    expect(source).toContain(
+      "Copyright 2002-2019 Adobe (http://www.adobe.com/).",
+    );
+  }
 });
 it("BR-105 the package holds the built auth modules and the pinned jose, never the qualification command or reports", () => {
   const manifest = JSON.parse(readFileSync("package.json", "utf8")) as {

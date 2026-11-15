@@ -96,9 +96,6 @@ const invalid: { name: string; options: LexicalOptions }[] = [
   { name: "real stream Length", options: { length: "57.0" } },
   { name: "real Pages Count", options: { count: "1.0" } },
   { name: "real trailer Size", options: { size: "7.0" } },
-  { name: "real Image Width", options: { width: "1.0" } },
-  { name: "real Image Height", options: { height: "1.0" } },
-  { name: "real Image BitsPerComponent", options: { bits: "8.0" } },
   { name: "real xref subsection first", options: { xrefFirst: "0.0" } },
   { name: "real xref subsection count", options: { xrefCount: "7.0" } },
   { name: "real xref object offset", options: { xrefOffsetReal: true } },
@@ -128,7 +125,7 @@ it.each(invalid)(
     const bytes = lexicalPdf(options),
       getDocument = vi.mocked(pdfjs.getDocument);
     getDocument.mockClear();
-    expect(() => preflightPdf(bytes, 16777216, [1])).toThrow();
+    await expect(preflightPdf(bytes, 16777216, [1])).rejects.toThrow();
     await expect(
       extractPdf({
         bytes,
@@ -155,7 +152,32 @@ it.each([
   "TestBR114_pdf_framing review2 preserves valid escapes and finite real geometry %#",
   async (options) => {
     const bytes = lexicalPdf(options);
-    expect(preflightPdf(bytes, 16777216, [1]).total_pages).toBe(1);
+    expect((await preflightPdf(bytes, 16777216, [1])).total_pages).toBe(1);
+    const result = await extractPdf({
+      bytes,
+      budget: 16777216,
+      maxOutputChars: 200000,
+      args: { format: "pdf" },
+      metadata: {
+        drive_id: 7,
+        file_id: 3,
+        etag: '"v1"',
+        size_bytes: bytes.length,
+      },
+    });
+    expect(result.text).toBe("Hello bounded PDF");
+  },
+);
+// BR-114 v2 (F-034 AC-10): an image XObject the content never draws is never
+// resolved or read, so these F-009 refusals now give the text.
+it.each([
+  { name: "real Image Width", options: { width: "1.0" } },
+  { name: "real Image Height", options: { height: "1.0" } },
+  { name: "real Image BitsPerComponent", options: { bits: "8.0" } },
+])(
+  "TestBR114_pdf_framing review2 BR-114 v2 admits an unused image with $name",
+  async ({ options }) => {
+    const bytes = lexicalPdf(options);
     const result = await extractPdf({
       bytes,
       budget: 16777216,

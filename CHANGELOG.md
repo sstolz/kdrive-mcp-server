@@ -22,6 +22,22 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
 
 ### Changed
 
+- #4 / F-034 v2 (pending acceptance): `kdrive_read` with `format:"pdf"` extracts
+  text from files written by common generators: cross-reference and object
+  streams (PDF 1.5+), incremental updates, linearized files, FlateDecode with
+  PNG predictors, ASCII85Decode and ASCIIHexDecode, metadata, annotations and
+  structure (left out), inherited page attributes, content arrays, graphics
+  around text, text inside Form XObjects (OCR text layers, overlays, imposed
+  pages, LaTeX figures, browser transparency groups), inline images of known
+  length, and Type 1, TrueType, Type0 and Type3 fonts whose shown codes map
+  through an encoding, a Type 1 built-in encoding (pdfLaTeX Computer Modern) or
+  `ToUnicode`. Font programs and Type3 glyph procedures never reach PDF.js.
+  Encrypted files, fonts whose text depends on their program, inline images of
+  unknown length and other filters on text streams still return
+  `UNSUPPORTED_FORMAT`; `kdrive_download` returns their bytes. A cross-reference
+  stream no longer refuses as `CONTENT_UNAVAILABLE`. The npm package and the
+  runtime image ship the Apache-2.0 licence text as `LICENSES/Apache-2.0.txt`
+  (BR-173 v2, BR-392 v2).
 - #3 / F-028 v2 (accepted 2026-11-14): the OAuth state file is at format
   version 2 while it holds a CIMD refresh family (ADR-011); earlier releases
   refuse such a file with `OAUTH_STATE_VERSION`. Removing the origins and

@@ -90,15 +90,41 @@ Binary controls and unsupported representations refuse explicitly. Successful
 text JSON includes `text`, `offset`, `characters_read`, `total_characters`,
 `has_more` and, only when unfinished, `next_offset`, plus owner/version/size.
 
-PDF adds optional ordered unique `pages` (1–10, default[1]). Only a conservative
-single-revision classic-xref profile is supported: direct stream lengths,
-unfiltered/single-Flate streams, one unique content stream per page, simple
-Helvetica/WinAnsi text operators and bounded raw RGB/gray image XObjects.
-Object/xref streams, indirect lengths, predictors, Forms, embedded/CID/Type3
-fonts, custom mappings, encryption, annotations and incremental PDFs refuse.
-Many common valid PDFs therefore return `UNSUPPORTED_FORMAT`. All stream and
-text-production admission precedes PDF.js; it receives a separately bounded
-canonical uncompressed PDF. Selected page text follows dependency item order,
+PDF adds optional ordered unique `pages` (1–10, default[1]). PDF.js only
+receives a canonical projection built from what text extraction needs (F-034,
+ADR-012): the page tree with each page's `MediaBox`, and for the selected pages
+the fonts their content selects, under canonical names `/K1`, `/K2`, … (the 12
+standard Latin names excepted), and one re-serialized content stream that keeps
+the text operators with Form XObjects inlined. Metadata, annotations, actions,
+JavaScript, outlines, structure, forms, images, attachments and font programs
+are never emitted.
+
+- Container: classic cross-reference tables and cross-reference streams,
+  hybrid files, incremental updates and linearized files through a bounded
+  `/Prev` chain, object streams, indirect `/Length` and `%PDF-2.0` headers. No
+  object scanning or repair runs.
+- Filters on the streams the projection needs: none, FlateDecode with PNG
+  predictors 10–15, ASCII85Decode or ASCIIHexDecode, alone or before
+  FlateDecode; other streams are never decoded.
+- Content: `q`, `Q`, `cm`, the text state and text operators are kept; paths,
+  colours, marked content, `gs`, image `Do` and inline images of known length
+  are dropped; Forms are inlined under 8 levels, 256 distinct Forms and 4,096
+  executions.
+- Fonts: Type 1, MMType1 and TrueType fonts whose shown codes map through an
+  encoding, a Type 1 built-in encoding read from the program's cleartext part
+  or `ToUnicode`; Type0 Identity-H/V fonts with a `ToUnicode` CMap that maps
+  every shown code; Type3 fonts projected without their glyph procedures.
+
+Encryption, LZW, RunLength, DCT and other filters on text streams, predefined
+CMaps, CFF built-in encodings, fonts whose text depends on their program, text
+operators outside `BT`/`ET`, `q`/`Q`/`cm` inside it and inline images of unknown
+length refuse with `UNSUPPORTED_FORMAT`; a file that contradicts its own
+structure refuses with `CONTENT_UNAVAILABLE`, and a ceiling with
+`LIMIT_EXCEEDED`. The first failing check in processing order decides. A
+refused file can still be fetched with `kdrive_download`. All stream and
+text-production admission precedes PDF.js; every decoded byte, including each
+reuse of a content or Form stream, counts against the extraction budget.
+Selected page text follows dependency item order,
 with LF/FF/LF between pages, without a layout/table-order guarantee. Blank or
 image-only selections use `NO_EXTRACTABLE_TEXT`; no OCR or scan detection runs.
 

@@ -129,8 +129,18 @@ export function installVerdict(list: Installed[]): {
   return { ok: findings.length === 0, findings };
 }
 
+/** BR-392 v2: the files copied into the temporary package directory. */
+export const packFiles = [
+  "dist",
+  "LICENSE",
+  "LICENSES",
+  "NOTICE",
+  "README.md",
+  "package.json",
+] as const;
+
 function run(work: string, prefix: string): number {
-  for (const file of ["dist", "LICENSE", "NOTICE", "README.md", "package.json"])
+  for (const file of packFiles)
     cpSync(file, join(work, file), { recursive: true });
   let tarball: string;
   try {

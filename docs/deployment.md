@@ -33,7 +33,8 @@ stages:
   without optional native packages, and removes its npm cache.
 - `runtime` starts from the digest-pinned `node:26.13.0-bookworm-slim` image
   and only copies `dist/`, `node_modules/`, `package.json`,
-  `package-lock.json`, `LICENSE`, `NOTICE` and `README.md` into `/app`. Its
+  `package-lock.json`, `LICENSE`, `NOTICE`, `README.md` and
+  `LICENSES/Apache-2.0.txt` into `/app`. Its
   files belong to root and are not writable by the runtime user. It runs as
   UID/GID 1000, sets `NODE_ENV=production`, `STOPSIGNAL SIGTERM`,
   `EXPOSE 3000`, and its entrypoint is `node /app/dist/cli.js`.
