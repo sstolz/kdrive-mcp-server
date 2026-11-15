@@ -8,24 +8,6 @@ version: 1
 
 # F-042 — Describe every MCP tool and parameter for AI clients
 
-Author: Codex (model and effort unknown), light spec phase, 2026-11-15.
-Base: supplied main `45501719235860d8aee68b507764c11b9d3ed2ab`;
-actual clean HEAD `f47a73c0ceede7f2af3dd8d948da5ea3a3f6c45a` on
-`claude/beautiful-maxwell-8mdk2w` (a subsequent history merge).
-IDs: F-042; new BR-428–BR-430 v1; AC-01–AC-08. No ADR.
-Cached `origin/main` is the supplied base; local `main` at `7fdc7b3` is
-stale. The supplied base and working tree allocate through F-041, BR-427
-and ADR-012. Next free IDs after this draft: F-043, BR-431, ADR-013.
-Recheck current main before freeze.
-
-This assignment revises a draft and pending records after the supplied review:
-no new review, freeze, implementation, tests, Docker, network, commits, PR or
-acceptance. It uses the
-full path because published tool guidance is a client contract. The direct
-spec-author assignment is the author phase; independent review remains a
-separate fresh-context phase. No token counters are exposed for this phase;
-no per-agent totals or retrospective attribution are inferred.
-
 ## Context
 
 Ticket #42 asks that an AI client can choose and call a tool from `tools/list`
@@ -74,8 +56,8 @@ Inspected local implementation: installed server `dist/mcp-oHn3ureC.mjs`
 `v4/classic/schemas.js` / `v4/core/to-json-schema.js`. These generated filenames
 are inspection evidence, not imports or test dependencies. Existing
 `TestBR283_description_and_overwrite_sentence` already checks the published
-`overwrite` description through the SDK. No new runtime probe was run here;
-AC-01/AC-02 verify the actual publication path in the implementation phase.
+`overwrite` description through the SDK. AC-01/AC-02 verify the actual
+publication path.
 
 ## Scope
 
@@ -98,8 +80,6 @@ AC-01/AC-02 verify the actual publication path in the implementation phase.
 - Describing every internal extraction or policy ceiling in every parameter,
   promising provider behavior, adding localization, fetching live data, or
   evaluating AI tool-selection quality with an external client.
-- Source/test edits or execution in this spec-only assignment. No files are
-  produced in `artifacts/` or `node_modules/.cache/`.
 
 ## Business rules
 
@@ -124,7 +104,8 @@ text does not change their definitions, so no pending version is needed.
 Behavioral dependencies remain unchanged: BR-060 v6 (tool inventory),
 BR-061–BR-067 (arguments/navigation), BR-065 v2 and BR-072–BR-081
 (pagination), BR-082–BR-094 (raw reads/ETags), BR-109–BR-123
-(extraction; current accepted versions), BR-260 v3–BR-262 (mutation inputs,
+(extraction; current accepted versions), BR-257 v1 (production received-share
+mutation refusal), BR-260 v3–BR-262 (mutation inputs,
 annotations/results), BR-278 v2/BR-427 v1 (protected sources), and
 BR-279 v2, BR-280–BR-282 v1 and BR-283 v2 (upload).
 No new policy interpretation is introduced by a description.
@@ -148,12 +129,12 @@ labels only, not literal output or required implementation identifiers.
 - **U** (all mutations, unchanged `UNCERTAIN_SENTENCE`):
   `If the result is uncertain, verify the item's state with a read tool before any new attempt.`
 - **R** (all mutations):
-  `On gate completion, returns a JSON operation result with result and attempts, plus applicable op, code, status, value, audit or message fields; no continuation cursor.`
+  `On gate completion, returns a JSON operation result with result and attempts, plus applicable op, code, status, value, audit or message fields; no continuation cursor. Pre-gate refusals return a bare error code in MCP text content, not JSON.`
 
 For ordinary read/navigation tools: `<name>. P N`.
-For the five paged tools: `<name>. P C N`.
+For the five paged tools: `<name>. P N C`.
 For `kdrive_read`: `<name>. P N A`.
-For every mutation: `<name>. P R U N`.
+For every mutation: `<name>. P N R U`.
 All JSON results mentioned here are carried in MCP text content;
 `kdrive_read` image output additionally carries MCP image content.
 
@@ -193,13 +174,15 @@ All ID and range bounds below are inclusive decimal integers.
 | Key | Exact description |
 | --- | --- |
 | D | `Drive ID, integer 1..9007199254740991. Omit to use the configured default drive; for a received item use its owner drive_id.` |
+| DR | `Configured drive ID, integer 1..9007199254740991. Omit to use the configured default drive. Received-share drives are refused.` |
 | DC | `Configured drive ID, integer 1..9007199254740991. Omit to list all configured drives with readable roots.` |
 | DS | `Owner drive ID filter, integer 1..9007199254740991. Omit to discover authorized received-share roots across owner drives.` |
 | DW | `Drive ID, integer 1..9007199254740991. Omit to use the configured default drive. Received-share writes are refused.` |
-| C | `Opaque next_cursor from this tool. Omit for the first page; otherwise keep the same arguments and session. Single-use, expires 300000 ms after traversal starts and may be evicted; invalid, expired or changed bindings return INVALID_CURSOR. Runtime limit: 128 UTF-8 bytes. Do not construct or edit it.` |
+| C | `Opaque next_cursor from this tool. Omit for the first page; otherwise keep the same arguments and session. Single-use, expires 300000 ms after traversal starts and may be evicted; invalid, expired or changed bindings return INVALID_CURSOR. Do not construct or edit it.` |
 | T | `Item type filter: file or dir. Omit to include both.` |
 | FL | `Folder ID whose direct children are listed, integer 1..9007199254740991. The folder must be authorized.` |
 | FS | `Folder scope ID, integer 1..9007199254740991. Omit to use configured roots in the selected drive; received-drive navigation requires an explicit authorized folder.` |
+| FSR | `Folder scope ID, integer 1..9007199254740991. The folder must be authorized and in a configured drive. Omit to use configured roots in the selected drive. Received-share drives are refused even with an explicit folder.` |
 | Q | `Search query passed to kDrive, nonempty and at most 4096 UTF-8 bytes. No server-side trimming or query-language interpretation.` |
 | FI | `File or folder ID for metadata, integer 1..9007199254740991, in drive_id.` |
 | FR | `File ID to read, integer 1..9007199254740991, in drive_id; folders have no file content.` |
@@ -208,7 +191,7 @@ All ID and range bounds below are inclusive decimal integers.
 | FU | `Existing file ID, integer 1..9007199254740991. Required exactly when overwrite is true; otherwise omit. Must identify the file named name in parent_id of drive_id.` |
 | F | `Required representation: text for decoded text, pdf for selected PDF-page text, or image for a PNG preview. encoding is text-only; pages is pdf-only. image forbids offset, length, encoding and pages, even offset 0.` |
 | O | `Zero-based Unicode code-point offset into decoded text or concatenated selected PDF-page text, integer 0..9007199254740991; default 0. A non-zero offset requires etag. Not allowed for image. Resume with next_offset and unchanged format, encoding and pages.` |
-| L | `Maximum Unicode code points to return, integer 1..9007199254740991. Omit to request up to 262144; the effective cap is 262144 and remaining text and serialized-output budgets can reduce it. Not allowed for image.` |
+| L | `Maximum Unicode code points to return, integer 1..9007199254740991. Omit to return as much remaining text as fits the serialized-output budgets; remaining text and those budgets can reduce any requested length. Not allowed for image.` |
 | E | `Exact quoted strong etag from an earlier result; required for a non-zero offset, optional at offset 0 and for image. Contains 1..254 printable ASCII characters inside quotes, excluding space and double quote; weak W/ tags are invalid. A different current version returns VERSION_CHANGED.` |
 | EN | `Text encoding: utf-8, utf-16le, utf-16be or windows-1252; allowed only for format text. Omit to use the BOM encoding, or utf-8 without a BOM. An explicit encoding conflicting with the BOM returns INVALID_ENCODING; decoding is strict.` |
 | P | `PDF page numbers, allowed only for format pdf. Supply 1..10 strictly increasing unique integers, each 1..9007199254740991 and within the document's page count; default [1]. Keep the same selection when continuing with offset and etag.` |
@@ -237,8 +220,8 @@ not a 59th top-level parameter.
 | `kdrive_list_drives` | `drive_id?:DC` |
 | `kdrive_list` | `drive_id?:D`, `cursor?:C`, `type?:T`, `folder_id:FL` |
 | `kdrive_search` | `drive_id?:D`, `cursor?:C`, `type?:T`, `folder_id?:FS`, `query:Q` |
-| `kdrive_recents` | `drive_id?:D`, `cursor?:C`, `type?:T`, `folder_id?:FS` |
-| `kdrive_my_shared` | `drive_id?:D`, `cursor?:C`, `type?:T`, `folder_id?:FS` |
+| `kdrive_recents` | `drive_id?:DR`, `cursor?:C`, `type?:T`, `folder_id?:FSR` |
+| `kdrive_my_shared` | `drive_id?:DR`, `cursor?:C`, `type?:T`, `folder_id?:FSR` |
 | `kdrive_shared_with_me` | `drive_id?:DS`, `cursor?:C`, `type?:T` |
 | `kdrive_info` | `drive_id?:D`, `file_id:FI` |
 | `kdrive_read` | `drive_id?:D`, `file_id:FR`, `format:F`, `offset?:O`, `length?:L`, `etag?:E`, `encoding?:EN`, `pages?:P`; `pages.items:PI` |
@@ -283,6 +266,7 @@ map. Helper code may compose those literals exactly as specified above.
   the catalog composition, not just a nonempty string. Every mutation's R
   names result and attempts as guaranteed fields and op, code, status, value,
   audit and message as applicable fields, with no continuation cursor.
+  R distinguishes bare-code pre-gate refusals from these JSON results.
   Zero provider calls.
   Verified by `TestBR428_AC01_all_registered_tool_descriptions`.
 - **AC-02** (BR-429) — Given those listings, When each input property and
@@ -301,8 +285,11 @@ map. Helper code may compose those literals exactly as specified above.
   exactly once on each tool, A exactly once on read, U exactly once on each
   mutation, R exactly once on each mutation, all existing mutation P sentences
   remain verbatim, and OW starts with the exact existing `OVERWRITE_SENTENCE`.
-  Session instructions remain
-  N. Verified by `TestBR428_AC03_existing_notices_and_sentences_preserved`;
+  N immediately follows P, before C or R/U. Assert its exclusive end offset
+  in UTF-8 bytes equals the byte length of the independent catalog literal
+  `<name>. P N` for each tool; later result/continuation clauses cannot push
+  it farther back. Session instructions remain N.
+  Verified by `TestBR428_AC03_existing_notices_and_sentences_preserved`;
   retain the existing `TestBR263_each_description_holds_its_fixed_sentences`,
   `TestBR263_v2_create_and_rename_descriptions_hold_the_NFC_sentence`,
   `TestBR283_description_and_overwrite_sentence` and
@@ -315,6 +302,13 @@ map. Helper code may compose those literals exactly as specified above.
   none has a continuation cursor. Reuse existing mutation fixtures, including
   an uncertain outcome whose audit append fails to cover both fields together.
   Verified by `TestBR428_AC03_mutation_result_fields_match_guidance`.
+  Given an invalid mutation argument or invalid upload encoding, When
+  `invokeMutation` refuses before calling the gate, Then the response is
+  exactly `{isError:true,content:[{type:"text",text:"INVALID_ARGUMENTS"}]}`,
+  with zero gate calls and no JSON operation result. Cover the read-mode
+  controller refusal similarly with bare `ACCESS_DENIED`. Verified by the
+  same test; these controller cases do not assume SDK validation uses the
+  same error envelope.
 - **AC-04** (BR-428) — Given paged/text/download/image synthetic results,
   When a client follows the published guidance, Then an empty nonterminal
   page still continues using `next_cursor`; `A😀B` in one-code-point reads
@@ -359,20 +353,35 @@ map. Helper code may compose those literals exactly as specified above.
   LIMIT_EXCEEDED; malformed base64 and lone-surrogate text return
   INVALID_ARGUMENTS before the byte limit. Defaults: PDF selects [1]; text
   uses its BOM or UTF-8 without a BOM; explicit conflicting BOM refuses;
-  omitted length, length 262144 and length 262145 yield identical successful
-  results for the same text fixture longer than 262144 Unicode code points
-  under the same source and serialized-output budgets. Output budgets may
-  reduce all three chunks below 262144; do not assert a full-cap wire result.
-  This characterizes the literal cap in `src/extraction.ts:readResult`
-  (`Math.min(args.length ?? 262144, 262144)`). Omitted length_bytes and
+  a bounded text fixture `A😀B` with ample output budget returns all three
+  code points when length is omitted, one for length 1 and two for length 2.
+  A larger bounded fixture under a serialized-output budget that fits at
+  least one code point but not the requested chunk returns fewer code points
+  than requested, with has_more and next_offset matching the returned count.
+  These checks cover observable length behavior only.
+  Omitted length_bytes and
   configured maxReadBytes agree; length_bytes = maxReadBytes + 1 returns
   LIMIT_EXCEEDED before policy/content work, with zero provider calls,
   rather than returning a clamped chunk. Verify DC/DS
-  omission visits all eligible drives, D/DW omission uses the default, FS
-  omission uses configured roots and omitted type includes both types.
+  omission visits all eligible drives, D/DR/DW omission uses the default,
+  FS/FSR omission uses configured roots and omitted type includes both types.
+  With received sharing enabled and a readable received folder in an
+  unconfigured owner drive, explicit drive_id/folder_id returns
+  `{isError:true,content:[{type:"text",text:"ACCESS_DENIED"}]}` for both
+  kdrive_recents and kdrive_my_shared; kdrive_list and kdrive_search succeed
+  on that same folder with valid inputs and complete read/list/search
+  evidence. Both restricted tools succeed on an authorized configured-drive
+  folder. Match these outcomes to DR/FSR versus D/FL/FS.
+  Tie DW to the production-adapter BR-257 fixture
+  `TestBR257_a_received_rename_reloads_shared_with_me_and_is_denied` in
+  `tests/mutation-composition.test.ts`: with sharedWithMe/sharedWrite enabled
+  and provider can_write/can_rename true, assert the adapter's received
+  mutation predicates are all false, a fresh shared_with_me GET occurs,
+  rename returns denied/ACCESS_DENIED with attempts 0, no intent is recorded
+  and no mutator is called. This assertion covers the production mapping;
+  it does not claim the abstract policy always refuses received mutations.
   Cursor tests characterize returned single-use tokens, changed bindings,
-  128/129-byte validation and expiry at 299999/300000 ms without asserting
-  an arbitrary 128-byte string is a valid issued token. Reuse existing
+  malformed tokens and expiry at 299999/300000 ms. Reuse existing
   boundary tests/fixtures for behavior; the new test links their measured
   values to the published dictionary. No schema maximum is mistaken for
   a guaranteed returned length or an authorized ID.
@@ -412,10 +421,10 @@ map. Helper code may compose those literals exactly as specified above.
    `UPLOAD_MAX_BYTES` for numeric text; preserve the existing comma-formatted
    upload sentence (524,288). Other current bounds are literals rather than
    exported shared constants: pin them against published schema keywords and
-   actual boundary behavior. In AC-06, compare omitted length, 262144 and
-   262145 on the same text fixture longer than 262144 code points within
-   source budgets, using identical output budgets and the existing
-   `readResult` projection. Also assert the maxReadBytes + 1 refusal before
+   observable boundary behavior. AC-06 covers bounded code-point lengths,
+   output-budget reduction, issued cursor behavior and the received-route
+   distinction, including the production BR-257 capability mapping.
+   Also assert the maxReadBytes + 1 refusal before
    policy/content work. Do not rewrite validation expressions to create
    a constants framework in this text-only ticket. Documentation defaults
    describe runtime omission; they are not new schema defaults.
@@ -452,11 +461,23 @@ map. Helper code may compose those literals exactly as specified above.
   validation constants where available and use boundary checks where they
   are not. A validation refactor and external documentation generator are
   unnecessary for this reversible metadata change; no ADR is needed.
-- **D-6 — Draft phase boundary.** Keep status draft and record the supplied
-  review's dispositions; approval of the revised draft remains pending.
-  The assignment's no-Docker/no-network/no-commit constraints preclude the
-  usual gate/forge steps here; those remain later full-path obligations.
-  No alternative host application gate is claimed.
+- **D-6 — Publish observable bounds.** Omit the internal 262144-code-point
+  collection cap and the 128-byte cursor guard from client text. The
+  serialized-result byte budget masks the former, and the UUID grammar
+  masks the latter. Comparisons that cannot detect changes to those guards
+  are rejected as evidence; AC-06 checks observable lengths and issued
+  cursor behavior instead.
+- **D-7 — Put the untrusted-data notice before result guidance.** Compose
+  paged tools as P N C and mutations as P N R U, keeping N immediately after
+  P on every tool. Placing N after continuation/result guidance is rejected
+  because truncating clients can lose it. AC-03 pins its end offset;
+  this placement does not guarantee visibility under arbitrary truncation.
+- **D-8 — Distinguish received routes.** Use dedicated DR/FSR descriptions
+  for recents/my-shared: only configured drives are supported, even with an
+  explicit folder. Keep list/search received-folder guidance separate.
+  Retain DW's received-write refusal with a production-adapter BR-257
+  assertion; extending that claim to all injected policy capabilities is
+  rejected.
 
 ## Risks
 
@@ -478,18 +499,15 @@ map. Helper code may compose those literals exactly as specified above.
 
 ## Open questions
 
-None. Coverage, wording, SDK attachment, constants, compactness and phase
-boundaries are resolved in D-1–D-6; independent review of the revised draft
-remains pending.
+None. Coverage, wording, SDK attachment, observable bounds, compactness and
+received-route distinctions are resolved in D-1–D-8.
 
 ## Stress-test
 
-### Review 1 dispositions
-
-The supplied review is recorded below with the disposition of every finding,
-not a new review or an approval of the revised head. Reviewer model/effort and
-token counters were not supplied (unknown); no usage is inferred. This
-revision remains draft v1; freeze, implementation and acceptance are pending.
+The entries below record supplied findings and their dispositions. They do
+not constitute approval of the revised head. Status remains draft v1;
+freeze, implementation and acceptance are pending. Reviewer model/effort
+and token counters were not supplied (unknown).
 
 ### 42-spec-review-1-reviewer — verdict: changes
 
@@ -506,13 +524,36 @@ revision remains draft v1; freeze, implementation and acceptance are pending.
    applicable code/status/value, audit for an unrecorded outcome and message
    for an uncertain result. The planned fixture checks cover these shapes
    and the absence of a continuation cursor.
-3. **Minor — extraction cap needs a behavior check. Retained, fixed in this revision.**
-   Added the 262145-versus-262144 comparison to AC-06, the test plan and
-   BR-429 on a fixture longer than 262144 code points within source budgets.
-   Source inspection: `src/extraction.ts:124` caps collection at
-   `Math.min(args.length ?? 262144, 262144)`; lines 152–165 can further
-   reduce the returned chunk to fit serialized-output budgets. Identical
-   successful results are required, not a guaranteed 262144-character chunk.
+3. **Minor — extraction cap needs a behavior check. Superseded by F-3 below.**
+   The earlier 262144/262145 comparison cannot detect drift in the internal
+   cap because serialized-output limits already reduce both results.
 
-These corrections were checked against local source only. No runtime tests,
-Docker/Make gate, CI or corrected-head review were run in this revision.
+### 42-spec-decision-1-fable — dispositions
+
+- **F-1 — Major, received recents/my-shared scope. Retained, fixed.**
+  Added DR/FSR and dedicated bindings, plus AC-06 received-folder refusal
+  and list/search success controls. `src/policy/received.ts:435–441` and
+  F-004's capability matrix distinguish these routes;
+  `src/pagination.ts:180–181` converts a missing policy page to
+  `ACCESS_DENIED`, exposed as bare text by `src/navigation.ts:149–156`.
+- **F-2 — Minor, notice position. Retained, fixed.** P N C and P N R U
+  place the existing N before result guidance; AC-03 pins its end offset.
+  D-7 records the truncation tradeoff without promising client behavior.
+- **F-3 — Minor, masked bounds. Retained, fixed.** Removed the code-point
+  cap and cursor byte limit from L/C, and removed the ineffective drift
+  checks from AC-06, the test plan and BR-429. `src/extraction-values.ts:39–42`
+  bounds the serialized result to 262144 bytes including its envelope;
+  `src/pagination.ts:129–133` also requires a fixed UUID-shaped token.
+  D-6 keeps observable behavior checks only.
+- **F-4 — Minor, received-write provenance. Retained, fixed.** AC-06 ties
+  DW to the BR-257 production fixture and all-false received mutation
+  predicates in `src/kdrive/normalize.ts:280–291`. The abstract policy's
+  effectiveSharedWrite/capability path at `src/policy/received.ts:443`
+  remains distinct.
+- **F-5 — Minor, pre-gate error shape. Retained, fixed.** R and AC-03
+  distinguish bare-code refusals from JSON gate results, following
+  `src/navigation.ts:149–156,791–809`; BR-428 carries the same distinction.
+- **F-6 — Minor, process narrative. Retained, fixed.** Removed assignment,
+  branch/base and sandbox narrative from the contract and replaced the
+  phase-boundary decision with product decisions. Review dispositions stay
+  here, following F-041's Stress-test pattern.
