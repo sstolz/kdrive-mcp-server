@@ -937,13 +937,13 @@ in F-037.
 ## Pending — stream operation budgets and weak validators
 
 [F-038 v1](../features/F-038-stream-budget-and-weak-etags.md) (#47 lot B)
-is draft and unreviewed. It prepares three pending versions, no new BR ID.
+is draft with Review 1 dispositions. It prepares three pending versions, no new BR ID.
 Current definitions and acceptance evidence remain unchanged and active.
 BR-088 keeps its retry rule; the obsolete fragment-budget assertion is
 replaced in the planned tests. BR-206 continues using BR-205 normalization;
-BR-207 keeps its 1,024-request / 120,000 ms preflight bounds. F-038 OQ-1
-requires confirmation of operation versus physical HTTP request accounting
-before freeze. No implementation or acceptance is claimed.
+BR-207 keeps its 1,024-request / 120,000 ms preflight bounds. F-038 D-1
+preserves the existing operation charging points; counting every physical
+HTTP request is out of scope. No implementation or acceptance is claimed.
 
 | ID                  | Version | Rule                                                                                                       | Source                                                        | Status                        |
 | ------------------- | ------- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- | ----------------------------- |

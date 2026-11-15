@@ -52,7 +52,9 @@ a fallback version scheme. Existing no-ETag refusals remain intentional.
 - A content hash, metadata-based version, alternative validator, or support
   for reading unversioned content. No full RFC entity-tag grammar migration.
 - Replacing the existing dependency-operation accounting with a new
-  transport-wide counter of physical HTTP hops (D-1).
+  transport-wide counter of every physical HTTP request, including
+  metadata/probe/redirect hops (D-1). This is a BACKLOG-worthy follow-up
+  requiring a separate transport/accounting contract.
 - Source/test edits, Docker, network, commits, review, freeze, implementation,
   acceptance and release in this authoring step. The owner explicitly
   authorized Codex as author; later phases retain the repository's reviews.
@@ -123,10 +125,16 @@ The targeted source audit found two body-charge sites in `src/content.ts`
 not per chunk; its 1,024-request and 120,000 ms bounds remain unchanged.
 `src/kdrive/transport.ts` body reads do not charge that preflight counter.
 At implementation repeat this inventory across `src/` and `tests/`, including
-`512`, `PREFLIGHT_REQUESTS`, `BR-070`, `BR-088`, `BR-207`, `BR-384`, budget
-increments and body reads, so another chunk-charging path is not overlooked.
+`512`, `PREFLIGHT_REQUESTS`, `BR-070`, `BR-088`, `BR-207`, `BR-384`,
+`derivedETag`, `etag`, `If-Match`, budget increments and body reads, so
+another chunk-charging or validator-consuming path is not overlooked.
 
 ### Validator results
+
+The source inventory (`rg -n -i 'derivedETag|etag|if-match' src/`) confirms
+that provider validators are consumed only by `describe` and `open` through
+`derivedETag`. No mutation or `If-Match` path uses provider validators;
+there is no `If-Match` path in the current source.
 
 The prefix test is case-sensitive and applies before hashing: `W/"x"`
 returns `null`; `w/"x"` retains the current opaque-validator derivation.
@@ -167,13 +175,18 @@ the existing local double. No live provider or real write is required.
   output; raw-output limits are not enlarged. Verified by
   `TestBR070_v4_AC01_eight_MiB_in_16_KiB_chunks_succeeds` in
   `tests/read-boundaries.test.ts`.
-- **AC-02** (BR-070 v4, BR-084, BR-088) — Given a 600-byte all-zero file,
+- **AC-02** (BR-070 v4, BR-084, BR-088) — Given `contentFixture` with a
+  600-byte all-zero file and no retries,
   When `kdrive_download` receives `{file_id:3}` with either 600 one-byte
   fragments or one 600-byte fragment, each followed by EOF, Then both
   return exactly `P({drive_id:7,file_id:3,offset_bytes:0,bytes_read:600,
   size_bytes:600,etag:'"version-1"',encoding:"base64",data:"A".repeat(800),
   has_more:false})`. Read counts are 601 and 2 respectively; each body
-  closes once; charged operation counts are equal and below 512. Verified
+  closes once. Both rows start exactly one `describe`, one `open` and four
+  authorization `inspect` calls: initial authorization, before `describe`,
+  before `open` and final authorization. Assert these observable mock call
+  counts from `tests/helpers/content.ts` and `tests/helpers/navigation.ts`,
+  not the internal charged-operation counter. Verified
   by `TestBR070_v4_AC02_fragmentation_does_not_consume_operations` in
   `tests/download-retry.test.ts`. This replaces the obsolete expectation
   in `TestBR088_shared_retry_budgets body reads share512 actual starts`.
@@ -280,8 +293,9 @@ the existing local double. No live provider or real write is required.
    close the other lots. Synchronize accepted markers in the next reviewed
    PR before release.
 
-This authoring step runs no product tests or Docker gate and claims no CI,
-review, freeze or acceptance. No source/test edits or commits are made.
+This revision step runs no product tests or Docker gate and claims no CI,
+new review, freeze or acceptance. The supplied review's dispositions are
+recorded below. No source/test edits or commits are made.
 
 ## Decisions
 
@@ -292,8 +306,9 @@ review, freeze or acceptance. No source/test edits or commits are made.
   adapter operation can include several requests (e.g. `describe` metadata
   plus probe, or a storage redirect). This repair does not introduce an
   exact 512-physical-HTTP-hop cap that the current code does not implement.
-  BR-207 separately continues counting preflight requests. See Open questions
-  for confirmation of the brief's use of “HTTP requests”.
+  BR-207 separately continues counting preflight requests. The owner resolved
+  OQ-1 in this revision by selecting the existing charging points; counting
+  every physical HTTP request is a separate, out-of-scope follow-up.
 - **D-2 — Keep guarded reads.** A dedicated internal stream-read path
   separates accounting from deadline/error/cleanup behavior. An unguarded
   direct `await body.read` is rejected because a stalled promise could
@@ -326,19 +341,33 @@ review, freeze or acceptance. No source/test edits or commits are made.
   a strong descriptor must not silently fall back or publish mixed bytes.
 - Synthetic fragmentation and strong validators establish the local
   contract, not provider support for strong versioning or a live throughput
-  guarantee. The physical-request accounting distinction in D-1 must be
-  resolved before freeze.
+  guarantee. D-1 preserves operation accounting and therefore does not
+  guarantee a ceiling of 512 physical HTTP requests.
 
 ## Open questions
 
-- **OQ-1 — Operation versus physical HTTP request accounting.** The brief
-  calls the unchanged 512 budget an HTTP-request budget; current navigation
-  code counts dependency operations, some of which perform several HTTP
-  requests. Recommended: confirm D-1, preserving those charging points and
-  removing only body-read charges. Alternative: require every physical HTTP
-  request (including metadata/probe/redirect hops) to share 512, which needs
-  a wider transport/accounting contract and revised AC-05 before freeze.
-
 ## Stress-test
 
-Not reviewed.
+### Review 1 dispositions
+
+The owner supplied this review for this revision; the entries below record
+its verdict and the disposition of every finding, not a new review or an
+approval of the revised head. Reviewer model/effort and token counters were
+not supplied (unknown); no usage is inferred. Status remains draft v1.
+
+### 47b-spec-review-1-reviewer — verdict: changes
+
+1. **Major — OQ-1 accounting boundary. Retained, fixed in this revision.**
+   D-1 records the owner's decision to preserve 512 at existing upstream
+   operation charging points. Counting every physical HTTP request is a
+   BACKLOG-worthy follow-up under Out of scope. Removed the open question
+   and its blockers from the spec index, capability map, BR README and BR-070.
+2. **Minor — validator consumer inventory. Retained, fixed in this revision.**
+   Added `derivedETag`, `etag` and `If-Match` to the inventory and recorded
+   the source search confirming no mutation or `If-Match` consumer.
+3. **Minor — observable AC-02 counts. Retained, fixed in this revision.**
+   Replaced the internal-counter assertion with identical port starts in
+   both rows: `describe=1`, `open=1`, `inspect=4`. Checked the existing test
+   fixtures and their authorization call path; no tests were run.
+4. **Minor — BR-070 History formatting. Retained, fixed in this revision.**
+   Removed the blank line separating the v4 entry from the History list.

@@ -8,8 +8,9 @@
 [BR-384 v2](business-rules/BR-384.md): proposed body reads consume byte
 and time bounds without spending the 512 upstream-operation budget; weak
 `W/` validators follow the existing absent-validator refusal in describe/open.
-Current accepted rule versions remain active. Draft, not reviewed, frozen,
-implemented or accepted; F-038 OQ-1 must be resolved before freeze.
+Current accepted rule versions remain active. Draft with Review 1 dispositions;
+not frozen, implemented or accepted. F-038 D-1 preserves the existing
+operation charging points; counting every physical HTTP request is out of scope.
 This adds no ability to read content without a qualifying validator.
 
 ## Accepted — rate-limited mutations stop after one attempt
