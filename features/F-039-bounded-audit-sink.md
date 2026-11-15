@@ -24,7 +24,7 @@ Frozen v1 on 2026-11-15 at the owner's explicit instruction, from reviewed
 base `5b9ca98`, with supplied review verdicts `47c-spec-review-3-reviewer`
 (changes), `47c-spec-review-4-reviewer` (changes, minors) and
 `47c-spec-decision-2-fable` (approve, minors), and all corrections below.
-This uncommitted freeze revision has no new SHA. Implementation, code review,
+The freeze commit is recorded on #47. Implementation, code review,
 CI and actual-main acceptance remain pending. Review token totals and actual
 reviewer model/effort were not supplied; no retrospective usage is inferred.
 
@@ -76,11 +76,9 @@ rewriting a known successful upstream result as a failed operation.
   threadpool can also hold OS/runtime teardown after `process.exit` is
   called; this unbounded OS-level stall is documented, not fixed.
   README/deployment guidance must name both limits.
-- Source implementation, Docker, network, commits, PR publication,
-  acceptance and release in this assignment. The owner authorizes this
-  freeze revision followed by tests-first authoring in `tests/` only,
-  including local compilation and execution against unchanged sources.
-  Required later independent code reviews and CI remain pending.
+- Source implementation, acceptance and release in the freeze step; they
+  follow the AGENTS.md path (tests first, then implementation, code review,
+  CI and acceptance on main).
 
 ## Business rules
 
@@ -696,7 +694,7 @@ diagnostic writes. All returned objects below are exact (no extra members).
    Evidence and exposed usage counters belong in #47/its PR, scoped to lot C;
    this lot alone does not authorize closing other lots or releasing.
 
-The authorized sequence is this documentation freeze, then tests first
+Per AGENTS.md, this documentation freeze is followed by tests first
 against unchanged sources. No Docker gate, CI, new independent review,
 acceptance or remote ticket-state update is claimed by this freeze record.
 No per-agent usage counters were supplied; record available usage and its
