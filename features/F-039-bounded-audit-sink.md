@@ -2,7 +2,7 @@
 id: F-039
 title: Bound audit append waits and shutdown drain
 ticket: "#47"
-status: frozen
+status: done
 version: 1
 ---
 
