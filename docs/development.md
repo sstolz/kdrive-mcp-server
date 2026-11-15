@@ -141,7 +141,11 @@ Complete sources fit min(maxReadBytes,8MiB). Logical expanded streams, canonical
 PDF and decoded UTF-8 text each obey min(maxExtractBytes,16MiB); structural,
 pixel, producer/item and finite scratch limits are separate, not an RSS claim.
 Owned workers obey min(extractTimeoutMs, remaining10-second invocation deadline)
-and terminate before releasing the slot. Full serialized MCP results count
+and ordinarily exit before releasing the slot. Failed or overdue termination
+instead releases the session slot by its deadline while a detached watcher keeps
+the process-wide extraction permit and identity charged until exit (F-040;
+[capacity and recovery](../SECURITY.md#process-wide-extraction-admission-f-040)).
+Full serialized MCP results count
 both JSON escaping layers, image base64 expansion and all block overhead against
 262144 UTF-8 bytes and maxOutputChars UTF-16 units. Oversize containers refuse
 before partial extraction; text truncates only at whole code points.

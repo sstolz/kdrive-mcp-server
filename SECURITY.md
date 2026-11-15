@@ -125,6 +125,52 @@ separate owned streams. These bounds do not prove cancellation of an underlying
 real provider request: no production adapter is qualified. Received-list cache
 age and multi-step resolution retain the existing revocation/concurrency limits.
 
+## Process-wide extraction admission (F-040)
+
+All `kdrive_read` formats, including continuations and empty sources, acquire one
+of two process-wide permits before source acquisition or buffering. At most four
+calls wait, with at most one active permit and one live waiter per trusted
+identity, serving the oldest eligible waiter. HTTP uses the exact verified
+issuer/subject pair across sessions; stdio and identity-free embedded controllers
+share one identity, and insecure HTTP uses a separate shared identity. Waiting
+spends the original invocation deadline and conveys no authorization. Raw
+downloads and resource reads retain their existing bounds.
+
+SERVER_BUSY is a transient admission refusal before source work, including
+extraction queue saturation, an identity's waiting limit or a detached worker
+holding its permit. The server does not automatically retry; a later client
+invocation requires fresh admission and authorization. Capacity may remain
+unavailable until a stuck worker exits or the process restarts.
+
+A permit covers source cleanup, worker exit, projection and final authorization.
+If termination fails or is still pending at the invocation deadline, a detached
+exit watcher retains the permit and identity charge; the invocation releases its
+session slot by that deadline. A live termination rejection still requires
+bounded fresh final authorization before `CONTENT_UNAVAILABLE`; denial returns
+`ACCESS_DENIED`, expiry `REQUEST_TIMEOUT`, and earlier cancel/close keeps
+`ACCESS_DENIED`. No late result is published.
+
+A detached identity's existing waiter and later extraction calls refuse
+`SERVER_BUSY`; if both permits are detached, every new extraction caller refuses
+immediately. Other existing waiters retain their deadlines. Permanently stuck
+workers reduce capacity until restart: two stop all extraction, and one blocks
+the shared stdio identity. Other tools remain available. This bounds concurrent
+pipelines, not total memory or RSS; external buffers, parser scratch and garbage
+collection remain outside worker heap limits.
+
+The process-owned stderr sink in both HTTP and stdio survives session close and
+offers exactly these payload-free lines once per detached worker:
+
+```text
+Extraction worker detached; capacity remains charged until exit.
+Detached extraction worker exited; capacity released.
+```
+
+Delivery is best effort, without waiting for a callback/drain or retrying.
+Blocked stderr can prevent delivery. No identity, path, content, error text or
+stack appears in either line. Ordinary cleanup and admission refusals emit
+neither diagnostic; these are not audit events.
+
 ## Mutation audit gate (F-016)
 
 Every write and share tool runs through one gate (#17). Before any

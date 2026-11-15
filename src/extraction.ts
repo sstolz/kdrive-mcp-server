@@ -1,4 +1,8 @@
 import { createExtractionWorker } from "./extraction-owner.js";
+import {
+  runOwnedWorker,
+  type ExtractionOwnership,
+} from "./extraction-lifecycle.js";
 import { crc32 } from "node:zlib";
 import type { CallToolResult } from "@modelcontextprotocol/server";
 import { record, array } from "./policy/values.js";
@@ -12,102 +16,23 @@ import {
   type ReadMetadata,
   type Extracted,
 } from "./extraction-values.js";
-const workerCodes = new Set([
-  "LIMIT_EXCEEDED",
-  "CONTENT_UNAVAILABLE",
-  "INVALID_ENCODING",
-  "UNSUPPORTED_FORMAT",
-  "NO_EXTRACTABLE_TEXT",
-  "INVALID_RANGE",
-]);
-/** BR-118: owned worker exit precedes settlement, including synchronous CPU cancellation. */
+/** BR-118 v3: ordinary exit precedes settlement; detached ownership stays charged. */
 export async function runExtraction(
   request: WorkerRequest,
   signal: AbortSignal,
   timeout: number,
+  ownership?: ExtractionOwnership,
 ): Promise<Extracted> {
   if (signal.aborted) throw new ContentFailure("ACCESS_DENIED");
   const worker = createExtractionWorker(request);
-  // Drain without retaining or publishing dependency output; each chunk is ephemeral.
-  worker.stdout.on("data", () => {});
-  worker.stderr.on("data", () => {});
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  let cancel: () => void = () => {};
+  const value = await runOwnedWorker(worker, signal, timeout, ownership);
   try {
-    return await new Promise<Extracted>((resolve, reject) => {
-      let done = false,
-        started = false;
-      const finish = (value: unknown, code?: string) => {
-        if (done) return;
-        done = true;
-        void worker.terminate().then(
-          () => {
-            if (code) {
-              reject(new ContentFailure(code as "LIMIT_EXCEEDED"));
-              return;
-            }
-            try {
-              const message = record(value);
-              if (
-                Object.keys(message).length !== 1 ||
-                !Object.hasOwn(message, "value")
-              )
-                extractionFail("CONTENT_UNAVAILABLE");
-              resolve(validateExtracted(message.value, request.budget));
-            } catch {
-              reject(new ContentFailure("CONTENT_UNAVAILABLE"));
-            }
-          },
-          () => {
-            reject(new ContentFailure("CONTENT_UNAVAILABLE"));
-          },
-        );
-      };
-      cancel = () => {
-        finish(undefined, "ACCESS_DENIED");
-      };
-      signal.addEventListener("abort", cancel, { once: true });
-      timer = setTimeout(
-        () => {
-          finish(undefined, "REQUEST_TIMEOUT");
-        },
-        Math.max(1, timeout),
-      );
-      worker.on("message", (value: unknown) => {
-        if (done) return;
-        try {
-          const m = record(value);
-          if (Object.keys(m).length === 1 && m.started === true) {
-            if (started) finish(undefined, "CONTENT_UNAVAILABLE");
-            else started = true;
-            return;
-          }
-          if (!started) {
-            finish(undefined, "CONTENT_UNAVAILABLE");
-            return;
-          }
-          if (
-            Object.keys(m).length === 1 &&
-            typeof m.code === "string" &&
-            workerCodes.has(m.code)
-          )
-            finish(undefined, m.code);
-          else finish(value);
-        } catch {
-          finish(undefined, "CONTENT_UNAVAILABLE");
-        }
-      });
-      worker.once("error", () => {
-        finish(undefined, "LIMIT_EXCEEDED");
-      });
-      worker.once("exit", () => {
-        finish(undefined, "LIMIT_EXCEEDED");
-      });
-      if (signal.aborted) cancel();
-    });
-  } finally {
-    if (timer) clearTimeout(timer);
-    signal.removeEventListener("abort", cancel);
+    const message = record(value);
+    if (Object.keys(message).length !== 1 || !Object.hasOwn(message, "value"))
+      extractionFail("CONTENT_UNAVAILABLE");
+    return validateExtracted(message.value, request.budget);
+  } catch {
+    throw new ContentFailure("CONTENT_UNAVAILABLE");
   }
 }
 export function validateExtracted(value: unknown, budget: number): Extracted {
