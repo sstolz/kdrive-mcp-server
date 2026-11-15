@@ -15,6 +15,37 @@ rename, move, trash, restore and upload. Every call goes through a policy
 (configured roots, deny patterns, received-share rules) and every write is
 recorded in an audit log before and after it is sent.
 
+**Why this server.** As of November 2026, Infomaniak offers a REST API for
+kDrive but no hosted MCP endpoint, and Anthropic provides no kDrive connector. Infomaniak's own
+MCP server (`@infomaniak/mcp-server-kdrive`, checked at version 1.2.0) runs
+over stdio only, so a remote client such as claude.ai cannot reach it. It is
+bound to a single drive: it lists items other users shared with you, but its
+file tools only act on that one drive, so they cannot open items that live in
+another user's drive. It also has no tool to:
+
+- read a file as text (`kdrive_read`: text files, PDF text, or a PNG preview
+  of an image);
+- find an item by its path (`kdrive_resolve_path`);
+- list the available drives (`kdrive_list_drives`);
+- list the items you shared (`kdrive_my_shared`).
+
+This server adds:
+
+- authenticated Streamable HTTP behind an OAuth proxy, for remote clients;
+- several drives (`KDRIVE_IDS`) and opt-in reading of items shared with you
+  (`KDRIVE_MCP_SHARED_WITH_ME`);
+- the tools above;
+- configured root folders: nothing outside them is visible;
+- deny patterns (`KDRIVE_MCP_DENY`, for example `/Private/**`): matching paths
+  are hidden from listings, search and reads, and cannot be written;
+- an audit log of every write, recorded before and after it is sent.
+
+Share tools are not available yet (`share` mode registers none, #20); the
+official server has them.
+
+It speaks standard MCP, so any compatible client can use it; only claude.ai
+has been verified end to end so far.
+
 **Status:** beta `0.6.0-beta.1` ([VERSION](VERSION)). The container image is
 published on GHCR as `ghcr.io/sstolz/kdrive-mcp-server:0.6.0-beta.1`
 (`linux/amd64` and `linux/arm64`; pin it by digest), and the npm package as
