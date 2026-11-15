@@ -85,6 +85,17 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
   their status; and `192.31.196.0/24`, `192.52.193.0/24`, `192.175.48.0/24` and
   `2620:4f:8000::/48` are no longer fetched from.
 
+- #46 / F-035 v1 (ready for freeze, pending acceptance): in `proxy` mode a
+  token request that fails a code's client, redirect URI, PKCE or resource
+  binding no longer consumes the code or revokes its refresh family; callbacks
+  that arrive together on a cold or rotated upstream key set share one key
+  fetch instead of failing; upstream requests release their connection when
+  refused early; and the OAuth routes' rate limits apply per client (the
+  socket address, or the `X-Forwarded-For` client behind a proxy listed in the
+  new `MCP_HTTP_TRUSTED_PROXIES` setting; IPv6 per `/64`) under a global
+  ceiling, so one abusive client no longer locks registration, login or token
+  refresh for everyone.
+
 ## [0.6.0-beta.1] - 2026-11-13
 
 ### Added
