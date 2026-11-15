@@ -3,6 +3,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { startStdioNavigation } from "../src/stdio.js";
 import { createOwnedStdioTransport } from "../src/stdio-transport.js";
 import { navigationFixture } from "./helpers/navigation.js";
+import type { MutationGate } from "../src/mutation-gate.js";
+import {
+  connectedCatalog,
+  dictionary,
+} from "./helpers/tool-description-catalog.js";
 
 afterEach(() => vi.useRealTimers());
 const initialize = {
@@ -15,7 +20,7 @@ const initialize = {
     clientInfo: { name: "bounded-client", version: "1" },
   },
 };
-async function wire(env: Record<string, string> = {}) {
+async function wire(env: Record<string, string> = {}, gate?: MutationGate) {
   const f = await navigationFixture(env),
     input = new PassThrough(),
     output = new PassThrough();
@@ -28,6 +33,7 @@ async function wire(env: Record<string, string> = {}) {
     input,
     output,
     signals: false,
+    ...(gate ? { gate } : {}),
     diagnostic: (message: string) => {
       stderr += message;
     },
@@ -401,4 +407,80 @@ describe("BR-070 finite outbound ownership", () => {
       await w.transport.close();
     }
   });
+});
+
+it("TestBR429_AC02_stdio_publishes_parameter_descriptions", async () => {
+  const w = await wire();
+  const memory = await connectedCatalog("read");
+  try {
+    w.send(initialize);
+    await w.read(1);
+    w.send({ jsonrpc: "2.0", method: "notifications/initialized" });
+    w.send({ jsonrpc: "2.0", id: 2, method: "tools/list", params: {} });
+    const listing = (await w.read(2)).result as Awaited<
+      ReturnType<typeof memory.client.listTools>
+    >;
+    expect(listing).toEqual(await memory.client.listTools());
+    const read = listing.tools.find((tool) => tool.name === "kdrive_read");
+    const properties = read?.inputSchema.properties as Record<
+      string,
+      { description?: string; items?: { description?: string } }
+    >;
+    // Bounded SDK publication sample: required, final optional wrapper, array item.
+    expect.soft(properties.file_id?.description).toBe(dictionary.FR);
+    expect.soft(properties.etag?.description).toBe(dictionary.E);
+    expect.soft(properties.pages?.items?.description).toBe(dictionary.PI);
+    for (const fixture of [w, memory.fixture]) {
+      expect(fixture.inspect).not.toHaveBeenCalled();
+      expect(fixture.collection).not.toHaveBeenCalled();
+      expect(fixture.children).not.toHaveBeenCalled();
+      expect(fixture.execute).not.toHaveBeenCalled();
+    }
+  } finally {
+    await memory.close();
+    await w.session.close();
+  }
+});
+
+it("TestBR428_AC03_stdio_invalid_mutation_arguments", async () => {
+  const gate = {
+    run: vi.fn(() =>
+      Promise.resolve({ result: "succeeded" as const, attempts: 1 }),
+    ),
+    execute: vi.fn(() => Promise.resolve({ status: "unavailable" as const })),
+    close: vi.fn(() => Promise.resolve()),
+  } satisfies MutationGate;
+  const w = await wire({ KDRIVE_MCP_MODE: "write" }, gate);
+  try {
+    w.send(initialize);
+    await w.read(1);
+    w.send({ jsonrpc: "2.0", method: "notifications/initialized" });
+    w.send({
+      jsonrpc: "2.0",
+      id: 2,
+      method: "tools/call",
+      params: {
+        name: "kdrive_rename",
+        arguments: { file_id: "INVALID_ID_MARKER", name: "renamed" },
+      },
+    });
+    expect(await w.read(2)).toEqual({
+      jsonrpc: "2.0",
+      id: 2,
+      result: {
+        isError: true,
+        content: [{ type: "text", text: "INVALID_ARGUMENTS" }],
+      },
+    });
+    expect(gate.run).not.toHaveBeenCalled();
+    expect(gate.execute).not.toHaveBeenCalled();
+    expect(w.inspect).not.toHaveBeenCalled();
+    expect(w.collection).not.toHaveBeenCalled();
+    expect(w.children).not.toHaveBeenCalled();
+    expect(w.execute).not.toHaveBeenCalled();
+    expect(w.stdout()).not.toContain("INVALID_ID_MARKER");
+    expect(w.stderr()).toBe("");
+  } finally {
+    await w.session.close();
+  }
 });
