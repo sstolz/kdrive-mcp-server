@@ -165,6 +165,12 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
   bypass is addressed; visibility refusals and the external-mutation
   check-then-act window remain.
 
+- #42 / F-042 v1 (draft; pending review, freeze, implementation and acceptance):
+  specify purpose, result and continuation descriptions for every MCP tool,
+  and units, defaults, bounds and cross-field guidance for every parameter.
+  Preserve existing unofficial/untrusted-content notices and mutation
+  cautions; fixed trusted text only, with no validation or behavior change.
+
 ## [0.6.0-beta.1] - 2026-11-13
 
 ### Added
