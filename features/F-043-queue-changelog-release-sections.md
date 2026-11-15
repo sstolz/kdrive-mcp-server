@@ -9,7 +9,7 @@ version: 1
 # F-043 — Queue documentation changelog release sections
 
 Author: Codex (model and effort unknown), spec phase, 2026-11-15.
-Base: `local/f043` at `3b035b8bd44487437afaa6eae4447b0791dd7567` (cached `origin/main`).
+Base: main `e05b032a89c0afeff40b5ef42b818b1e9c266dae` (F-042 accepted).
 IDs: F-043; BR-387 v2; no new BR or ADR.
 Next free IDs: F-044, BR-431, ADR-013.
 
@@ -43,8 +43,8 @@ fallback when no release cites the current ticket and the archive cutoff.
   subsection logic into a shared test helper under `tests/helpers/`.
   Reuse `RELEASE_HEADING`, word-boundary ticket matching, entry/subsection
   boundaries and the `changelogTicket12Section` archive cutoff. Support
-  a "Fixed required, no marker" option for #16 without changing #104 or #12
-  selection or content requirements.
+  a "Fixed required, bullet starts with `- #16 `, no additional text marker"
+  option for #16 without changing #104 or #12 selection or content requirements.
 - Record the draft and pending v2 in the rule index, spec index, capability
   map and Unreleased changelog entry.
 
@@ -57,7 +57,7 @@ publication, CI or build changes, and acceptance claims.
 ## Business rules
 
 - **BR-387 v2** — README "Key limits" and the section `## Parallel tool calls` of `docs/mcp-client-compatibility.md` state that one call per session runs at a time, that up to 4 further calls wait in arrival order for at most 12 seconds, and that `SERVER_BUSY` means the call was refused before any kDrive request, so it is safe to retry (writes included) once an earlier call has completed.
-  `CHANGELOG.md` selects the first release section whose body cites #16 anywhere, in file order; if no such release section exists, it selects `## [Unreleased]`. The selected section has a `### Fixed` line citing #16. A release section has a heading of the form `## [<version>] - <YYYY-MM-DD>`, using the F-025 version/date grammar; an undated heading is not a release section. A citation matches `#16\b`, so `#160` does not cite #16. Only text before the `## [0.6.0-beta.1]` heading is searched, as in BR-321 v4: that section and older sections use archived ticket numbers.
+  `CHANGELOG.md` selects the first release section whose body cites #16 anywhere, in file order; if no such release section exists, it selects `## [Unreleased]`. The selected section has a bullet under `### Fixed` whose line starts with `- #16 `. A release section has a heading of the form `## [<version>] - <YYYY-MM-DD>`, using the F-025 version/date grammar; an undated heading is not a release section. A citation matches `#16\b`, so `#160` does not cite #16. Only text before the `## [0.6.0-beta.1]` heading is searched, as in BR-321 v4: that section and older sections use archived ticket numbers.
   Verified by: AC-01–AC-06.
 
 ## Acceptance criteria
@@ -72,9 +72,11 @@ in `tests/dependency-audit.test.ts`, then `make check`.
 - **AC-01** (BR-387 v2) — Given the repository documents, When
   `TestBR387_docs_describe_queue_and_retryable_SERVER_BUSY` runs, Then the
   README and compatibility assertions remain unchanged and the #16 Fixed
-  entry passes in its selected section. The assertion requires the returned
-  heading to equal the BR-387 v2 selection applied to the real `CHANGELOG.md`
-  (`## [Unreleased]` before promotion, `## [0.6.0-beta.2] - 2026-11-15` after).
+  entry passes in its selected section. Compute the expected heading directly
+  from the real `CHANGELOG.md` lines, without the selection helper: it is
+  `## [0.6.0-beta.2] - 2026-11-15` if that exact heading line exists, otherwise
+  `## [Unreleased]`. Assert that the helper's returned heading equals this
+  independently computed expectation.
 - **AC-02** (BR-387 v2) — Given a synthetic changelog with the #16 Fixed
   line under Unreleased, When checked with no release section, with only an
   undated `## [0.7.0]` section, or with a dated release containing only #7,
@@ -84,7 +86,10 @@ in `tests/dependency-audit.test.ts`, then `make check`.
   `## [0.6.0-beta.2] - 2026-11-15` section with the #16 Fixed line,
   When checked, Then that release passes, including when another Fixed
   bullet precedes #16. Given instead that #16 appears only under Added or
-  Changed and nowhere under Fixed, When checked, Then it fails.
+  Changed and nowhere under Fixed, When checked, Then it fails. Given a
+  release whose only Fixed bullet is `- Related queue fix for #16`, When
+  checked, Then it fails: the bullet must start with `- #16 `, even though
+  the later citation selects that release.
   Verified by: `TestBR387_v2_changelog_release_fixed_line`.
 - **AC-04** (BR-387 v2) — Given otherwise valid synthetic fixtures whose
   only citation is #160 instead of #16, separately under Unreleased and
@@ -110,8 +115,10 @@ in `tests/dependency-audit.test.ts`, then `make check`.
 - **AC-07** (BR-321 v4, unchanged) — Given the real `CHANGELOG.md`, When
   `TestBR321_audit_docs development, security and changelog state the audit contract`
   runs in `tests/dependency-audit.test.ts`, Then the heading returned for
-  #12 equals the BR-321 v4 selection applied to that file
-  (`## [Unreleased]` before promotion, `## [0.6.0-beta.2] - 2026-11-15` after).
+  #12 equals an independently computed expectation: inspect the real file's
+  lines without the selection helper and use `## [0.6.0-beta.2] - 2026-11-15`
+  if that exact heading line exists, otherwise `## [Unreleased]`. Assert that
+  the helper's result equals this expected heading.
   The #12 Fixed and Added requirements, markers, archive cutoff, #104
   assertion and other documentation assertions remain unchanged.
 
@@ -126,16 +133,18 @@ in `tests/dependency-audit.test.ts`, then `make check`.
   new entries after an earlier release. Select by a #16 citation anywhere
   in the release body, exactly as `releases.find((s) => cites.test(s.body))`
   in `tests/dependency-audit.test.ts:463` at `728b4c3`, then require the
-  #16 Fixed line in that section. Unlike BR-321, BR-387 requires no Added
-  entry or additional text marker.
+  Fixed bullet starting with `- #16 ` in that section, preserving the v1
+  ticket prefix. Unlike BR-321, BR-387 requires no Added entry or additional
+  text marker.
   Keep valid older matches before the archive cutoff. F-025 AC-05 explicitly
   permits these; the cutoff comes from BR-321 v4 / F-027, not F-025.
 - **D-3 — Share bounded parsing.** Prefer a shared helper with explicit
   required-subsection/marker options to a copied parser or importing a
   test suite. Preserve BR-321's #104 and #12 selection, markers and negative
   cases. #16 uses the same body-citation selection and archive cutoff as
-  #12, with a "Fixed required, no marker" option. Update the #12 real-file
-  heading assertion through AC-07 so it follows the existing BR-321 v4
+  #12, with a "Fixed required, bullet starts with `- #16 `, no additional
+  text marker" option. Update the #12 real-file heading assertion through
+  AC-07 so it follows the existing BR-321 v4
   contract across promotion; no BR-321 revision is needed.
 - **D-4 — Draft only.** Record the pending requirement without moving
   existing changelog entries. Release 0.6.0-beta.2 is a separate change.
@@ -145,11 +154,6 @@ in `tests/dependency-audit.test.ts`, then `make check`.
 ## Stress-test
 
 ### Review 1 dispositions
-
-The supplied review findings are recorded below with their dispositions;
-this is not a new review or approval of the revised head. Reviewer
-model/effort and token counters were not supplied (unknown); no usage is
-inferred. This revision remains draft v1; no freeze or acceptance is claimed.
 
 ### 67-spec-review-1-reviewer — verdict: changes
 
@@ -169,3 +173,24 @@ inferred. This revision remains draft v1; no freeze or acceptance is claimed.
    at `tests/dependency-audit.test.ts:401` (`728b4c3`), which currently
    pins Unreleased. Its expected heading follows BR-321 v4's selection
    on the real file; BR-321 and the #12 content requirements are unchanged.
+
+### 67-spec-decision-1-fable — dispositions
+
+- **Base and counts. Retained, fixed.** The base is main `e05b032`
+  with F-042 accepted. The index keeps 420 active, eight superseded and
+  zero pending-acceptance rules, plus one pending version of an active
+  rule (BR-387 v2), following the existing pending-version convention.
+- **Major — independent real-file expectations. Retained, fixed.** AC-01
+  and AC-07 derive the expected heading from an exact-line presence check
+  for `## [0.6.0-beta.2] - 2026-11-15`, falling back to `## [Unreleased]`,
+  without calling the selection helper. Each asserts the helper's result
+  equals that expectation. This supersedes Review 1's selection-derived
+  expectation wording and incorporates the optional Review 2 note.
+- **Minor — preserve the Fixed bullet prefix. Retained, fixed.** BR-387 v2,
+  Scope and D-2–D-3 require a Fixed bullet starting with `- #16 `, matching
+  the prefix in `tests/invocation-queue.test.ts:575`. AC-03 adds a failing
+  synthetic bullet that mentions #16 only later in its line. This clarifies
+  Review 1's "no marker" option; body-citation selection remains unchanged.
+- **Minor — remove status narrative. Retained, fixed.** Removed the
+  Stress-test preamble and BR-387 Verification's implementation/acceptance
+  disclaimer.
