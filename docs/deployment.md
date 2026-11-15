@@ -317,8 +317,32 @@ SIGNING_KEY_FILE=./secrets/signing-key.pem
   Add per-client-IP rate and connection limits there too
   ([OAuth proxy notes](oauth-proxy.md#limits-and-residual-risks)).
 
-Check the file with `docker compose config`; Compose names any variable still
-unset.
+**F-035 pending acceptance.** `MCP_HTTP_TRUSTED_PROXIES` is optional and empty
+by default; the Compose example passes `${MCP_HTTP_TRUSTED_PROXIES:-}`.
+Use exact proxy addresses or a dedicated access-controlled proxy-only network.
+Every trusted hop must append the upstream address it observed as the last
+`X-Forwarded-For` element. Trusting a whole shared network trusts every
+container on it, including containers connecting directly to the server.
+
+An untrusted container on a listed shared network can connect directly to the
+server and send a victim's address in `X-Forwarded-For`. This selects the
+victim's peer and can exhaust its window: socket `CONTAINER_ADDRESS`, header
+`X-Forwarded-For: VICTIM_ADDRESS`. Exact proxy addresses or an isolated
+proxy-only network prevent that trust mistake. Do not list a shared network
+merely because Traefik belongs to it, and never list client addresses as proxies.
+
+A residential `/56` or `/48` supplies 256 or 65,536 `/64` peers, so one home
+line can cross the two-peer or twenty-peer global barriers. Per-peer admission
+therefore reduces single-peer interference but cannot prevent global lockout.
+
+Required installation-specific values use `${NAME:?…}`; optional values may
+use `${NAME:-}` with an empty default. Credentials remain file secrets only.
+Leaving the trusted-proxy list empty behind Traefik retains one shared peer
+window. Set the comma-separated list only after checking the proxy addresses,
+network isolation and header-append policy; it is read at startup.
+
+Check the file with `docker compose config`; Compose names any required
+variable still unset.
 
 ### 5. Start in `read` mode
 
