@@ -1,12 +1,11 @@
 # Capability map
 
-## Provisional — process-wide extraction admission
+## Accepted — process-wide extraction admission
 
-[F-040 frozen v1](features/F-040-process-wide-extraction-admission.md)
+[F-040 v1](features/F-040-process-wide-extraction-admission.md)
 (#47 lot D), [BR-423 v1](business-rules/BR-423.md),
 [BR-424 v1](business-rules/BR-424.md), [BR-425 v1](business-rules/BR-425.md),
-[BR-426 v1](business-rules/BR-426.md) and pending [BR-118 v3](business-rules/BR-118.md)
-(v2 remains active): frozen admission contract for all `kdrive_read` formats uses two
+[BR-426 v1](business-rules/BR-426.md) and [BR-118 v3](business-rules/BR-118.md): admission contract for all `kdrive_read` formats uses two
 process-wide permits before source buffering, at most one permit and one live
 waiter per identity, and four waiters globally, serving the oldest eligible
 waiter. Queue/identity saturation returns `SERVER_BUSY` without automatic retry;
@@ -22,11 +21,9 @@ offers fixed payload-free detach/release diagnostics to signal
 lost/recovered capacity; permanently stuck workers reduce capacity until restart
 (two cause immediate refusal for every new extraction caller, one blocks the
 shared stdio identity). README/tool/compatibility
-wording will explain transient `SERVER_BUSY` and its recovery limits. Raw
+wording explains transient `SERVER_BUSY` and its recovery limits. Raw
 and resource reads retain their contracts. This limits concurrent pipelines,
-not total process memory. Reviews 1–3 and Decisions 1–2 are dispositioned; v1 is frozen at the explicit
-owner instruction, with no corrected-head approval claimed. Implementation
-and acceptance remain pending.
+not total process memory. Accepted on actual main `67c101a` on 2026-11-15 (#47 comment `6897680463`).
 Lot C's accepted F-039 contract and active rule versions remain separate.
 
 ## Accepted — bounded audit waits and shutdown
