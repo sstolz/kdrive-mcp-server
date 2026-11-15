@@ -3,8 +3,10 @@
 > **Beta: the interface may change before 1.0.** Tool names, parameters,
 > settings and outputs can still change between beta versions.
 >
-> **Unofficial project, not affiliated with Infomaniak.** It is distinct from
-> the `@infomaniak/mcp-server-kdrive` npm package.
+> **Unofficial project, not affiliated with Infomaniak.** It is not endorsed
+> or supported by Infomaniak, and it is distinct from the
+> `@infomaniak/mcp-server-kdrive` npm package. Infomaniak and kDrive are named
+> only to describe what the server connects to.
 
 An [MCP](https://modelcontextprotocol.io) server that gives AI clients
 controlled access to an Infomaniak kDrive. A client can browse, search and read
@@ -13,11 +15,15 @@ rename, move, trash, restore and upload. Every call goes through a policy
 (configured roots, deny patterns, received-share rules) and every write is
 recorded in an audit log before and after it is sent.
 
-**Status:** beta `0.6.0-beta.1` ([VERSION](VERSION)), to be published through
-the gated release workflow described in [docs/publishing.md](docs/publishing.md)
-as npm `@sstolz/kdrive-mcp-server@beta` and image
-`ghcr.io/sstolz/kdrive-mcp-server:0.6.0-beta.1`. You can also build the image or
-the package from this repository. Changes are listed in [CHANGELOG.md](CHANGELOG.md).
+**Status:** beta `0.6.0-beta.1` ([VERSION](VERSION)). The container image is
+published on GHCR as `ghcr.io/sstolz/kdrive-mcp-server:0.6.0-beta.1`
+(`linux/amd64` and `linux/arm64`; pin it by digest), and the npm package as
+`@sstolz/kdrive-mcp-server@beta`; both went through the gated release workflow
+([docs/publishing.md](docs/publishing.md)). The published beta predates the
+changes under Unreleased in [CHANGELOG.md](CHANGELOG.md); build the image or
+the package from this repository to get them.
+
+<a id="quick-start"></a>
 
 ## What it offers
 
@@ -30,33 +36,71 @@ the package from this repository. Changes are listed in [CHANGELOG.md](CHANGELOG
 - **Bounded results:** reads, downloads and listings have size, item and time
   limits; names, paths and file content are returned as untrusted data.
 
-## Install
+## Quick start (Docker)
 
-Prerequisites:
+Run the published image `ghcr.io/sstolz/kdrive-mcp-server`, configured with
+[environment variables](#configure). You need Docker and an Infomaniak API
+token with the kDrive scope from an account with the **admin** role on every
+drive you configure (startup checks this), plus the drive ID
+([Values from the Infomaniak side](#values-from-the-infomaniak-side)). For a
+remote deployment, you also need Docker Compose and Traefik.
 
-- an Infomaniak API token for kDrive, from an account with the **admin** role on
-  every drive you configure (startup checks this);
-- Docker with Compose and GNU Make 3.81 or later to build from this repository;
-- for the packaged CLI only: Node.js 26.13 or later (26.x).
-
-Build from a checkout of this repository:
+Read the published image's digest, then pull it by digest: a beta never gets
+`latest`, and tags can be overwritten.
 
 ```sh
-make setup        # build the development container and install dependencies
-make image        # container image: kdrive-mcp-server:runtime-<arch>
-make pack         # npm package: ./artifacts/sstolz-kdrive-mcp-server-0.6.0-beta.1.tgz
+docker buildx imagetools inspect ghcr.io/sstolz/kdrive-mcp-server:0.6.0-beta.1
+docker pull 'ghcr.io/sstolz/kdrive-mcp-server:0.6.0-beta.1@sha256:<digest>'
 ```
 
-`make image IMAGE_PLATFORMS=linux/amd64` builds one architecture only. Nothing
-is pushed to a registry. To use the CLI on your machine, install the package
-with `npm install -g ./artifacts/sstolz-kdrive-mcp-server-0.6.0-beta.1.tgz` (keep the
-leading `./`, without which npm reads the argument as a GitHub shorthand); it
-provides the `kdrive-mcp-server` command. `kdrive-mcp-server --help` and
-`--version` need no configuration.
+The examples below use the version tag for readability; replace it with the
+same digest-pinned image reference after inspecting it. Paths, IDs and domains
+are fake; substitute your own values.
 
-Once the public beta is published, install it from the npm registry with
-`npm install -g @sstolz/kdrive-mcp-server@beta`
-([publishing](docs/publishing.md)).
+### Local (stdio)
+
+Your AI client launches this command itself and communicates over stdin and
+stdout. Configure it under [Connect an AI client](#connect-an-ai-client).
+Docker must be running and accessible to the client.
+
+Store your token in `/home/you/.config/kdrive/token`, a regular UTF-8 file
+containing only the token (a final newline is accepted). Mount it read-only at
+`/run/secrets/kdrive-token`; `KDRIVE_TOKEN_FILE` is the path **inside** the
+container. The image runs as UID/GID `1000:1000`, so that user must be able to
+read the mounted file. On Linux, use owner `1000:1000` and mode `0400` for the
+token file, with private host directories traversable by the user who launches
+Docker. The file must exist before launch; do not use a symlink as the token
+file or put a token in the client configuration.
+
+```sh
+docker run -i --rm \
+  -e KDRIVE_ID=123456 \
+  -e KDRIVE_MCP_MODE=read \
+  -e KDRIVE_MCP_ROOTS=123456:/Documents \
+  -e KDRIVE_TOKEN_FILE=/run/secrets/kdrive-token \
+  -v /home/you/.config/kdrive/token:/run/secrets/kdrive-token:ro \
+  ghcr.io/sstolz/kdrive-mcp-server:0.6.0-beta.1
+```
+
+The image starts `node /app/dist/cli.js`; stdio is the default transport, so
+no command or transport argument is needed after the image name. Keep `-i`
+and omit `-t` so stdin stays open without a terminal. This example exposes
+only `/Documents` on drive `123456`. Start in `read` mode, check the tools
+from your client, then switch to `write` only if you need it
+([Limits and risks](#limits-and-risks)).
+
+### Remote (HTTP behind Traefik with OAuth)
+
+For web and mobile clients, use [examples/compose.yaml](examples/compose.yaml)
+to run the same image behind Traefik with `KDRIVE_MCP_TRANSPORT=http`,
+`OAUTH_MODE=proxy` and `KDRIVE_MCP_MODE=read`. For example, serve drive
+`123456` at `https://mcp.example.com/mcp`, mounting the kDrive token, upstream
+client secret and signing key as read-only secrets. Follow
+[Personal server, step by step](docs/deployment.md#personal-server-step-by-step)
+for the complete fake-value setup, including OAuth registration, secret-file
+permissions and Traefik; its
+[settings table](docs/deployment.md#settings-of-an-http-deployment) lists every
+variable. Then add a [remote connector](#remote-connector-authenticated-http).
 
 ## Configure
 
@@ -80,15 +124,158 @@ Never put a token in a CLI argument or in the YAML file. Size limits
 OAuth settings, every CLI option and YAML key, defaults, bounds and error codes
 are in the [configuration reference](features/F-002-configuration.md). A
 configuration or startup failure prints one line,
-`Configuration error [<code>] (<setting>).`, and exits 1.
+`Configuration error [<code>] (<setting>).`, and exits 1. For a remote
+deployment, the [settings table](docs/deployment.md#settings-of-an-http-deployment)
+of the deployment guide gives every HTTP and OAuth variable with its role,
+whether it is required and a fake example.
+
+### Values from the Infomaniak side
+
+This project is not affiliated with Infomaniak; the links below go to
+Infomaniak's own documentation. Menu paths are those of the Infomaniak
+Manager in French at the time of writing; Infomaniak may rename them. The
+[deployment guide](docs/deployment.md#2-collect-the-infomaniak-values-and-register-the-oauth-client)
+describes the same steps in order.
+
+- **API application** (needed for the token, and for the OAuth client of a
+  remote deployment). In the Manager: **Utilisateurs et profils** → **Mon
+  profil** → **Développeur** → **Application API** → **Créer une nouvelle
+  application**. Choose the type **Application** and any name. The
+  application URL field is the OAuth redirect (callback) URI. For a local
+  test, enter `http://127.0.0.1:8765/callback`. For a deployment, enter `<MCP_PUBLIC_URL>/oauth/callback`, for example
+  `https://mcp.example.com/mcp/oauth/callback`.
+  Keep the client ID and client secret that are shown: a remote deployment
+  uses them as `OAUTH_UPSTREAM_CLIENT_ID` and the client secret file.
+- **API token** (`KDRIVE_TOKEN_FILE`). In the Manager: **Utilisateurs et
+  profils** → **Mon profil** → **Développeur** → **Tokens API** → **Créer un
+  token**. Select the application created above, the scope **drive — Produits
+  Drive**, and a validity (1 day, 1 month, 6 months, 1 year or unlimited; a
+  shorter validity limits the damage of a leak but needs renewal). Log in as
+  an account with the **admin** role on every drive you configure. Infomaniak's
+  guide:
+  [Add and manage Infomaniak API tokens](https://www.infomaniak.com/en/support/faq/2582/add-and-manage-infomaniak-api-tokens);
+  token list in the Manager:
+  <https://manager.infomaniak.com/v3/ng/accounts/token/list>. The token is
+  shown once: store it in a file only you can read, never in a CLI argument or
+  a committed file.
+- **Drive ID** (`KDRIVE_ID`). The number in the kDrive web app URL after
+  `/kdrive/app/drive/`: for example,
+  `https://ksuite.infomaniak.com/kdrive/app/drive/123456/…` gives `123456`.
+  You can also list the drives your token can access with the
+  [kDrive API](https://developer.infomaniak.com/docs/api) (the `/2/drive`
+  routes). An example that reads the token from a file, so that it stays off
+  the command line (curl reads its options from standard input):
+
+  ```sh
+  printf 'header = "Authorization: Bearer %s"\n' "$(cat ./secrets/kdrive-token)" |
+    curl -sS -K - 'https://api.infomaniak.com/2/drive/init?with=drives'
+  ```
+
+  The answer lists each accessible drive with its ID and your role; the
+  server's startup check uses the same route. The full response format is not
+  documented here.
+
+- **OAuth client and issuer** (`OAUTH_UPSTREAM_CLIENT_ID`, its secret,
+  `OAUTH_ISSUER`; remote deployment only). With Infomaniak as the provider,
+  use the client ID and client secret of the API application above and set
+  `OAUTH_ISSUER` to `https://login.infomaniak.com` (no trailing slash), as
+  given by [Infomaniak's discovery document](https://login.infomaniak.com/.well-known/openid-configuration).
+  With another provider, register a confidential OAuth 2.0 / OpenID Connect
+  application with the redirect URI `<MCP_PUBLIC_URL>/oauth/callback`. Take
+  the issuer exactly as the provider's `/.well-known/openid-configuration`
+  document gives it.
 
 ## Connect an AI client
 
+The configurations below are examples in the documented formats of each
+client; check your client's own documentation for the current details.
+Verification status with this server:
+
+| Client         | Local (stdio)    | Remote (HTTP, OAuth proxy)                                 |
+| -------------- | ---------------- | ---------------------------------------------------------- |
+| Claude Code    | not yet verified | not yet verified                                           |
+| Claude Desktop | not yet verified | not yet verified                                           |
+| claude.ai      | not applicable   | verified (maintainer acceptance with claude.ai on the web) |
+
+The stdio transport itself is verified by the maintainer's acceptance runs,
+but not yet through a named client. Other clients and their callback URLs
+are in the [client compatibility matrix](docs/mcp-client-compatibility.md).
+
 ### Local client (stdio)
 
-Most desktop clients and coding assistants start local MCP servers from a JSON
-configuration of this shape (see your client's documentation for the file
-location):
+The client starts `docker run` with the same settings and read-only token
+mount as the [quick start](#local-stdio). The server speaks MCP on stdin and
+stdout and writes its own diagnostics to stderr. The paths and IDs below are
+fake; use an absolute host path for the token file in both examples.
+
+**Claude Code** (example; `--scope user` makes the server available in every
+project):
+
+```sh
+claude mcp add kdrive --scope user -- docker run -i --rm \
+  -e KDRIVE_ID=123456 \
+  -e KDRIVE_MCP_MODE=read \
+  -e KDRIVE_MCP_ROOTS=123456:/Documents \
+  -e KDRIVE_TOKEN_FILE=/run/secrets/kdrive-token \
+  -v /home/you/.config/kdrive/token:/run/secrets/kdrive-token:ro \
+  ghcr.io/sstolz/kdrive-mcp-server:0.6.0-beta.1
+```
+
+**Claude Desktop** and most desktop clients (example): add the server under
+`mcpServers` in the client's JSON configuration, `claude_desktop_config.json`
+for Claude Desktop (see the client's documentation for the file location),
+then restart the client:
+
+```json
+{
+  "mcpServers": {
+    "kdrive": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "-e",
+        "KDRIVE_ID=123456",
+        "-e",
+        "KDRIVE_MCP_MODE=read",
+        "-e",
+        "KDRIVE_MCP_ROOTS=123456:/Documents",
+        "-e",
+        "KDRIVE_TOKEN_FILE=/run/secrets/kdrive-token",
+        "-v",
+        "/home/you/.config/kdrive/token:/run/secrets/kdrive-token:ro",
+        "ghcr.io/sstolz/kdrive-mcp-server:0.6.0-beta.1"
+      ]
+    }
+  }
+}
+```
+
+#### Alternative: installed npm CLI
+
+After [installing the npm package](#install), the client
+can start `kdrive-mcp-server` directly and pass settings as environment
+variables. The token path is then on the host, with no container mount; keep
+it private and readable by the user running the client. Use one of these
+alternatives in place of the Docker configuration above.
+
+**Claude Code** (example; `--scope user` makes the server available in every
+project):
+
+```sh
+claude mcp add kdrive --scope user \
+  -e KDRIVE_TOKEN_FILE=/home/you/.config/kdrive/token \
+  -e KDRIVE_ID=123456 \
+  -e KDRIVE_MCP_ROOTS=123456:/Documents \
+  -e KDRIVE_MCP_MODE=read \
+  -- kdrive-mcp-server
+```
+
+**Claude Desktop** and most desktop clients (example): add the server under
+`mcpServers` in the client's JSON configuration, `claude_desktop_config.json`
+for Claude Desktop (see the client's documentation for the file location),
+then restart the client:
 
 ```json
 {
@@ -96,7 +283,7 @@ location):
     "kdrive": {
       "command": "kdrive-mcp-server",
       "env": {
-        "KDRIVE_TOKEN_FILE": "/home/me/.config/kdrive/token",
+        "KDRIVE_TOKEN_FILE": "/home/you/.config/kdrive/token",
         "KDRIVE_ID": "123456",
         "KDRIVE_MCP_ROOTS": "123456:/Documents",
         "KDRIVE_MCP_MODE": "read"
@@ -106,14 +293,13 @@ location):
 }
 ```
 
-The server speaks MCP on stdin and stdout and writes its own diagnostics to
-stderr.
-
 ### Remote connector (authenticated HTTP)
 
-For web and mobile clients, run the container image behind a TLS reverse proxy.
-The server acts as an OAuth proxy in front of an OpenID Connect provider (for
-example Infomaniak's) and only accepts the subjects or emails you allow.
+For web and mobile clients, run the container image behind a TLS reverse
+proxy. The server acts as an OAuth proxy in front of an OpenID Connect
+provider (for example Infomaniak's) and only accepts the subjects or emails
+you allow. The [deployment guide](docs/deployment.md#personal-server-step-by-step)
+walks through it with Docker Compose and Traefik; in short:
 
 1. Register an OAuth client at your provider with the redirect URI
    `<MCP_PUBLIC_URL>/oauth/callback`, for example
@@ -122,31 +308,80 @@ example Infomaniak's) and only accepts the subjects or emails you allow.
    and an EC P-256 signing key in PKCS#8 PEM (the server never generates one).
 3. Start from [examples/compose.yaml](examples/compose.yaml) (environment and
    Compose secrets behind Traefik) or [examples/config.yaml](examples/config.yaml)
-   (YAML alternative). The key settings:
+   (YAML alternative). The key settings (fake deployment values, with
+   Infomaniak as the provider):
 
    ```yaml
    KDRIVE_MCP_TRANSPORT: http
    OAUTH_MODE: proxy
    MCP_HTTP_HOST: 0.0.0.0 # inside the container only
    MCP_PUBLIC_URL: https://mcp.example.com/mcp
-   OAUTH_ISSUER: https://login.example.com # your OIDC provider
-   OAUTH_UPSTREAM_CLIENT_ID: <client id>
+   OAUTH_ISSUER: https://login.infomaniak.com # Infomaniak; no trailing slash
+   OAUTH_UPSTREAM_CLIENT_ID: 00000000-fake-client-id
    OAUTH_ALLOWED_EMAILS: you@example.com
    OAUTH_ALLOWED_REDIRECT_URIS: https://claude.ai/api/mcp/auth_callback
    ```
 
-4. In the client, add a custom connector with the URL `MCP_PUBLIC_URL`. The
-   client registers itself, you log in at your provider, and the server checks
-   your identity against the allowlist.
+4. Put the callback URL of each client you use in
+   `OAUTH_ALLOWED_REDIRECT_URIS` (comma-separated), then declare the server in
+   the client as below. The client registers itself, you log in at your
+   provider, and the server checks your identity against the allowlist.
 
-`OAUTH_ALLOWED_REDIRECT_URIS` lists the callback URLs of the clients you use;
-the [client compatibility matrix](docs/mcp-client-compatibility.md) gives them
-for common clients. Operator details (signing key, redirect matching, restart
-behaviour, reverse proxy) are in the [OAuth proxy notes](docs/oauth-proxy.md)
-and the [deployment guide](docs/deployment.md), which walks through a personal
-server installation step by step. In `write` and `share` modes a
-file audit log needs a writable mount, and `stop_grace_period` must be at least
-75 s so in-flight writes can record their outcome.
+**claude.ai** (verified): add a custom connector with the URL
+`MCP_PUBLIC_URL`, for example `https://mcp.example.com/mcp`. Its callback URL
+is `https://claude.ai/api/mcp/auth_callback`.
+
+**Claude Desktop** (not yet verified): remote servers are added as custom
+connectors with the same URL; Claude's documentation gives Desktop the same
+callback URL as claude.ai.
+
+**Claude Code** (not yet verified): add the server with the HTTP transport,
+then log in from the `/mcp` command inside Claude Code:
+
+```sh
+claude mcp add --transport http kdrive https://mcp.example.com/mcp
+```
+
+Claude Code uses a loopback callback, `http://localhost:<port>/callback`. The
+server accepts any port on an `http` loopback entry, so the allowlist entry is
+`http://localhost/callback`.
+
+`OAUTH_ALLOWED_REDIRECT_URIS` entries are compared byte for byte, except that
+port. Operator details (signing key, redirect matching, restart behaviour,
+reverse proxy) are in the [OAuth proxy notes](docs/oauth-proxy.md). In
+`write` and `share` modes a file audit log needs a writable mount, and
+`stop_grace_period` must be at least 75 s so in-flight writes can record
+their outcome.
+
+<a id="install"></a>
+
+## Other installation methods
+
+### npm package (published beta)
+
+For the packaged CLI, you need Node.js 26.13 or later (26.x). Install the
+published beta with
+`npm install -g @sstolz/kdrive-mcp-server@beta`
+([publishing](docs/publishing.md)). It provides the `kdrive-mcp-server`
+command; use the [npm client configuration](#alternative-installed-npm-cli).
+
+### Build from a checkout of this repository
+
+You need Docker with Compose and GNU Make 3.81 or later.
+
+```sh
+make setup        # build the development container and install dependencies
+make image        # container image: kdrive-mcp-server:runtime-<arch>
+make pack         # npm package: ./artifacts/sstolz-kdrive-mcp-server-0.6.0-beta.1.tgz
+```
+
+`make image IMAGE_PLATFORMS=linux/amd64` builds one architecture only. A
+local build pushes nothing to a registry. To use the CLI on your machine,
+install the package with
+`npm install -g ./artifacts/sstolz-kdrive-mcp-server-0.6.0-beta.1.tgz` (keep
+the leading `./`, without which npm reads the argument as a GitHub shorthand); it
+provides the `kdrive-mcp-server` command. `kdrive-mcp-server --help` and
+`--version` need no configuration.
 
 ## Tools
 

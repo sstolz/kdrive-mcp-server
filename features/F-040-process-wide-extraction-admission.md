@@ -2,7 +2,7 @@
 id: F-040
 title: Bound process-wide extraction admission before source buffering
 ticket: "#47"
-status: frozen
+status: done
 version: 1
 ---
 
