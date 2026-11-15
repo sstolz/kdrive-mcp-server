@@ -4,6 +4,10 @@ Planned delivery tickets live in the GitHub backlog (archive `docs/github-backlo
 Record newly observed out-of-scope work below as one line per item:
 `YYYY-MM-DD — observation — location — why it matters`.
 
+- 2026-11-15 — `read<T>(port)` accepts any port (#47 lot B code decision `47b-code-decision-1-fable`) — src/content.ts:62; src/navigation.ts:465 — A future caller could route a request-issuing call through the uncharged path; narrow it to an already-open body or document the invariant.
+
+- 2026-11-15 — A body resolving synchronously in 1-byte chunks can loop up to 8 MiB iterations without yielding (#47 lot B code decision `47b-code-decision-1-fable`) — src/content.ts; src/navigation.ts — The deadline holds, but cancellation is delivered late; production transport yields on I/O. Consider a periodic macrotask yield; F-038 forbids a fragment cap.
+
 - 2026-11-15 — Track a physical-HTTP-request counter, including metadata, probes and redirect hops — [F-038 D-1](features/F-038-stream-budget-and-weak-etags.md#decisions); src/kdrive/adapter.ts; src/kdrive/transport.ts — Existing dependency-operation charging can admit several physical requests per operation; a separate transport/accounting contract is needed.
 
 - 2026-11-15 — F-037 (#47 lot A) leaves the first-attempt authorization window: intent append up to 5,000 ms plus transport queue, DNS and TLS within the 30,000 ms attempt timer — src/mutation-gate.ts; SECURITY.md — A target or ancestor may move after policy validation and before the first write; track a separate authorization/precondition design, since stopping 429 retries does not make authorization atomic.

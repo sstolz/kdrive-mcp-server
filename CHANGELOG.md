@@ -115,7 +115,7 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
   performs fresh admission and authorization with its own audit records;
   uncertain writes are never automatically replayed.
 
-- #47 lot B / F-038 v1 (frozen, pending acceptance): separate body reads
+- #47 lot B / F-038 v1 (accepted 2026-11-15): separate body reads
   and EOF probes from the unchanged 512 upstream-operation budget, retaining
   byte caps and deadlines so valid fragmented content can complete; treat
   case-sensitive `W/` validators exactly as absent validators in both
