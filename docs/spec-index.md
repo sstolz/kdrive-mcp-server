@@ -220,7 +220,7 @@ accepted design for #14 / F-009, whose implementation was accepted on actual mai
 (built-in `node:https` transport, F-014 D-01), accepted with F-014 on main `2a9c1e3`.
 #72 allocates [ADR-007](../architecture-decisions/ADR-007-isolated-self-hosted-runner.md)
 (isolated self-hosted runner, F-015), accepted with F-015 on main `de9b283`.
-ADR-008 stays allocated to F-019 (#103) and is not written yet (#81).
+ADR-008 stays allocated to F-019 (#103) and is not written yet (live issue #81).
 #104 allocates [ADR-009](../architecture-decisions/ADR-009-dependency-overrides-skiplibcheck.md)
 (dependency overrides and `skipLibCheck`, F-020), accepted with F-020 on main `b6acf86`.
 #12 allocates [ADR-010](../architecture-decisions/ADR-010-direct-image-codecs.md)
