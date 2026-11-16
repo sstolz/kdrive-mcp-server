@@ -1031,7 +1031,7 @@ BR-431, ADR-013.
 | [BR-429](BR-429.md) | v1      | Exact descriptions of all 58 parameter occurrences and pages.items, consistent with validation. | [F-042 v1](../features/F-042-mcp-tool-descriptions.md) | Active |
 | [BR-430](BR-430.md) | v1      | Fixed trusted text, catalog size budgets and unchanged non-description contracts.               | [F-042 v1](../features/F-042-mcp-tool-descriptions.md) | Active |
 
-## Active — queue changelog release sections
+## Accepted — queue changelog release sections
 
 [F-043 v1](../features/F-043-queue-changelog-release-sections.md) (#67) was
 accepted on actual main `f72a15b` on 2026-11-15 (#67 comment `6902168340`).
