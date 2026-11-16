@@ -112,6 +112,9 @@
         "actions": "read",
         "packages": "write"
       },
+      "outputs": {
+        "image_digest": "${{ steps.release-image.outputs.image_digest }}"
+      },
       "steps": [
         {
           "uses": "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683",
@@ -138,6 +141,7 @@
           }
         },
         {
+          "id": "release-image",
           "run": "make release-image",
           "env": {
             "RELEASE_VERSION": "${{ inputs.version }}",
@@ -177,6 +181,7 @@
             "RELEASE_SHA": "${{ inputs.sha }}",
             "RELEASE_DRY_RUN": "${{ inputs.dry_run }}",
             "RELEASE_PHASE": "npm",
+            "RELEASE_IMAGE_DIGEST": "${{ needs.publish-image.outputs.image_digest }}",
             "GITHUB_TOKEN": "${{ github.token }}"
           }
         },
@@ -202,7 +207,7 @@
       "runs-on": "ubuntu-24.04",
       "timeout-minutes": 60,
       "if": "github.repository == 'sstolz/kdrive-mcp-server' && github.ref == 'refs/heads/main' && inputs.dry_run == false",
-      "needs": ["verify", "publish-npm"],
+      "needs": ["verify", "publish-image", "publish-npm"],
       "permissions": {
         "contents": "read",
         "packages": "read"
@@ -223,7 +228,8 @@
             "RELEASE_SHA": "${{ inputs.sha }}",
             "RELEASE_DRY_RUN": "${{ inputs.dry_run }}",
             "GITHUB_TOKEN": "${{ github.token }}",
-            "RELEASE_TARBALL_SHA256": "${{ needs.verify.outputs.tarball-sha256 }}"
+            "RELEASE_TARBALL_SHA256": "${{ needs.verify.outputs.tarball-sha256 }}",
+            "RELEASE_IMAGE_DIGEST": "${{ needs.publish-image.outputs.image_digest }}"
           }
         }
       ]

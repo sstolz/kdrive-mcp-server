@@ -4,6 +4,11 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
 
 ## [Unreleased]
 
+### Added
+
+- #89 / F-024 v3 (pending acceptance): first stable release through the gated
+  workflow with npm and GHCR `latest`; later releases belong to #91.
+
 ## [0.6.0-beta.2] - 2026-11-15
 
 ### Added

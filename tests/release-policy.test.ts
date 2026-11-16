@@ -2,7 +2,15 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { validateReleaseWorkflow } from "./helpers/release-policy.js";
+import {
+  CHECK_VARIABLES,
+  NPM_VARIABLES,
+  VERIFY_VARIABLES,
+  EXPECTED_RELEASE_WORKFLOW,
+  validateReleaseWorkflow,
+} from "./helpers/release-policy.js";
+
+import { rules } from "./helpers/image-policy.js";
 
 const PATH = ".github/workflows/release.yml";
 
@@ -409,7 +417,15 @@ describe("F-024 AC-03 AC-04 release workflow policy", () => {
   it.each(Object.keys(mutations))(
     "BR-355 rejects release workflow mutation: %s",
     (name) => {
-      const workflow = real();
+      const workflow = JSON.parse(
+        JSON.stringify(EXPECTED_RELEASE_WORKFLOW).replaceAll(
+          "@<40-hex>",
+          `@${PIN}`,
+        ),
+      ) as Workflow;
+      expect(() => {
+        validateReleaseWorkflow(JSON.stringify(workflow));
+      }).not.toThrow();
       const before = JSON.stringify(workflow);
       mutations[name]!(workflow);
       const text = JSON.stringify(workflow, null, 2);
@@ -469,7 +485,8 @@ describe("F-024 AC-02 release documentation", () => {
       .map((word) => word.replaceAll("`", ""));
     expect(named.length).toBeGreaterThan(0);
     for (const name of named) expect(name).toBe(tarball);
-    expect(readme).toContain("npm install -g @sstolz/kdrive-mcp-server@beta");
+    if (readFileSync("VERSION", "utf8").includes("-beta."))
+      expect(readme).toContain("npm install -g @sstolz/kdrive-mcp-server@beta");
 
     const old = ["artifacts/", "kdrive-mcp-server-"].join("");
     const offenders = treeFiles().filter(
@@ -485,7 +502,13 @@ describe("F-024 AC-02 release documentation", () => {
       .filter((line) => line.startsWith("npx "));
     expect(npx.length).toBeGreaterThan(0);
     for (const line of npx)
-      expect(line.startsWith("npx @sstolz/kdrive-mcp-server")).toBe(true);
+      expect(
+        line.startsWith(
+          readFileSync("VERSION", "utf8").includes("-beta.")
+            ? "npx @sstolz/kdrive-mcp-server"
+            : "npx -y @sstolz/kdrive-mcp-server@",
+        ),
+      ).toBe(true);
 
     const raw = readFileSync("docs/publishing.md", "utf8");
     const doc = prose(raw);
@@ -556,3 +579,171 @@ describe("F-024 AC-02 release documentation", () => {
       expect(text).toContain(phrase);
   });
 });
+
+// F-024 v3 AC-24, AC-30, AC-33. Keep the beta assertions above until VERSION is stable.
+describe("F-024 v3 documentation and digest plumbing", () => {
+  it("BR-354 v2 install text follows VERSION", () => {
+    for (const root of [".", "tests/fixtures/release/stable-install"]) {
+      const version = readFileSync(join(root, "VERSION"), "utf8").trim();
+      for (const file of ["README.md", "SPEC.md"]) {
+        const doc = readFileSync(join(root, file), "utf8");
+        if (version.includes("-beta.")) {
+          if (file === "README.md")
+            expect(doc).toContain(
+              "npm install -g @sstolz/kdrive-mcp-server@beta",
+            );
+          expect(doc).toContain("@sstolz/kdrive-mcp-server");
+        } else {
+          const install = doc
+            .split("\n")
+            .filter((line) => line.startsWith("npm install -g "));
+          expect(install).toEqual(["npm install -g @sstolz/kdrive-mcp-server"]);
+          expect(doc).toContain(`npx -y @sstolz/kdrive-mcp-server@${version}`);
+        }
+      }
+    }
+  });
+  it("BR-354 v2 guide covers first stable recovery", () => {
+    const raw = readFileSync("docs/publishing.md", "utf8");
+    const text = prose(raw);
+    for (const fragment of [
+      "1.0.0",
+      "latest",
+      "beta",
+      "RELEASE_IMAGE_DIGEST",
+      "containerimage.digest",
+      "release-image: image digest",
+      "packages: write",
+      "mutable",
+      "digest",
+      "Re-run failed jobs",
+      "Re-run all jobs",
+      "package version",
+      "404",
+      "versions",
+      "time",
+      "read-back",
+      "#91",
+      "dry_run=true",
+      "dry_run=false",
+    ])
+      expect(text).toContain(fragment);
+    expect(text).toMatch(/latest.{0,200}not protected.{0,100}release/iu);
+    expect(text).toMatch(/same-repository workflow.{0,150}overwrite/iu);
+    expect(text).toMatch(/re-run.{0,150}publish-npm/iu);
+    expect(text).toMatch(/never.{0,80}(delete|republish)/iu);
+    expect(text).not.toContain("$previous");
+    // The accepted beta recovery bullets remain verbatim, independently of stable recovery.
+    const beta = readFileSync(
+      "tests/fixtures/release/beta-recovery.md",
+      "utf8",
+    );
+    const bullets = beta.match(/^- [\s\S]*?(?=^-(?: |$)|(?![\s\S]))/gmu) ?? [];
+    expect(bullets).toHaveLength(7);
+    for (const bullet of bullets) expect(text).toContain(prose(bullet).trim());
+    const order = [...raw.matchAll(/\*\*(P-[0-5])\*\*/gu)].map(
+      (match) => match[1],
+    );
+    expect(order).toEqual(["P-0", "P-1", "P-4", "P-2", "P-5", "P-3"]);
+  });
+  const digest = "${{ needs.publish-image.outputs.image_digest }}";
+  it.each(["output", "step id", "needs", "recipients", "closed set"])(
+    "BR-356 v2 BR-358 v2 stable digest plumbing: %s",
+    (part) => {
+      const w = real();
+      if (part === "output")
+        expect(job(w, "publish-image").outputs).toEqual({
+          image_digest: "${{ steps.release-image.outputs.image_digest }}",
+        });
+      if (part === "step id") {
+        expect(step(w, "publish-image", "make release-image").id).toBe(
+          "release-image",
+        );
+        expect(step(w, "verify", "make release-npm").id).toBe("release-npm");
+      }
+      if (part === "needs")
+        expect(job(w, "read-back").needs).toEqual([
+          "verify",
+          "publish-image",
+          "publish-npm",
+        ]);
+      if (part === "recipients") {
+        const recipients = Object.entries(w.jobs).flatMap(([name, j]) =>
+          j.steps
+            .filter((s) => s.env?.RELEASE_IMAGE_DIGEST !== undefined)
+            .map((s) => [name, s.run, s.env!.RELEASE_IMAGE_DIGEST]),
+        );
+        expect(recipients).toEqual([
+          ["publish-npm", "make release-check", digest],
+          ["read-back", "make release-verify", digest],
+        ]);
+      }
+      if (part === "closed set")
+        expect(() => {
+          validateReleaseWorkflow(JSON.stringify(w));
+        }).not.toThrow();
+    },
+  );
+  it.each([
+    "missing output",
+    "wrong output",
+    "missing id",
+    "digest on npm publish",
+    "missing npm digest",
+    "missing read-back digest",
+    "missing dependency",
+  ])("BR-356 v2 BR-358 v2 stable digest plumbing: rejects %s", (mutation) => {
+    const w = JSON.parse(
+      JSON.stringify(EXPECTED_RELEASE_WORKFLOW).replaceAll(
+        "@<40-hex>",
+        `@${PIN}`,
+      ),
+    ) as Workflow;
+    expect(() => {
+      validateReleaseWorkflow(JSON.stringify(w));
+    }).not.toThrow();
+    if (mutation === "missing output") delete job(w, "publish-image").outputs;
+    if (mutation === "wrong output")
+      job(w, "publish-image").outputs = { image_digest: "wrong" };
+    if (mutation === "missing id")
+      delete step(w, "publish-image", "make release-image").id;
+    if (mutation === "digest on npm publish")
+      step(w, "publish-npm", "make release-npm").env!.RELEASE_IMAGE_DIGEST =
+        digest;
+    if (mutation === "missing npm digest")
+      delete step(w, "publish-npm", "make release-check").env!
+        .RELEASE_IMAGE_DIGEST;
+    if (mutation === "missing read-back digest")
+      delete step(w, "read-back", "make release-verify").env!
+        .RELEASE_IMAGE_DIGEST;
+    if (mutation === "missing dependency")
+      job(w, "read-back").needs = ["verify", "publish-npm"];
+    expect(() => {
+      validateReleaseWorkflow(JSON.stringify(w));
+    }).toThrow();
+  });
+});
+
+it.each(["release-check", "release-npm", "release-verify", "release-image"])(
+  "BR-375 v2 release target variables: %s",
+  (target) => {
+    const rule = rules(readFileSync("Makefile", "utf8")).find(
+      (r) => r.target === target,
+    )!;
+    if (target === "release-image") {
+      // A make environment variable must reach the host shell; the rehearsal checks the actual output.
+      expect(rule.recipe).toEqual(["/bin/sh scripts/release-image.sh"]);
+    } else {
+      const names = [...rule.recipe[0]!.matchAll(/ -e ([A-Z_0-9]+)/gu)].map(
+        (match) => match[1],
+      );
+      expect(names).toEqual(
+        target === "release-check"
+          ? CHECK_VARIABLES
+          : target === "release-verify"
+            ? VERIFY_VARIABLES
+            : NPM_VARIABLES,
+      );
+    }
+  },
+);

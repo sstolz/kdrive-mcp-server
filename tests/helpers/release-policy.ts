@@ -20,6 +20,7 @@ const SHA = "${{ inputs.sha }}";
 const DRY_RUN = "${{ inputs.dry_run }}";
 const TOKEN = "${{ github.token }}";
 const DIGEST = "${{ needs.verify.outputs.tarball-sha256 }}";
+const IMAGE_DIGEST = "${{ needs.publish-image.outputs.image_digest }}";
 const PLATFORMS = "linux/amd64 linux/arm64";
 
 const checkout = {
@@ -39,6 +40,7 @@ const releaseCheck = (phase: string) =>
     RELEASE_DRY_RUN: DRY_RUN,
     RELEASE_PHASE: phase,
     GITHUB_TOKEN: TOKEN,
+    ...(phase === "npm" ? { RELEASE_IMAGE_DIGEST: IMAGE_DIGEST } : {}),
   });
 const binfmt = make("image-binfmt", { IMAGE_PLATFORMS: PLATFORMS });
 
@@ -103,17 +105,23 @@ export const EXPECTED_RELEASE_WORKFLOW = {
       needs: ["verify"],
       environment: "release",
       permissions: { contents: "read", actions: "read", packages: "write" },
+      outputs: {
+        image_digest: "${{ steps.release-image.outputs.image_digest }}",
+      },
       steps: [
         checkout,
         releaseCheck("image"),
         binfmt,
-        make("release-image", {
-          RELEASE_VERSION: VERSION,
-          RELEASE_SHA: SHA,
-          RELEASE_DRY_RUN: DRY_RUN,
-          IMAGE_PLATFORMS: PLATFORMS,
-          GITHUB_TOKEN: TOKEN,
-        }),
+        {
+          id: "release-image",
+          ...make("release-image", {
+            RELEASE_VERSION: VERSION,
+            RELEASE_SHA: SHA,
+            RELEASE_DRY_RUN: DRY_RUN,
+            IMAGE_PLATFORMS: PLATFORMS,
+            GITHUB_TOKEN: TOKEN,
+          }),
+        },
       ],
     },
     "publish-npm": {
@@ -147,7 +155,7 @@ export const EXPECTED_RELEASE_WORKFLOW = {
       "runs-on": "ubuntu-24.04",
       "timeout-minutes": 60,
       if: PUBLISH_GUARD,
-      needs: ["verify", "publish-npm"],
+      needs: ["verify", "publish-image", "publish-npm"],
       permissions: { contents: "read", packages: "read" },
       steps: [
         checkout,
@@ -157,6 +165,7 @@ export const EXPECTED_RELEASE_WORKFLOW = {
           RELEASE_DRY_RUN: DRY_RUN,
           GITHUB_TOKEN: TOKEN,
           RELEASE_TARBALL_SHA256: DIGEST,
+          RELEASE_IMAGE_DIGEST: IMAGE_DIGEST,
         }),
       ],
     },
@@ -238,3 +247,50 @@ export function validateReleaseWorkflow(text: string): void {
   }
   compare(normalize(parsed), EXPECTED_RELEASE_WORKFLOW, "$");
 }
+
+// BR-375: the exact -e lists of the three scripts/release.ts targets.
+export const CHECK_VARIABLES = [
+  "GITHUB_ACTIONS",
+  "GITHUB_SHA",
+  "GITHUB_TOKEN",
+  "RELEASE_VERSION",
+  "RELEASE_SHA",
+  "RELEASE_DRY_RUN",
+  "RELEASE_PHASE",
+  "RELEASE_IMAGE_DIGEST",
+  "RELEASE_GITHUB_API_URL",
+  "RELEASE_NPM_REGISTRY_URL",
+  "RELEASE_GHCR_URL",
+];
+export const NPM_VARIABLES = [
+  "GITHUB_ACTIONS",
+  "ACTIONS_ID_TOKEN_REQUEST_URL",
+  "ACTIONS_ID_TOKEN_REQUEST_TOKEN",
+  "GITHUB_EVENT_NAME",
+  "GITHUB_REF",
+  "GITHUB_REPOSITORY",
+  "GITHUB_REPOSITORY_ID",
+  "GITHUB_REPOSITORY_OWNER_ID",
+  "GITHUB_RUN_ATTEMPT",
+  "GITHUB_RUN_ID",
+  "GITHUB_SERVER_URL",
+  "GITHUB_SHA",
+  "GITHUB_WORKFLOW_REF",
+  "RUNNER_ENVIRONMENT",
+  "RELEASE_VERSION",
+  "RELEASE_SHA",
+  "RELEASE_DRY_RUN",
+  "RELEASE_TARBALL_SHA256",
+];
+export const VERIFY_VARIABLES = [
+  "GITHUB_ACTIONS",
+  "GITHUB_TOKEN",
+  "RELEASE_VERSION",
+  "RELEASE_SHA",
+  "RELEASE_DRY_RUN",
+  "RELEASE_TARBALL_SHA256",
+  "RELEASE_IMAGE_DIGEST",
+  "RELEASE_GITHUB_API_URL",
+  "RELEASE_NPM_REGISTRY_URL",
+  "RELEASE_GHCR_URL",
+];

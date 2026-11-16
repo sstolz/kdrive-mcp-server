@@ -257,7 +257,7 @@ runner-reset-check:
 # scripts/release.ts targets use Node built-ins only (no make setup) and pass
 # every variable by name; none of these targets is a prerequisite of another.
 release-check: _require-container-config
-	$(COMPOSE) run --rm -T -e GITHUB_ACTIONS -e GITHUB_SHA -e GITHUB_TOKEN -e RELEASE_VERSION -e RELEASE_SHA -e RELEASE_DRY_RUN -e RELEASE_PHASE -e RELEASE_GITHUB_API_URL -e RELEASE_NPM_REGISTRY_URL -e RELEASE_GHCR_URL dev node scripts/release.ts check
+	$(COMPOSE) run --rm -T -e GITHUB_ACTIONS -e GITHUB_SHA -e GITHUB_TOKEN -e RELEASE_VERSION -e RELEASE_SHA -e RELEASE_DRY_RUN -e RELEASE_PHASE -e RELEASE_IMAGE_DIGEST -e RELEASE_GITHUB_API_URL -e RELEASE_NPM_REGISTRY_URL -e RELEASE_GHCR_URL dev node scripts/release.ts check
 
 release-setup: _require-container-config
 	$(COMPOSE) build dev
@@ -273,8 +273,9 @@ release-npm: _require-container-config
 	fi
 
 # Host Docker (BR-370): the script validates its inputs before any docker call.
+export GITHUB_OUTPUT
 release-image:
 	/bin/sh scripts/release-image.sh
 
 release-verify: _require-container-config
-	$(COMPOSE) run --rm -T -e GITHUB_ACTIONS -e GITHUB_TOKEN -e RELEASE_VERSION -e RELEASE_SHA -e RELEASE_DRY_RUN -e RELEASE_TARBALL_SHA256 -e RELEASE_GITHUB_API_URL -e RELEASE_NPM_REGISTRY_URL -e RELEASE_GHCR_URL dev node scripts/release.ts verify
+	$(COMPOSE) run --rm -T -e GITHUB_ACTIONS -e GITHUB_TOKEN -e RELEASE_VERSION -e RELEASE_SHA -e RELEASE_DRY_RUN -e RELEASE_TARBALL_SHA256 -e RELEASE_IMAGE_DIGEST -e RELEASE_GITHUB_API_URL -e RELEASE_NPM_REGISTRY_URL -e RELEASE_GHCR_URL dev node scripts/release.ts verify

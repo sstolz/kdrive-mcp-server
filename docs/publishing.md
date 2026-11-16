@@ -130,7 +130,7 @@ ever stored in GitHub.
   check); after setting the package public, re-run only the failed
   `read-back` job.
 
-### Partial-failure recovery
+### Beta partial-failure recovery (F-024 v2 D-8)
 
 The image is pushed before npm is published, because a GHCR version can be
 deleted while an npm version can never be reused.
@@ -160,3 +160,102 @@ deleted while an npm version can never be reused.
 - deleting the GHCR version and dispatching again works only while the
   release commit is still `main`'s HEAD (BR-361); otherwise the next beta is
   released.
+
+### First stable publication (F-024 v3, #89)
+
+Publish `1.0.0` directly under npm `latest`; there is no `next` promotion.
+Stable images use exactly `<version>` and `latest` from one two-platform
+build. Beta uses npm `beta` and only the image `<version>` tag.
+
+The following preflight matrix applies in `release-check`:
+
+| Kind   | Phase                      | npm                                                                                                                                            | GHCR                                                               |
+| ------ | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| Beta   | verify dry                 | 404 is allowed; otherwise readable versions/time and candidate absent                                                                          | Candidate HEAD 404                                                 |
+| Beta   | verify real / image        | Candidate absent from versions/time; deprecated placeholder latest                                                                             | Candidate HEAD 404                                                 |
+| Beta   | npm                        | Same real npm preflight; publish with beta                                                                                                     | Candidate HEAD 200                                                 |
+| Stable | verify dry or real / image | 200, readable versions/time, candidate absent, exact deprecated placeholder latest; candidate above every published version except placeholder | Candidate and latest GET 404                                       |
+| Stable | npm                        | Same stable npm preflight; publish with latest                                                                                                 | Candidate and latest GET indexes each hash to RELEASE_IMAGE_DIGEST |
+
+For either kind, a non-placeholder npm `latest` or any stable version key in
+`versions` or `time` refuses publication: see #91 (F-024 v4). Resetting `latest`
+cannot reopen the gate. Stable ordering includes published betas, compares
+numeric components as exact integers and ignores build metadata. Ignore only
+`created` and `modified` in `time`; reject other non-SemVer keys in either
+object. Beta retains its existing unordered candidate checks before stable.
+
+Stable image builds parse the exact top-level `containerimage.digest` from
+buildx JSON metadata. The line `release-image: image digest sha256:<hex>`
+identifies the pushed package version. The workflow passes `image_digest` as
+`RELEASE_IMAGE_DIGEST` only to `publish-npm`'s release-check and read-back's
+release-verify. Stable verify/image input digests must be empty; stable npm
+preflight and read-back require a lowercase SHA-256 digest. Beta accepts an
+empty or valid digest and does not compare it.
+
+Read-back retries npm up to 20 times, 15 seconds apart. Stable requires the
+candidate entry's exact version and its key in `time`, npm `latest` naming
+that version, attestations, the tarball matching verify, and the original
+`0.0.0-placeholder.0` still deprecated. The beta tag need not move. Both stable
+image tags must serve valid indexes with exactly `linux/amd64` and
+`linux/arm64`, each raw GET body hashing to this run's `RELEASE_IMAGE_DIGEST`.
+Both require anonymous token access and anonymous HEAD 200. GET comparisons
+use `application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json`;
+HEAD is only an access check. Beta read-back still requires npm `beta`,
+another deprecated version on npm `latest`, provenance, the verified tarball,
+and its two-platform public image with GHCR latest absent or another digest.
+
+GHCR `latest` is mutable and is not protected by the `release` environment
+approval. Any same-repository workflow with `packages: write` can overwrite
+it. Pin images by the printed manifest digest, for example
+`ghcr.io/sstolz/kdrive-mcp-server@sha256:<hex>`. The image is unsigned (#92).
+GHCR latest may serve the candidate before npm does, until npm publishes or
+owner cleanup finishes; registries cannot switch atomically.
+
+Each release requires the exact-version, exact-SHA go and successful real
+dry run before a recovered redispatch or a new patch version too. Record
+both approvals and read-back evidence in the release ticket. Agents never
+re-run release jobs or touch registries.
+
+### Owner-only first-stable recovery (D-4)
+
+1. If an image was pushed but npm failed, was rejected or the second approval
+   expired, confirm npm has no candidate version in either `versions` or
+   `time`. Check uncertain npm publication outcomes first. Uncertain evidence
+   stops recovery. Fresh verify/image preflight is **blocked: image exists**;
+   phase npm can pass only with this run's digest and all unchanged gates.
+2. The owner first attempts a same-run re-run of the failed `publish-npm`
+   job: use "Re-run failed jobs" or that job alone, never "Re-run all jobs".
+   Reuse the same image digest, with every gate checked again. GitHub may
+   reuse the approval already granted to that job; the owner's re-run is
+   then the publication go. Record the behavior observed at first occurrence
+   in `docs/observations/`.
+3. A re-run is unavailable if the re-run window expired, run evidence is
+   uncertain, the run was cancelled, its artifacts are gone, or "Re-run all
+   jobs" was used (verify fails because
+   the image exists). Only when the same-run re-run is unavailable does the
+   owner delete the GHCR candidate **package version**, identified by the
+   digest in `release-image: image digest sha256:<hex>` and its exact
+   `<version>` and `latest` tags. Delete the package version, not one tag:
+   both tags share that digest and deletion removes both. An advanced main
+   does not block the same-run re-run of the approved commit; it only blocks
+   a new dispatch of the old commit (step 5).
+4. Until deletion read-back confirms absence, preflight is **blocked: cleanup
+   unconfirmed**. Confirm candidate and latest both GET 404. Preflight is now
+   **ready: placeholder and both tags absent**, subject to all other gates.
+   Uncertain image pushes require the same GET confirmation.
+5. After cleanup and a new successful dry run, redispatch only while the
+   commit is main HEAD. If main advanced, it is **blocked: old commit is not
+   main HEAD**: prepare a patch bump on main with its own tag, go and dry run.
+   Cleanup is required before either new-dispatch choice. No previous stable
+   or default-tag repointing exists in this scope.
+6. If npm accepted the candidate, it is **blocked for publication: see #91**.
+   Never delete or republish it. If read-back was skipped, verify manually;
+   if read-back failed, rerun only read-back. No new gated stable or beta
+   release is available until #91. A fix commit before npm accepts 1.0.0
+   forces 1.0.1; after npm acceptance this D-4 rule applies.
+
+Once VERSION is stable, default installation becomes
+`npm install -g @sstolz/kdrive-mcp-server`. Exact execution is
+`npx -y @sstolz/kdrive-mcp-server@<version>`; pin an exact version. Betas remain
+installable with `@beta` or an exact version. While VERSION is beta, the
+existing README.md and SPEC.md beta install text stays; #6 owns those edits.
