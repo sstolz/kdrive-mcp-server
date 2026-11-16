@@ -2733,6 +2733,14 @@ describe("F-024 v3 npm and image publication", () => {
           [name, STABLE, "false", metadata, diagnostic, false] as const,
       ),
     [
+      "extra compose stdout",
+      STABLE,
+      "false",
+      JSON.stringify(metadataSample),
+      "buildx metadata digest is not a sha256 digest",
+      false,
+    ] as const,
+    [
       "failed build logs out",
       STABLE,
       "false",
@@ -2742,8 +2750,20 @@ describe("F-024 v3 npm and image publication", () => {
     ] as const,
   ])(
     "BR-368 v2 BR-370 v2 image argv: %s",
-    async (_name, version, dry, metadata, diagnostic, failBuild) => {
+    async (name, version, dry, metadata, diagnostic, failBuild) => {
       const fake = fakeBin();
+      if (name === "extra compose stdout") {
+        executable(
+          join(fake.bin, "docker"),
+          FAKE_DOCKER.replace(
+            "  const result = spawnSync(argv[index + 1]",
+            '  console.log("compose preamble");\n  const result = spawnSync(argv[index + 1]',
+          ).replace(
+            "  process.exit(result.status === null ? 1 : result.status);",
+            '  console.log("\\ncompose epilogue");\n  process.exit(result.status === null ? 1 : result.status);',
+          ),
+        );
+      }
       const cwd = temporary("release-v3-image-");
       const output = join(cwd, "output");
       const metadataPath = join(cwd, "metadata.json");
@@ -3237,6 +3257,7 @@ describe("F-024 v3 stable release and recovery", () => {
       writeFileSync(output, "");
       let releaseVersion = STABLE;
       let releaseSha = repo.sha;
+      let dispatchedSha = repo.sha;
       const state = releaseState(repo.sha);
       // Package versions keyed by digest: deleting one removes every tag on it.
       const images = new Map<string, Set<string>>();
@@ -3277,7 +3298,7 @@ describe("F-024 v3 stable release and recovery", () => {
               GITHUB_OUTPUT: output,
               RELEASE_VERSION: releaseVersion,
               RELEASE_SHA: releaseSha,
-              GITHUB_SHA: releaseSha,
+              GITHUB_SHA: dispatchedSha,
               RELEASE_DRY_RUN: "false",
               GITHUB_TOKEN: TOKEN,
               RELEASE_RETRY_DELAY_MS: "0",
@@ -3456,8 +3477,13 @@ describe("F-024 v3 stable release and recovery", () => {
           expect(journal).not.toContain("owner cleanup");
         } else {
           // Re-run unavailable (expired, partial image job or main moved): owner cleanup first.
-          if (scenario === "main advanced")
-            repo.git("update-ref", "refs/remotes/origin/main", repo.parent);
+          if (scenario === "main advanced") {
+            writeFileSync(join(repo.root, "main-advanced.txt"), "new change\n");
+            repo.git("add", "main-advanced.txt");
+            repo.git("commit", "-q", "-m", "advance main fixture");
+            dispatchedSha = repo.git("rev-parse", "HEAD");
+            repo.git("update-ref", "refs/remotes/origin/main", dispatchedSha);
+          }
           ownerDelete();
           expect(deletionConfirmed).toBe(false);
           expect(images.size).toBe(0);
@@ -3474,8 +3500,7 @@ describe("F-024 v3 stable release and recovery", () => {
           ]);
           deletionConfirmed = true;
           if (scenario === "main advanced") {
-            // GNU Make exits 2 when the recipe fails.
-            expect(preflight.status).toBe(2);
+            reasonViaMake(preflight, "sha is not the checked-out HEAD");
             // A new patch commit on main gets its own version, tag, go and dry-run evidence.
             const patch = "1.0.1";
             writeFileSync(join(repo.root, "VERSION"), `${patch}\n`);
@@ -3505,6 +3530,7 @@ describe("F-024 v3 stable release and recovery", () => {
             });
             releaseVersion = patch;
             releaseSha = sha;
+            dispatchedSha = sha;
             state.ciRuns = releaseState(sha).ciRuns;
             packed = packTarball(prepared, {
               name: "@sstolz/kdrive-mcp-server",

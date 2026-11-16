@@ -134,6 +134,10 @@ try {
 		printf '%s\n' 'release-image: buildx metadata digest is not a sha256 digest' >&2
 		exit 1
 	}
+	if test "${#digest}" -ne 71 || ! matches "$digest" '^sha256:[0-9a-f]{64}$'; then
+		printf '%s\n' 'release-image: buildx metadata digest is not a sha256 digest' >&2
+		exit 1
+	fi
 	if test -n "${GITHUB_OUTPUT-}"; then
 		printf 'image_digest=%s\n' "$digest" >> "$GITHUB_OUTPUT" || exit 1
 	fi
