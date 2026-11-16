@@ -53,8 +53,6 @@ container image is `ghcr.io/sstolz/kdrive-mcp-server:0.6.0-beta.2`
 is `sha256:6e561933d78e1443db3b67356d6d081362531158c77cd8a47fe895e1a5d5a866`), and the npm package is `@sstolz/kdrive-mcp-server@beta`.
 Changes are listed in [CHANGELOG.md](CHANGELOG.md).
 
-<a id="quick-start"></a>
-
 ## What it offers
 
 - **Three modes**, cumulative: `read` (default), `write`, `share`. Today `share`
@@ -76,9 +74,11 @@ configure (startup checks this), and the drive ID
 ([Values from the Infomaniak side](#values-from-the-infomaniak-side)).
 Settings use [environment variables](#configure).
 
-Only a beta is published: `0.6.0-beta.2`, under the npm dist-tag `beta`
-([publishing](docs/publishing.md)). Pin the exact version as below. With a
-dist-tag, `npx` fetches whatever the tag points to at each start.
+Only betas are published; the current one is `0.6.0-beta.2`, under the npm
+dist-tag `beta` ([publishing](docs/publishing.md)). `latest` points to a
+deprecated placeholder, so never run the package without a version. Pin the
+exact version as below: with a dist-tag, `npx` fetches whatever the tag points
+to at each start.
 
 Store your token in `/home/you/.config/kdrive/token`, a regular UTF-8 file
 containing only the token (a final newline is accepted). The token path is
@@ -104,8 +104,7 @@ need it ([Limits and risks](#limits-and-risks)).
 #### With Docker
 
 You can use the published image `ghcr.io/sstolz/kdrive-mcp-server` instead.
-Docker must be running and accessible to the client. For a remote deployment,
-you also need Docker Compose and Traefik.
+Docker must be running and accessible to the client.
 
 Read the published image's digest, then pull it by digest: a beta never gets
 `latest`, and tags can be overwritten.
@@ -146,6 +145,10 @@ from your client, then switch to `write` only if you need it
 ([Limits and risks](#limits-and-risks)).
 
 ### Remote (HTTP behind Traefik with OAuth)
+
+You need Docker with Compose, Traefik, the same admin-role API token and drive
+ID ([Values from the Infomaniak side](#values-from-the-infomaniak-side)), and
+the image pinned by digest as shown under [With Docker](#with-docker).
 
 For web and mobile clients, use [examples/compose.yaml](examples/compose.yaml)
 for an existing Traefik deployment, or
