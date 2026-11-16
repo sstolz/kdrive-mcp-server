@@ -1,6 +1,6 @@
 ---
 id: F-024
-title: Gated beta and stable publication
+title: Gated first stable publication
 ticket: "#89"
 status: draft
 version: 3
@@ -18,8 +18,11 @@ This version adds stable publication to the existing gated workflow. It
 changes version validation, tag selection, registry preflight and read-back.
 It affects the owner who approves releases, maintainers who prepare them,
 and users who install the default stable package or pull the stable image.
-Runtime behavior stays unchanged. Betas remain available after the first stable
-release under the ordering and tag rules below.
+Runtime behavior stays unchanged. The owner narrowed v3 on 2026-11-16 to
+the first stable release only. Stable publication requires npm `latest` to be
+exactly the deprecated `0.0.0-placeholder.0`. Once it is not that placeholder,
+every release is refused. Later releases belong to #91 (F-024 v4).
+Betas before the first stable retain v1/v2 behavior.
 
 The completed v2 contract is preserved verbatim in
 [the v2 snapshot](history/F-024-v2.md). The
@@ -36,8 +39,13 @@ the spec or implement it.
 
 ## Scope
 
-- Extend input validation in `scripts/release.ts` and
-  `scripts/release-image.sh` to accept stable versions.
+- Extend `scripts/release.ts` for first-stable validation, preflight and
+  read-back. Extend `scripts/release-image.sh` for stable tags and buildx
+  metadata-file parsing.
+- Extend `.github/workflows/release.yml` with the image job output. Update
+  Makefile release targets to pass `RELEASE_IMAGE_DIGEST` to check/verify
+  for stable releases and make `GITHUB_OUTPUT` available to the image job.
+  Update their closed-set policy tests for these exact changes.
 - Select npm and GHCR tags by release kind. Keep one release workflow and its
   current job order, permissions, environment and approval gates.
 - Extend `release-check` and `release-verify` for stable registry state.
@@ -56,6 +64,13 @@ the spec or implement it.
 
 ### Out of scope
 
+- Later stable releases, betas after stable, recovery of a deprecated stable
+  npm `latest`, and repointing GHCR `latest`: #91 (F-024 v4).
+- README.md and SPEC.md install strings. Their changes belong to the
+  release-preparation PR of #6. While VERSION is beta, v1 text stays.
+- Changes to `docs/publishing.md` in this spec phase. The guide changes only
+  in the implementation PR.
+
 - The `1.0.0` version bump, CHANGELOG promotion and README version strings.
   These belong to the release-preparation PR of #6.
 - Any publication, tag creation, real workflow dispatch or deployment approval.
@@ -68,7 +83,7 @@ the spec or implement it.
 ## Business rules
 
 These are proposed replacement texts. BR files are not edited in this task.
-All eight affected rules currently have version 1. Their purpose stays the
+All twelve affected rules currently have version 1. Their purpose stays the
 same, so each becomes version 2. No new BR ID; re-check the next free IDs
 before freeze and before the PR. Never reuse withdrawn IDs.
 
@@ -80,7 +95,7 @@ before freeze and before the PR. Never reuse withdrawn IDs.
   stable release, published directly with npm `latest` and GHCR `<version>`
   and `latest`; beta publishes use npm `beta` and only GHCR `<version>`.
   npm `latest` stays on the deprecated placeholder until the first stable
-  release. From the first stable release, the default install is
+  release. Only once VERSION is stable, the default install is
   `npm install -g @sstolz/kdrive-mcp-server`. Exact execution uses
   `npx -y @sstolz/kdrive-mcp-server@<version>`. Advise users to pin an exact
   version. Betas remain installable with `@beta` or an exact version.
@@ -89,7 +104,10 @@ before freeze and before the PR. Never reuse withdrawn IDs.
   BR-373 v2 read-back for each release kind. Stable recovery follows D-4
   below. The recovery cases derive from
   [features/history/F-024-v2.md D-8](history/F-024-v2.md#decisions),
-  with the stable GHCR default restoration added here.
+  limited to first-stable cleanup here. While VERSION is beta, BR-354 v1
+  install text remains. Once VERSION is stable, tests assert that README.md
+  and SPEC.md contain no `@beta` default. Explicit beta examples may remain.
+  Those install edits belong to #6, not #89.
   Verified by: AC-24, AC-32.
 - **BR-359 v2** — Every release mode validates inputs before Git, any child
   process, Docker, a request or input interpolation. `RELEASE_VERSION` is
@@ -101,43 +119,34 @@ before freeze and before the PR. Never reuse withdrawn IDs.
   `RELEASE_SHA` remains exactly 40 lowercase hex characters;
   `RELEASE_DRY_RUN` remains `true` or `false`; `release-check` requires
   `RELEASE_PHASE` to be `verify`, `image` or `npm`. Their v1 diagnostics,
-  input-only failure output and exit 1 remain unchanged.
+  input-only failure output and exit 1 remain unchanged. For stable phase
+  `npm` and stable read-back, `RELEASE_IMAGE_DIGEST` joins this validation-first
+  list and must match `sha256:<64 lowercase hex>`. Missing or malformed values
+  fail before any command or request. Beta does not require this input.
   Verified by: AC-25.
-- **BR-363 v2** — In both dry-run modes and every phase, npm must return
-  200 with readable `versions` and `time` objects. Neither object contains
-  the candidate. A stable candidate is strictly greater, under SemVer
-  precedence, than every published version in either object except exactly
-  `0.0.0-placeholder.0`, and than npm `latest`. Include published betas in
-  this comparison. Compare numeric components as exact integers, without
-  lossy conversion. Build metadata does not change precedence.
-  The exact placeholder remains present with a non-empty `deprecated` string.
-  npm `latest` names that placeholder or an existing, non-deprecated stable
-  version. A deprecated stable `latest` fails closed for owner recovery;
-  it is never a placeholder. Missing, dangling, malformed, metadata-bearing
-  or other pre-release `latest` values fail closed. Unreadable documents
-  and unexpected statuses fail closed.
-  A beta retains the other v1 checks, but may follow a stable release only
-  when its SemVer precedence is greater than the stable npm `latest`.
-  A beta never moves npm `latest`. Only `0.0.0-placeholder.0` qualifies as
-  the placeholder, even if another version is deprecated.
+- **BR-363 v2** — Stable preflight requires npm 200 with readable `versions`
+  and `time` objects. The candidate is absent from both. npm `latest` is
+  exactly `0.0.0-placeholder.0`, whose version entry has a non-empty
+  `deprecated` string. The candidate is strictly greater in SemVer precedence
+  than every published version in either object except that placeholder.
+  In `time`, ignore exactly `created` and `modified`. Every other key must
+  be valid SemVer. Malformed version keys fail closed. Compare numeric
+  components as exact integers. Build metadata does not affect precedence.
+  Include published betas, even betas above the candidate's base version.
+  A readable npm document with non-placeholder `latest` refuses every
+  release kind with the #91 diagnostic below, including dry runs. Missing
+  or malformed registry data fails closed. Stable has no npm-404 exemption.
 
-  GHCR keeps the v1 authenticated pull-token and status handling. In phases
-  `verify` and `image`, `<version>` must return 404. If npm `latest` is the
-  placeholder, GHCR `latest` must return 404. If npm `latest` is an older
-  stable version, that GHCR version and GHCR `latest` must both return 200
-  and resolve to the same manifest digest. Thus GHCR `latest` cannot name an
-  unrelated image before a stable push. In phase `npm`, the image has already
-  been pushed: `<version>` and `latest` must both return 200 and resolve to
-  this run's pushed manifest digest. In phase `npm`, re-run only the npm
-  conditions above on the previous `latest` plus this new GHCR pair check.
-  Do not re-run the pre-push GHCR absence or prior-image comparison checks.
-  Missing digests,
-  malformed manifests, unexpected statuses and token failures fail closed.
-  Manifest digests are SHA-256 hashes of the raw manifest response bytes,
-  using GET for every compared tag with the identical Accept list:
+  Before stable image publication, both GHCR candidate and `latest` must
+  return 404. In stable phase `npm`, both must return 200 and resolve to
+  exactly `RELEASE_IMAGE_DIGEST`. Compute SHA-256 over raw GET response bytes
+  with the identical Accept list for both tags:
   `application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json`.
-  Never derive a comparison digest from HEAD. A HEAD-only digest cannot pass.
-  These checks run before each publish step, alongside BR-378 v1.
+  Never compare HEAD digests. Require valid image indexes and fail closed
+  on missing digests, token errors or unexpected statuses. Keep v1 token
+  and unexpected-status diagnostics. BR-378 still runs in every phase.
+  Before first stable, beta retains v1/v2 checks, including npm dry-run 404,
+  no ordering against published betas, and no new GHCR latest preflight.
   Verified by: AC-26, AC-27, AC-28.
 - **BR-368 v2** — A beta release uses npm dist-tag `beta` and pushes only
   `ghcr.io/sstolz/kdrive-mcp-server:<version>`. It never writes `latest`.
@@ -162,19 +171,20 @@ before freeze and before the PR. Never reuse withdrawn IDs.
   existing source, version and revision labels, and exactly the references
   selected by BR-368 v2. Stable uses two `--tag` arguments on one build;
   beta uses one. The real build writes a buildx `--metadata-file`.
-  Validate its `containerimage.digest` as `sha256:<64 lowercase hex>` and
+  For stable only, validate its `containerimage.digest` as `sha256:<64 lowercase hex>` and
   expose it as the `publish-image` job output `image_digest`.
-  Pass that output as `RELEASE_IMAGE_DIGEST` only to phase `npm` and
-  `read-back`; add `publish-image` to read-back dependencies. Reject a missing
+  For stable, pass that output as `RELEASE_IMAGE_DIGEST` only to phase `npm`
+  and `read-back`; add `publish-image` to read-back dependencies. The image
+  recipe writes `image_digest=<digest>` to `GITHUB_OUTPUT` after validation.
+  The workflow exposes `steps.release-image.outputs.image_digest` as
+  `needs.publish-image.outputs.image_digest`. Beta behavior stays unchanged. Reject a missing
   or malformed digest before image requests. Dry builds produce no digest
   requirement. Logout still runs on exit, including build failure.
   Verified by: AC-30, AC-31, AC-32.
 - **BR-372 v2** — After BR-359 v2 validation, npm read-back keeps the v1
   retry limit of 20 attempts, 15 seconds apart, until all npm conditions
-  hold. For beta, `beta` names the candidate and `latest` remains the exact
-  deprecated placeholder or a non-deprecated stable version lower than the
-  candidate; publication never changes that prior `latest`. Other v1 beta
-  conditions remain unchanged. For stable,
+  hold. For beta, all v1/v2 read-back conditions remain unchanged.
+  No stable-default support is added to beta. For stable,
   `versions[<version>]` exists and records the exact release version;
   `dist-tags.latest` equals `<version>`; that exact version has
   `dist.attestations`; and its tarball bytes pass BR-379 v1 against the
@@ -189,7 +199,7 @@ before freeze and before the PR. Never reuse withdrawn IDs.
   among non-attestation entries. For beta, `latest` remains absent or has
   another digest, as in v1. For stable, `<version>` and `latest` both return
   200 and resolve to exactly `RELEASE_IMAGE_DIGEST` from this run.
-  Beta version read-back also equals this run's digest. An anonymous token request
+  Beta read-back stays unchanged from v2 and requires no run digest. An anonymous token request
   and anonymous manifest HEAD must succeed for both stable references.
   Digest comparisons use GET and the BR-363 v2 Accept list. HEAD is only
   an anonymous access check. Both stable tags must serve the checked index.
@@ -201,10 +211,14 @@ before freeze and before the PR. Never reuse withdrawn IDs.
 
 ### Unchanged rules and gates
 
-BR-353 v1, BR-355 v1 through BR-358 v1, BR-360 v1 through BR-362 v1,
-BR-364 v1 through BR-367 v1, BR-371 v1, BR-374 v1, BR-375 v1,
+BR-353 v1, BR-360 v1 through BR-362 v1,
+BR-364 v1 through BR-367 v1, BR-371 v1, BR-374 v1,
 BR-378 v1 and BR-379 v1 retain their accepted texts. BR-016 v3 and
-BR-178 v3 remain unchanged. This spec does not restore the withdrawn rules
+BR-178 v3 and BR-355 v1 remain unchanged. BR-356 through BR-358 and
+BR-375 retain their gates. Their workflow/output and environment-list clauses need
+pending v2 sections only for the stable digest hand-off specified here.
+BR-356 v2, BR-357 v2, BR-358 v2 and BR-375 v2 cover that plumbing;
+BR-355 remains v1. This spec does not restore the withdrawn rules
 or any dependency rule superseded by later features.
 
 In particular, an owner go names the version and commit. A successful real
@@ -229,16 +243,69 @@ PR, using that PR's date and the summary below:
 
 `- v2 — <implementation-PR-date> — F-024 v3 (#89) — <summary>; pending acceptance, v1 stays the accepted rule until acceptance`
 
-| Rule      | Summary                                            |
-| --------- | -------------------------------------------------- |
-| BR-354 v2 | Document stable tags, checks and recovery          |
-| BR-359 v2 | Accept stable inputs without metadata              |
-| BR-363 v2 | Check stable ordering and phase-specific tag state |
-| BR-368 v2 | Map stable releases to both latest tags            |
-| BR-369 v2 | Select the npm publish tag by release kind         |
-| BR-370 v2 | Push both stable image tags from one build         |
-| BR-372 v2 | Verify stable npm latest and preserved placeholder |
-| BR-373 v2 | Verify stable image tag equality and public access |
+The final version changes are BR-354, BR-356, BR-357, BR-358, BR-359,
+BR-363, BR-368, BR-369, BR-370, BR-372, BR-373 and BR-375: v1 to v2.
+BR-356/357/358/375 change only the stable digest output, dependencies,
+closed-set workflow validation and Makefile environment forwarding. Their
+existing gate clauses remain. Verified by AC-30, AC-32 and AC-33.
+
+### Registry conditions by kind and phase
+
+Each preflight row also requires all unchanged owner, commit, CI and
+environment gates. `preflight` means phase `verify`. Phase `image` and phase
+`npm` are real-run checks. Dry builds never publish. All rows refuse a
+non-placeholder npm `latest` before publication with the #91 diagnostic.
+Stable read-back intentionally sees the newly published stable `latest`.
+
+| Kind   | Phase                   | Exact npm conditions                                                                                                                                                                                       | Exact GHCR conditions                                                                                                                                                          |
+| ------ | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Beta   | preflight dry_run=true  | Unchanged from v2: 404 passes; 200 requires readable versions/time and candidate absent from both; other statuses fail. If latest is present and not the exact placeholder, refuse with #91.               | Unchanged from v2: authenticated token 200; candidate HEAD 404; no latest check.                                                                                               |
+| Beta   | preflight dry_run=false | Unchanged from v2: 200; candidate absent from versions/time; latest names another deprecated version, subject to the exact-placeholder boundary above.                                                     | Unchanged from v2: authenticated token 200; candidate HEAD 404; no latest check.                                                                                               |
+| Beta   | phase image             | Unchanged from v2: same real preflight npm conditions.                                                                                                                                                     | Unchanged from v2: candidate HEAD 404; push only version, both platforms.                                                                                                      |
+| Beta   | phase npm               | Unchanged from v2: same real preflight npm conditions; publish with beta.                                                                                                                                  | Unchanged from v2: authenticated token 200; candidate HEAD 200; no latest check or run digest.                                                                                 |
+| Beta   | read-back               | Unchanged from v2: candidate present; beta equals candidate; latest names another deprecated version; attestations present; tarball matches verify; 20 attempts, 15 seconds apart.                         | Unchanged from v2: candidate GET is an index with exactly both platforms; latest 404 or different GET digest; anonymous token and candidate HEAD 200; print digest.            |
+| Stable | preflight dry_run=true  | 200; exact deprecated placeholder latest; readable versions/time; candidate absent and strictly above all published versions except placeholder; only created/modified time keys ignored.                  | Authenticated token 200; candidate and latest GET 404.                                                                                                                         |
+| Stable | preflight dry_run=false | Same stable npm conditions as dry_run=true.                                                                                                                                                                | Authenticated token 200; candidate and latest GET 404.                                                                                                                         |
+| Stable | phase image             | Same stable npm conditions as preflight.                                                                                                                                                                   | Candidate and latest GET 404; push both tags from one two-platform build; export metadata digest.                                                                              |
+| Stable | phase npm               | Same stable npm conditions as preflight; publish with latest.                                                                                                                                              | Both tags GET 200, valid indexes, each raw-body digest equals RELEASE_IMAGE_DIGEST.                                                                                            |
+| Stable | read-back               | Candidate entry records exact version; latest equals candidate; attestations present; tarball matches verify; exact placeholder remains deprecated; beta tag need not move; 20 attempts, 15 seconds apart. | Both tags GET 200, each digest equals RELEASE_IMAGE_DIGEST; exactly linux/amd64 and linux/arm64; anonymous token and HEAD 200 for both; HEAD never supplies comparison digest. |
+
+### Exact diagnostics and new read-back output
+
+The following strings are fixed diagnostic reasons. Existing report prefixes
+and input summaries remain. New read-back lines are shown in full. In those
+lines `<reason>` is exactly one of the listed alternatives; `<hex>` is 64
+lowercase hex digits. Do not print an untrusted registry key in a diagnostic.
+Implementation removes `unsupported pre-release` and
+`stable releases are out of scope (F-024 v1)` from code and tests.
+
+| Input or condition                                    | Exact string                                                                                                                                                  |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 01.0.0                                                | `version is not a SemVer version`                                                                                                                             |
+| v1.0.0                                                | `version is not a SemVer version`                                                                                                                             |
+| 1.0.0-beta.01                                         | `version is not a SemVer version`                                                                                                                             |
+| 1.0.0-rc.1                                            | `unsupported release version`                                                                                                                                 |
+| 1.0.0+b                                               | `unsupported release version`                                                                                                                                 |
+| Stable candidate not greater than a published version | `stable version is not greater than every published version`                                                                                                  |
+| Non-placeholder npm latest, either release kind       | `releases after the first stable are out of scope; see #91 (F-024 v4)`                                                                                        |
+| Existing GHCR latest before stable push               | `GHCR latest already exists; first stable requires 404`                                                                                                       |
+| Either stable tag digest differs from run digest      | `image digest does not match RELEASE_IMAGE_DIGEST`                                                                                                            |
+| Non-SemVer time key other than created/modified       | `npm time contains a non-SemVer version key`                                                                                                                  |
+| Non-SemVer versions key                               | `npm versions contains a non-SemVer version key`                                                                                                              |
+| Missing or malformed stable input digest              | `RELEASE_IMAGE_DIGEST is not a sha256 digest`                                                                                                                 |
+| Missing or malformed stable buildx metadata digest    | `buildx metadata digest is not a sha256 digest`                                                                                                               |
+| New stable npm latest line                            | `release-verify: npm latest tag ok` or `release-verify: npm latest tag FAIL latest does not name the version`                                                 |
+| New stable placeholder line                           | `release-verify: npm original placeholder deprecated ok` or `release-verify: npm original placeholder deprecated FAIL original placeholder is not deprecated` |
+| New stable candidate digest line                      | `release-verify: image version digest ok` or `release-verify: image version digest FAIL <reason>`                                                             |
+| New stable latest digest line                         | `release-verify: image latest digest ok` or `release-verify: image latest digest FAIL <reason>`                                                               |
+| Digest-line reason alternatives                       | `image digest does not match RELEASE_IMAGE_DIGEST`; `image manifest unavailable`; `image manifest invalid`                                                    |
+| New stable latest public line                         | `release-verify: image latest is public (P-3) ok` or `release-verify: image latest is public (P-3) FAIL anonymous pull failed`                                |
+| Existing printed digest, unchanged                    | `release-verify: image digest sha256:<hex>`                                                                                                                   |
+
+Retain existing version-platform, version-public, provenance and tarball
+lines. Add no other new read-back condition lines. Failed manifest status or
+token access uses `image manifest unavailable` on the new digest lines;
+invalid index content uses `image manifest invalid`.
 
 ## Acceptance criteria
 
@@ -246,26 +313,16 @@ AC-01 through AC-23 remain historical evidence for v2. The criteria below
 cover v3. All listed new test names are planned, not implemented or passing.
 Use versioned BR citations in those tests. Tests run through `make check`.
 
-- **AC-24 (BR-354 v2)** — Given the updated publishing guide, when its
-  contract test reads it, then it describes direct `1.0.0` stable publication,
-  beta and stable tag mappings, stable preflight, full read-back, digest
-  pinning and unchanged P-0 through P-5. Pin these exact guide strings:
-  `1.0.0 is the first stable release`,
-  `npm install -g @sstolz/kdrive-mcp-server`,
-  `npx -y @sstolz/kdrive-mcp-server@<version>`,
-  `Pin an exact version`, `Betas remain installable with @beta or an exact version`,
-  `Stable: npm latest; GHCR <version> and latest`,
-  `Beta: npm beta; GHCR <version> only`, and
-  `Agents never perform registry deletion`.
-  In `tests/release-policy.test.ts`, rename
-  `BR-354 documentation uses the scoped name` to
-  `BR-354 v2 documentation uses the scoped name`. Replace its default README
-  expectation `npm install -g @sstolz/kdrive-mcp-server@beta` with the default
-  install string above. Replace its SPEC line prefix
-  `npx @sstolz/kdrive-mcp-server` with the exact versioned `npx -y` command
-  above. Keep explicit beta examples as beta examples. Replace old recovery
-  string assertions with the steps in D-4 and the guide. Verified by:
-  `tests/release.test.ts`, `BR-354 v2 publishing guide covers stable and beta`.
+- **AC-24 (BR-354 v2)** — Given the implementation guide, when
+  `BR-354 v2 guide covers first stable recovery` runs in
+  `tests/release-policy.test.ts`, then the guide describes the phase table,
+  direct 1.0.0, tags, digest pinning, D-4 cleanup and unchanged P-0 through
+  P-5. Given beta VERSION, when `BR-354 v2 install text follows VERSION`
+  runs, then v1 README/SPEC expectations remain. Given stable VERSION in
+  the #6 release-prep fixture, when that test runs, then default install
+  lines contain no `@beta`, use `npm install -g @sstolz/kdrive-mcp-server`
+  and exact execution uses `npx -y @sstolz/kdrive-mcp-server@<version>`.
+  This spec phase changes neither the guide nor install strings.
 - **AC-25 (BR-359 v2)** — Given each release entry point, when versions
   `1.0.0`, `1.2.3`, `0.0.0` and `0.6.0-beta.2` are supplied with other valid
   inputs, then validation passes. Given leading zeros, whitespace, `v1.0.0`,
@@ -275,38 +332,30 @@ Use versioned BR citations in those tests. Tests run through `make check`.
   Verified by: `tests/release.test.ts`,
   `BR-359 v2 accepts stable and beta inputs: %s` and
   `BR-359 v2 refuses inputs before side effects: %s`.
-- **AC-26 (BR-363 v2)** — Given an unpublished stable candidate and the
-  deprecated exact placeholder or an older stable npm `latest`, when
-  preflight runs in either dry-run mode, then npm checks pass. Given a
-  missing, dangling, malformed, pre-release, metadata-bearing, equal or newer
-  `latest`, a missing deprecation on the placeholder, an unreadable document,
-  non-200 response, or candidate in either `versions` or `time`, when it
-  runs, then npm checks fail. Ordering cases include `1.9.9 < 1.10.0`,
-  `1.10.9 < 1.11.0`, `1.99.99 < 2.0.0`, equality, reverse order and integers
-  beyond JavaScript's safe integer range. With published `0.6.0-beta.2`,
-  refuse stable `0.5.0`, equality with an already published `0.5.0`, and
-  the already published `0.6.0-beta.2`; accept stable `0.6.0` and `1.0.0`.
-  Refuse `0.0.0`. After stable `1.0.0`, accept `1.1.0-beta.1` without
-  moving `latest`; refuse `1.0.0-beta.1`. Refuse deprecated stable `latest`
-  and any substitute deprecated placeholder. Verified by:
-  `tests/release.test.ts`, `BR-363 v2 stable npm preflight: %s`.
-- **AC-27 (BR-363 v2)** — Given phase `verify` or `image`, when the candidate
-  GHCR version is absent and `latest` is absent for the placeholder, or equals
-  the older npm stable version's digest, then preflight passes. Given an
-  existing candidate, unexpected `latest`, mismatched digest, missing older
-  stable image, token failure or unexpected status, when preflight runs,
-  then it fails. Record GET and the identical Accept header for both tags.
-  A double offering equal HEAD digests but different GET bodies must fail.
-  Verified by: `tests/release.test.ts`,
-  `BR-363 v2 stable image preflight: %s`.
-- **AC-28 (BR-363 v2)** — Given phase `npm` after a stable push and npm still
-  on its valid previous `latest` (placeholder or older stable `1.0.0`
-  before candidate `1.0.1`), when both GHCR tags name this run's digest,
-  then preflight passes without the old-image comparison. Given either tag
-  missing, different digests, both tags equal to another run's digest, or
-  missing/malformed `RELEASE_IMAGE_DIGEST`,
-  when preflight runs, then it fails before npm publication. Verified by:
-  `tests/release.test.ts`, `BR-363 v2 stable npm phase image check: %s`.
+- **AC-26 (BR-363 v2)** — Given npm fixtures for every phase-table row,
+  when `BR-363 v2 npm phase matrix: %s` runs in `tests/release.test.ts`,
+  then exactly those conditions pass. Test stable 404 refusal and beta
+  dry-run 404 acceptance. Test every non-placeholder latest, including
+  deprecated stable, for both kinds and dry-run values with the #91 reason.
+  Test created/modified ignored, all other malformed time keys refused,
+  candidate in either object refused, placeholder deprecation required,
+  and unreadable/status failures. Test exact integer ordering above the safe
+  integer range, 1.9.9 versus 1.10.0, equality and reverse order. Published
+  0.6.0-beta.2 refuses stable 0.5.0 but permits 0.6.0 and 1.0.0.
+  An unpublished beta below an existing beta remains accepted before stable.
+- **AC-27 (BR-363 v2)** — Given GHCR fixtures for every phase-table row,
+  when `BR-363 v2 GHCR phase matrix: %s` runs in `tests/release.test.ts`,
+  then stable requires both tags absent before push and beta keeps v2 HEAD
+  checks. Existing latest, candidate, token failures and unexpected statuses
+  fail with the specified diagnostics. Record methods and Accept headers.
+- **AC-28 (BR-359 v2, BR-363 v2)** — Given stable phase npm, when
+  `BR-363 v2 stable digest binding: %s` runs in `tests/release.test.ts`,
+  then only both GET bodies matching the run digest pass. Equal HEAD digests
+  with different GET bytes fail. Two equal tags from another run fail.
+  Missing/malformed input digest fails before commands or requests in check
+  and verify. Beta needs no digest. Both GET requests use the exact Accept
+  list above. `F-024 v3 exact diagnostics: %s` asserts every diagnostics-table
+  string and absence of both removed legacy messages in code and tests.
 - **AC-29 (BR-368 v2, BR-369 v2)** — Given fake npm and a valid stable
   tarball, when dry or real publication runs, then its exact argv uses
   `--tag latest --access public --ignore-scripts --provenance`, with
@@ -317,12 +366,12 @@ Use versioned BR citations in those tests. Tests run through `make check`.
   refused as in v1. Verified by: `tests/release.test.ts`,
   `BR-368 v2 BR-369 v2 npm exact argv: %s` and
   `BR-369 v2 stable publish safeguards: %s`.
-- **AC-30 (BR-368 v2, BR-370 v2)** — Given fake Docker, when a real stable
+- **AC-30 (BR-356 v2, BR-357 v2, BR-358 v2, BR-368 v2, BR-370 v2, BR-375 v2)** — Given fake Docker, when a real stable
   image build runs, then one push builds both platforms with exactly the
   version and `latest` tags, existing labels and stdin login. Given beta,
   when it runs, then there is only the version tag. Given either kind in dry
   run, when it runs, then no login, tag or push occurs. Given a failed real
-  build, when it exits, then logout still runs. Given a successful push,
+  build, when it exits, then logout still runs. Given a successful stable push,
   when buildx metadata is read, then its digest is validated, exported and
   passed to npm and read-back. Missing or malformed metadata stops the
   dependent jobs. Verified by:
@@ -335,7 +384,7 @@ Use versioned BR citations in those tests. Tests run through `make check`.
   turn, including anonymous access denied on either image tag, when
   read-back runs, then it fails. Given delayed npm consistency, when the
   conditions appear within 20 attempts, then it succeeds; otherwise it fails
-  after attempt 20. Beta read-back uses the updated stable-default conditions above. Verified
+  after attempt 20. Beta read-back remains unchanged from v2, without run-digest binding. Verified
   by: `tests/release.test.ts`, `BR-372 v2 stable npm read-back: %s`,
   `BR-373 v2 stable image read-back: %s`, and the existing
   `BR-372 v2 BR-373 v2 read-back: %s` beta cases.
@@ -358,14 +407,18 @@ Use versioned BR citations in those tests. Tests run through `make check`.
   failed npm preflight, failed npm publication, and a partial image push.
   Apply every D-4 recovery step to the doubles through an owner-only harness
   action, never an agent registry command. Assert each stated preflight
-  result after cleanup, default restoration, redispatch and patch bump.
-  Test both placeholder and older stable defaults, main HEAD unchanged and
+  result after each D-4 step, redispatch and patch bump.
+  The GHCR double models package versions keyed by digest; deleting a package
+  version removes every tag on that digest. The npm double models versions,
+  time, dist-tags, tarballs and attestations, including uncertain publish
+  success. The fake Docker writes buildx metadata and captures exact argv.
+  Test placeholder defaults only, main HEAD unchanged and
   advanced, uncertain npm success that did publish, and failed read-back.
   Assert no deletion or republish after npm accepted the version.
   Verified by: `tests/release.test.ts`,
   `F-024 v3 stable release and recovery rehearsal: %s` and
   `BR-354 v2 stable release procedure preserves owner gates`.
-- **AC-33 (unchanged BR-355 v1 through BR-358 v1, BR-360 v1 through
+- **AC-33 (BR-355 v1, BR-356 v2, BR-357 v2, BR-358 v2, BR-375 v2; unchanged BR-360 v1 through
   BR-362 v1, BR-371 v1, BR-378 v1)** — Given the workflow and stable input
   fixtures, when workflow policy and release checks run, then approvals,
   least permissions, job order, tagged dispatched main HEAD, CI evidence and
@@ -399,47 +452,41 @@ Use versioned BR citations in those tests. Tests run through `make check`.
 
 ## Decisions
 
-- **D-1 Direct stable release.** Follow the owner decisions of 2026-11-16
-  on #6. Publish `1.0.0` directly under npm `latest`. Reject publishing stable
-  under `next` first: it adds an unrequested promotion step and another write.
-  This spec accepts stable syntax generally; #6 chooses the first version.
-- **D-2 One workflow.** Reuse the existing workflow and select tags from the
-  validated version. Reject a separate stable workflow: it duplicates the
-  approval and credential policy and can drift from it.
-- **D-3 Both defaults move.** Push GHCR `latest` and the version from one
-  two-platform build. Reject leaving GHCR `latest` untouched: it conflicts
-  with the owner decision and would leave the registries' defaults divergent.
-  Keep digest pinning advice because tags can move. Before the image push,
-  require GHCR's default to agree with the prior npm stable release, or be
-  absent for the placeholder. Reject accepting any arbitrary old GHCR default:
-  it could hide a partial prior publication. Stable dry runs check this state
-  too; they do not use beta's npm-404 exemption.
-- **D-4 Partial publication is possible.** Keep GHCR before npm. Follow
-  [features/history/F-024-v2.md D-8](history/F-024-v2.md#decisions) for
-  reported npm failure, skipped read-back, failed read-back and image-only
-  recovery. The registries cannot switch atomically. Use the owner-run
-  procedure in `docs/publishing.md` below for stable cleanup. Agents never
-  perform registry deletion. First confirm npm lacks the exact version;
-  unavailable or uncertain npm evidence stops recovery. While the image
-  exists, `verify` and `image` preflight fail. Same-run `publish-npm` retry
-  passes only if both tags still equal this run's digest and all gates pass.
-  Otherwise the owner deletes the GHCR version tag. Preflight still fails
-  while GHCR `latest` names the partial image. The owner repoints `latest`
-  to the prior stable digest, or deletes `latest` when npm still names the
-  placeholder. GET verification must confirm candidate 404 and default
-  restored or absent. Registry preflight now passes if other gates pass.
-  Redispatch the same version only while its commit is main HEAD, after a
-  new successful dry-run gate. If main advanced, BR-361 still refuses the
-  old SHA; prepare the next patch version on main with a new tag and gate.
-  Cleanup of the partial default is still required before a patch release.
-  If npm accepted the version, never delete or republish it. Verify manually
-  if read-back was skipped; rerun only read-back if it failed. Uncertain
-  image push outcomes use the same GET checks and cleanup procedure.
-  Reject automatic rollback: only the owner can authorize registry cleanup.
-- **D-5 Betas after stable.** Allow a beta strictly above the current stable
-  npm `latest`, such as `1.1.0-beta.1` after `1.0.0`. Preserve stable defaults.
-  Refuse a deprecated stable default for owner recovery. Only the exact
-  placeholder is exempt from published-version ordering for stable releases.
+- **D-1 First stable only.** Apply the owner narrowing of 2026-11-16.
+  #6 chooses 1.0.0. Stable syntax is general, but the registry gate accepts
+  it only while latest is the exact deprecated placeholder. Reject `next`
+  promotion as an extra write. Later stable, beta after stable, deprecated
+  stable recovery and GHCR latest repointing move to #91 (F-024 v4).
+- **D-2 One workflow.** Select tags from validated inputs. Reject a separate
+  workflow because approval and credential policy could drift.
+- **D-3 Both defaults move once.** Build both stable tags together. Before
+  push, GHCR latest must be 404. Reject accepting an existing default as
+  partial publication could be hidden. Keep digest pinning. Beta has no new
+  ordering or registry checks before first stable.
+- **D-4 Owner-only first-stable recovery.** Registries cannot switch atomically.
+  For image pushed but npm failed, confirm npm has no candidate version in
+  either versions or time. Uncertain evidence stops recovery. At this step,
+  fresh verify/image preflight is **blocked: image exists**; phase npm can
+  pass only with this run's digest and all unchanged gates.
+  The owner deletes the GHCR candidate **package version**, not one tag.
+  Both tags share a digest, so this removes both tags. Until read-back of
+  deletion confirms absence, preflight is **blocked: cleanup unconfirmed**.
+  The owner confirms candidate and latest both GET 404. Registry preflight
+  is now **ready: placeholder and both tags absent**, subject to other gates.
+  Redispatch after a new successful dry run only while the commit is main
+  HEAD. If main advanced, state is **blocked: old commit is not main HEAD**;
+  prepare a patch bump on main with its own tag, go and dry run. Cleanup is
+  required before either choice. No repointing or previous stable exists in
+  this scope. Agents never touch registries. The guide must give these
+  explicit steps, with no loop over an empty `$previous` value.
+  If npm accepted the version, state is **blocked for publication: see #91**;
+  never delete or republish it. Verify manually if read-back was skipped;
+  rerun only read-back if it failed. Uncertain image outcomes require the
+  same GET confirmation. Reject automatic rollback as owner-only destruction.
+- **D-5 Install documentation follows VERSION.** Stable BR-354 v2 install
+  clauses apply only once VERSION is stable. Keep beta v1 text until then.
+  README/SPEC edits move to #6 release prep. Guide edits belong to the
+  implementation PR. Reject changing default installs in this spec phase.
 - **D-6 Keep IDs and evidence.** Version existing rules because their purpose
   is unchanged. Keep BR-379 v1: its digest rule already applies to either
   release kind. Prepare pending records in implementation and accept them
@@ -449,17 +496,47 @@ Use versioned BR citations in those tests. Tests run through `make check`.
 
 ## Stress-test
 
-- **Round 1, finding 1: retained** — Stable ordering covers every published version, including betas, and latest. Boundary cases are explicit.
-- **Round 1, finding 2: retained** — Phase npm checks npm state and this run’s GHCR pair only. An older stable latest case permits later stable releases.
-- **Round 1, finding 3: retained** — Owner cleanup restores the prior default before redispatch or a patch bump. AC-32 rehearses each preflight state.
-- **Round 1, finding 4: retained** — Default stable install and exact npx commands replace beta defaults. AC-24 lists changed test strings.
-- **Round 1, finding 5: retained** — Buildx metadata supplies a job digest. npm preflight and read-back require that exact digest, removing the gap.
-- **Round 1, finding 6: retained** — Compared manifests use GET and one Accept list. A misleading HEAD digest case must fail.
-- **Round 1, finding 7: retained** — Betas above stable latest are allowed. Deprecated stable latest and substitute placeholders are refused.
-- **Round 1, finding 8: retained** — AC-25 pins refusal inputs and diagnostics. Implementation must remove both legacy messages.
-- **Round 1, finding 9: retained** — BR preparation preserves accepted v1 beside pending v2. History uses the implementation PR date.
-- **Round 1, finding 10: retained** — Environment inventories are replaced by the no-new-ID and pre-freeze/pre-PR recheck instruction.
-- **Round 1, finding 11: retained** — AC-24 pins strings; AC-32 defines doubles and approval simulation; AC-34 and AC-35 add main acceptance and release gates. Read-back tests cite v2.
-- **Round 1, finding 12: retained** — BR-354 and D-4 cite the v2 snapshot D-8 for recovery provenance.
+Round-1 decisions superseded by the owner narrowing:
+
+- **Round 1, finding 1: retained in part** — Stable ordering still covers all
+  published versions. Comparing against a prior stable latest moves to #91.
+- **Round 1, finding 2: superseded** — Prior stable latest is refused. Phase
+  npm binds only the first-stable pair to this run.
+- **Round 1, finding 3: superseded** — Delete the package version and confirm
+  both tags absent. Prior-default restoration moves to #91.
+- **Round 1, finding 4: superseded** — Install defaults follow VERSION and
+  change only in #6 release prep.
+- **Round 1, finding 5: retained in part** — Metadata binds stable only.
+- **Round 1, finding 6: retained** — Stable comparisons use identical GET Accept.
+- **Round 1, finding 7: superseded** — All publication after placeholder latest
+  moves to #91. No beta-after-stable path remains.
+- **Round 1, finding 8: retained** — Pin diagnostics and remove legacy messages.
+- **Round 1, finding 9: retained** — Accepted v1 remains beside pending v2.
+- **Round 1, finding 10: retained** — No new IDs; recheck before freeze and PR.
+- **Round 1, finding 11: retained in part** — Keep doubles, main acceptance and
+  per-release gates. Remove later-stable cases and early install edits.
+- **Round 1, finding 12: retained in part** — v2 D-8 remains recovery provenance;
+  first-stable cleanup is now the explicit D-4 procedure.
+
+- **Round 2, finding 1: retained** — Guide changes are implementation work.
+  The orchestrator already reverted the spec-phase guide edit.
+- **Round 2, finding 2: retained** — Split the phase matrix by kind. Beta v2
+  behavior, including dry-run 404, stays unchanged before first stable.
+- **Round 2, finding 3: retained** — Ignore exactly created/modified time keys;
+  reject every other non-SemVer key with a fixed diagnostic.
+- **Round 2, finding 4: retained** — Delete the package version, removing both
+  shared-digest tags; confirm both 404. Repointing moves to #91.
+- **Round 2, finding 5: moved to #91** — Deprecated stable latest refuses all
+  publication. Its recovery is outside first stable.
+- **Round 2, finding 6: retained** — Pin refused inputs and every new read-back
+  line in the diagnostics table and named tests.
+- **Round 2, finding 7: retained** — Stable install clauses require stable
+  VERSION; README/SPEC edits belong to #6 release prep.
+- **Round 2, finding 8: retained** — Explicit first-stable cleanup has no
+  previous-tag loop and no empty `$previous` case.
+- **Round 2, finding 9: retained** — Scope names Makefile targets, image
+  metadata parsing and workflow job outputs.
+- **Round 2, finding 10: retained** — Stable must exceed published betas;
+  unpublished betas below existing betas keep v2 behavior before stable.
 
 No approval or freeze is claimed.
