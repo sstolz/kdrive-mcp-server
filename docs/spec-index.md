@@ -196,7 +196,7 @@ freeze or merge alone. #35 synchronizes these accepted states.
 
 ### Architecture-decision ledger
 
-F-003 allocates [BR-029–BR-046](../business-rules/README.md#pending--configured-tree-access-policy),
+F-003 allocates [BR-029–BR-046](../business-rules/README.md#accepted--configured-tree-access-policy),
 all v1, accepted on 2026-11-09 (BR-042 at v2). No existing rule is superseded. The next unused
 feature and rule IDs were F-005 and BR-059 after #7 allocated F-004 and
 BR-047–BR-058; #8 now allocates F-005 and BR-059–BR-071 as recorded above.

@@ -53,7 +53,7 @@ kDrive adapter and the stdio and HTTP runtime of the packaged CLI are accepted w
 | [BR-027](BR-027.md)   | v1         | Stable redacted configuration diagnostics with deterministic phase order. [Examples](BR-027.md#examples)                                   | [F-002 v1](../features/history/F-002-v1.md), accepted under [v2](../features/F-002-configuration.md)               | Active                                                                       |
 | [BR-028](BR-028.md)   | v1         | Separate local preparation from resolved readiness through types and synthetic preflight. [Examples](BR-028.md#examples)                   | [F-002 v1](../features/history/F-002-v1.md), accepted under [v2](../features/F-002-configuration.md)               | Active; v2 active since F-014 (see below)                                    |
 
-<a id="pending--configured-tree-access-policy"></a>
+<a id="accepted--configured-tree-access-policy"></a>
 
 ## Accepted — configured-tree access policy
 
@@ -81,7 +81,7 @@ production AC-19/AC-20 passed through F-014 AC-23/AC-24 on main `2a9c1e3` on 202
 | [BR-045](BR-045.md) | v1      | Independent all-target batches     | Active                                    |
 | [BR-046](BR-046.md) | v1      | Bounded refusal diagnostics        | Active                                    |
 
-<a id="pending--received-share-access-policy"></a>
+<a id="accepted--received-share-access-policy"></a>
 
 ## Accepted — received-share access policy
 
@@ -149,7 +149,7 @@ unused BR ID is BR-423 (BR-376 and BR-377 are withdrawn and never reused). No ne
 authorization is introduced. The [capability map](../capability-map.md) describes
 accepted user-facing scope and explicitly provisional entries.
 
-## Pending — injected stdio navigation
+## Accepted — injected stdio navigation
 
 F-005 allocated BR-059–BR-071 v1 for #8, accepted on actual main
 209a68de956b328e04e2d98d6745128a587184bd. BR-060/065 v2 were accepted under #9;
@@ -191,7 +191,7 @@ BR-060 v3 is accepted under #10; v4 is accepted under #14 (main `7b046a0`). The 
 | [BR-080](BR-080.md) | v1      | An invalid, expired or unavailable continuation produces one fixed sanitized error and starts no dependency call.                         | [F-006 v1](../features/F-006-filtered-pagination.md) | Active (injected scope) |
 | [BR-081](BR-081.md) | v1      | Cancellation, timeout, close or a failed page invalidates the affected traversal and publishes no partial batch or reusable continuation. | [F-006 v1](../features/F-006-filtered-pagination.md) | Active (injected scope) |
 
-<a id="pending--raw-content-and-resources"></a>
+<a id="accepted--raw-content-and-resources"></a>
 
 ## Accepted — raw content and resources
 
@@ -214,7 +214,7 @@ No production adapter or version qualification is established.
 | [BR-092](BR-092.md) | v1      | Missing qualified content dependencies fail explicitly and leave the existing diagnostic production CLI unchanged.                                                                            | [F-007 v1](../features/F-007-bounded-downloads.md) | Active (injected scope) |
 | [BR-093](BR-093.md) | v1      | The central retry wrapper applies to injected read ports only and never changes abstract policy dispatch or retries `execute`.                                                                | [F-007 v1](../features/F-007-bounded-downloads.md) | Active (injected scope) |
 
-<a id="pending--oidc-provider-qualification"></a>
+<a id="accepted--oidc-provider-qualification"></a>
 
 ## Accepted — OIDC provider qualification
 
@@ -241,7 +241,7 @@ no HTTP/OAuth runtime or real client connection is established.
 | [BR-107](BR-107.md) | v1      | Usable JWKS keys; a private member makes the whole set unusable.                                                  | [F-008 v1](../features/F-008-oidc-qualification.md) | Active           |
 | [BR-108](BR-108.md) | v1      | Dated client compatibility matrix with allowed values and reference-version comparison.                           | [F-008 v1](../features/F-008-oidc-qualification.md) | Active           |
 
-<a id="pending--bounded-extracted-content"></a>
+<a id="accepted--bounded-extracted-content"></a>
 
 ## Accepted — bounded extracted content
 
@@ -266,7 +266,7 @@ accepted on actual main `7b046a0` (acceptance (private archive)). Only the decla
 | [BR-122](BR-122.md) | v1      | Extraction/image dependencies execute without external requests, optional native/WASM codecs, eval or document-supplied JavaScript.                                                  | [F-009 v1](../features/F-009-bounded-content-reading.md) | Active; v3 active since F-027 (see below) |
 | [BR-123](BR-123.md) | v1      | Missing qualified content dependencies refuse authorized reads explicitly while existing raw/resources/navigation and the production diagnostic retain their accepted contracts.     | [F-009 v1](../features/F-009-bounded-content-reading.md) | Active; v2 active since F-014 (see below) |
 
-<a id="pending--oauth-proxy"></a>
+<a id="accepted--oauth-proxy"></a>
 
 ## Accepted — bounded OAuth proxy
 
@@ -298,7 +298,7 @@ MCP-client connections are deferred to #12/#13 and are not established.
 | [BR-142](BR-142.md) | v2      | Single-instance in-memory state, restart semantics and 1,000-entry store bounds.                      | [F-010 v1](../features/F-010-oauth-proxy.md) | Active (v2, #103); v3 active since F-032 (see below) |
 | [BR-143](BR-143.md) | v2      | No secret, code, token, cookie or identity in refusals or fixed-event logs.                           | [F-010 v1](../features/F-010-oauth-proxy.md) | Active (v2, #103); v4 active since F-031 (see below) |
 
-<a id="pending--http-image"></a>
+<a id="accepted--http-image"></a>
 
 ## Accepted — multi-architecture HTTP container image
 
@@ -325,7 +325,7 @@ to v4 (the `image` CI job). All were accepted on actual main `25e79ba` on 2026-1
 | [BR-187](BR-187.md) | v2      | Deployment doc sections incl. personal-server guide and Troubleshooting, truthful status phrases, no readiness claims. | [F-013 v3](../features/F-013-http-image.md) | Active (v2, #101)                         |
 | [BR-188](BR-188.md) | v1      | `make image-binfmt`: opt-in, digest-pinned arm64 emulation registration.                                               | [F-013 v2](../features/F-013-http-image.md) | Active                                    |
 
-<a id="pending--authenticated-http"></a>
+<a id="accepted--authenticated-http"></a>
 
 ## Accepted — authenticated Streamable HTTP (proxy mode)
 
@@ -361,7 +361,7 @@ BR-189 v1; both were accepted on actual main `7b8b52d` on 2026-11-05
 | [BR-171](BR-171.md) | v2      | Dev-only owner-run acceptance composition; secrets from an external directory mounted read-only.                       | [F-012 v2](../features/F-012-authenticated-http.md) | Active; v3 active since F-029 (see below)            |
 | [BR-189](BR-189.md) | v1      | The local Sonar entry refuses a checkout holding a `secrets` path.                                                     | [F-012 v2](../features/F-012-authenticated-http.md) | Active (#63, main `7b8b52d`)                         |
 
-<a id="pending--pre-merge-quality-gates"></a>
+<a id="accepted--pre-merge-quality-gates"></a>
 
 ## Accepted — pre-merge quality gates
 
@@ -382,7 +382,7 @@ BR-150 and BR-151 to v2 and BR-015 to v3. F-011 v3 (2026-11-04) versions BR-151 
 | [BR-150](BR-150.md) | v2      | Secrets reach only the analysis service; read-only prep; pristine snapshot; fixed mode; manifest binding.     | [F-011 v2](../features/F-011-pre-merge-quality-gates.md) | Active |
 | [BR-151](BR-151.md) | v3      | Inline pristine export and Git-metadata save before setup, comparison, final `.git` quarantine step.          | [F-011 v3](../features/F-011-pre-merge-quality-gates.md) | Active |
 
-<a id="pending--production-kdrive-adapter"></a>
+<a id="accepted--production-kdrive-adapter"></a>
 
 ## Accepted — production kDrive adapter
 
@@ -1031,7 +1031,7 @@ BR-431, ADR-013.
 | [BR-429](BR-429.md) | v1      | Exact descriptions of all 58 parameter occurrences and pages.items, consistent with validation. | [F-042 v1](../features/F-042-mcp-tool-descriptions.md) | Active |
 | [BR-430](BR-430.md) | v1      | Fixed trusted text, catalog size budgets and unchanged non-description contracts.               | [F-042 v1](../features/F-042-mcp-tool-descriptions.md) | Active |
 
-## Active — queue changelog release sections
+## Accepted — queue changelog release sections
 
 [F-043 v1](../features/F-043-queue-changelog-release-sections.md) (#67) was
 accepted on actual main `f72a15b` on 2026-11-15 (#67 comment `6902168340`).
