@@ -69,7 +69,7 @@ const outcome = (result: ValidationResult): CheckOutcome =>
     : { status: result.status, reason: result.reason };
 
 const relation = (value: unknown, expected: string): Relation =>
-  // eslint-disable-next-line sonarjs/no-nested-conditional -- F-011: pre-existing nested conditional kept unchanged; refactor tracked in BACKLOG.md
+  // eslint-disable-next-line sonarjs/no-nested-conditional -- F-011: pre-existing nested conditional kept unchanged; refactor tracked in #79
   value === undefined ? "absent" : value === expected ? "equal" : "different";
 
 const contains = (aud: unknown, value: string) =>
@@ -88,10 +88,10 @@ function accessFacts(token: string, input: AnalysisInput): AccessTokenFacts {
     audience:
       payload.aud === undefined
         ? "absent"
-        : // eslint-disable-next-line sonarjs/no-nested-conditional -- F-011: pre-existing nested conditional kept unchanged; refactor tracked in BACKLOG.md
+        : // eslint-disable-next-line sonarjs/no-nested-conditional -- F-011: pre-existing nested conditional kept unchanged; refactor tracked in #79
           contains(payload.aud, input.resource)
           ? "resource"
-          : // eslint-disable-next-line sonarjs/no-nested-conditional -- F-011: pre-existing nested conditional kept unchanged; refactor tracked in BACKLOG.md
+          : // eslint-disable-next-line sonarjs/no-nested-conditional -- F-011: pre-existing nested conditional kept unchanged; refactor tracked in #79
             contains(payload.aud, input.clientId)
             ? "client-id"
             : "other",

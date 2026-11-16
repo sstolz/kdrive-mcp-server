@@ -27,7 +27,7 @@ export function matches(pattern: string, path: string): boolean {
       next[j] =
         token === "**"
           ? !!previous[j] || (j > 0 && !!next[j - 1])
-          : // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- F-011: pre-existing assertion on a value checked earlier in the same flow; removing it is deferred to keep reviewed control flow unchanged (BACKLOG.md)
+          : // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- F-011: pre-existing assertion on a value checked earlier in the same flow; removing it is deferred to keep reviewed control flow unchanged (#79)
             j > 0 && !!previous[j - 1] && component(token, v[j - 1]!);
     previous = next;
   }

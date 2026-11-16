@@ -62,7 +62,7 @@ function dimensions(width: number, height: number, budget: number) {
     fail("LIMIT_EXCEEDED");
 }
 /** BR-116: admission precedes every codec; no MIME, metadata or automatic EXIF route. */
-// eslint-disable-next-line sonarjs/cognitive-complexity -- F-011: pre-existing complex function; splitting it is deferred to keep reviewed control flow unchanged in this ticket (BACKLOG.md)
+// eslint-disable-next-line sonarjs/cognitive-complexity -- F-011: pre-existing complex function; splitting it is deferred to keep reviewed control flow unchanged in this ticket (#79)
 export function preflightImage(input: Uint8Array, budget: number) {
   const bytes = Buffer.from(input.buffer, input.byteOffset, input.byteLength);
   if (bytes.subarray(0, 8).equals(pngSignature)) {
@@ -91,7 +91,7 @@ export function preflightImage(input: Uint8Array, budget: number) {
         dimensions(width, height, budget);
         if (
           body[8] !== 8 ||
-          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- F-011: pre-existing assertion on a value checked earlier in the same flow; removing it is deferred to keep reviewed control flow unchanged (BACKLOG.md)
+          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- F-011: pre-existing assertion on a value checked earlier in the same flow; removing it is deferred to keep reviewed control flow unchanged (#79)
           ![2, 6].includes(body[9]!) ||
           body[10] !== 0 ||
           body[11] !== 0 ||
@@ -142,7 +142,7 @@ export function preflightImage(input: Uint8Array, budget: number) {
     while (pos < bytes.length && !scan) {
       if (bytes[pos++] !== 255) fail("CONTENT_UNAVAILABLE");
       while (bytes[pos] === 255) pos++;
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- F-011: pre-existing assertion on a value checked earlier in the same flow; removing it is deferred to keep reviewed control flow unchanged (BACKLOG.md)
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- F-011: pre-existing assertion on a value checked earlier in the same flow; removing it is deferred to keep reviewed control flow unchanged (#79)
       const marker = bytes[pos++]!;
       if (pos + 2 > bytes.length) fail("CONTENT_UNAVAILABLE");
       const length = bytes.readUInt16BE(pos);
@@ -156,7 +156,7 @@ export function preflightImage(input: Uint8Array, budget: number) {
         if (body[0] !== 8) fail("UNSUPPORTED_FORMAT");
         height = body.readUInt16BE(1);
         width = body.readUInt16BE(3);
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- F-011: pre-existing assertion on a value checked earlier in the same flow; removing it is deferred to keep reviewed control flow unchanged (BACKLOG.md)
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- F-011: pre-existing assertion on a value checked earlier in the same flow; removing it is deferred to keep reviewed control flow unchanged (#79)
         components = body[5]!;
         if (![1, 3].includes(components) || body.length !== 6 + components * 3)
           fail("UNSUPPORTED_FORMAT");
@@ -182,7 +182,7 @@ export function preflightImage(input: Uint8Array, budget: number) {
     while (pos < bytes.length) {
       if (bytes[pos++] !== 255) continue;
       while (bytes[pos] === 255) pos++;
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- F-011: pre-existing assertion on a value checked earlier in the same flow; removing it is deferred to keep reviewed control flow unchanged (BACKLOG.md)
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- F-011: pre-existing assertion on a value checked earlier in the same flow; removing it is deferred to keep reviewed control flow unchanged (#79)
       const marker = bytes[pos++]!;
       if (marker === 0 || (marker >= 208 && marker <= 215)) continue;
       if (marker === 217 && pos === bytes.length) {

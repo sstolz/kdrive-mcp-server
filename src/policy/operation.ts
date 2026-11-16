@@ -39,7 +39,7 @@ export const collectionKinds = new Set([
 export const readKinds = new Set(["read", ...collectionKinds]);
 export const shareKinds = new Set(["share-link", "share-invite"]);
 /** BR-035/043: strict registry, no caller effects or callbacks, copied before awaits. */
-// eslint-disable-next-line sonarjs/cognitive-complexity -- F-011: pre-existing complex function; splitting it is deferred to keep reviewed control flow unchanged in this ticket (BACKLOG.md)
+// eslint-disable-next-line sonarjs/cognitive-complexity -- F-011: pre-existing complex function; splitting it is deferred to keep reviewed control flow unchanged in this ticket (#79)
 export function operation(value: unknown, nested = false): Operation {
   try {
     const raw = record(value),
@@ -50,7 +50,7 @@ export function operation(value: unknown, nested = false): Operation {
       (nested && kind === "batch")
     )
       refuse("INVALID_OPERATION");
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- F-011: pre-existing assertion on a value checked earlier in the same flow; removing it is deferred to keep reviewed control flow unchanged (BACKLOG.md)
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- F-011: pre-existing assertion on a value checked earlier in the same flow; removing it is deferred to keep reviewed control flow unchanged (#79)
     const allowed = fields[kind]!;
     if (Object.keys(raw).some((k) => k !== "kind" && !allowed.includes(k)))
       refuse("INVALID_OPERATION");

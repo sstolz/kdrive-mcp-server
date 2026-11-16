@@ -99,7 +99,7 @@ export function validateExtracted(value: unknown, budget: number): Extracted {
   return extractionFail("CONTENT_UNAVAILABLE");
 }
 /** BR-110/113: exact code-point projection with full MCP/escaped JSON accounting. */
-// eslint-disable-next-line sonarjs/cognitive-complexity -- F-011: pre-existing complex function; splitting it is deferred to keep reviewed control flow unchanged in this ticket (BACKLOG.md)
+// eslint-disable-next-line sonarjs/cognitive-complexity -- F-011: pre-existing complex function; splitting it is deferred to keep reviewed control flow unchanged in this ticket (#79)
 export function readResult(
   metadata: ReadMetadata,
   args: ReadArguments,
@@ -166,7 +166,7 @@ export function readResult(
 }
 
 function typedLength(value: Uint8Array): number {
-  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- F-011: pre-existing assertion on a value checked earlier in the same flow; removing it is deferred to keep reviewed control flow unchanged (BACKLOG.md)
+  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- F-011: pre-existing assertion on a value checked earlier in the same flow; removing it is deferred to keep reviewed control flow unchanged (#79)
   return Object.getOwnPropertyDescriptor(
     Object.getPrototypeOf(Uint8Array.prototype) as object,
     "byteLength",
@@ -179,7 +179,7 @@ function copyTyped(value: Uint8Array) {
 }
 
 /** Validate the bounded encoder projection without decoding document data in the parent. */
-// eslint-disable-next-line sonarjs/cognitive-complexity -- F-011: pre-existing complex function; splitting it is deferred to keep reviewed control flow unchanged in this ticket (BACKLOG.md)
+// eslint-disable-next-line sonarjs/cognitive-complexity -- F-011: pre-existing complex function; splitting it is deferred to keep reviewed control flow unchanged in this ticket (#79)
 function completePng(data: Uint8Array, width: number, height: number) {
   const bytes = Buffer.from(data);
   if (
@@ -207,7 +207,7 @@ function completePng(data: Uint8Array, width: number, height: number) {
         bytes.readUInt32BE(pos + 8) !== width ||
         bytes.readUInt32BE(pos + 12) !== height ||
         bytes[pos + 16] !== 8 ||
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- F-011: pre-existing assertion on a value checked earlier in the same flow; removing it is deferred to keep reviewed control flow unchanged (BACKLOG.md)
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- F-011: pre-existing assertion on a value checked earlier in the same flow; removing it is deferred to keep reviewed control flow unchanged (#79)
         ![2, 6].includes(bytes[pos + 17]!) ||
         bytes[pos + 18] !== 0 ||
         bytes[pos + 19] !== 0 ||

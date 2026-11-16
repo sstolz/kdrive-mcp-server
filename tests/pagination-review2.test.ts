@@ -12,7 +12,7 @@ it.each(
   states.flatMap((state) => [59999, 60000].map((time) => ({ state, time }))),
 )(
   "TestBR077 current received-root candidate $state at $time ms",
-  // eslint-disable-next-line sonarjs/cognitive-complexity -- F-011: pre-existing complex function; splitting it is deferred to keep reviewed control flow unchanged in this ticket (BACKLOG.md)
+  // eslint-disable-next-line sonarjs/cognitive-complexity -- F-011: pre-existing complex function; splitting it is deferred to keep reviewed control flow unchanged in this ticket (#79)
   async ({ state, time }) => {
     const f = await fixture(),
       roots = Array.from({ length: 257 }, (_, i) => ({

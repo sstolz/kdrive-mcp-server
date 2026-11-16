@@ -5,7 +5,7 @@ import type { WorkerRequest } from "./extraction-values.js";
 const request = workerData as WorkerRequest;
 // The closed extraction pipeline has no network use, including dependency fetch fallbacks.
 globalThis.fetch = () => Promise.reject(new Error("EXTERNAL_UNAVAILABLE"));
-// eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- F-011: pre-existing assertion on a value checked earlier in the same flow; removing it is deferred to keep reviewed control flow unchanged (BACKLOG.md)
+// eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- F-011: pre-existing assertion on a value checked earlier in the same flow; removing it is deferred to keep reviewed control flow unchanged (#79)
 parentPort!.postMessage({ started: true });
 try {
   let value;
@@ -15,10 +15,10 @@ try {
     value = await (await import("./extraction-pdf.js")).extractPdf(request);
   else
     value = await (await import("./extraction-image.js")).extractImage(request);
-  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- F-011: pre-existing assertion on a value checked earlier in the same flow; removing it is deferred to keep reviewed control flow unchanged (BACKLOG.md)
+  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- F-011: pre-existing assertion on a value checked earlier in the same flow; removing it is deferred to keep reviewed control flow unchanged (#79)
   parentPort!.postMessage({ value });
 } catch (error) {
-  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- F-011: pre-existing assertion on a value checked earlier in the same flow; removing it is deferred to keep reviewed control flow unchanged (BACKLOG.md)
+  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- F-011: pre-existing assertion on a value checked earlier in the same flow; removing it is deferred to keep reviewed control flow unchanged (#79)
   parentPort!.postMessage({
     code: contentFailure(error) ?? "CONTENT_UNAVAILABLE",
   });

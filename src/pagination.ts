@@ -75,7 +75,7 @@ export function createPagination(config: ResolvedConfiguration, ports: Ports) {
       active = undefined;
       outputHandle = undefined;
     },
-    // eslint-disable-next-line sonarjs/cognitive-complexity -- F-011: pre-existing complex function; splitting it is deferred to keep reviewed control flow unchanged in this ticket (BACKLOG.md)
+    // eslint-disable-next-line sonarjs/cognitive-complexity -- F-011: pre-existing complex function; splitting it is deferred to keep reviewed control flow unchanged in this ticket (#79)
     async run(tool: string, args: Record<string, unknown>) {
       expire();
       const received = tool === "kdrive_shared_with_me";
@@ -99,16 +99,16 @@ export function createPagination(config: ResolvedConfiguration, ports: Ports) {
         const explicit = args.folder_id !== undefined;
         if (
           !received &&
-          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- F-011: pre-existing assertion on a value checked earlier in the same flow; removing it is deferred to keep reviewed control flow unchanged (BACKLOG.md)
+          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- F-011: pre-existing assertion on a value checked earlier in the same flow; removing it is deferred to keep reviewed control flow unchanged (#79)
           !config.driveIds.includes(driveId!) &&
           (!explicit || args.folder_id === 1)
         )
           return fail("ACCESS_DENIED");
         const roots = received
           ? []
-          : // eslint-disable-next-line sonarjs/no-nested-conditional -- F-011: pre-existing nested conditional kept unchanged; refactor tracked in BACKLOG.md
+          : // eslint-disable-next-line sonarjs/no-nested-conditional -- F-011: pre-existing nested conditional kept unchanged; refactor tracked in #79
             explicit
-            ? // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- F-011: pre-existing assertion on a value checked earlier in the same flow; removing it is deferred to keep reviewed control flow unchanged (BACKLOG.md)
+            ? // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- F-011: pre-existing assertion on a value checked earlier in the same flow; removing it is deferred to keep reviewed control flow unchanged (#79)
               [{ driveId: driveId!, id: args.folder_id as number }]
             : config.resolvedRoots
                 .filter((r) => r.driveId === driveId)
@@ -158,7 +158,7 @@ export function createPagination(config: ResolvedConfiguration, ports: Ports) {
         }
         const end = Math.min(state.position + 256, state.candidates.length);
         for (; state.position < end; state.position++) {
-          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- F-011: pre-existing assertion on a value checked earlier in the same flow; removing it is deferred to keep reviewed control flow unchanged (BACKLOG.md)
+          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- F-011: pre-existing assertion on a value checked earlier in the same flow; removing it is deferred to keep reviewed control flow unchanged (#79)
           const item = await ports.root(state.candidates[state.position]!);
           if (item) add(item);
         }
@@ -166,7 +166,7 @@ export function createPagination(config: ResolvedConfiguration, ports: Ports) {
       }
       const kind = tool.slice("kdrive_".length).replaceAll("_", "-");
       while (state.position < state.roots.length) {
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- F-011: pre-existing assertion on a value checked earlier in the same flow; removing it is deferred to keep reviewed control flow unchanged (BACKLOG.md)
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- F-011: pre-existing assertion on a value checked earlier in the same flow; removing it is deferred to keep reviewed control flow unchanged (#79)
         const root = state.roots[state.position]!;
         const scope = await ports.read(root);
         if (scope?.type !== "dir") {

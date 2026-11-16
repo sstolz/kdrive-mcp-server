@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-non-null-assertion -- F-011: this file holds 25 pre-existing assertions on values checked earlier in the same flow (indexed parser and policy state); a file-level directive is kept for this dense file only, and removing them is deferred to keep reviewed control flow unchanged (BACKLOG.md) */
+/* eslint-disable @typescript-eslint/no-non-null-assertion -- F-011: this file holds 25 pre-existing assertions on values checked earlier in the same flow (indexed parser and policy state); a file-level directive is kept for this dense file only, and removing them is deferred to keep reviewed control flow unchanged (#79) */
 import { isResolvedConfiguration } from "../config.js";
 import { matches } from "./glob.js";
 import {
@@ -342,7 +342,7 @@ export function createPolicy(
     }
   }
   /** BR-036–039: complete namespace-specific descendants; never filter a tree proof. */
-  // eslint-disable-next-line sonarjs/cognitive-complexity -- F-011: pre-existing complex function; splitting it is deferred to keep reviewed control flow unchanged in this ticket (BACKLOG.md)
+  // eslint-disable-next-line sonarjs/cognitive-complexity -- F-011: pre-existing complex function; splitting it is deferred to keep reviewed control flow unchanged in this ticket (#79)
   async function traverse(
     source: Item,
     result: string | undefined,
@@ -439,7 +439,7 @@ export function createPolicy(
       }
     }
   }
-  // eslint-disable-next-line sonarjs/cognitive-complexity -- F-011: pre-existing complex function; splitting it is deferred to keep reviewed control flow unchanged in this ticket (BACKLOG.md)
+  // eslint-disable-next-line sonarjs/cognitive-complexity -- F-011: pre-existing complex function; splitting it is deferred to keep reviewed control flow unchanged in this ticket (#79)
   async function effects(op: Operation, inv: Invocation): Promise<Effect> {
     if (op.kind === "shared-with-me") refuse("SHARED_ACCESS_UNAVAILABLE");
     if (
@@ -460,7 +460,7 @@ export function createPolicy(
     const source = sourceRef
       ? await inspect(
           sourceRef,
-          // eslint-disable-next-line sonarjs/no-nested-conditional -- F-011: pre-existing nested conditional kept unchanged; refactor tracked in BACKLOG.md
+          // eslint-disable-next-line sonarjs/no-nested-conditional -- F-011: pre-existing nested conditional kept unchanged; refactor tracked in #79
           op.kind === "restore" ? "original-trash" : "live",
           inv,
         )
@@ -573,7 +573,7 @@ export function createPolicy(
       regions,
     };
   }
-  // eslint-disable-next-line sonarjs/cognitive-complexity -- F-011: pre-existing complex function; splitting it is deferred to keep reviewed control flow unchanged in this ticket (BACKLOG.md)
+  // eslint-disable-next-line sonarjs/cognitive-complexity -- F-011: pre-existing complex function; splitting it is deferred to keep reviewed control flow unchanged in this ticket (#79)
   async function collection(
     op: Operation,
     inv: Invocation,
@@ -672,7 +672,7 @@ export function createPolicy(
       ...(p.terminal ? { terminal: true } : { next: p.next }),
     });
   }
-  // eslint-disable-next-line sonarjs/cognitive-complexity -- F-011: pre-existing complex function; splitting it is deferred to keep reviewed control flow unchanged in this ticket (BACKLOG.md)
+  // eslint-disable-next-line sonarjs/cognitive-complexity -- F-011: pre-existing complex function; splitting it is deferred to keep reviewed control flow unchanged in this ticket (#79)
   async function evaluate(
     value: unknown,
     paging?: { cursor?: string },

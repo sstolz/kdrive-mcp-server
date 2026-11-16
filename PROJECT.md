@@ -117,7 +117,7 @@ quote anyone's words.
   orchestrator notes the tokens Codex reports per ticket. Setup:
   [docs/development.md](docs/development.md#codex-cli).
 - **D-12 — 2026-11-15 — No backlog file.** Out-of-scope findings become
-  GitHub issues with no milestone; `BACKLOG.md` was triaged into issues and
+  GitHub issues with no milestone; `BACKLOG.md` was triaged into #72–#81 and
   removed (#6). Where a decision is the owner's, the issue says
   "owner decision needed".
 

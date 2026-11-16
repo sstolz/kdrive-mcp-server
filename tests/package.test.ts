@@ -21,7 +21,7 @@ function packageResult(output: string): Packed {
   if (!result) throw new Error("npm pack did not return an artifact");
   return result;
 }
-// eslint-disable-next-line sonarjs/cognitive-complexity -- F-011: pre-existing complex function; splitting it is deferred to keep reviewed control flow unchanged in this ticket (BACKLOG.md)
+// eslint-disable-next-line sonarjs/cognitive-complexity -- F-011: pre-existing complex function; splitting it is deferred to keep reviewed control flow unchanged in this ticket (#79)
 it("BR-004 real package allowlist excludes synthetic secrets, source, tests and reports", () => {
   const directory = mkdtempSync(join(tmpdir(), "kdrive-package-"));
   for (const path of [

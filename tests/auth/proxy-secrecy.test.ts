@@ -321,7 +321,7 @@ function isRefusal(response: ProxyResponse): boolean {
 }
 
 describe("BR-143 v2 secrecy of handler output and logs", () => {
-  // eslint-disable-next-line sonarjs/cognitive-complexity -- F-011: pre-existing complex function; splitting it is deferred to keep reviewed control flow unchanged in this ticket (BACKLOG.md)
+  // eslint-disable-next-line sonarjs/cognitive-complexity -- F-011: pre-existing complex function; splitting it is deferred to keep reviewed control flow unchanged in this ticket (#79)
   it("BR-143 refusals and logs never carry secrets, codes, tokens, cookies or identities", async () => {
     const h = await harness({ emails: ["owner@example.test"] });
     const seen = record(h);
