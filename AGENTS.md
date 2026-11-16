@@ -188,8 +188,8 @@ branch, go back to step 2, and review again if the code changed.
 
 - Every BR has a unit test that names it (`TestBR012_...` or `// BR-012`).
 - Implement only the frozen scope. Anything unrelated becomes a forge ticket
-  with no milestone that states the date, observation, location and why it
-  matters.
+  that states the date, observation, location and why it matters; it gets no
+  milestone.
   Only a project without a forge keeps such lines in `BACKLOG.md`.
 - Never remove or disable a test or a gate to get green.
 - Evidence must match the claim. Run the command and quote its result before
