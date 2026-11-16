@@ -21,7 +21,7 @@ canvas, rendering or WASM. No dependency installation or runtime proof is claime
 by this proposal. A bounded exact-pin feasibility probe subsequently imported
 `pdfjs-dist/build/pdf.mjs` and extracted `Hello bounded PDF €é` through its
 streaming API without native canvas and with external factories trapped; see
-author2 (archived evidence `runs/14-spec-author-2.md`). This is feasibility evidence, not product
+author2 (private archive). This is feasibility evidence, not product
 implementation or acceptance.
 
 ## Decision
@@ -96,5 +96,5 @@ Primary evidence read2026-11-03:
   termination enables a parent deadline during synchronous work.
 
 Dependency audit and the scoped nested-Zod nonreachability assessment, including
-its limitations, are recorded in development evidence (archived evidence `runs/14-development-2.md`).
+its limitations, are recorded in development evidence (private archive).
 No clean-audit or universal dependency-safety claim is made.

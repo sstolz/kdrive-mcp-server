@@ -3,7 +3,7 @@
 Status: accepted (2026-11-06). Design of
 [F-015 v2](../features/F-015-self-hosted-runner.md) (ticket #72, D-01 to D-17),
 implemented in PR #73 and accepted on main `de9b283`
-(acceptance (archived evidence `runs/72-acceptance-1.md`)).
+(acceptance (private archive)).
 
 ## Context
 

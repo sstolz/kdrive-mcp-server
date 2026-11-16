@@ -10,14 +10,14 @@ version: 2
 
 Injected-scope acceptance completed on actual main
 `209a68de956b328e04e2d98d6745128a587184bd`,2026-11-02; see
-the acceptance evidence (archived evidence `runs/8-acceptance-1.md`). This marker synchronization
+the acceptance evidence (private archive). This marker synchronization
 changes no frozen v1 contract. F-006 later versions BR-060/065 for #9.
 
 Autonomous freeze by the orchestrator on 2026-11-02 at 22:01:12 UTC, exact
 reviewed SHA `afc53e42ead78d140a8a41d8d5c94d6c65dccbc5`, after fresh independent
-round 3 approval (archived evidence `runs/8-spec-review-3.md`). The ticket is ready, no question
+round 3 approval (private archive). The ticket is ready, no question
 remains and the user was notified of this SHA and the decisions. See the
-freeze record (archived evidence `runs/8-freeze-1.md`). Only the injected F-005 scope is authorized.
+freeze record (private archive). Only the injected F-005 scope is authorized.
 
 #8 (archive issue 8) needs a real MCP
 stdio session through which a client can navigate authorized synthetic drives.
@@ -457,7 +457,7 @@ not assumed answers; #6/#7 obligations remain unchanged.
 
 ## Stress-test
 
-Fresh review round 1 (archived evidence `runs/8-spec-review-1.md`) returned `changes` against
+Fresh review round 1 (private archive) returned `changes` against
 `d63aabcfbcebe0d88858e400746f2d79a162bd7c`. All findings are retained:
 
 - **R1, major — retained.** Keep exact accepted stdio/HTTP diagnostics, exit 1,
@@ -479,9 +479,9 @@ Fresh review round 1 (archived evidence `runs/8-spec-review-1.md`) returned `cha
 
 At author round 2 the revised draft remained unfrozen pending fresh independent
 review. That draft granted no implementation permission, acceptance or release. Correction evidence:
-author round 2 (archived evidence `runs/8-spec-author-2.md`).
+author round 2 (private archive).
 
-Fresh review round 2 (archived evidence `runs/8-spec-review-2.md`) returned `changes` against
+Fresh review round 2 (private archive) returned `changes` against
 `4afd9b27e905cd955d8f95f2ef284d894e5484f6`.
 
 - **Round 2 R1, major — retained.** Explicitly own bounded complete-line
@@ -494,7 +494,7 @@ Fresh review round 2 (archived evidence `runs/8-spec-review-2.md`) returned `cha
   zero protected work and subsequent valid traffic. Prior CLI, policy and finite
   lifecycle contracts remain unchanged; no SDK migration/framework is introduced.
 
-Correction evidence: author round 3 (archived evidence `runs/8-spec-author-3.md`). Fresh
-round 3 approval (archived evidence `runs/8-spec-review-3.md`) of the exact SHA recorded above
+Correction evidence: author round 3 (private archive). Fresh
+round 3 approval (private archive) of the exact SHA recorded above
 preceded autonomous freeze; all five findings are resolved. Acceptance and
 production qualification remain separate.

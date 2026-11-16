@@ -16,13 +16,13 @@ execution; this plan does not silently authorize a new credential mount.
 
 Root executed the separate ignored one-off operator for exactly one GET
 `/2/drive/init?with=drives` after a fresh independent operational safety
-review round 2 (archived evidence `runs/5-probe-security-review-2.md`) approved its exact inputs.
+review round 2 (private archive) approved its exact inputs.
 The request returned HTTP 401; see the
-sanitized result (archived evidence `runs/5-read-probes-1.md`). No inventory was obtained.
+sanitized result (private archive). No inventory was obtained.
 One separately authorized, receipt-preserving retry then returned HTTP 200 after
-fresh independent safety review (archived evidence `runs/5-retry-security-review-1.md`) and
+fresh independent safety review (private archive) and
 owner verification of the replacement credential. The
-retry report (archived evidence `runs/5-init-retry-1.md`) records three accepted projections,
+retry report (private archive) records three accepted projections,
 584 ms and 1,409 body bytes. The owner attributed the prior failure to expiration;
 HTTP 401 itself did not diagnose that cause. Neither authentication checkpoint
 grants an automatic child, file, root, search or content request. Separately
@@ -79,7 +79,7 @@ received-share, visibility and transition fixtures remain unprovided/unmeasured:
   exact owner-approved search query/scope. A negative sample proves only itself.
 - One completed owned folder with1001 observed children. Its approved canonical
   private expected-ID manifest was used to verify the measured two-page union;
-  see the closed GET evidence (archived evidence `runs/5-final-get-execution-1.md`).
+  see the closed GET evidence (private archive).
   No further own setup writes were planned during that bounded read window.
   No external-client pause or upstream lock is claimed; changed membership
   fails closed.
@@ -101,15 +101,15 @@ designated parent, with a README marker, tiny binary and pagination entries.
 Only this separate setup may create new synthetic objects; existing personal
 objects cannot be overwritten, moved, renamed, shared or deleted. An acknowledged
 same-run parent plus fresh complete ancestry/capabilities is required per write.
-The creator (archived evidence `runs/5-fixture-setup-execution-1.md`) and
-recovery (archived evidence `runs/5-fixture-recovery-execution-1.md`) stopped; their journals and
+The creator (private archive) and
+recovery (private archive) stopped; their journals and
 uncertain old POST remain preserved, never retrospectively successful or retried.
 The separately reviewed no-retry completion retained bounded generated inputs,
 30-second absolute GET/POST deadlines, 676 new requests/263 POSTs/30 minutes,
 and 1494 prior requests plus 30 reserved final GETs within 2200 account requests.
 No cleanup, broad discovery or received-share creation is authorized.
 
-The closed completion (archived evidence `runs/5-fixture-completion-execution-1.md`) exited0:
+The closed completion (private archive) exited0:
 263 new ACKs,538 requests,1001 reconciled children,zero retries and unchanged
 prior evidence. Original0680 was not observed; a distinct spare was created.
 Its fixture-stage cumulative counter is2032. This is successful provisioning,
@@ -122,10 +122,10 @@ creator, stopped recovery, separately successful completion. Original/recovery/
 completion ACKs and any read-only observed-after-timeout member remain distinct.
 No pending/unknown write can become write authority. Root's start/end source and
 closure observations are not cryptographic process attestation or another
-client's pause. The closed-input builder (archived evidence `runs/5-final-get-execution-1.md`)
+client's pause. The closed-input builder (private archive)
 created the private binding and manifest after local approval, then obtained
 exact-invocation approval. The first two read sessions stopped; the
-focused final session (archived evidence `runs/5-remaining-read-probes-execution-2.md`) completed
+focused final session (private archive) completed
 its selected samples. No further account request is planned by this evidence work.
 
 ### Selected evidence and unavailable inputs
@@ -216,7 +216,7 @@ candidates, not normative guarantees. Record any rejected parameter honestly.
 
 The selected canonical P/M/R/E/X-invalid-limit suite originally used at most nine GETs and
 six successful download bytes. A/V/C, invalid-file/denied-drive controls and scope
-options remain unmeasured. The sanitized record (archived evidence `runs/5-final-read-measurements-1.md`)
+options remain unmeasured. The sanitized record (private archive)
 now records P/M and X422; two stopped sessions consumed8 starts without download
 bytes. The reviewed-host continuation reached CDN206 but header parsing refused;
 its actual cause remains unknown. The focused final session did not repeat X:

@@ -10,8 +10,8 @@ version: 1
 
 Acceptance completed on 2026-11-03: AC-01–AC-19 passed on actual main
 `2cec566ab8e2f030dbbbf47f04bf541e5eb48dc4` (`make check` rc=0, see the
-acceptance summary (archived evidence `runs/11-acceptance-1.md`)); the owner ran AC-20 on actual main
-`7b046a0446930ab6a935510314c6c1b975d13550`, see the Infomaniak discover (archived evidence `runs/11-acceptance-infomaniak-1.md`), Infomaniak token (archived evidence `runs/11-acceptance-infomaniak-token-1.md`), Gitea discover (archived evidence `runs/11-acceptance-gitea-1.md`) and Gitea token (archived evidence `runs/11-acceptance-gitea-token-1.md`) reports. Infomaniak
+acceptance summary (private archive)); the owner ran AC-20 on actual main
+`7b046a0446930ab6a935510314c6c1b975d13550`, see the Infomaniak discover (private archive), Infomaniak token (private archive), Gitea discover (private archive) and Gitea token (private archive) reports. Infomaniak
 and Gitea are both `proxy-only`, every matrix client resolves to `proxy` and the
 P-21 promotion flag is true; the owner selected Infomaniak as the production
 provider. This marker synchronization changes no frozen v1 contract.
@@ -23,10 +23,10 @@ unchanged.
 
 Autonomous freeze by the orchestrator on 2026-11-02 at 23:42:29 UTC, exact
 reviewed SHA `50c399405a4afe4d8a062070314b20614a09bcb6`, after fresh independent
-round 8 approval (archived evidence `runs/11-spec-review-8.md`) and
-round 9 diff approval (archived evidence `runs/11-spec-review-9.md`). The ticket is ready, no
+round 8 approval (private archive) and
+round 9 diff approval (private archive). The ticket is ready, no
 question remains and the user was notified of this SHA and the decisions. See
-the freeze record (archived evidence `runs/11-freeze-1.md`). Allocates BR-094–BR-108.
+the freeze record (private archive). Allocates BR-094–BR-108.
 
 Administrative renumbering on 2026-11-03 (no contract change): this feature
 was drafted, reviewed and frozen as F-006 with BR-072–BR-086; #45 and #46
@@ -330,7 +330,7 @@ constant used by the code, the tests and the orchestrator:
 Any hit blocks the commit. A long-run hit only may be overridden: the
 orchestrator records in the acceptance record each hit's location and why it is
 provider metadata; JWT, parameter and email hits are never overridable. It then
-commits it as `runs/11-acceptance-<label>-1.md`, updates the matrix
+commits it as (private archive), updates the matrix
 real-test results and records the verdict, the client decisions and any P-21
 promotion in #11.
 
@@ -493,7 +493,7 @@ promotion in #11.
   401 (`id-token` or `audience`); and #11
   records the client
   decisions and any P-21 promotion. Verified by: committed
-  `runs/11-acceptance-<label>-1.md` records.
+  (private archive) records.
 
 ## Decisions
 
@@ -550,7 +550,7 @@ None.
 
 ## Stress-test
 
-Round 1 (report (archived evidence `runs/11-spec-review-1.md`), reviewed SHA
+Round 1 (report (private archive), reviewed SHA
 `9b158bd507b6cc4d677d8197ff86f0b5e5a2c9f8`, verdict `changes`, 9 major, 11
 minor). All findings retained:
 
@@ -576,7 +576,7 @@ minor). All findings retained:
 - m-10 → scope item 1 states what P-12 keeps.
 - m-11 → plain `node`; acceptance evidence section; module locations.
 
-Round 2 (report (archived evidence `runs/11-spec-review-2.md`), reviewed SHA
+Round 2 (report (private archive), reviewed SHA
 `63532f2c47163d220d5a11c6bd494fa720279f62`, verdict `changes`, 3 major, 10
 minor; all round-1 findings confirmed fixed or partly fixed). All retained:
 
@@ -596,7 +596,7 @@ minor; all round-1 findings confirmed fixed or partly fixed). All retained:
 - n-09 → needed fact defined (BR-103, AC-15).
 - n-10 → matrix sourcing stated; reference version comparison (BR-108, AC-19).
 
-Round 3 (report (archived evidence `runs/11-spec-review-3.md`), reviewed SHA
+Round 3 (report (private archive), reviewed SHA
 `5f550a2a9eb4362437d61eae5af1f568e33703c8`, verdict `changes`, 3 major, 7
 minor; all round-2 findings confirmed fixed). All retained:
 
@@ -614,7 +614,7 @@ minor; all round-2 findings confirmed fixed). All retained:
 - R3-m-06 → AC-18 uses `typ`, a written value.
 - R3-m-07 → BR-105 wording and `jose` pin check (AC-17).
 
-Round 4 (report (archived evidence `runs/11-spec-review-4.md`), reviewed SHA
+Round 4 (report (private archive), reviewed SHA
 `acb60e2f9d79155a416ac205c6ef2cc4360dcb18`, verdict `changes`, 1 major, 6
 minor; all round-3 findings confirmed fixed). All retained:
 
@@ -627,7 +627,7 @@ minor; all round-3 findings confirmed fixed). All retained:
 - R4-m-05 → `none` reported only (BR-095).
 - R4-m-06 → AC-15 "at least one".
 
-Round 5 (report (archived evidence `runs/11-spec-review-5.md`), reviewed SHA
+Round 5 (report (private archive), reviewed SHA
 `00f9b0b88cea6cafc411d5ed9dbfef3d56620d96`, verdict `changes`, 1 major, 6
 minor; round-4 findings confirmed fixed except an AC-03 row). All retained:
 
@@ -643,7 +643,7 @@ minor; round-4 findings confirmed fixed except an AC-03 row). All retained:
 Owner-supplied OpenAI pages (2026-11-02) added: CIMD counts only with `none`
 (BR-103, D-13) and RFC 9207 issuer identification is recorded (BR-101, D-14).
 
-Round 6 (report (archived evidence `runs/11-spec-review-6.md`), reviewed SHA
+Round 6 (report (private archive), reviewed SHA
 `28fbb51fddd26b734d54193f86ee787fbc5d018d`, verdict `changes`, 1 major, 6
 minor; round-5 findings fixed except an AC-16 scan test). All retained:
 
@@ -657,7 +657,7 @@ minor; round-5 findings fixed except an AC-16 scan test). All retained:
 - R6-m-05 → stale SPEC §8 CIMD statement updated in scope item 5.
 - R6-m-06 → AC-16 backtick/pipe scan test; decisions reordered.
 
-Round 7 (report (archived evidence `runs/11-spec-review-7.md`), reviewed SHA
+Round 7 (report (private archive), reviewed SHA
 `aa8d0a80a521558dbd79bb142033fc3501fad848`, verdict `changes`, 1 major, 6
 minor; round-6 findings fixed or completed here). All retained:
 
@@ -672,7 +672,7 @@ minor; round-6 findings fixed or completed here). All retained:
 - R7-m-06 → `OKP` only with `Ed25519`, `key_ops` rule (BR-107, AC-04); AC-20
   ID-token check only when returned.
 
-Round 8 (report (archived evidence `runs/11-spec-review-8.md`), reviewed SHA
+Round 8 (report (private archive), reviewed SHA
 `e6798b6677b1dd2507e426c9ded5f4cdbea171c7`, verdict `approve`, 0 major, 5
 minor). All minors retained:
 
@@ -682,7 +682,7 @@ minor). All minors retained:
 - R8-m-04 → D-14 states Claude's `unverified` fact and its consequence.
 - R8-m-05 → `EC` curves limited to `P-256` and `P-384` (BR-107, AC-04).
 
-Round 9 (report (archived evidence `runs/11-spec-review-9.md`), diff
+Round 9 (report (private archive), diff
 `e6798b6..50c3994`, verdict `approve`, 1 minor). R9-m-01 retained as a test
 reading, without contract change: the AC-16 empty-segment case is verified as
 "a run whose token has an empty signature segment completes and writes the

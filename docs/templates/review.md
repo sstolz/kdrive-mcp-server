@@ -29,5 +29,5 @@ spec/BR/unit test or freeze for prose. Do not approve unsupported claims.
 ## Evidence and limits
 
 Quote executed commands/results and distinguish inspection from tests. State
-unverified points honestly. Save to `runs/<ticket>-<act>-<round>.md` and return at
-most 15 lines. After two unresolved rounds, escalate to the user via orchestrator.
+unverified points honestly. Return at most 15 lines; the orchestrator posts the
+report on the PR under its evidence identifier (AGENTS.md §9). After two unresolved rounds, escalate to the user via orchestrator.

@@ -19,7 +19,7 @@ parent folder ID.
 - Result: the Infomaniak access token is opaque (the validator answers 401
   `malformed`); the ID token is a JWT. The provider is usable only behind the
   OAuth proxy of this server (`proxy-only`), never by direct token validation.
-- Evidence: archived evidence `runs/11-acceptance-infomaniak-token-1.md`.
+- Evidence: (private archive).
 
 ### Drive initialisation
 
@@ -29,8 +29,7 @@ parent folder ID.
 - Result: the expired token gave HTTP 401 with no usable body; the retry gave
   HTTP 200 with one projection per accessible drive (ID and role). A bare
   `GET /2/drive` was reported as 422 in the earlier historical notes.
-- Evidence: archived evidence `runs/5-read-probes-1.md` and
-  `runs/5-init-retry-1.md`; summary in `docs/kdrive-read-evidence.md`.
+- Evidence: (private archive); summary in `docs/kdrive-read-evidence.md`.
 
 ## Reads
 
@@ -43,8 +42,7 @@ parent folder ID.
   terminal page. `limit=5000` was refused earlier with 422
   `validation_rule_max`; an invalid limit returned 422 `validation_failed`
   without validation details.
-- Evidence: archived evidence `runs/5-final-read-measurements-1.md` and
-  `runs/5-remaining-read-probes-execution-2.md`.
+- Evidence: (private archive).
 
 ### Downloads redirect to a storage host
 
@@ -55,7 +53,7 @@ parent folder ID.
   with the exact bytes for `0-0`, `7-9` and `15-15` (matching
   `Content-Length`), and 416 with an empty `text/html` body for `16-16`. The
   storage hop is followed without the bearer token.
-- Evidence: archived evidence `runs/5-remaining-read-probes-execution-2.md`.
+- Evidence: (private archive).
 
 ### ETag shape
 
@@ -66,8 +64,7 @@ parent folder ID.
   unchanged file but does not follow the standard syntax. None of the 85
   write-probe responses carried an `ETag` header. Conditional requests are not
   qualified: `If-Match` is ignored on rename.
-- Evidence: archived evidence `runs/5-remaining-read-probes-execution-2.md`
-  and `runs/16-execution-B-1.md`.
+- Evidence: (private archive).
 
 ### Error codes and rate limits
 
@@ -78,8 +75,7 @@ parent folder ID.
   `not_authorized`; invalid parameter 422 `validation_failed` (historical
   samples, `docs/api-notes.md`). No rate-limit header and no 429 were seen in
   any session. No rate ceiling was sought.
-- Evidence: historical notes in `docs/api-notes.md`; archived evidence
-  `runs/16-execution-A-1.md` and `runs/16-execution-B-1.md`.
+- Evidence: historical notes in `docs/api-notes.md`; (private archive).
 
 ## Writes
 
@@ -96,8 +92,7 @@ parent folder ID.
   (`DELETE /2/drive/{d}/files/{f}`) and restore
   (`POST /2/drive/{d}/trash/{f}/restore`) return a cancellable action
   (`cancel_id`, `valid_until`) whose effect is visible immediately.
-- Evidence: archived evidence `runs/16-execution-A-1.md` and
-  `runs/16-execution-B-1.md`; summary in `docs/kdrive-write-evidence.md`.
+- Evidence: (private archive); summary in `docs/kdrive-write-evidence.md`.
 
 ### Upload collisions
 
@@ -111,8 +106,7 @@ parent folder ID.
   and replaces the content. Names are case-sensitive: case-only variants
   coexist. A size mismatch gives 400 `upload_failed_error`; a 0-byte upload is
   accepted. Atomicity under every interleaving is not proven.
-- Evidence: archived evidence `runs/16-execution-A-1.md`,
-  `runs/16-execution-B-1.md` and `runs/16-decisions-1.md`.
+- Evidence: (private archive).
 
 ### Rename and move collisions
 
@@ -121,8 +115,7 @@ parent folder ID.
 - Result: rename or move onto an existing sibling name gives 409
   `conflict_error`, nothing changed. Creating a folder under an existing name
   gives HTTP 400, not an automatically renamed folder.
-- Evidence: archived evidence `runs/16-execution-B-1.md` and
-  `runs/18-acceptance-1.md` (steps 3 and 7).
+- Evidence: (private archive) (steps 3 and 7).
 
 ### Upload names
 
@@ -134,8 +127,7 @@ parent folder ID.
   folder. A decomposed (NFD) name is stored under a different name, presumably
   its NFC form; NFC names, including the compatibility ligature U+FB01, are
   stored unchanged, so no NFKC rewriting is applied.
-- Evidence: archived evidence `runs/19-acceptance-1.md`,
-  `runs/19-acceptance-2.md` and `runs/91-acceptance-1.md`.
+- Evidence: (private archive).
 
 ## Trash and restore
 
@@ -149,8 +141,7 @@ parent folder ID.
   the trashed root. Children of a trashed folder have `status`
   `trash_inherited`. `path` is a deletion-time snapshot: it does not follow a
   later rename of the former parent.
-- Evidence: archived evidence `runs/16-execution-A-1.md`,
-  `runs/16-execution-B-1.md` and `runs/18-acceptance-1.md` (step 6).
+- Evidence: (private archive) (step 6).
 
 ### Restore recreates a trashed parent
 
@@ -161,8 +152,7 @@ parent folder ID.
   409 `conflict_error`. Restoring over a live same-name item also gives 409
   `conflict_error`, without overwrite. This server therefore restores only when
   the former parent is live.
-- Evidence: archived evidence `runs/16-execution-B-1.md` and
-  `runs/16-decisions-1.md`.
+- Evidence: (private archive).
 
 ## Not measured
 

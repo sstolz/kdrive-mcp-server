@@ -1,6 +1,6 @@
 # Bounded kDrive write-behavior probe plan (#16)
 
-Status: approved at a162fed (runs/16-plan-review-3.md); Stages A and B executed on 2026-11-04, Stage C not run (the owner cleans up). Results: [write evidence](kdrive-write-evidence.md). Ticket: #16 (archive issue 16)
+Status: approved at a162fed (private archive); Stages A and B executed on 2026-11-04, Stage C not run (the owner cleans up). Results: [write evidence](kdrive-write-evidence.md). Ticket: #16 (archive issue 16)
 (P-16). Path: research ticket, no F/BR allocation; this plan plays the role the
 [read probe plan](kdrive-read-probe-plan.md) played for #5. Review model: Opus
 5.5 high (milestone 0.4 table: "#16: Opus only").
@@ -261,7 +261,7 @@ Any mismatch in X0 or X1 skips X2 for that item and reports it.
 
 ## Evidence and unknowns
 
-Each executed stage produces `runs/16-execution-<stage>-<n>.md` (sanitized
+Each executed stage produces (private archive) (sanitized
 receipt summary, request count, operator digest, journal digest) and the
 consolidated `docs/kdrive-write-evidence.md`. Every row states what remains
 unknown. Known unknowns at the outset:

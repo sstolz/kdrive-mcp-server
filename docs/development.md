@@ -325,7 +325,7 @@ and errors. It supplies no production adapter.
 ## Configuration and injected preflight
 
 F-002 v2 is accepted on actual main `88bf8caa7412988e11099a4a01f9e600aa38eeee`; see the
-acceptance evidence (archived evidence `runs/33-acceptance-1.md`). The [configuration contract](../features/F-002-configuration.md)
+acceptance evidence (private archive). The [configuration contract](../features/F-002-configuration.md)
 lists every CLI option, environment name, YAML key, default, bound and diagnostic.
 
 Sources replace settings in this order: CLI, environment, explicitly selected YAML,

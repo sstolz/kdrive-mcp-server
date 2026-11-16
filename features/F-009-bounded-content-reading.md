@@ -10,10 +10,10 @@ version: 1
 
 Autonomously frozen by the orchestrator on 2026-11-03 at 00:39:59 UTC,
 exact reviewed SHA `3fe07d92b75776fbfb4091b887a4c7839b5295ca`, after fresh
-independent round 2 approval (archived evidence `runs/14-spec-review-2.md`). The ticket is ready,
+independent round 2 approval (private archive). The ticket is ready,
 no question remains, and the owner was notified of this SHA, the decisions and
 the deliberately limited PDF/image compatibility. See the
-freeze record (archived evidence `runs/14-freeze-1.md`). Implementation and acceptance are pending.
+freeze record (private archive). Implementation and acceptance are pending.
 
 #14 (archive issue 14) extends the injected
 content composition accepted by #10 on actual main
@@ -44,9 +44,9 @@ registration contract. Existing F-007 byte/resource semantics remain unchanged.
   no external executable, native add-on or WASM codec.
 - Tests first; named BR unit tests, representative actual SDK wire checks,
   package checks and the full Docker/Make gate.
-- Synchronize accepted #10 markers and carry unchanged `runs/10-pr46-review-3.md`,
-  `runs/10-acceptance-1.md`, `runs/10-usage-summary-1.md` and the initial
-  `runs/14-orchestration-1.md`. Reconcile any same-marker changes from #11 with
+- Synchronize accepted #10 markers and carry the archived #10 review,
+  acceptance and usage records and the initial #14 orchestration record
+  unchanged (private archive). Reconcile any same-marker changes from #11 with
   latest main before merging; do not overwrite later accepted evidence.
 
 ### Out of scope
@@ -363,7 +363,7 @@ external factory fetches explicitly; missing required fonts/CMaps fail fixed.
 Use getPage/streamTextContent only, with `disableNormalization:true`, never
 getTextContent, render/operator-list/attachment/script APIs. The modern entrypoint
 was imported and extracted WinAnsi text without native canvas in the bounded
-exact-pin feasibility probe (archived evidence `runs/14-spec-author-2.md`); its fixed Node-build
+exact-pin feasibility probe (private archive); its fixed Node-build
 recommendation warning is captured/discarded by worker stream ownership.
 Validate total_pages<=256 before getPage, and all selected pages<=total_pages
 before extracting any page; an out-of-range selection is `INVALID_RANGE`.
@@ -559,7 +559,7 @@ verification are evidence tasks, not authorization to weaken the contract.
 
 - **Round1 — changes, all retained.** Fresh independent gpt-6-astra/high review
   of `1f46c6875b63a54b9ee74cde44691b00c1eb10de` reported2 major and2 minor
-  findings in review1 (archived evidence `runs/14-spec-review-1.md`).
+  findings in review1 (private archive).
 - **R1 retained:** logical unique stream size does not bound PDF.js concatenated
   or power-of-two buffers. Reject content arrays/reuse and non-profile expansion;
   canonicalize admitted streams to a separately capped uncompressed buffer before
@@ -576,5 +576,5 @@ verification are evidence tasks, not authorization to weaken the contract.
 - **R4 retained:** ledger records proposed ADR-004 and next-unused ADR-005.
 - Exact-pin modern PDF.js import and WinAnsi streaming succeeded without native
   canvas, external factories or WASM; details/failure correction are in
-  author2 (archived evidence `runs/14-spec-author-2.md`). Fresh independent review of this corrected
+  author2 (private archive). Fresh independent review of this corrected
   draft is pending; no implementation is authorized before autonomous freeze.

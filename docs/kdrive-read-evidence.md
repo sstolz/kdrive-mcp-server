@@ -20,22 +20,22 @@ they are neither account responses nor observations. The original French
 for their stated samples. Two separately approved init requests occurred on
 2026-11-02: the original rejection and the successful receipt-preserving retry.
 
-After fresh operational approval (archived evidence `runs/5-probe-security-review-2.md`), root
+After fresh operational approval (private archive), root
 executed one GET `/2/drive/init?with=drives` at `2026-11-02T06:44:12.877Z`.
 It returned 401 in 1,196 ms, outcome `http-error`, with zero retained body bytes.
 Make exited 2 and the inner operator exited 1; that execution made no retry or
 follow-up call.
-The sanitized live report (archived evidence `runs/5-read-probes-1.md`) records exact inputs and
+The sanitized live report (private archive) records exact inputs and
 limits. No inventory or account payload was retained. The reason for rejection
 was not diagnosed by the response. The owner later attributed it to expiration
 and reported replacing the token; this is owner attribution, not a measured
 cause or scope proof.
 
-After fresh retry safety approval (archived evidence `runs/5-retry-security-review-1.md`), separate
+After fresh retry safety approval (private archive), separate
 owner verification and root authorization, one fixed GET at
 `2026-11-02T08:52:00.735Z` returned **200**, outcome `ok`, in **584 ms** with
 **1,409 body bytes** and **three** accepted ID/role projections. Make exited 0.
-The retry report (archived evidence `runs/5-init-retry-1.md`) records the command, reviewed inputs,
+The retry report (private archive) records the command, reviewed inputs,
 authorization and limits. Actual IDs/roles remain in its ignored exclusive
 receipt; no private identifiers or raw response are published. This establishes
 only successful bounded projection for this route and sample. Content, scope
@@ -64,13 +64,13 @@ cleanup and deletion are excluded. Fixed init requests inside these separately
 reviewed setup stages revalidate only the selected drive's admin role; they do
 not authorize new account discovery or additional read targets.
 
-The creator stopped (archived evidence `runs/5-fixture-setup-execution-1.md`) on an uncertain POST
+The creator stopped (private archive) on an uncertain POST
 for one synthetic child; it was never retried. A distinct
-recovery stopped (archived evidence `runs/5-fixture-recovery-execution-1.md`) on a fresh metadata
+recovery stopped (private archive) on a fresh metadata
 GET before its next POST. Both outcomes remain stopped. A further completion
-used the owner-selected no-retry proposal (archived evidence `runs/5-fixture-completion-no-retry-proposal-1.md`)
-after fresh safety approval (archived evidence `runs/5-fixture-completion-security-review-3.md`).
-It completed (archived evidence `runs/5-fixture-completion-execution-1.md`), Make/inner exit0,
+used the owner-selected no-retry proposal (private archive)
+after fresh safety approval (private archive).
+It completed (private archive), Make/inner exit0,
 starting `2026-11-02T12:47:06.948Z`, observed closed at `12:57:01Z`.
 Its final operational reconciliation recorded **1001 pagination children**:
 679 original,59 recovery and263 completion ACKs. Old uncertain0680 was not
@@ -81,13 +81,13 @@ successful prior-evidence end checks. The fixture-stage cumulative counter is203
 These are provisioning observations, not final P/M/R/E/X qualification. The
 subsequent GET-only operator still requires closed, digest-bound provenance and
 fresh source/actual-input approval; fixtures alone do not qualify read behavior.
-Its local binding/manifest preparation (archived evidence `runs/5-final-get-execution-1.md`)
+Its local binding/manifest preparation (private archive)
 succeeded after local builder approval and exact-invocation approval. Its first
 GET result below is stopped; invocation approval never relabels the result.
 
-The final sanitized measurement record (archived evidence `runs/5-final-read-measurements-1.md`)
+The final sanitized measurement record (private archive)
 keeps two stopped sessions and the independently reviewed
-successful compatibility session (archived evidence `runs/5-remaining-read-probes-execution-2.md`)
+successful compatibility session (private archive)
 distinct. The latter ran11 attempts in11142ms,1697 body bytes/six download bytes,
 five tokenless destination attempts, Make0/inner0 and unchanged bound evidence.
 The earlier generic206 refusal's header cause remains undiagnosed: current
@@ -101,7 +101,7 @@ nonstandard ETags do not reconstruct the discarded earlier response.
 | E   | ETag presence/weak marker/equality on an unchanged synthetic binary          | Repeated known first byte; opaque ETag present/bounded,shape other,equal true,standard syntax false; no standard conditional/version qualification | #10, #14                                  |
 | X   | Invalid-limit sample on the owned synthetic folder                           | Second session422,232 bytes,code validation_failed; validation-details presence false                                                              | #9; remaining controls affect #6, #7, #10 |
 
-The separately reviewed remaining-read plan (archived evidence `runs/5-remaining-read-probes-plan-1.md`)
+The separately reviewed remaining-read plan (private archive)
 executed X independently before content; the focused M/R/E session did not repeat
 it. No further account request is planned. Fixture accounting totals2051
 requests:2032 provisioning plus4+4+11 read attempts;19 of30 reserved read attempts
@@ -203,21 +203,21 @@ template, status, bounded sample size, observed limits, fixture alias and affect
 ticket for every actual observation. Retain unknowns when the relevant sample is
 missing. Never replace the historical notes or synthetic labels with inferred
 success. Product specifications still need their own reviewed contracts. The
-historical PR #40 documentation-only acceptance (archived evidence `runs/5-pr40-acceptance-1.md`)
+historical PR #40 documentation-only acceptance (private archive)
 remains separate from final #5 acceptance and its future actual-main SHA.
 
 Earlier documentation work synchronized public #35 post-acceptance records:
-acceptance (archived evidence `runs/35-acceptance-1.md`),
-independent review (archived evidence `runs/35-pr-review-1.md`),
-actual-main checkout (archived evidence `runs/35-main-checkout-1.md`),
-document checks (archived evidence `runs/35-main-doc-check-1.md`) and
-normalization proof (archived evidence `runs/35-sync-normalization-1.md`).
+acceptance (private archive),
+independent review (private archive),
+actual-main checkout (private archive),
+document checks (private archive) and
+normalization proof (private archive).
 Those reports describe their original operations and are not new #5 test runs.
 
 Earlier documentation work also recorded the separately authorized local branch-cleanup
-plan (archived evidence `runs/BRANCH-CLEANUP-plan-1.md`),
-independent review (archived evidence `runs/BRANCH-CLEANUP-review-1.md`) and
-acceptance record (archived evidence `runs/BRANCH-CLEANUP-acceptance-1.md`).
+plan (private archive),
+independent review (private archive) and
+acceptance record (private archive).
 These are administrative records: four local branches were deleted with their
 histories archived; nine remote candidates remain blocked by the available
 deletion capability and were not deleted. This bookkeeping establishes no

@@ -10,12 +10,12 @@ version: 1
 
 Injected-scope acceptance completed on actual main
 `30e059ef8ef3540c4aa4bb6a0de0bf209c963b12`,2026-11-02; see
-the acceptance evidence (archived evidence `runs/9-acceptance-1.md`). This marker synchronization
+the acceptance evidence (private archive). This marker synchronization
 changes no frozen v1 contract. F-007 later versions BR-060 for #10.
 
 Autonomous freeze by the orchestrator on 2026-11-02, reviewed SHA
 `59f462ff1e0444a5a55c3907676480d70baf8e75`, after fresh independent
-round2 approval and freeze record (archived evidence `runs/9-spec-review-2.md`). The ticket is
+round2 approval and freeze record (private archive). The ticket is
 ready, no question remains and the user was notified of this SHA and decisions.
 
 #9 (archive issue 9) extends the accepted
@@ -42,7 +42,7 @@ is resolved by the explicit work/continuation contract below.
 - Named unit tests and actual SDK stdio client tests, including >1000 synthetic
   objects, root overlap and consecutive calls.
 - Synchronize accepted #8 F-005/BR-059–071/capability markers using its
-  actual-main acceptance (archived evidence `runs/8-acceptance-1.md`); carry preserved #8 review2,
+  actual-main acceptance (private archive); carry preserved #8 review2,
   acceptance1 and usage-summary1 records unchanged into the reviewed PR.
 - Version BR-060 and BR-065 for their same-purpose registration/list contracts.
   F-005 v1 remains immutable history; these later definitions govern #9.
@@ -379,7 +379,7 @@ None. Independent review and orchestrator freeze completed as recorded above.
 
 ## Stress-test
 
-- **Round 1 R1, major — retained.** Independent review (archived evidence `runs/9-spec-review-1.md`)
+- **Round 1 R1, major — retained.** Independent review (private archive)
   identified incompatible all-five-tool fixture assumptions. The applicability
   matrix and AC-02/06 now separate ordinary data pages from complete received
   proof/candidate batches, retain compatible >1000 fixtures for every tool, and

@@ -346,7 +346,7 @@ run.
 
 Accepted on actual main 0f1852c732fa3d4afe1741a7d89e453ae96b2905, 2026-11-10
 (`make check` rc=0; owner-run `make kdrive-upload-acceptance` passed all 12
-steps with 63 requests, evidence (archived evidence `runs/19-acceptance-2.md`)):
+steps with 63 requests, evidence (private archive)):
 [F-018 v1](features/F-018-upload.md) (#19), BR-279–BR-289 and BR-035 v2,
 BR-060 v6, BR-190 v3, BR-266 v2 and BR-274 v2. In
 `write` and `share` modes the server registers `kdrive_upload`: UTF-8 `text` or
@@ -360,7 +360,7 @@ triggered (kDrive renamed a file named like a folder and normalized an NFD
 name, both reported `uncertain`), so F-018 v2 (NFC-only names, owner decision
 2026-11-10) is required before any release.
 Accepted on actual main b6b7fbb5a96934c8f918cc8e00e9e42a4ac0e0f6, 2026-11-11
-(evidence (archived evidence `runs/91-acceptance-1.md`)): F-018 v2 (#91) refuses names that are not
+(evidence (private archive)): F-018 v2 (#91) refuses names that are not
 in NFC for `kdrive_upload`, `kdrive_create_folder` and `kdrive_rename`; NFC names
 are stored unchanged, which resolves D-18-11 for normalization (R-18-3 remains an
 accepted risk).
@@ -376,7 +376,7 @@ version.
 Accepted on actual main 4b59c528eed9d088cad27271f460f5a4077b9eda, 2026-11-10
 (`make check` rc=0, 127 files / 3121 tests; PR #86 CI green; owner-run
 `make kdrive-write-acceptance` passed all 11 steps with 70 requests,
-evidence (archived evidence `runs/18-acceptance-1.md`)):
+evidence (private archive)):
 [F-017 v1](features/F-017-controlled-tree-mutations.md) (#18),
 [BR-260–BR-278](business-rules/README.md#accepted--controlled-tree-mutations),
 BR-039 v2, BR-060 v5, BR-190 v2 and BR-200 v2. In `write` and `share` modes the
@@ -394,7 +394,7 @@ the measured trash `path` is a deletion-time snapshot.
 Accepted on actual main bc09d562eb422acd2b284be8c14e1e0806d6a118, 2026-11-04
 (`make check` rc=0, 94 files / 2041 tests; PR Quality Gate observed failing on
 a seeded issue and passing after its revert in real CI,
-evidence (archived evidence `runs/50-acceptance-1.md`)): [F-011 v3](features/F-011-pre-merge-quality-gates.md),
+evidence (private archive)): [F-011 v3](features/F-011-pre-merge-quality-gates.md),
 [BR-144–BR-151](business-rules/README.md#pending--pre-merge-quality-gates)
 (BR-144/150 v2, BR-151 v3), BR-010/012/014 v2 and BR-015 v3. A stricter lint gate (SonarJS and `strictTypeChecked`),
 a Sonar host taken from runtime configuration, and a blocking PR Quality Gate
@@ -410,7 +410,7 @@ confirmed in the record.
 
 Accepted on actual main 00e6fe340a505ce57967b486a0bda6f7c2f4d2d9, 2026-11-04
 (`make check` rc=0, 94 files / 2031 tests; PR #53 CI green; owner-run AC-21 with
-claude.ai web, evidence (archived evidence `runs/12-acceptance-claude-1.md`)): [F-012 v1](features/F-012-authenticated-http.md),
+claude.ai web, evidence (private archive)): [F-012 v1](features/F-012-authenticated-http.md),
 [BR-152–BR-171](business-rules/README.md#pending--authenticated-http),
 [BR-025 v2](business-rules/BR-025.md) (F-002 v4) and
 [BR-059 v2](business-rules/BR-059.md) (F-005 v2). A `node:http` listener in
@@ -441,7 +441,7 @@ established (#12/#13).
 
 Accepted on actual main 25e79ba, 2026-11-05 (`make check` rc=0, 97 files / 2128
 tests; main CI run 41990665178 built and smoke-tested both architectures,
-evidence (archived evidence `runs/13-acceptance-1.md`)): [F-013 v2](features/F-013-http-image.md),
+evidence (private archive)): [F-013 v2](features/F-013-http-image.md),
 [BR-172–BR-188](business-rules/README.md#pending--http-image) and
 [BR-015 v4](business-rules/BR-015.md). A production `Dockerfile` builds a
 non-root `runtime` image and a dev-only `smoke` image for linux/amd64 and
@@ -460,7 +460,7 @@ section. The guide has not been run on a real server.
 ## Accepted injected scope — bounded extracted content
 
 Accepted on actual main 7b046a0, 2026-11-03 (`make check` rc=0, 61 files / 1576
-tests plus 4 package tests, evidence (archived evidence `runs/14-acceptance-1.md`)): [F-009 v1](features/F-009-bounded-content-reading.md),
+tests plus 4 package tests, evidence (private archive)): [F-009 v1](features/F-009-bounded-content-reading.md),
 [BR-109–123](business-rules/README.md#pending--bounded-extracted-content) and
 [BR-060 v4](business-rules/BR-060.md). Ten injected reads include strict decoded
 text, selected-page text from a conservative classic PDF profile, and complete
@@ -474,7 +474,7 @@ qualification or production entrypoint is established at that SHA; #6/#7 passed 
 Accepted on actual main 2cec566ab8e2f030dbbbf47f04bf541e5eb48dc4, 2026-11-03, with owner-run
 AC-20 on actual main 7b046a0446930ab6a935510314c6c1b975d13550: [F-008 v1](features/F-008-oidc-qualification.md),
 [BR-094–BR-108](business-rules/README.md#pending--oidc-provider-qualification)
-and the Infomaniak discover (archived evidence `runs/11-acceptance-infomaniak-1.md`), Infomaniak token (archived evidence `runs/11-acceptance-infomaniak-token-1.md`), Gitea discover (archived evidence `runs/11-acceptance-gitea-1.md`) and Gitea token (archived evidence `runs/11-acceptance-gitea-token-1.md`) reports.
+and the Infomaniak discover (private archive), Infomaniak token (private archive), Gitea discover (private archive) and Gitea token (private archive) reports.
 The qualification tooling and the access-token validator in `src/auth/` are
 accepted. Both real providers are `proxy-only`: Infomaniak issues opaque access
 tokens and Gitea access JWTs lack `iss`, `aud` and `sub`, while both return a
@@ -485,7 +485,7 @@ OAuth runtime exists, and no MCP client connection is tested.
 ## Accepted injected scope — bounded raw content and resources
 
 Accepted on actual main4f84e4bb5343274d779ff43061effb60aa3cb64b,2026-11-03;
-see #10 acceptance (archived evidence `runs/10-acceptance-1.md`): [F-007 v1](features/F-007-bounded-downloads.md),
+see #10 acceptance (private archive): [F-007 v1](features/F-007-bounded-downloads.md),
 [BR-082–BR-093](business-rules/README.md#accepted--raw-content-and-resources) and
 [BR-060 v3](business-rules/BR-060.md). Nine injected read tools and one complete
 binary resource template share fresh configured/received read policy. Raw
@@ -497,7 +497,7 @@ production ACs passed later with F-014.
 ## Accepted injected scope — filtered collection continuation
 
 Accepted on actual main `30e059ef8ef3540c4aa4bb6a0de0bf209c963b12`,2026-11-02;
-see #9 acceptance (archived evidence `runs/9-acceptance-1.md`): [F-006 v1](features/F-006-filtered-pagination.md),
+see #9 acceptance (private archive): [F-006 v1](features/F-006-filtered-pagination.md),
 [BR-072–BR-081](business-rules/README.md#accepted--filtered-pagination),
 [BR-060 v2](business-rules/BR-060.md) and [BR-065 v2](business-rules/BR-065.md).
 At that accepted SHA eight injected read tools share guarded metadata and five paged collections.
@@ -508,7 +508,7 @@ Complete received proofs remain mandatory; provider qualification is absent.
 ## Accepted injected scope — stdio navigation
 
 Accepted on actual main209a68de956b328e04e2d98d6745128a587184bd,2026-11-02;
-see #8 acceptance (archived evidence `runs/8-acceptance-1.md`): [F-005 v1](features/F-005-stdio-navigation.md) and
+see #8 acceptance (private archive): [F-005 v1](features/F-005-stdio-navigation.md) and
 [BR-059–BR-071](business-rules/README.md#pending--injected-stdio-navigation).
 At its accepted SHA, the SDK server/stdio runner exposed four guarded read tools with exact scalar
 metadata, configured/default drive isolation, scoped terminal lists, guarded
@@ -521,7 +521,7 @@ kDrive connection, provider qualification, HTTP/resources or release is claimed.
 ## Accepted — mutation audit gate
 
 Accepted on actual main 005b9ba8e5b4115c5b14844e3fc23b7ea8079242, 2026-11-10 (`make check` rc=0, 123 files / 2945
-tests; PR #84 CI green; evidence (archived evidence `runs/17-acceptance-1.md`)):
+tests; PR #84 CI green; evidence (private archive)):
 [F-016 v1](features/F-016-mutation-audit-gate.md) (#17),
 [BR-234–BR-259](business-rules/README.md#accepted--mutation-audit-gate),
 BR-069 v2 and BR-070 v2. In `write` and `share` modes the
@@ -539,7 +539,7 @@ writes stay denied.
 Accepted on actual main 2a9c1e3cd82b10d701e003aeea180d1000088787, 2026-11-09
 (owner-run `make kdrive-acceptance`, AC-23–AC-26 all pass, 249 GET within the
 400 bound; AC-01–AC-22 by the merged suites and CI of PRs #71, #75–#78,
-evidence (archived evidence `runs/70-acceptance-4.md`)): [F-014 v7](features/F-014-production-kdrive-adapter.md),
+evidence (private archive)): [F-014 v7](features/F-014-production-kdrive-adapter.md),
 [BR-190–BR-217](business-rules/README.md#pending--production-kdrive-adapter),
 BR-016/028/071/123/175 v2 and
 [ADR-006](architecture-decisions/ADR-006-builtin-https-kdrive-transport.md).
@@ -556,7 +556,7 @@ Accepted 2026-11-09: [F-004 v1](features/F-004-received-share-policy.md),
 [BR-047–BR-058](business-rules/README.md#pending--received-share-access-policy)
 and [BR-042 v2](business-rules/BR-042.md); AC-01–AC-13 by unit tests (green on
 main `5ede9d6`), production AC-14/AC-15 through F-014 AC-25 on main `2a9c1e3`
-(evidence (archived evidence `runs/7-acceptance-4.md`)). Opt-in discovery of received shares,
+(evidence (private archive)). Opt-in discovery of received shares,
 root/child reads with recipient paths, a list-only read cache below 60 seconds
 (revocation enforced once the snapshot is 60 s old) and fresh capability-gated
 mutation simulations. Re-sharing and external-root enumeration deny. No real
@@ -567,7 +567,7 @@ write is issued.
 Accepted 2026-11-09: [F-003 v2](features/F-003-tree-access-policy.md),
 [BR-029–BR-046](business-rules/README.md#pending--configured-tree-access-policy);
 AC-01–AC-18 by unit tests (green on main `5ede9d6`), production AC-19/AC-20
-through F-014 AC-23/AC-24 on main `2a9c1e3` (evidence (archived evidence `runs/6-acceptance-1.md`)).
+through F-014 AC-23/AC-24 on main `2a9c1e3` (evidence (private archive)).
 Configured drive roots, deny patterns and operation effects are enforced on real
 kDrive metadata with fresh checks, including a 1,001-child descendant proof; the
 qualified `kdrive_info` tool and `kdrive://` resource dispatch through the
@@ -587,7 +587,7 @@ See the [specification index](docs/spec-index.md) and [draft policy](docs/delive
 ## Accepted — diagnostic package and development foundation
 
 Accepted on main `f2d38b32dbbd78059da6754bb11d9b8e561fd645`, 2026-11-01;
-see the AC acceptance evidence (archived evidence `runs/28-acceptance-1.md`) and completed
+see the AC acceptance evidence (private archive) and completed
 #3 (archive issue 3) /
 #28 (archive issue 28).
 
@@ -608,7 +608,7 @@ see the AC acceptance evidence (archived evidence `runs/28-acceptance-1.md`) and
 ## Accepted — configuration and injected startup preflight
 
 Accepted on main `88bf8caa7412988e11099a4a01f9e600aa38eeee`, 2026-11-01;
-see the AC acceptance evidence (archived evidence `runs/33-acceptance-1.md`) and completed
+see the AC acceptance evidence (private archive) and completed
 #4 (archive issue 4),
 #31 (archive issue 31) and
 #33 (archive issue 33).

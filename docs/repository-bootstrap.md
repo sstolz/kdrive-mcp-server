@@ -54,9 +54,9 @@ the resulting branch, commit, tree and content on 2026-11-01:
 - Branch protection flag: `false`. Settings changes: none.
 
 Sanitized evidence source: `/tmp/kdrive-p01-bootstrap-evidence.json`; the durable
-snapshot is the acceptance record (archived evidence `runs/P-01-acceptance-1.md`). The earlier
+snapshot is the acceptance record (private archive). The earlier
 independent procedure review is recorded locally at
-`runs/P-01-bootstrap-review-1.md` (`approve`); it is not included in this PR and
+(private archive) (`approve`); it is not included in this PR and
 does not attest to later execution or settings. This updated record still
 requires independent review.
 
@@ -130,7 +130,7 @@ Pre-PR snapshot: `feat/1-repository-bootstrap` has been created from root commit
 `8d6f56acf07e9e5cc4021f9baa36f49bdb44034e`. Committing the two administrative
 records and creating/reading back their draft PR are pending at this snapshot.
 The planned PR contained exactly `docs/repository-bootstrap.md` and
-`runs/P-01-acceptance-1.md`. README is already on `main` and is not part of this
+(private archive). README is already on `main` and is not part of this
 diff. Existing project/governance imports remain reserved for #2. This snapshot
 does not claim a PR or merge; later publication does not change its timing.
 

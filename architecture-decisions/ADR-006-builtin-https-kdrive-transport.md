@@ -1,7 +1,7 @@
 # ADR-006 — Built-in `node:https` transport for the kDrive adapter
 
 Status: accepted (2026-11-09). Design of F-014 (#70, decision D-01), accepted
-with F-014 v7 on main `2a9c1e3` (acceptance (archived evidence `runs/70-acceptance-4.md`)).
+with F-014 v7 on main `2a9c1e3` (acceptance (private archive)).
 
 ## Context
 

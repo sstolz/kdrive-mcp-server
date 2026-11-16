@@ -485,7 +485,7 @@ injected fake `fetch` and no network.
    100-code-point non-message field).
 8. Escape format ambiguous for astral code points, surrogates and backslash —
    retained: `\uXXXX` / `\u{X…}`, `Cs` escaped, `\` → `\\` (BR-337, AC-11).
-9. Metadata path and symlink, host path prefix — retained: `runs/<runId>.txt`
+9. Metadata path and symlink, host path prefix — retained: (private archive)
    read via `lstat`, regular non-symlink ≤ 64 KiB; URLs built relative to a
    slash-terminated base, `/sonar` prefix tested (BR-329, BR-331, AC-03,
    AC-06).

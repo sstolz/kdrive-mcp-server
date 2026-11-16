@@ -10,9 +10,9 @@ feature versions are separate provenance and do not imply earlier BR versions.
 The summaries below are navigation aids, not replacement contracts.
 
 Current statuses follow actual-main acceptance on 2026-11-01: the
-F-001 acceptance (archived evidence `runs/28-acceptance-1.md`) on
+F-001 acceptance (private archive) on
 `f2d38b32dbbd78059da6754bb11d9b8e561fd645` and
-F-002 acceptance (archived evidence `runs/33-acceptance-1.md`) on
+F-002 acceptance (private archive) on
 `88bf8caa7412988e11099a4a01f9e600aa38eeee`, recorded in completed
 #4 (archive issue 4),
 #31 (archive issue 31) and
@@ -58,7 +58,7 @@ kDrive adapter and the stdio and HTTP runtime of the packaged CLI are accepted w
 ## Accepted — configured-tree access policy
 
 [F-003 v2](../features/F-003-tree-access-policy.md), #6/#7: AC-01–AC-18 by unit tests (green on main `5ede9d6`);
-production AC-19/AC-20 passed through F-014 AC-23/AC-24 on main `2a9c1e3` on 2026-11-09 (evidence (archived evidence `runs/6-acceptance-1.md`)).
+production AC-19/AC-20 passed through F-014 AC-23/AC-24 on main `2a9c1e3` on 2026-11-09 (evidence (private archive)).
 
 | ID                  | Version | Rule                               | Status                                    |
 | ------------------- | ------- | ---------------------------------- | ----------------------------------------- |
@@ -86,7 +86,7 @@ production AC-19/AC-20 passed through F-014 AC-23/AC-24 on main `2a9c1e3` on 202
 ## Accepted — received-share access policy
 
 [F-004 v1](../features/F-004-received-share-policy.md), #7: AC-01–AC-13 by unit tests (green on main `5ede9d6`);
-production AC-14/AC-15 passed through F-014 AC-25 on main `2a9c1e3` on 2026-11-09 (evidence (archived evidence `runs/7-acceptance-4.md`)).
+production AC-14/AC-15 passed through F-014 AC-25 on main `2a9c1e3` on 2026-11-09 (evidence (private archive)).
 
 | ID                  | Version | Rule                                | Status |
 | ------------------- | ------- | ----------------------------------- | ------ |
@@ -122,10 +122,10 @@ Examples state concrete Given / When / Then conditions and observable outcomes.
 Implemented examples identify one actual test case or parameter row each.
 The user requested completing the 122 missing active-rule verification entries
 before publication: 121 now have automated cases and one has an identified
-manual GNU Make 3.81 test. See boundary-development evidence (archived evidence `runs/35-boundary-development-1.md`)
+manual GNU Make 3.81 test. See boundary-development evidence (private archive)
 for actual results; documentation rows and matrix expansions are not counts of
 unique tests. Historical-only rules retain their original AC targets without
-invented obsolete implementations. See the migration evidence (archived evidence `runs/35-migration-1.md`)
+invented obsolete implementations. See the migration evidence (private archive)
 and each record's Verification for preserved historical limits.
 
 All 428 allocated IDs have records, including merged lot D (`67c101a`).
@@ -175,7 +175,7 @@ Production #6/#7 ACs passed through F-014 on 2026-11-09.
 ## Accepted — filtered pagination
 
 F-006 v1 rules and BR-060/065 v2 were accepted for injected scope on actual main
-`30e059ef8ef3540c4aa4bb6a0de0bf209c963b12`; see #9 acceptance (archived evidence `runs/9-acceptance-1.md`).
+`30e059ef8ef3540c4aa4bb6a0de0bf209c963b12`; see #9 acceptance (private archive).
 BR-060 v3 is accepted under #10; v4 is accepted under #14 (main `7b046a0`). The #6/#7 production ACs passed through F-014 on 2026-11-09.
 
 | Rule                | Version | Statement                                                                                                                                 | Source                                               | Status                  |
@@ -196,7 +196,7 @@ BR-060 v3 is accepted under #10; v4 is accepted under #14 (main `7b046a0`). The 
 ## Accepted — raw content and resources
 
 F-007 v1 and BR-082–093 / BR-060 v3 are accepted for injected scope on
-main4f84e4bb5343274d779ff43061effb60aa3cb64b; see #10 acceptance (archived evidence `runs/10-acceptance-1.md`).
+main4f84e4bb5343274d779ff43061effb60aa3cb64b; see #10 acceptance (private archive).
 No production adapter or version qualification is established.
 
 | Rule                | Version | Statement                                                                                                                                                                                     | Source                                             | Status                  |
@@ -220,7 +220,7 @@ No production adapter or version qualification is established.
 
 F-008 v1 and BR-094–BR-108 are accepted: AC-01–AC-19 on actual main
 `2cec566ab8e2f030dbbbf47f04bf541e5eb48dc4` and the owner-run AC-20 on actual main
-`7b046a0446930ab6a935510314c6c1b975d13550` (Infomaniak discover (archived evidence `runs/11-acceptance-infomaniak-1.md`), Infomaniak token (archived evidence `runs/11-acceptance-infomaniak-token-1.md`), Gitea discover (archived evidence `runs/11-acceptance-gitea-1.md`) and Gitea token (archived evidence `runs/11-acceptance-gitea-token-1.md`)). Both providers are `proxy-only`;
+`7b046a0446930ab6a935510314c6c1b975d13550` (Infomaniak discover (private archive), Infomaniak token (private archive), Gitea discover (private archive) and Gitea token (private archive)). Both providers are `proxy-only`;
 no HTTP/OAuth runtime or real client connection is established.
 
 | ID                  | Version | Rule                                                                                                              | Source                                              | Status           |
@@ -246,7 +246,7 @@ no HTTP/OAuth runtime or real client connection is established.
 ## Accepted — bounded extracted content
 
 F-009 allocates BR-109–123 v1 and versions BR-060 to v4 for #14. All are
-accepted on actual main `7b046a0` (acceptance (archived evidence `runs/14-acceptance-1.md`)). Only the declared injected profile is covered.
+accepted on actual main `7b046a0` (acceptance (private archive)). Only the declared injected profile is covered.
 
 | Rule                | Version | Statement                                                                                                                                                                            | Source                                                   | Status                                    |
 | ------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------- | ----------------------------------------- |
@@ -303,7 +303,7 @@ MCP-client connections are deferred to #12/#13 and are not established.
 ## Accepted — multi-architecture HTTP container image
 
 F-013 v2 (#13, frozen 2026-11-05) allocates BR-172–BR-188 v1 and versions BR-015
-to v4 (the `image` CI job). All were accepted on actual main `25e79ba` on 2026-11-05 (evidence (archived evidence `runs/13-acceptance-1.md`)).
+to v4 (the `image` CI job). All were accepted on actual main `25e79ba` on 2026-11-05 (evidence (private archive)).
 
 | ID                  | Version | Rule                                                                                                                   | Source                                      | Status                                    |
 | ------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- | ----------------------------------------- |
@@ -332,10 +332,10 @@ to v4 (the `image` CI job). All were accepted on actual main `25e79ba` on 2026-1
 F-012 v1, BR-152–BR-171 v1, BR-025 v2 (F-002 v4) and BR-059 v2 (F-005 v2) are
 accepted on actual main `00e6fe340a505ce57967b486a0bda6f7c2f4d2d9` (`make check`
 rc=0, 94 files / 2031 tests; PR #53 CI green; owner-run AC-21 with claude.ai web,
-evidence (archived evidence `runs/12-acceptance-claude-1.md`)).
+evidence (private archive)).
 F-012 v2 (#63, autonomous freeze 2026-11-05) versions BR-171 to v2 and allocates
 BR-189 v1; both were accepted on actual main `7b8b52d` on 2026-11-05
-(evidence (archived evidence `runs/63-acceptance-1.md`)).
+(evidence (private archive)).
 
 | ID                  | Version | Rule                                                                                                                   | Source                                              | Status                                               |
 | ------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- | ---------------------------------------------------- |
@@ -369,7 +369,7 @@ F-011 v1 allocates BR-144–BR-151 v1 for #50 and versions BR-010, BR-012,
 BR-014 and BR-015 to v2. F-011 v2 (after PR #52 review 1, frozen 2026-11-03) versions BR-144,
 BR-150 and BR-151 to v2 and BR-015 to v3. F-011 v3 (2026-11-04) versions BR-151 to v3
 (`.git/config.worktree` saved and compared). All are active, accepted on main `bc09d56`
-(acceptance (archived evidence `runs/50-acceptance-1.md`)).
+(acceptance (private archive)).
 
 | ID                  | Version | Rule                                                                                                          | Source                                                   | Status |
 | ------------------- | ------- | ------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- | ------ |
@@ -389,7 +389,7 @@ BR-150 and BR-151 to v2 and BR-015 to v3. F-011 v3 (2026-11-04) versions BR-151 
 F-014 v1 (#70, frozen 2026-11-05) allocates BR-190–BR-217 v1 and versions
 BR-016, BR-028, BR-071, BR-123 and BR-175 to v2. F-014 v2–v7 version further
 rules (see each record's History). All were accepted with F-014 v7 on actual
-main `2a9c1e3` on 2026-11-09 (evidence (archived evidence `runs/70-acceptance-4.md`)); the v2
+main `2a9c1e3` on 2026-11-09 (evidence (private archive)); the v2
 statements of the five versioned rules replace their v1 statements listed above.
 
 | ID                  | Version | Rule                                                                                                          | Source                                                     | Status                                    |
@@ -432,7 +432,7 @@ statements of the five versioned rules replace their v1 statements listed above.
 
 F-016 v1 (#17, frozen 2026-11-09 at `c547802`) allocates BR-234–BR-259 v1 and
 versions BR-069 and BR-070 to v2. All were accepted on actual main
-005b9ba8e5b4115c5b14844e3fc23b7ea8079242 on 2026-11-10 (evidence (archived evidence `runs/17-acceptance-1.md`)); BR-069 v2 and
+005b9ba8e5b4115c5b14844e3fc23b7ea8079242 on 2026-11-10 (evidence (private archive)); BR-069 v2 and
 BR-070 v2 replace the v1 statements listed above.
 
 | ID                  | Version | Rule                                                                                                                     | Source                                               | Status                                    |
@@ -471,7 +471,7 @@ BR-070 v2 replace the v1 statements listed above.
 F-017 v1 (#18, frozen 2026-11-10 at `e6e96e5`) allocates BR-260–BR-278 v1 and
 versions BR-039 to v2, BR-060 to v5, BR-190 to v2 and BR-200 to v2. All were
 accepted on actual main `4b59c52` on 2026-11-10
-(acceptance (archived evidence `runs/18-acceptance-1.md`)); the new versions are active.
+(acceptance (private archive)); the new versions are active.
 
 | ID                  | Version | Rule                                                                                                                                     | Source                                                                                              | Status                                    |
 | ------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- | ----------------------------------------- |
@@ -504,7 +504,7 @@ accepted on actual main `4b59c52` on 2026-11-10
 F-018 v1 (#19, frozen 2026-11-10 at `0c9a542`) allocates BR-279–BR-289 v1 and
 versions BR-035 to v2, BR-060 to v6, BR-190 to v3, BR-266 to v2 and BR-274 to
 v2. All were accepted on actual main `0f1852c` on 2026-11-10
-(acceptance (archived evidence `runs/19-acceptance-2.md`)); the new versions are active.
+(acceptance (private archive)); the new versions are active.
 
 | ID                  | Version | Rule                                                                                | Source                                  | Status                     |
 | ------------------- | ------- | ----------------------------------------------------------------------------------- | --------------------------------------- | -------------------------- |

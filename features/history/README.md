@@ -65,7 +65,7 @@ No fresh BR identifier is allocated for this clarification of the existing
 source/diagnostic contract. Fresh independent GPT-6 Astra/high review approved
 v2 SHA-256 `7005d6d3322a10a76dff08cc6fb05dfe3641f8ab07586ca65ccf61563c100d4f`;
 the orchestrator froze v2 at 21:29:17 UTC and notified the user. See the
-v2 review evidence (archived evidence `runs/4-spec-v2-review-1.md`). V2 acceptance subsequently
+v2 review evidence (private archive). V2 acceptance subsequently
 succeeded on actual main `88bf8caa7412988e11099a4a01f9e600aa38eeee`, 2026-11-01;
-see the acceptance report (archived evidence `runs/33-acceptance-1.md`). The v1 snapshot remains
+see the acceptance report (private archive). The v1 snapshot remains
 verbatim; only this navigation metadata is synchronized in #35.

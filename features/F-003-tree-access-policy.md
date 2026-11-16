@@ -14,11 +14,11 @@ configured-tree route; all other configured-tree rules and blocked production
 AC-19/AC-20 remain unchanged. The orchestrator autonomously froze both contracts
 at 2026-11-02 19:32:08 UTC on reviewed SHA
 `e913aa40af932889daa88be780095ff9095706c2`, after fresh independent
-round 2 approval (archived evidence `runs/7-spec-review-2.md`), and notified the user.
+round 2 approval (private archive), and notified the user.
 [The immutable v1 snapshot](history/F-003-v1.md) preserves its contract
 and review record. V1 autonomous freeze: 2026-11-02 at 07:44:57 UTC, reviewed commit
 `ba18efdc983d5e3fe800b4d4eb62c65f1347ee0f`; fresh independent
-round 2 approval (archived evidence `runs/6-spec-review-2.md`). The orchestrator confirms abstract
+round 2 approval (private archive). The orchestrator confirms abstract
 contract readiness and no open product question. AC-19/AC-20 remain blocked;
 this freeze establishes neither production qualification nor ticket acceptance.
 
@@ -32,13 +32,13 @@ The ticket's complete obligation remains #6 (archive issue 6).
 At freeze, the [read evidence dossier](../docs/kdrive-read-evidence.md) contained
 only a current HTTP 401 attempt. Subsequent accepted #5 documentation now records
 bounded positive owned metadata and complete two-page children measurements;
-see the sanitized observations (archived evidence `runs/5-final-read-measurements-1.md`).
+see the sanitized observations (private archive).
 Those measurements do not implement or qualify a normalized production adapter,
 nor establish all required positive/negative access-policy fixtures. Historical
 samples and public client code likewise do not qualify that adapter. An abstract
 injected policy implementation can advance independently; their success cannot
 close #6 or establish production enforcement. No provider request is authorized
-by this specification. See readiness (archived evidence `runs/6-readiness-1.md`).
+by this specification. See readiness (private archive).
 
 ## Scope
 
@@ -605,7 +605,7 @@ authorizes the abstract stage only; no provider request is authorized.
 The dispositions below belong to preserved v1. Fresh independent #7 round 2
 approved this amendment and F-004 together on the joint freeze SHA above.
 
-Fresh review round 1 (archived evidence `runs/6-spec-review-1.md`) returned `changes` against
+Fresh review round 1 (private archive) returned `changes` against
 `86182007b8f744ba9fddd492d4f709cbf453e8c7`. All four findings are retained:
 
 - **R1, major — retained.** Reject interdependent batch effects before dispatch,
