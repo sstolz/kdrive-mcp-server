@@ -649,7 +649,9 @@ Use versioned BR citations in those tests. Tests run through `make check`.
 - **First live stable steps** — Stable-only workflow steps first run live
   on 1.0.0. AC-32 rehearses them against doubles. AC-36 mitigates the buildx
   metadata risk with a real two-tag local-registry push and a derived fixture.
-  If these mitigations still fail, the fix commit forces `1.0.1`.
+  If these mitigations still fail before npm accepts 1.0.0, the fix commit
+  forces `1.0.1`; after npm accepts it, D-4 applies and publication is
+  blocked until #91.
   Status: accepted by the owner on 2026-11-16 (#89, second decision comment).
 
 ## Stress-test
@@ -748,5 +750,8 @@ Round-1 decisions superseded by the owner narrowing:
   stable phase `npm` keeps the v1 token diagnostic; the #91 refusal takes
   precedence over every other npm condition once the npm document is
   readable; BR-370 v2 forwards the image output (empty for beta).
+- **Review 7 (diff-only), finding 1: retained** — The forced `1.0.1` applies
+  only before npm accepts 1.0.0; afterwards D-4 applies until #91. Finding 2:
+  `make format-check` passes; no change.
 
 No approval or freeze is claimed.
