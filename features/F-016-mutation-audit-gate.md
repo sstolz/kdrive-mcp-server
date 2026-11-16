@@ -39,7 +39,7 @@ What already exists on the base:
   does not change the read path.
 - `KDRIVE_MCP_AUDIT_LOG` is parsed (F-002: `stderr` or a path resolved against
   the working directory) but unused in `src/`.
-- #16 measured write endpoints ((private archive), -B-1.md): no 429 was
+- #16 measured write endpoints (private archive): no 429 was
   observed and no 5xx or timeout was provoked, so the classification of those
   cases below rests on HTTP semantics, not on measurement.
 
