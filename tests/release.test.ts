@@ -382,10 +382,9 @@ describe("F-024 AC-08 registry checks", () => {
       "true",
       "verify",
       (s) => {
-        s.npm = {
-          status: 200,
-          body: npmDocument({ placeholder: false, latest: "0.5.0" }),
-        };
+        // F-024 v3 (BR-363 v2): a non-placeholder latest is the #91 refusal,
+        // so this case keeps the valid pre-1.0 registry state.
+        s.npm = { status: 200, body: npmDocument({}) };
       },
       [],
     ],
