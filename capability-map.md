@@ -395,7 +395,7 @@ Accepted on actual main bc09d562eb422acd2b284be8c14e1e0806d6a118, 2026-11-04
 (`make check` rc=0, 94 files / 2041 tests; PR Quality Gate observed failing on
 a seeded issue and passing after its revert in real CI,
 evidence (private archive)): [F-011 v3](features/F-011-pre-merge-quality-gates.md),
-[BR-144–BR-151](business-rules/README.md#pending--pre-merge-quality-gates)
+[BR-144–BR-151](business-rules/README.md#accepted--pre-merge-quality-gates)
 (BR-144/150 v2, BR-151 v3), BR-010/012/014 v2 and BR-015 v3. A stricter lint gate (SonarJS and `strictTypeChecked`),
 a Sonar host taken from runtime configuration, and a blocking PR Quality Gate
 for same-repository pull requests on the dedicated `kdrive-mcp-server-pr`
@@ -411,7 +411,7 @@ confirmed in the record.
 Accepted on actual main 00e6fe340a505ce57967b486a0bda6f7c2f4d2d9, 2026-11-04
 (`make check` rc=0, 94 files / 2031 tests; PR #53 CI green; owner-run AC-21 with
 claude.ai web, evidence (private archive)): [F-012 v1](features/F-012-authenticated-http.md),
-[BR-152–BR-171](business-rules/README.md#pending--authenticated-http),
+[BR-152–BR-171](business-rules/README.md#accepted--authenticated-http),
 [BR-025 v2](business-rules/BR-025.md) (F-002 v4) and
 [BR-059 v2](business-rules/BR-059.md) (F-005 v2). A `node:http` listener in
 `src/http/` mounts the accepted OAuth proxy handlers and the SDK Streamable HTTP
@@ -428,7 +428,7 @@ adapter and no CLI HTTP runtime exist yet, so a real drive is not served.
 
 Accepted on actual main 3fc14c3bbbd57b3c52ca4b74c07a512720f0d627, 2026-11-03
 (`make check` rc=0, 76 files / 1746 tests; PR #51 CI green): [F-010 v1](features/F-010-oauth-proxy.md),
-[BR-124–BR-143](business-rules/README.md#pending--oauth-proxy),
+[BR-124–BR-143](business-rules/README.md#accepted--oauth-proxy),
 [BR-100 v2](business-rules/BR-100.md) and [BR-024 v2](business-rules/BR-024.md)
 (F-002 v3). Transport-independent handlers for authorization-server metadata,
 dynamic registration, consent, the upstream login with Infomaniak or another
@@ -442,7 +442,7 @@ established (#12/#13).
 Accepted on actual main 25e79ba, 2026-11-05 (`make check` rc=0, 97 files / 2128
 tests; main CI run 41990665178 built and smoke-tested both architectures,
 evidence (private archive)): [F-013 v2](features/F-013-http-image.md),
-[BR-172–BR-188](business-rules/README.md#pending--http-image) and
+[BR-172–BR-188](business-rules/README.md#accepted--http-image) and
 [BR-015 v4](business-rules/BR-015.md). A production `Dockerfile` builds a
 non-root `runtime` image and a dev-only `smoke` image for linux/amd64 and
 linux/arm64 (`make image`, `make image-smoke`, CI job `image`); nothing is
@@ -461,7 +461,7 @@ section. The guide has not been run on a real server.
 
 Accepted on actual main 7b046a0, 2026-11-03 (`make check` rc=0, 61 files / 1576
 tests plus 4 package tests, evidence (private archive)): [F-009 v1](features/F-009-bounded-content-reading.md),
-[BR-109–123](business-rules/README.md#pending--bounded-extracted-content) and
+[BR-109–123](business-rules/README.md#accepted--bounded-extracted-content) and
 [BR-060 v4](business-rules/BR-060.md). Ten injected reads include strict decoded
 text, selected-page text from a conservative classic PDF profile, and complete
 resized PNG images from admitted PNG/JPEG sources. Full version-bound downloads,
@@ -473,7 +473,7 @@ qualification or production entrypoint is established at that SHA; #6/#7 passed 
 
 Accepted on actual main 2cec566ab8e2f030dbbbf47f04bf541e5eb48dc4, 2026-11-03, with owner-run
 AC-20 on actual main 7b046a0446930ab6a935510314c6c1b975d13550: [F-008 v1](features/F-008-oidc-qualification.md),
-[BR-094–BR-108](business-rules/README.md#pending--oidc-provider-qualification)
+[BR-094–BR-108](business-rules/README.md#accepted--oidc-provider-qualification)
 and the Infomaniak discover (private archive), Infomaniak token (private archive), Gitea discover (private archive) and Gitea token (private archive) reports.
 The qualification tooling and the access-token validator in `src/auth/` are
 accepted. Both real providers are `proxy-only`: Infomaniak issues opaque access
@@ -509,7 +509,7 @@ Complete received proofs remain mandatory; provider qualification is absent.
 
 Accepted on actual main209a68de956b328e04e2d98d6745128a587184bd,2026-11-02;
 see #8 acceptance (private archive): [F-005 v1](features/F-005-stdio-navigation.md) and
-[BR-059–BR-071](business-rules/README.md#pending--injected-stdio-navigation).
+[BR-059–BR-071](business-rules/README.md#accepted--injected-stdio-navigation).
 At its accepted SHA, the SDK server/stdio runner exposed four guarded read tools with exact scalar
 metadata, configured/default drive isolation, scoped terminal lists, guarded
 path resolution and bounded sanitized I/O. F-006 extends that version as described above. Actual SDK child/client tests use
@@ -540,7 +540,7 @@ Accepted on actual main 2a9c1e3cd82b10d701e003aeea180d1000088787, 2026-11-09
 (owner-run `make kdrive-acceptance`, AC-23–AC-26 all pass, 249 GET within the
 400 bound; AC-01–AC-22 by the merged suites and CI of PRs #71, #75–#78,
 evidence (private archive)): [F-014 v7](features/F-014-production-kdrive-adapter.md),
-[BR-190–BR-217](business-rules/README.md#pending--production-kdrive-adapter),
+[BR-190–BR-217](business-rules/README.md#accepted--production-kdrive-adapter),
 BR-016/028/071/123/175 v2 and
 [ADR-006](architecture-decisions/ADR-006-builtin-https-kdrive-transport.md).
 The packaged CLI runs production preflight and serves stdio or HTTP with a
@@ -553,7 +553,7 @@ and a version change. Read-only: no mutation reaches kDrive.
 ## Accepted — separate received-share policy
 
 Accepted 2026-11-09: [F-004 v1](features/F-004-received-share-policy.md),
-[BR-047–BR-058](business-rules/README.md#pending--received-share-access-policy)
+[BR-047–BR-058](business-rules/README.md#accepted--received-share-access-policy)
 and [BR-042 v2](business-rules/BR-042.md); AC-01–AC-13 by unit tests (green on
 main `5ede9d6`), production AC-14/AC-15 through F-014 AC-25 on main `2a9c1e3`
 (evidence (private archive)). Opt-in discovery of received shares,
@@ -565,7 +565,7 @@ write is issued.
 ## Accepted — configured-tree policy
 
 Accepted 2026-11-09: [F-003 v2](features/F-003-tree-access-policy.md),
-[BR-029–BR-046](business-rules/README.md#pending--configured-tree-access-policy);
+[BR-029–BR-046](business-rules/README.md#accepted--configured-tree-access-policy);
 AC-01–AC-18 by unit tests (green on main `5ede9d6`), production AC-19/AC-20
 through F-014 AC-23/AC-24 on main `2a9c1e3` (evidence (private archive)).
 Configured drive roots, deny patterns and operation effects are enforced on real

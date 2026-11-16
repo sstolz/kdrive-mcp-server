@@ -24,6 +24,15 @@ free on the npm registry, but `kdrive-mcp` and `@infomaniak/mcp-server-kdrive`
 as too similar to an existing name, and it sets this project apart from those
 packages. Publishing a scoped package publicly needs `--access public`.
 
+**Name re-check before 1.0 (2026-11-16).** On the npm registry,
+`@sstolz/kdrive-mcp-server` is this project's package (`beta` → `0.6.0-beta.2`,
+`latest` → the deprecated placeholder), and the unscoped `kdrive-mcp-server` is
+still free. Related names exist: the official `@infomaniak/mcp-server-kdrive`
+(1.2.0, repository `Infomaniak/mcp-server-kdrive`), which README names in its
+non-affiliation notice, and third-party `kdrive-mcp`, `infomaniak-mcp` and
+`infomaniak-mcp-agent` packages or repositories. None uses this project's name.
+Recheck on the day of the 1.0 publication.
+
 ## Versions
 
 - The public beta was first `0.6.0-beta.1`; the current published beta is

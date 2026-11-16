@@ -20,7 +20,7 @@ Since #14 / F-009 (accepted on main `7b046a0`), all modes expose ten read tools 
 `kdrive_read`, `kdrive_download` and one complete-binary resource template,
 with no prompt; `write` and `share` modes add the five write tools of #18
 and `kdrive_upload` of #19
-(see [Write tools](#write-tools-pending-acceptance)). Metadata still has exactly `drive_id`, `id`,
+(see [Write tools](#write-tools)). Metadata still has exactly `drive_id`, `id`,
 `name`, `type` and `path`; names, paths and file content are untrusted data.
 
 The five collections accept optional `type` and session-owned `cursor` handles.
