@@ -1,9 +1,44 @@
 # Access-policy security boundary
 
-The unreleased F-003 policy is an abstract injected core, pending acceptance.
-It does not register an MCP server or qualify a production kDrive adapter.
-The current executable remains local configuration preparation only. Ticket #6
-stays open for real adapter and tool/resource integration (AC-19/AC-20).
+## Reporting a vulnerability
+
+Report suspected vulnerabilities privately through GitHub's private
+vulnerability reporting: choose **Report a vulnerability** on this repository's
+**Security** tab. Do not open a public issue for a suspected vulnerability.
+Include the affected version, configuration mode (stdio or HTTP), reproduction
+steps and the expected impact. Do not include credentials or private files.
+This is a single-maintainer, best-effort project with no response-time guarantee.
+
+## Current status
+
+The executable starts a production kDrive adapter and an MCP server over stdio
+or HTTP. The runtime and adapter are accepted; the README records maintainer
+acceptance with claude.ai on the web. Synthetic tests alone do not establish
+provider guarantees. The boundaries and remaining limits below still apply.
+
+## Telemetry and network traffic
+
+The server has no telemetry, keeps no usage statistics and sends no data to the
+maintainer. Operational diagnostics and mutation audit logs are separate from
+telemetry; see the audit boundary below.
+
+External application traffic goes to the kDrive API and its allowed kDrive
+download CDN hosts, the configured identity provider in HTTP mode with OAuth,
+and, when enabled in proxy mode, Client ID Metadata Documents (CIMD) at origins
+listed in `OAUTH_ALLOWED_CLIENT_ID_ORIGINS`. That list is empty by default,
+which disables CIMD. Identity-provider discovery and key endpoints are included
+in OAuth traffic. Hostname resolution also uses DNS. The image's health probe
+makes a local HTTP request to `127.0.0.1`; it sends nothing to the maintainer.
+
+### Cookie
+
+The only cookie is `__Host-kdrive-oauth`. It is strictly necessary to bind the
+browser to an in-progress authorization flow. Only the OAuth proxy in HTTP
+mode sets it. Its lifetime is 600 seconds (ten minutes), with `Path=/`,
+`Secure`, `HttpOnly` and `SameSite=Lax`, and no `Domain` attribute. There is no
+tracking or analytics cookie.
+
+## Access-policy boundary
 
 Configuration and dependency implementations are trusted composition components;
 client arguments and dependency results are untrusted data. Only the exact
@@ -46,10 +81,10 @@ require explicit recursive authority; nonempty denies still require complete
 descendant path proofs. Restore capabilities describe the current trashed source,
 separately from historical original paths. Re-sharing always denies.
 
-These are abstract synthetic guarantees. F-004 production adapter AC-14 and real
-consumer AC-15 remain blocked and mandatory, alongside #6 AC-19/AC-20. Provider
-ancestry, recipient paths, recursive capabilities and actual runtime wiring have
-not been qualified; blanket refusal cannot satisfy the positive acceptance cases.
+The injected policy tests establish synthetic guarantees. Production runtime
+acceptance is recorded separately in the [capability map](capability-map.md)
+and [README](README.md#connect-an-ai-client). Provider races and unmeasured
+effects remain subject to the limits below.
 
 A fresh check precedes execution, but an upstream change can race with execution.
 Traversal across pages likewise cannot establish a single concurrent snapshot.
@@ -66,8 +101,8 @@ implementation records.
 
 ## Injected stdio navigation boundary
 
-The injected SDK transport exposes nine read tools and one binary resource
-template under F-007 (pending #10 acceptance), extending accepted F-006. Its additive policy
+The injected SDK transport exposes ten read tools and one binary resource
+template, extending F-006 and F-007. Its additive policy
 projection returns exactly the normalized item authorized in that invocation,
 without using an arbitrary execute response. Listing also checks direct-parent
 identity/path, and path resolution follows fresh guarded anchors and children.
@@ -114,15 +149,15 @@ objects are not inspected for status or message. Abstract policy dispatch and
 execute do not acquire retries. Resource errors use fixed code-32000/messages
 without error.data; credentials, headers, URLs, ETags and content never appear in
 failure diagnostics. Authorized success deliberately contains requested content.
-No production adapter/version/redirect qualification follows from synthetic
-tests, and #6/#7's mandatory production ACs remain blocked.
+Synthetic tests alone do not qualify production adapter versions or redirects;
+production acceptance is recorded separately in the capability map.
 
 Close aborts evidence, settles owned sends, removes owned listeners/timers and
 destroys the output without waiting for drain. The dedicated default process
 composition terminates after cleanup because Node process stdout can retain a
 pending OS pipe write after stream destruction. Embedded callers provide
 separate owned streams. These bounds do not prove cancellation of an underlying
-real provider request: no production adapter is qualified. Received-list cache
+real provider request by themselves. Received-list cache
 age and multi-step resolution retain the existing revocation/concurrency limits.
 
 ## Process-wide extraction admission (F-040)

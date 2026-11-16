@@ -122,7 +122,10 @@ from your client, then switch to `write` only if you need it
 ### Remote (HTTP behind Traefik with OAuth)
 
 For web and mobile clients, use [examples/compose.yaml](examples/compose.yaml)
-to run the same image behind Traefik with `KDRIVE_MCP_TRANSPORT=http`,
+for an existing Traefik deployment, or
+[examples/compose-traefik.yaml](examples/compose-traefik.yaml) to include
+Traefik and ACME TLS. Adapt the example; it is not exercised by CI. Both run
+the same image behind Traefik with `KDRIVE_MCP_TRANSPORT=http`,
 `OAUTH_MODE=proxy` and `KDRIVE_MCP_MODE=read`. For example, serve drive
 `123456` at `https://mcp.example.com/mcp`, mounting the kDrive token, upstream
 client secret and signing key as read-only secrets. Follow
@@ -357,6 +360,11 @@ walks through it with Docker Compose and Traefik; in short:
    the client as below. The client registers itself, you log in at your
    provider, and the server checks your identity against the allowlist.
 
+Prefer `OAUTH_ALLOWED_SUBJECTS` from `OAUTH_ISSUER`: the `(iss, sub)` pair is
+the reference identity. `OAUTH_ALLOWED_EMAILS` is a separate, optional mechanism
+that requires an exact address match and `email_verified=true`. It is
+discouraged because an address can change or be reassigned.
+
 **claude.ai** (verified): add a custom connector with the URL
 `MCP_PUBLIC_URL`, for example `https://mcp.example.com/mcp`. Its callback URL
 is `https://claude.ai/api/mcp/auth_callback`.
@@ -465,6 +473,11 @@ it again after a pause; each new invocation requires fresh admission and full
 authorization. After
 `uncertain`, check the item with a read tool before trying again: the server
 never replays an uncertain write.
+
+The [extraction dependency rationale](architecture-decisions/ADR-004-bounded-extraction-dependencies.md)
+explains the choice of pure JavaScript dependencies and bounded workers. It
+records the original design; later extraction changes are listed in the
+[capability map](capability-map.md).
 
 Key limits:
 
@@ -624,10 +637,26 @@ never races an in-flight port operation: if it outlives close's budget, the
 retained descriptor stays open until actual process termination, including in
 library hosts. No timer guarantees actual termination or durable delivery.
 
+## Privacy
+
+The server has no telemetry, keeps no usage statistics and sends no data to the
+maintainer. External application traffic goes to the kDrive API and its allowed
+download CDN, the configured identity provider in HTTP mode with OAuth, and
+CIMD documents at `OAUTH_ALLOWED_CLIENT_ID_ORIGINS` in proxy mode when enabled.
+The origin list is empty by default, so CIMD is off. DNS resolves these hosts;
+the image's health probe contacts the local server.
+
+The only cookie, `__Host-kdrive-oauth`, is strictly necessary for an in-progress
+OAuth authorization flow in HTTP proxy mode. It lasts ten minutes and has
+`Path=/`, `Secure`, `HttpOnly` and `SameSite=Lax`, with no `Domain`. There is no
+tracking or analytics cookie. See
+[network traffic](SECURITY.md#telemetry-and-network-traffic) and
+[cookie details](SECURITY.md#cookie).
+
 ## More documentation
 
-- [SECURITY.md](SECURITY.md): security boundary and how to report a
-  vulnerability.
+- [SECURITY.md](SECURITY.md): security boundaries and private vulnerability
+  reporting through the repository's Security tab.
 - [Configuration reference](features/F-002-configuration.md),
   [deployment guide](docs/deployment.md), [OAuth proxy notes](docs/oauth-proxy.md).
 - [Publishing](docs/publishing.md): package and image names, versions and the
