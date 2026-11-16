@@ -33,7 +33,7 @@ export interface VerdictInput {
 }
 
 /** BR-102: the provider verdict and its failing conditions. */
-// eslint-disable-next-line sonarjs/cognitive-complexity -- F-011: pre-existing complex function; splitting it is deferred to keep reviewed control flow unchanged in this ticket (BACKLOG.md)
+// eslint-disable-next-line sonarjs/cognitive-complexity -- F-011: pre-existing complex function; splitting it is deferred to keep reviewed control flow unchanged in this ticket (#79)
 export function providerVerdict(input: VerdictInput): {
   verdict: ProviderVerdict;
   failing: string[];

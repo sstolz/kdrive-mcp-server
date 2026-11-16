@@ -1,6 +1,6 @@
 import { extractionFail, type ReadArguments } from "./extraction-values.js";
 /** BR-112: fatal incremental decoding, one explicit leading BOM, no replacement. */
-// eslint-disable-next-line sonarjs/cognitive-complexity -- F-011: pre-existing complex function; splitting it is deferred to keep reviewed control flow unchanged in this ticket (BACKLOG.md)
+// eslint-disable-next-line sonarjs/cognitive-complexity -- F-011: pre-existing complex function; splitting it is deferred to keep reviewed control flow unchanged in this ticket (#79)
 export function decodeText(
   bytes: Uint8Array,
   encoding: ReadArguments["encoding"],
@@ -9,16 +9,16 @@ export function decodeText(
   const bom =
     bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf
       ? "utf-8"
-      : // eslint-disable-next-line sonarjs/no-nested-conditional -- F-011: pre-existing nested conditional kept unchanged; refactor tracked in BACKLOG.md
+      : // eslint-disable-next-line sonarjs/no-nested-conditional -- F-011: pre-existing nested conditional kept unchanged; refactor tracked in #79
         bytes[0] === 0xff && bytes[1] === 0xfe
         ? "utf-16le"
-        : // eslint-disable-next-line sonarjs/no-nested-conditional -- F-011: pre-existing nested conditional kept unchanged; refactor tracked in BACKLOG.md
+        : // eslint-disable-next-line sonarjs/no-nested-conditional -- F-011: pre-existing nested conditional kept unchanged; refactor tracked in #79
           bytes[0] === 0xfe && bytes[1] === 0xff
           ? "utf-16be"
           : undefined;
   if (encoding && bom && encoding !== bom) extractionFail("INVALID_ENCODING");
   const selected = encoding ?? bom ?? "utf-8",
-    // eslint-disable-next-line sonarjs/no-nested-conditional -- F-011: pre-existing nested conditional kept unchanged; refactor tracked in BACKLOG.md
+    // eslint-disable-next-line sonarjs/no-nested-conditional -- F-011: pre-existing nested conditional kept unchanged; refactor tracked in #79
     start = bom ? (bom === "utf-8" ? 3 : 2) : 0;
   const decoder = new TextDecoder(selected, { fatal: true, ignoreBOM: true });
   const parts: string[] = [];

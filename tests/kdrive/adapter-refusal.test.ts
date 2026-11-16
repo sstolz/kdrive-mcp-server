@@ -321,7 +321,7 @@ describe("BR-217 operator events", () => {
       );
     },
     // The fake-timer loop yields with real ticks; under CPU load the default
-    // 5,000 ms real test timeout was exhausted (BACKLOG 2026-11-09).
+    // 5,000 ms real test timeout was exhausted (#78).
     20_000,
   );
 });

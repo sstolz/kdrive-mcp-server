@@ -146,7 +146,7 @@ export function createContentReader(
       text.length <= config.maxOutputChars && Buffer.byteLength(text) <= 262144
     );
   }
-  // eslint-disable-next-line sonarjs/cognitive-complexity -- F-011: pre-existing complex function; splitting it is deferred to keep reviewed control flow unchanged in this ticket (BACKLOG.md)
+  // eslint-disable-next-line sonarjs/cognitive-complexity -- F-011: pre-existing complex function; splitting it is deferred to keep reviewed control flow unchanged in this ticket (#79)
   async function read(
     target: Ref,
     offset: number,
@@ -350,7 +350,7 @@ export function createContentReader(
   };
 }
 function byteLength(value: Uint8Array): number {
-  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- F-011: pre-existing assertion on a value checked earlier in the same flow; removing it is deferred to keep reviewed control flow unchanged (BACKLOG.md)
+  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- F-011: pre-existing assertion on a value checked earlier in the same flow; removing it is deferred to keep reviewed control flow unchanged (#79)
   return Object.getOwnPropertyDescriptor(
     Object.getPrototypeOf(Uint8Array.prototype) as object,
     "byteLength",

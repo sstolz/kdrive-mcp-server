@@ -192,7 +192,7 @@ const schemas = {
         )
         .min(1)
         .max(10)
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- F-011: pre-existing assertion on a value checked earlier in the same flow; removing it is deferred to keep reviewed control flow unchanged (BACKLOG.md)
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- F-011: pre-existing assertion on a value checked earlier in the same flow; removing it is deferred to keep reviewed control flow unchanged (#79)
         .refine((p) => p.every((n, i) => i === 0 || n > p[i - 1]!))
         .optional()
         .describe(
@@ -491,7 +491,7 @@ export function createNavigationController(
   }
   // BoundFailure is tracked out-of-band because policy intentionally collapses port errors.
   let boundCode: "LIMIT_EXCEEDED" | "READ_UNAVAILABLE" | undefined;
-  // eslint-disable-next-line sonarjs/cognitive-complexity -- F-011: pre-existing complex function; splitting it is deferred to keep reviewed control flow unchanged in this ticket (BACKLOG.md)
+  // eslint-disable-next-line sonarjs/cognitive-complexity -- F-011: pre-existing complex function; splitting it is deferred to keep reviewed control flow unchanged in this ticket (#79)
   async function bounded<T>(
     port: () => Promise<T>,
     page = false,
@@ -562,7 +562,7 @@ export function createNavigationController(
               bounded(() => received.children(request), true),
             collection: (request) =>
               bounded(() => received.collection(request), true),
-            // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- F-011: pre-existing assertion on a value checked earlier in the same flow; removing it is deferred to keep reviewed control flow unchanged (BACKLOG.md)
+            // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- F-011: pre-existing assertion on a value checked earlier in the same flow; removing it is deferred to keep reviewed control flow unchanged (#79)
             ...(received.now ? { now: () => received.now!() } : {}),
           },
         }
@@ -651,7 +651,7 @@ export function createNavigationController(
     }
     return result;
   }
-  // eslint-disable-next-line sonarjs/cognitive-complexity -- F-011: pre-existing complex function; splitting it is deferred to keep reviewed control flow unchanged in this ticket (BACKLOG.md)
+  // eslint-disable-next-line sonarjs/cognitive-complexity -- F-011: pre-existing complex function; splitting it is deferred to keep reviewed control flow unchanged in this ticket (#79)
   async function run(
     name: ToolName,
     args: Record<string, unknown>,
@@ -659,7 +659,7 @@ export function createNavigationController(
     const driveId = (args.drive_id as number | undefined) ?? config.driveId;
     if (name === "kdrive_read") {
       const target = Object.freeze({ driveId, id: args.file_id as number }),
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- F-011: pre-existing assertion on a value checked earlier in the same flow; removing it is deferred to keep reviewed control flow unchanged (BACKLOG.md)
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- F-011: pre-existing assertion on a value checked earlier in the same flow; removing it is deferred to keep reviewed control flow unchanged (#79)
         inv = current!;
       const permit = await acquireExtraction(
         options.identity,
@@ -764,14 +764,14 @@ export function createNavigationController(
           (await navigation("list", driveId, item.id)).entries ?? [];
         const matches = children.filter((entry) => entry.name === part);
         if (matches.length !== 1) throw new Error("ACCESS_DENIED");
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- F-011: pre-existing assertion on a value checked earlier in the same flow; removing it is deferred to keep reviewed control flow unchanged (BACKLOG.md)
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- F-011: pre-existing assertion on a value checked earlier in the same flow; removing it is deferred to keep reviewed control flow unchanged (#79)
         item = matches[0]!;
       }
     }
     if (item.path !== requested) throw new Error("ACCESS_DENIED");
     return { item };
   }
-  // eslint-disable-next-line sonarjs/cognitive-complexity -- F-011: pre-existing complex function; splitting it is deferred to keep reviewed control flow unchanged in this ticket (BACKLOG.md)
+  // eslint-disable-next-line sonarjs/cognitive-complexity -- F-011: pre-existing complex function; splitting it is deferred to keep reviewed control flow unchanged in this ticket (#79)
   async function perform<T>(
     work: () => Promise<T>,
     paged: boolean,
@@ -985,7 +985,7 @@ export function createNavigationController(
         signal,
       );
       return result.ok
-        ? // eslint-disable-next-line sonarjs/no-nested-conditional -- F-011: pre-existing nested conditional kept unchanged; refactor tracked in BACKLOG.md
+        ? // eslint-disable-next-line sonarjs/no-nested-conditional -- F-011: pre-existing nested conditional kept unchanged; refactor tracked in #79
           tool === "kdrive_read"
           ? (result.value as CallToolResult)
           : { content: [{ type: "text", text: JSON.stringify(result.value) }] }

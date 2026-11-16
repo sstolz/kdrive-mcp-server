@@ -68,7 +68,7 @@ function cliValue(
   parsed: CliOption,
 ): { value: string; index: number } {
   if (parsed.equal >= 0)
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- F-011: pre-existing assertion on a value checked earlier in the same flow; removing it is deferred to keep reviewed control flow unchanged (BACKLOG.md)
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- F-011: pre-existing assertion on a value checked earlier in the same flow; removing it is deferred to keep reviewed control flow unchanged (#79)
     return { value: argv[index]!.slice(parsed.equal + 1), index };
   if (parsed.option === "--insecure-no-auth") return { value: "1", index };
   const next = argv[index + 1];
@@ -98,7 +98,7 @@ export function cliSource(argv: readonly string[]): CliSource {
   const rawValues: Array<{ key: DiagnosticSetting; value: string }> = [];
   let index = 0;
   while (index < argv.length) {
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- F-011: pre-existing assertion on a value checked earlier in the same flow; removing it is deferred to keep reviewed control flow unchanged (BACKLOG.md)
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- F-011: pre-existing assertion on a value checked earlier in the same flow; removing it is deferred to keep reviewed control flow unchanged (#79)
     const parsed = parseOption(argv[index]!, seen);
     if (parsed.key === "transport") {
       selectTransport(result.source, parsed, argv[index + 1]);
@@ -197,7 +197,7 @@ export function yamlSource(text: string): Source {
     logLevel: "silent",
   });
   if (docs.length !== 1) fail("CONFIG_SYNTAX", "configFile");
-  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- F-011: pre-existing assertion on a value checked earlier in the same flow; removing it is deferred to keep reviewed control flow unchanged (BACKLOG.md)
+  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- F-011: pre-existing assertion on a value checked earlier in the same flow; removing it is deferred to keep reviewed control flow unchanged (#79)
   const doc = docs[0]!;
   if (doc.errors.length || doc.warnings.length || !isMap(doc.contents))
     fail("CONFIG_SYNTAX", "configFile");

@@ -61,7 +61,7 @@ function fact(value: string, row: string): Fact {
 }
 
 /** BR-108: parses and validates `docs/mcp-client-compatibility.md`. */
-// eslint-disable-next-line sonarjs/cognitive-complexity -- F-011: pre-existing complex function; splitting it is deferred to keep reviewed control flow unchanged in this ticket (BACKLOG.md)
+// eslint-disable-next-line sonarjs/cognitive-complexity -- F-011: pre-existing complex function; splitting it is deferred to keep reviewed control flow unchanged in this ticket (#79)
 export function parseMatrix(text: string): Matrix {
   const reference =
     /Reference MCP authorization specification version: `(\d{4}-\d{2}-\d{2})`/u.exec(
@@ -104,7 +104,7 @@ export function parseMatrix(text: string): Matrix {
     const expected =
       version === "unverified"
         ? "unverified"
-        : // eslint-disable-next-line sonarjs/no-nested-conditional -- F-011: pre-existing nested conditional kept unchanged; refactor tracked in BACKLOG.md
+        : // eslint-disable-next-line sonarjs/no-nested-conditional -- F-011: pre-existing nested conditional kept unchanged; refactor tracked in #79
           version === reference
           ? "yes"
           : "no";

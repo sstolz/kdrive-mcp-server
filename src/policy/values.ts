@@ -148,7 +148,7 @@ export interface Item extends Ref {
   readonly treeRootId?: number;
 }
 /** BR-033/039: validate exact identity, lifecycle and every adjacent path relationship. */
-// eslint-disable-next-line sonarjs/cognitive-complexity -- F-011: pre-existing complex function; splitting it is deferred to keep reviewed control flow unchanged in this ticket (BACKLOG.md)
+// eslint-disable-next-line sonarjs/cognitive-complexity -- F-011: pre-existing complex function; splitting it is deferred to keep reviewed control flow unchanged in this ticket (#79)
 export function item(
   value: unknown,
   expected: Ref | undefined,

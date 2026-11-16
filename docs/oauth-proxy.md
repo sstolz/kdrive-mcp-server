@@ -472,7 +472,8 @@ clients in `auto` negotiation fall back to `initialize` after a 400 on their
   out. Add per-client-IP request and connection limits at the reverse proxy.
   MCP requests have no shared OAuth window, so invalid tokens never block a
   valid one; the MCP and health limits are unchanged.
-- Nothing bounds the duration of a call inside the MCP server (BACKLOG).
+- Nothing bounds the duration of a call inside the MCP server (may be stale since F-026/F-038/F-040;
+  see #81).
 
 ### Owner-run acceptance composition
 

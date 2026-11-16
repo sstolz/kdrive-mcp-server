@@ -102,16 +102,16 @@ function evaluate(
     dynamicRegistration:
       registration === undefined
         ? "unknown"
-        : // eslint-disable-next-line sonarjs/no-nested-conditional -- F-011: pre-existing nested conditional kept unchanged; refactor tracked in BACKLOG.md
+        : // eslint-disable-next-line sonarjs/no-nested-conditional -- F-011: pre-existing nested conditional kept unchanged; refactor tracked in #79
           isHttpsUrl(registration)
           ? "yes"
           : "no",
-    // eslint-disable-next-line sonarjs/no-nested-conditional -- F-011: pre-existing nested conditional kept unchanged; refactor tracked in BACKLOG.md
+    // eslint-disable-next-line sonarjs/no-nested-conditional -- F-011: pre-existing nested conditional kept unchanged; refactor tracked in #79
     cimd: cimd === undefined ? "unknown" : cimd === true ? "yes" : "no",
     jwks:
       jwksUri === undefined
         ? "unknown"
-        : // eslint-disable-next-line sonarjs/no-nested-conditional -- F-011: pre-existing nested conditional kept unchanged; refactor tracked in BACKLOG.md
+        : // eslint-disable-next-line sonarjs/no-nested-conditional -- F-011: pre-existing nested conditional kept unchanged; refactor tracked in #79
           isHttpsUrl(jwksUri) && jwksUsable(jwksUri)
           ? "yes"
           : "no",
@@ -139,7 +139,7 @@ const firstDefined = (documents: Record<string, unknown>[], name: string) =>
   documents.find((document) => document[name] !== undefined)?.[name];
 
 /** BR-094, BR-095, BR-107: fetches and evaluates the provider metadata. */
-// eslint-disable-next-line sonarjs/cognitive-complexity -- F-011: pre-existing complex function; splitting it is deferred to keep reviewed control flow unchanged in this ticket (BACKLOG.md)
+// eslint-disable-next-line sonarjs/cognitive-complexity -- F-011: pre-existing complex function; splitting it is deferred to keep reviewed control flow unchanged in this ticket (#79)
 export async function discover(
   issuer: string,
   fetch: Fetch,

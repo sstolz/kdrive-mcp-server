@@ -11,7 +11,7 @@ class NoExternalFactory {
   }
 }
 /** BR-114 v2/BR-115/BR-122: PDF.js reads only the bounded canonical projection of F-034. */
-// eslint-disable-next-line sonarjs/cognitive-complexity -- F-011: pre-existing complex function; splitting it is deferred to keep reviewed control flow unchanged in this ticket (BACKLOG.md)
+// eslint-disable-next-line sonarjs/cognitive-complexity -- F-011: pre-existing complex function; splitting it is deferred to keep reviewed control flow unchanged in this ticket (#79)
 export async function extractPdf(request: WorkerRequest) {
   const pages = request.args.pages ?? [1],
     plan = await preflightPdf(request.bytes, request.budget, pages);

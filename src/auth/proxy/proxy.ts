@@ -1517,7 +1517,7 @@ export function createOAuthProxy(options: OAuthProxyOptions): OAuthProxy {
   }
 
   // ---- BR-132, BR-135 -------------------------------------------------------
-  // eslint-disable-next-line sonarjs/cognitive-complexity -- F-011: pre-existing complex function; splitting it is deferred to keep reviewed control flow unchanged in this ticket (BACKLOG.md)
+  // eslint-disable-next-line sonarjs/cognitive-complexity -- F-011: pre-existing complex function; splitting it is deferred to keep reviewed control flow unchanged in this ticket (#79)
   async function callback(input: {
     query: URLSearchParams;
     cookie?: string;

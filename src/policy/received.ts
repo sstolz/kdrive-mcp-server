@@ -78,11 +78,11 @@ export function compatibleReceivedChain(
   const offset = long.length - short.length;
   return short.every(
     (p, i) =>
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- F-011: pre-existing assertion on a value checked earlier in the same flow; removing it is deferred to keep reviewed control flow unchanged (BACKLOG.md)
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- F-011: pre-existing assertion on a value checked earlier in the same flow; removing it is deferred to keep reviewed control flow unchanged (#79)
       p.id === long[offset + i]!.id &&
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- F-011: pre-existing assertion on a value checked earlier in the same flow; removing it is deferred to keep reviewed control flow unchanged (BACKLOG.md)
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- F-011: pre-existing assertion on a value checked earlier in the same flow; removing it is deferred to keep reviewed control flow unchanged (#79)
       p.driveId === long[offset + i]!.driveId &&
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- F-011: pre-existing assertion on a value checked earlier in the same flow; removing it is deferred to keep reviewed control flow unchanged (BACKLOG.md)
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- F-011: pre-existing assertion on a value checked earlier in the same flow; removing it is deferred to keep reviewed control flow unchanged (#79)
       p.path === long[offset + i]!.path,
   );
 }
@@ -126,7 +126,7 @@ function root(value: unknown): Item {
     capabilities: caps,
   });
 }
-// eslint-disable-next-line sonarjs/cognitive-complexity -- F-011: pre-existing complex function; splitting it is deferred to keep reviewed control flow unchanged in this ticket (BACKLOG.md)
+// eslint-disable-next-line sonarjs/cognitive-complexity -- F-011: pre-existing complex function; splitting it is deferred to keep reviewed control flow unchanged in this ticket (#79)
 function parse(
   value: unknown,
   expected: Ref | undefined,
@@ -268,7 +268,7 @@ export function receivedPolicy(
       refuse("SHARED_ACCESS_UNAVAILABLE");
     return dependency;
   }
-  // eslint-disable-next-line sonarjs/cognitive-complexity -- F-011: pre-existing complex function; splitting it is deferred to keep reviewed control flow unchanged in this ticket (BACKLOG.md)
+  // eslint-disable-next-line sonarjs/cognitive-complexity -- F-011: pre-existing complex function; splitting it is deferred to keep reviewed control flow unchanged in this ticket (#79)
   async function acquire(ctx: ReceivedInvocation): Promise<Snapshot> {
     const dep = available();
     if (!ctx.mutation && cached && age(cached)) return cached;
@@ -426,7 +426,7 @@ export function receivedPolicy(
     authorize(i: Item) {
       if (i.anchorId === undefined) refuse("OUTSIDE_SCOPE");
     },
-    // eslint-disable-next-line sonarjs/cognitive-complexity -- F-011: pre-existing complex function; splitting it is deferred to keep reviewed control flow unchanged in this ticket (BACKLOG.md)
+    // eslint-disable-next-line sonarjs/cognitive-complexity -- F-011: pre-existing complex function; splitting it is deferred to keep reviewed control flow unchanged in this ticket (#79)
     gate(
       op: Operation,
       source: Item | undefined,
