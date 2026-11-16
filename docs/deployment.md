@@ -274,14 +274,15 @@ Server settings (the `environment` of the service; the server reads no
 | `OAUTH_SIGNING_KEY_FILE`            | Path, inside the container, of the EC P-256 signing key.                                        | Yes; set by the example                                      | `/run/secrets/signing-key.pem`        |
 | `OAUTH_ALLOWED_EMAILS`              | Comma-separated emails allowed to log in.                                                       | Yes, or `OAUTH_ALLOWED_SUBJECTS`                             | `you@example.com`                     |
 | `OAUTH_ALLOWED_SUBJECTS`            | Comma-separated provider subjects (`sub`) allowed to log in.                                    | Instead of, or with, the emails                              | `00000000-fake-subject`               |
-| `OAUTH_ALLOWED_REDIRECT_URIS`       | Callback URLs of your AI clients, compared byte for byte.                                       | Yes                                                          | `https://client.example.org/callback` |
+| `OAUTH_ALLOWED_REDIRECT_URIS`       | Callback URLs of your AI clients; matching rules below.                                         | Yes                                                          | `https://client.example.org/callback` |
 | `OAUTH_AUDIENCE`                    | Token audience.                                                                                 | No (defaults to `MCP_PUBLIC_URL`)                            | leave unset                           |
 | `OAUTH_STATE_FILE`                  | SQLite file that keeps clients and logins across restarts.                                      | No                                                           | `/audit/oauth-state.sqlite`           |
-| `OAUTH_ALLOWED_CLIENT_ID_ORIGINS`   | Origins allowed for Client ID Metadata Documents; not in the published beta.                    | No (empty by default)                                        | leave unset                           |
+| `OAUTH_ALLOWED_CLIENT_ID_ORIGINS`   | Origins allowed for Client ID Metadata Documents (available in `0.6.0-beta.2`).                 | No (empty by default)                                        | leave unset                           |
 
 `OAUTH_ALLOWED_EMAILS` and `OAUTH_ALLOWED_SUBJECTS` together need at least one
-entry. The callback URL of each client is in the
-[client compatibility matrix](mcp-client-compatibility.md); the example value
+entry. Redirect URIs match byte for byte, except that the port of an `http`
+loopback URI on `127.0.0.1`, `[::1]` or `localhost` may vary (RFC 8252 §7.3).
+The callback URL of each client is in the [client compatibility matrix](mcp-client-compatibility.md); the example value
 above is a placeholder, not a real client. Size and time limits
 (`KDRIVE_MCP_MAX_READ_BYTES` and others) keep their defaults unless you have a
 reason; the configuration reference gives every setting, bound and error code.
@@ -448,8 +449,15 @@ sudo chmod 0400 secrets/kdrive-token secrets/upstream-client-secret secrets/sign
 
 ### 4. Configure Compose behind the reverse proxy
 
-[`examples/compose.yaml`](../examples/compose.yaml) is the single Compose
-example of this project; this step starts from it and explains it. Copy
+[`examples/compose.yaml`](../examples/compose.yaml) uses an existing Traefik.
+For an example that includes Traefik and ACME TLS, use
+[`examples/compose-traefik.yaml`](../examples/compose-traefik.yaml). Adapt its
+version, ACME contact, host and secret-file placeholders. It is not exercised
+by CI. It creates the shared network and an ACME storage volume, publishes
+HTTPS on port 443, and mounts the Docker socket read-only for discovery.
+Protect access to that socket and keep the ACME storage private.
+
+This step explains the existing-Traefik example. Copy
 it into the deployment directory as `compose.yaml`, from your checkout or
 from the repository at the tag that matches your image (`v0.6.0-beta.2` for
 the published beta). What it contains:
@@ -519,25 +527,12 @@ SIGNING_KEY_FILE=./secrets/signing-key.pem
   Add per-client-IP rate and connection limits there too
   ([OAuth proxy notes](oauth-proxy.md#limits-and-residual-risks)).
 
-For those Traefik settings, add labels to the `labels` of your copy and a
-servers transport to Traefik's dynamic file configuration. The names
-`letsencrypt` and `kdrive-mcp-transport` are examples; this snippet has not
-yet been verified against a running Traefik with this server:
-
-```yaml
-# Extra labels in compose.yaml (example)
-traefik.http.routers.kdrive-mcp.tls.certresolver: letsencrypt
-traefik.http.services.kdrive-mcp.loadbalancer.serverstransport: kdrive-mcp-transport@file
-```
-
-```yaml
-# Traefik dynamic configuration, file provider (example)
-http:
-  serversTransports:
-    kdrive-mcp-transport:
-      forwardingTimeouts:
-        idleConnTimeout: 4s
-```
+The complete [Traefik example](../examples/compose-traefik.yaml) includes the
+`letsencrypt` certificate resolver label and the
+`kdrive-mcp-transport@file` servers transport, with `idleConnTimeout: 4s`.
+For an existing Traefik, adapt those labels and its dynamic file configuration.
+These settings have not been verified against a running Traefik with this
+server.
 
 **F-035 accepted on main `703bece`.** `MCP_HTTP_TRUSTED_PROXIES` is optional and
 empty by default; the Compose example passes `${MCP_HTTP_TRUSTED_PROXIES:-}`.

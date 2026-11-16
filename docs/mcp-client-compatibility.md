@@ -8,6 +8,10 @@ OAuth mechanisms that decide the HTTP authentication mode of
 [F-008 v1](../features/F-008-oidc-qualification.md) (BR-108) and read by
 `make oidc-qualify`, which computes each client's mode from it (BR-103).
 
+Current status: the [README client table](../README.md#connect-an-ai-client)
+records maintainer acceptance with claude.ai on the web. The dated matrix below
+keeps the 2026-11-03 qualification history; it is not the current runtime status.
+
 Rules for every row:
 
 - Facts take only `supported`, `not supported` or `unverified`. A fact not read

@@ -758,3 +758,16 @@ project board (archive project board). Product work needs a
 reviewed frozen contract, tests first, local checks, PR/CI, independent review and
 acceptance on the actual merged main SHA. Release and publication require the
 user's explicit authorization.
+
+## Upstream tracking
+
+[NOTICE](../NOTICE) pins the upstream comparison baseline to tag `1.2.0`,
+revision `857272d7fd42c0940ae389b9092b1c4cd2351337`, and reference file
+`src/kdrive-client.ts` in the upstream repository linked there.
+
+Before adapting upstream behavior, check its tags and commits since that
+revision. Compare the pinned file with the selected upstream revision. Record
+retained and changed behavior, and resolve source provenance and licensing
+before copying code. Update NOTICE if the comparison baseline or copied
+material changes. Keep the tag, revision and reference path together. This
+procedure does not claim that a new comparison has been completed.

@@ -15,6 +15,9 @@ mounts them on HTTP routes (see "HTTP server" below).
   keeps issued access tokens valid until they expire (one hour). Replacing the
   file invalidates them, and clients authorize again.
 
+The proxy uses the strictly necessary `__Host-kdrive-oauth` browser-binding
+cookie. See [cookie lifetime and attributes](../SECURITY.md#cookie).
+
 ## Upstream client
 
 - Register `<MCP_PUBLIC_URL>/oauth/callback` as the redirect URI of the static
@@ -57,7 +60,7 @@ retain their single refusal with `status: 503` and
 `error: "temporarily_unavailable"`, alongside existing store/revocation events.
 Validation order, responses, code consumption and lifetime remain unchanged.
 
-## Restart and persisted state (F-019, pending acceptance)
+## Restart and persisted state (F-019, accepted 2026-11-11)
 
 - Without `OAUTH_STATE_FILE` all state is in memory in one instance. A restart
   loses registered clients, pending flows and refresh tokens; clients get
