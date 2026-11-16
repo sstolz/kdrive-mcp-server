@@ -10,11 +10,11 @@ version: 3
 
 **Accepted (2026-11-04)** on actual main `bc09d562eb422acd2b284be8c14e1e0806d6a118`
 with the owner's Sonar configuration (P1–P3) and real CI evidence; see
-runs/50-acceptance-1.md (archived evidence `runs/50-acceptance-1.md`). Deviations from the
+(private archive) (private archive). Deviations from the
 planned acceptance order (the merge preceded P2 and AC-13(b); AC-13(b) ran as
 an unmerged CI PR with an S7781 seed) are recorded there.
 
-**Version 3 (frozen, 2026-11-04).** Frozen autonomously by the orchestrator on 2026-11-04 at reviewed SHA `fb5ad17` after Opus approval of `1611a4d` (runs/50-spec-v3-review-1.md (archived evidence `runs/50-spec-v3-review-1.md`)) and Fable approval of `fb5ad17` (runs/50-spec-v3-fable-1.md (archived evidence `runs/50-spec-v3-fable-1.md`)); the Fable minors are applied in the freeze commit. The ticket is ready, no question remains, and the user is notified of the SHA and D19. The first real `sonar-pr` run after the
+**Version 3 (frozen, 2026-11-04).** Frozen autonomously by the orchestrator on 2026-11-04 at reviewed SHA `fb5ad17` after Opus approval of `1611a4d` ((private archive) (private archive)) and Fable approval of `fb5ad17` ((private archive) (private archive)); the Fable minors are applied in the freeze commit. The ticket is ready, no question remains, and the user is notified of the SHA and D19. The first real `sonar-pr` run after the
 owner set `SONAR_ENABLED=true` (PR #58, run 41821992074) stopped in the BR-151
 pristine export with `Unsupported Git metadata exists.`. A diagnostic job on the
 same runner (run 41822983911, git 2.56.0, the pinned `actions/checkout`
@@ -34,12 +34,12 @@ as [F-011 v2](history/F-011-v2.md).
 
 **Version 2 (frozen, 2026-11-03).** v2 frozen autonomously on 2026-11-03 by
 the orchestrator after Opus approval of `3fbee72`
-(runs/50-spec-v2-review-1.md (archived evidence `runs/50-spec-v2-review-1.md`)); minors m1–m9
+((private archive) (private archive)); minors m1–m9
 applied in this commit, reviewed within the PR #52 code review (economy path
 chosen by the owner).
 
  PR #52 code review round 1
-(runs/50-pr52-review-1.md (archived evidence `runs/50-pr52-review-1.md`), M1) found that
+((private archive) (private archive), M1) found that
 dependency lifecycle code run by `make setup` can rewrite `.git/config` (for
 example `core.fsmonitor`) or `.git/hooks`. The `actions/checkout` post step then
 runs host `git` in the secret-bearing jobs, and post steps run even after a
@@ -54,11 +54,11 @@ seed (erratum). The v1 text is preserved as
 
 v1 history: autonomous freeze by the orchestrator on 2026-11-03 at 09:42:59 UTC, exact
 reviewed SHA `b4abcfd`, after fresh independent Fable
-round 6 approval (archived evidence `runs/50-spec-review-6.md`) (full spec at `a12d034`) and
-round 7 diff approval (archived evidence `runs/50-spec-review-7.md`). IDs re-checked free on
+round 6 approval (private archive) (full spec at `a12d034`) and
+round 7 diff approval (private archive). IDs re-checked free on
 main `3fc14c3`. The ticket is ready, no question remains and the user was
 notified of this SHA and the decisions. See the
-freeze record (archived evidence `runs/50-freeze-1.md`). Allocates BR-144–BR-151 and ADR-005;
+freeze record (private archive). Allocates BR-144–BR-151 and ADR-005;
 versions BR-010, BR-012, BR-014 and BR-015 to v2.
 
 #50 (archive issue 50) is a full-path
@@ -97,7 +97,7 @@ the orchestrator within the owner's intent, 2026-11-03):
   setup, passing `-Dsonar.projectKey=kdrive-mcp-server-pr` explicitly (the
   tracked properties file keeps the `main` key), and observes that `kdrive-pr-gate` passes. A finding in active code
   is fixed in this PR before the merge. The result is recorded as
-  owner-observed evidence in `runs/50-acceptance-1.md`.
+  owner-observed evidence in (private archive).
 - **P3 — Enablement.** `SONAR_ENABLED=true` is set only after the merge and
   only after P1 and P2 hold.
 
@@ -196,7 +196,7 @@ whose pull request now runs a Sonar Quality Gate.
   ADRs, `features/history/`, done feature records (F-001), superseded BRs,
   `runs/` and CHANGELOG entries of past releases (Decision D9).
 - Other hosts of the same domain recorded as OIDC/MCP evidence (the OIDC
-  provider and MCP hosts in `runs/11-*`); "server URL" in this feature means
+  provider and MCP hosts in (private archive)); "server URL" in this feature means
   the Sonar server only.
 - typescript-eslint `stylistic*` configurations and Prettier changes.
 - Dependabot or other bot pull requests receiving Sonar secrets: such PRs get
@@ -526,7 +526,7 @@ confidential by owner decision, not as a credential), and the integrity of the
   PR, AGENTS.md §6). Verified by: `tests/quality-commands.test.ts` —
   `BR-010 v2 SonarJS rejects a seeded duplicated-branch fixture` /
   `BR-010 v2 accepts the fixed fixture`; the seeded and reverted commit SHAs
-  and their CI run URLs recorded in `runs/50-development-1.md`.
+  and their CI run URLs recorded in (private archive).
 - **AC-02** (BR-010 v2, BR-144 v2) — Given the committed `eslint.config.mjs`,
   When the effective configuration is computed for `src/index.ts`,
   `scripts/sonar.ts` and a `tests/` file, Then every rule that the pinned
@@ -541,7 +541,7 @@ confidential by owner decision, not as a credential), and the integrity of the
   `globals` comments) stops the lint run, a tracked `NOSONAR` is reported,
   and `make lint` on the branch head exits 0. Verified by:
   `tests/quality-commands.test.ts` — `BR-144 ...` cases; `make lint` output in
-  `runs/50-development-1.md`.
+  (private archive).
 - **AC-03** (BR-145) — Given host values `https://sonar.example.test`,
   `https://sonar.example.test/` and `https://sonar.example.test/ctx` (accepted)
   and `http://…`, relative, `https://user:pw@…`, `…?q=1`, `…#f`,
@@ -648,7 +648,7 @@ confidential by owner decision, not as a credential), and the integrity of the
   analyses `kdrive-mcp-server` and succeeds with its Quality Gate, and the log
   shows no host. Verified by: the `main` push run of the merge of the
   records-synchronization PR of AGENTS.md §6 (the PR that marks F-011
-  `done`), URL and conclusion recorded in `runs/50-acceptance-1.md`, or
+  `done`), URL and conclusion recorded in (private archive), or
   owner-observed.
 - **AC-13** (BR-148, BR-149, P1, P2) — Given `kdrive-pr-gate` configured
   per P1: (a) Given this PR's head, When the owner analyses it into
@@ -674,7 +674,7 @@ confidential by owner decision, not as a credential), and the integrity of the
   run URLs are recorded. Verified by:
   owner-observed results for (a) and (b) with the seeded and reverted SHAs,
   the AC-08 test for (c), and the CI run URL for (d), all in
-  `runs/50-acceptance-1.md`. A real failing `sonar-pr` job is recorded as
+  (private archive). A real failing `sonar-pr` job is recorded as
   owner-observed when it first occurs; no extra acceptance branch is created
   without the owner's authorization.
 - **AC-14** (BR-149) — Given a fork pull request, When CI runs, Then no executed step
@@ -692,7 +692,7 @@ confidential by owner decision, not as a credential), and the integrity of the
   are deliberately not searched, as narrowed by D9 and the orchestrator's
   comment on #50 that records this narrowing of the ticket's acceptance line.
   Verified by: that command and its exit code in
-  `runs/50-acceptance-1.md`.
+  (private archive).
 - **AC-16** (#21 records) — Given this PR, When the records are inspected,
   Then BR-124–BR-143 have `status: active` and an acceptance History line
   citing main `3fc14c3`, BR-100 and BR-024 carry a v2-accepted History line,
@@ -760,7 +760,7 @@ confidential by owner decision, not as a credential), and the integrity of the
   recorded in the runs evidence: writing a file under `.git` from
   `docker compose run --rm dev` fails. Verified by:
   `tests/dev-environment.test.ts` — `BR-150 v2 .git is read-only in dev and
-  prep (%s)`; `runs/50-development-1.md`.
+  prep (%s)`; (private archive).
 - **AC-21** (BR-151 v3) — Given the three BR-151 constants from
   `tests/helpers/ci-policy.ts`, each executed with `bash -eo pipefail` in the
   dev image, and a temporary Git repository with `RUNNER_TEMP` and
@@ -945,7 +945,7 @@ confidential by owner decision, not as a credential), and the integrity of the
 ### v3 round 1 — reviewed SHA `1611a4d`
 
 Opus 5.5 high, approve, no critical or major
-(runs/50-spec-v3-review-1.md (archived evidence `runs/50-spec-v3-review-1.md`)).
+((private archive) (private archive)).
 
 - **m1 (minor), retained:** the T2 control column names `config.worktree` and
   BR-151 v3.
@@ -963,7 +963,7 @@ Opus 5.5 high, approve, no critical or major
 ### v3 round 2 (Fable decision pass) — reviewed SHA `fb5ad17`
 
 Fable 5.1, approve, no critical or major
-(runs/50-spec-v3-fable-1.md (archived evidence `runs/50-spec-v3-fable-1.md`)).
+((private archive) (private archive)).
 
 - **m1 (minor), retained:** AC-21 and BR-151 E-07 require the saved copy to be
   byte-identical (`cmp`).
@@ -976,7 +976,7 @@ Fable 5.1, approve, no critical or major
 
 ### Round 1 — reviewed SHA `5b7326ea57a8dcd62ede865d20ca5ef194e3dcd3`
 
-Review: runs/50-spec-review-1.md (archived evidence `runs/50-spec-review-1.md`) (Fable,
+Review: (private archive) (private archive) (Fable,
 devil's advocate with secrets threat model), verdict `changes`, 5 major,
 10 minor. All findings retained; majors decided by the orchestrator.
 
@@ -1018,7 +1018,7 @@ devil's advocate with secrets threat model), verdict `changes`, 5 major,
 
 ### Round 2 — reviewed SHA `3a142b6`
 
-Review: runs/50-spec-review-2.md (archived evidence `runs/50-spec-review-2.md`) (Fable),
+Review: (private archive) (private archive) (Fable),
 verdict `changes`, 2 major, 5 minor; round 1 fixes confirmed. All findings
 retained; majors decided by the orchestrator.
 
@@ -1052,7 +1052,7 @@ retained; majors decided by the orchestrator.
 
 ### Round 3 — reviewed SHA `232e7ef`
 
-Review: runs/50-spec-review-3.md (archived evidence `runs/50-spec-review-3.md`) (Fable),
+Review: (private archive) (private archive) (Fable),
 verdict `changes`, 2 major, 4 minor. All findings retained as proposed by the
 reviewer, per the orchestrator's decision.
 
@@ -1079,7 +1079,7 @@ reviewer, per the orchestrator's decision.
 
 ### Round 4 — reviewed SHA `8a8d6b5`
 
-Review: runs/50-spec-review-4.md (archived evidence `runs/50-spec-review-4.md`) (Fable),
+Review: (private archive) (private archive) (Fable),
 verdict `changes`, 2 major, 4 minor. All findings retained.
 
 - **F29 (major), retained, option (a) per the orchestrator:** snapshot
@@ -1113,7 +1113,7 @@ verdict `changes`, 2 major, 4 minor. All findings retained.
 
 ### Round 5 — reviewed SHA `83ebc2a`
 
-Review: runs/50-spec-review-5.md (archived evidence `runs/50-spec-review-5.md`) (Fable),
+Review: (private archive) (private archive) (Fable),
 verdict `changes`, 1 major, 3 minor. All findings retained as proposed.
 
 - **F35 (major), retained:** BR-150 pins the exact `--exclude` patterns
@@ -1132,7 +1132,7 @@ verdict `changes`, 1 major, 3 minor. All findings retained as proposed.
 
 ### Round 6 — reviewed SHA `a12d034`
 
-Review: runs/50-spec-review-6.md (archived evidence `runs/50-spec-review-6.md`) (Fable),
+Review: (private archive) (private archive) (Fable),
 verdict `approve`, 0 major, 4 minor. All minors retained as proposed.
 
 - **F39 (minor), retained:** the Make target sets a fixed
@@ -1148,7 +1148,7 @@ verdict `approve`, 0 major, 4 minor. All minors retained as proposed.
 
 ### Version 2 inputs — PR #52 code review round 1 (reviewed head `850c441`)
 
-Review: runs/50-pr52-review-1.md (archived evidence `runs/50-pr52-review-1.md`) (Opus, effort
+Review: (private archive) (private archive) (Opus, effort
 high), verdict `changes`, 2 major, 8 minor. Contract-level dispositions:
 
 - **M1 (major), retained (orchestrator decision: fix, no residual):**
@@ -1165,7 +1165,7 @@ high), verdict `changes`, 2 major, 8 minor. Contract-level dispositions:
 
 ### Version 2, round 1 — reviewed SHA `3fbee72`
 
-Review: runs/50-spec-v2-review-1.md (archived evidence `runs/50-spec-v2-review-1.md`) (Opus,
+Review: (private archive) (private archive) (Opus,
 effort high), verdict `approve`, 0 critical, 0 major, 9 minor. All minors are
 applied in the freeze commit; the orchestrator froze v2 autonomously and this
 text is reviewed within the PR #52 code review.

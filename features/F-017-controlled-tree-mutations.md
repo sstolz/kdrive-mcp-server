@@ -32,9 +32,9 @@ What already exists on the base:
   issues only `GET` requests (BR-190).
 - #16 measured the write routes and trash metadata
   ([evidence](../docs/kdrive-write-evidence.md),
-  Stage A (archived evidence `runs/16-execution-A-1.md`), Stage B (archived evidence `runs/16-execution-B-1.md`)).
+  Stage A (private archive), Stage B (private archive)).
   The owner chose restore option A
-  (decisions (archived evidence `runs/16-decisions-1.md`)): restore only when the trashed
+  (decisions (private archive)): restore only when the trashed
   item's former parent is live and authorized, otherwise refuse, because the
   server recreates a trashed former parent (new ID) at the former path.
 - Spec review round 1 (orchestrator decision): `kdrive_trash`,
@@ -499,7 +499,7 @@ responses, and a counting `onRequest` observer.
   v3 leak check (token, real IDs other than `1`, real names, `@`, URLs) and
   contains no `cancel_id` value; without `KDRIVE_WRITE_FOLDER` the target refuses before any Docker
   command. Verified by: owner-run command, report
-  `runs/18-acceptance-1.md`; the refusal by a `Makefile` test in
+  (private archive); the refusal by a `Makefile` test in
   `mutation-tools.test.ts` (`TestBR276_*`).
 - **AC-16** (BR-277) — Given the README and `SECURITY.md` after the
   implementation PR, Then they state each BR-277 item. Verified by: reviewer
@@ -512,7 +512,7 @@ responses, and a counting `onRequest` observer.
   addition. Rejected: splitting create/rename/move from trash/restore (two
   freezes and two acceptance runs for one transport change).
 - **D-17-2 — Restore to the former parent only, destination derived by the
-  policy core.** Owner decision A (runs/16-decisions-1.md). The core derives
+  policy core.** Owner decision A (private archive). The core derives
   the destination from fresh original-trash evidence inside the single policy
   decision, so no pre-read outside the guarded facade picks it. Rejected: a
   caller-supplied destination equal to the former parent (a second source of
@@ -589,8 +589,8 @@ None.
 
 ## Stress-test
 
-Round 1 (review (archived evidence `runs/18-spec-review-1.md`), fixes in
-runs/18-spec-fix-1.md (archived evidence `runs/18-spec-fix-1.md`)):
+Round 1 (review (private archive), fixes in
+(private archive) (private archive)):
 
 1. major, F-003 evidence contract — retained: BR-039 v2 now states the
    amendment (live former-parent chain, named F-003 sentences no longer
@@ -617,7 +617,7 @@ runs/18-spec-fix-1.md (archived evidence `runs/18-spec-fix-1.md`)):
 11. minor, BR-268 body ownership — retained: the port returns raw bytes; the
     mutator alone validates the 2xx body.
 
-### Round 2 (`runs/18-spec-review-2.md`, verdict approve)
+### Round 2 ((private archive), verdict approve)
 
 1. minor, BR-260 garbled text — retained: single sentence.
 2. minor, step 10 contradiction — retained: trash `succeeded`, zero writes
@@ -630,7 +630,7 @@ runs/18-spec-fix-1.md (archived evidence `runs/18-spec-fix-1.md`)):
 5. minor, root-sentinel former parent — retained: AC-07 and AC-08 cases.
 6. minor, AC-10 static check — retained: extended to the acceptance tooling.
 
-### Fable decision pass (`runs/18-spec-fable-1.md`, verdict changes)
+### Fable decision pass ((private archive), verdict changes)
 
 1. major, step-6 landing unchecked — retained: step 6, BR-277 and D-17-3
    check the landing (same ID under `G2`, no recreated `G`); any other
@@ -644,7 +644,7 @@ runs/18-spec-fix-1.md (archived evidence `runs/18-spec-fix-1.md`)):
 5. minor, fixed sentences silent on folder restore with denies — retained:
    `kdrive_trash` and `kdrive_restore` sentences; "renaming" added to R-17-2.
 
-### Round 3 (`runs/18-spec-review-3.md`, diff-only, verdict approve)
+### Round 3 ((private archive), diff-only, verdict approve)
 
 1. minor, AC-06 second-drive case untestable as worded — retained: concrete
    setup and `succeeded` outcome.

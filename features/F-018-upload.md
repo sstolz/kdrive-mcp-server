@@ -204,7 +204,7 @@ kept in [history](history/F-018-v1.md).
 ### Context (v2)
 
 The owner-run acceptance of v1
-(runs/19-acceptance-2.md (archived evidence `runs/19-acceptance-2.md`)) triggered D-18-11:
+((private archive) (private archive)) triggered D-18-11:
 
 - step 9: kDrive stored a decomposed (NFD) name under a different name,
   presumably its NFC form;
@@ -361,7 +361,7 @@ caps (unchanged from v1).
   9 (b) pass and every other asserted step passes as in v1; step 9 (c) and
   step 8 (v2) are recorded, not asserted, and a 9 (c) `no` triggers D-18-11. Verified by:
   `upload-acceptance-script.test.ts` (`TestBR287_*`) and the owner report
-  `runs/91-acceptance-1.md`.
+  (private archive).
 - **AC-17** (BR-288 v2) — Given the README and `SECURITY.md`, Then they state
   the NFC rule for the three tools; that deny patterns match exact stored
   code points, so the NFC form is needed for new names and the stored form
@@ -428,7 +428,7 @@ None.
 
 ### Stress-test (v2)
 
-Spec review round 1 (`runs/91-spec-review-1.md`, Opus, verdict `changes`):
+Spec review round 1 ((private archive), Opus, verdict `changes`):
 
 | #   | Severity | Finding                                                         | Decision | Change                                                                |
 | --- | -------- | --------------------------------------------------------------- | -------- | --------------------------------------------------------------------- |
@@ -440,11 +440,11 @@ Spec review round 1 (`runs/91-spec-review-1.md`, Opus, verdict `changes`):
 | 6   | minor    | Overwrite of an existing non-NFC file becomes impossible         | Retained | Users affected and D-18-12 state it; rename-first workaround           |
 | 7   | minor    | Script and test changes missing from Scope                       | Retained | Scope item 3 names both; step 9 (v2) adds both names to secrets        |
 
-Spec review round 2 (`runs/91-spec-review-2.md`, Opus diff-only, verdict
+Spec review round 2 ((private archive), Opus diff-only, verdict
 `approve`): one minor, retained. "BR-287 caps" now reads "BR-287 v2 caps
 (unchanged from v1)".
 
-Fable decision pass (`runs/91-spec-fable-1.md`, verdict `changes`; the major
+Fable decision pass ((private archive), verdict `changes`; the major
 finding sends the spec back to an Opus round):
 
 | #   | Severity | Finding                                                              | Decision | Change                                                                 |
@@ -454,7 +454,7 @@ finding sends the spec back to an Opus round):
 | 3   | minor    | "In the same folder" is inferred                                     | Retained | "Presumably"; step 8 (v2) records off-set run-prefix children          |
 | 4   | minor    | The reason the rule lives in the schema layer is not recorded        | Retained | D-18-12 records the single entry point and the rule for future tools  |
 
-Spec review round 3 (`runs/91-spec-review-3.md`, Opus diff-only, verdict
+Spec review round 3 ((private archive), Opus diff-only, verdict
 `changes`): finding 1 (major) — AC-16 did not cover the observed step 9 (c)
 and step 8 (v2) values — retained, AC-16 now states both as recorded, not
 asserted, and checked as present by the synthetic test; finding 2 (minor) —
@@ -484,8 +484,8 @@ What already exists on the base:
   result path `destination/name` checked) and `replace` (target only, must be
   a file). F-004 sets every received mutation predicate to `false`
   (BR-204 v1); BR-257 refetches the received list for a received write.
-- #16 measured the upload route (runs/16-execution-A-1.md W2, C1;
-  runs/16-execution-B-1.md C2–C7, K2, Z1): `POST
+- #16 measured the upload route ((private archive) W2, C1;
+  (private archive) C2–C7, K2, Z1): `POST
   /3/drive/{d}/upload?directory_id&file_name&total_size&conflict=error` is
   synchronous and returns the file object; a same-name upload with
   `conflict=error` was refused 409 `file_already_exists_error` on 9/9
@@ -495,7 +495,7 @@ What already exists on the base:
   mismatch gave 400 `upload_failed_error`; 0 bytes and 1 MiB were accepted;
   the maximum size is unknown; a file named like an existing folder was
   created (stored name unknown, C5).
-- Owner decision D-07 option A (runs/16-decisions-1.md): `overwrite:false`
+- Owner decision D-07 option A (private archive): `overwrite:false`
   maps to `conflict=error`, stated as observed behaviour, not a contractual
   guarantee; `overwrite:true` maps to `conflict=version`.
 - Inbound bounds: stdio frames are at most 1 MiB (F-005); the HTTP MCP body
@@ -896,7 +896,7 @@ use the F-017 injected transport (loopback TLS server, counting `onRequest`).
   step passes, steps 8 and 9 are recorded, the caps hold, and the summary passes the
   BR-213 v3 leak check; without `KDRIVE_WRITE_FOLDER` the target refuses
   before any Docker command. Verified by: owner-run command, report
-  `runs/19-acceptance-1.md`; the refusal by a `Makefile` test in
+  (private archive); the refusal by a `Makefile` test in
   `upload-tool.test.ts` (`TestBR287_*`).
 - **AC-13** (BR-288) — Given the README, `SECURITY.md` and the tool
   description after the implementation PR, Then they state each BR-288 item
@@ -1010,7 +1010,7 @@ None.
 
 ## Stress-test
 
-Round 1 (`runs/19-spec-review-1.md`, verdict `changes`):
+Round 1 ((private archive), verdict `changes`):
 
 | #   | Severity | Finding                                          | Decision | Change                                                                                                    |
 | --- | -------- | ------------------------------------------------ | -------- | --------------------------------------------------------------------------------------------------------- |
@@ -1023,7 +1023,7 @@ Round 1 (`runs/19-spec-review-1.md`, verdict `changes`):
 | 7   | minor    | Server name normalization could bypass the check | Retained | R-18-5 and acceptance step 9 (one NFD upload, observed)                                                   |
 | 8   | minor    | Base should cite main `8b85fc1`                  | Retained | Base line updated                                                                                         |
 
-Round 2 (`runs/19-spec-review-2.md`, verdict `approve`, three minors folded in
+Round 2 ((private archive), verdict `approve`, three minors folded in
 by the orchestrator):
 
 | #   | Severity | Finding                                              | Decision | Change                                                                   |
@@ -1032,7 +1032,7 @@ by the orchestrator):
 | 2   | minor    | Step 9 observation method unstated                   | Retained | One paginated GET listing of R, filtered in memory, within BR-287 caps   |
 | 3   | minor    | Fixture migration undefined for a missing target     | Retained | Existing fixture folder as destination; AC-05 says "one non-GET request" |
 
-Fable decision pass (`runs/19-spec-fable-1.md`, verdict `approve`, five
+Fable decision pass ((private archive), verdict `approve`, five
 minors folded in by the orchestrator; findings 1 and 2 change BR and tool
 text, so an Opus diff-only round checks them):
 
@@ -1044,7 +1044,7 @@ text, so an Opus diff-only round checks them):
 | 4   | minor    | R-18-2 omits a destination moved out of roots mid-flight | Retained | Sentence added to R-18-2                                                     |
 | 5   | minor    | Mismatched 2xx drops the written ID from audit           | Retained | BACKLOG line for an F-016 follow-up; no change in this ticket                |
 
-Round 3 (`runs/19-spec-review-3.md`, Opus diff-only, verdict `changes`): one
+Round 3 ((private archive), Opus diff-only, verdict `changes`): one
 minor, retained — the stdio-termination text wrongly said an in-flight
 upload stays intent-only; `src/stdio.ts` drains the gate before exit
 (BR-254), so BR-288 and D-18-3 now say the outcome is recorded and only the

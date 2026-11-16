@@ -381,7 +381,7 @@ D-16 and ADR-007 (proposed).
 ## Acceptance criteria
 
 Static and stub tests run in the dev container (`make check`); owner-run
-evidence is recorded in `runs/72-acceptance-1.md` and the ticket, sanitized:
+evidence is recorded in (private archive) and the ticket, sanitized:
 no token, JIT configuration, internal host name or internal address.
 
 - **AC-01** (BR-218) — Given `ops/runner/lima.yaml`, When the runner-ops test
@@ -463,7 +463,7 @@ no token, JIT configuration, internal host name or internal address.
   `runs/x.md` give `true`, `true`; a path `runs` (no slash) gives
   `heavy=true`. And Given a stub `git` on `PATH`, When `make ci-changes` runs
   with a failing `git`, Then `$GITHUB_OUTPUT` holds `heavy=true` and
-  `image=true`; with a rename `src/a.ts` → `runs/a.ts` listed by
+  `image=true`; with a rename `src/a.ts` → (private archive) listed by
   `--no-renames` as both paths, Then `heavy=true`. Verified by:
   `tests/ci-changes.test.ts` `BR-226 …`.
 - **AC-10** (BR-149 v2, BR-183 v2, BR-227) — Given the real `ci.yml`, When
@@ -670,7 +670,7 @@ None.
 
 ## Stress-test
 
-### Round 1 (review of `044b0dc`, `runs/72-spec-review-1.md`; owner answers 2026-11-06)
+### Round 1 (review of `044b0dc`, (private archive); owner answers 2026-11-06)
 
 1. major, `ghcr.io` probe vs BR-178 — retained: BR-178 v2 admits the exact
    `https://ghcr.io/v2/` once in `probe.sh`; AC-03 tests it.
@@ -712,7 +712,7 @@ None.
 
 ### Round 2 — 2026-11-06
 
-Review `runs/72-spec-review-2.md` (changes: 2 major, 3 minor), all retained and
+Review (private archive) (changes: 2 major, 3 minor), all retained and
 applied by the orchestrator (AGENTS.md project override: in-scope corrections
 continue autonomously). Owner decision the same day: no Fable pass on #72.
 
@@ -737,7 +737,7 @@ continue autonomously). Owner decision the same day: no Fable pass on #72.
 
 ### Round 3 — 2026-11-06
 
-Diff-only check `runs/72-spec-review-3.md` (changes: 1 major, 3 minor), all
+Diff-only check (private archive) (changes: 1 major, 3 minor), all
 retained and applied by the orchestrator.
 
 1. major, golden VM provisioned before the egress table and stale sets after
@@ -756,6 +756,6 @@ retained and applied by the orchestrator.
 
 BR-231 v1 asserted an empty `$RUNNER_TEMP` at step start, which the
 implementation author flagged as likely unsatisfiable on a real runner
-(`runs/72-development-1.md`); the owner chose a spec v2 before the first
+(private archive); the owner chose a spec v2 before the first
 real run. Only BR-231 and D-17 change; reviewed with the code review of
 round 1.

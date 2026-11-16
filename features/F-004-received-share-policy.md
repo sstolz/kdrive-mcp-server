@@ -10,7 +10,7 @@ version: 1
 
 Autonomous joint freeze by the orchestrator: 2026-11-02 at 19:32:08 UTC,
 reviewed commit `e913aa40af932889daa88be780095ff9095706c2`, after fresh
-independent round 2 approval (archived evidence `runs/7-spec-review-2.md`). F-004 v1 and F-003 v2
+independent round 2 approval (private archive). F-004 v1 and F-003 v2
 are frozen together. The user was notified; no open decision remains. This
 authorizes only the abstract stage and no provider request; AC-14/15 remain blocked.
 
@@ -26,7 +26,7 @@ this contract to preserve configured-tree separation while adding this route.
 The joint freeze permits the abstract implementation; it establishes no
 production qualification or acceptance.
 
-The #5 final measurements (archived evidence `runs/5-final-read-measurements-1.md`) explicitly
+The #5 final measurements (private archive) explicitly
 leave shared-child ancestry and external visibility unmeasured. SPEC §10.3's
 provider field descriptions are hypotheses requiring qualification, not facts
 that this feature may assume. No credentials, private fixtures, provider calls
@@ -394,7 +394,7 @@ The recorded joint freeze authorizes the abstract stage only.
 
 ## Stress-test
 
-Fresh review round 1 (archived evidence `runs/7-spec-review-1.md`) returned `changes` against
+Fresh review round 1 (private archive) returned `changes` against
 `c0538b9290c4b84915b1b252cdaf14dd1b31433b`.
 
 - **R1, major — retained.** Add the exhaustive normalized capability matrix for
@@ -407,7 +407,7 @@ Fresh review round 1 (archived evidence `runs/7-spec-review-1.md`) returned `cha
   positive descendant mutations and always-denied kinds. Provider mapping remains
   blocked under AC-14; no real behavior or successful qualification is invented.
 
-Fresh round 2 approval (archived evidence `runs/7-spec-review-2.md`) of
+Fresh round 2 approval (private archive) of
 `e913aa40af932889daa88be780095ff9095706c2` resolves R1. The orchestrator froze
 this joint contract at the timestamp recorded above. Production qualification
 and actual-main acceptance remain separate and mandatory.

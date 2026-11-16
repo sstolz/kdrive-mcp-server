@@ -15,9 +15,9 @@ Re-check all three on main before freeze and again before the PR.
 
 Version 2: Claude Opus 5.5 (effort unknown), 2026-11-08, on branch
 `feat/70-production-kdrive-adapter` at `6192f05`. It sets the upstream page
-size to 100 (latency probe (archived evidence `runs/70-list-latency-1.md`), D-02), closes the
-wording gaps of code review round 1 (archived evidence `runs/70-code-review-1.md`) and pins
-TLS verification (Fable code pass 1 (archived evidence `runs/70-code-fable-1.md`)); see
+size to 100 (latency probe (private archive), D-02), closes the
+wording gaps of code review round 1 (private archive) and pins
+TLS verification (Fable code pass 1 (private archive)); see
 Stress-test "v2 changes". Version 1 is preserved unchanged in
 [history](history/F-014-v1.md). No new F, BR or ADR ID is allocated.
 
@@ -44,7 +44,7 @@ Version 5: Claude Opus 5.5 (effort unknown), 2026-11-09, on branch
 `feat/70-f014-v5` from main `7b1769f`. The first owner acceptance run on main
 `7b1769f` failed in run B: a children page of 100 took 5,010 ms (beyond
 BR-193), and AC-23 required the outside-scope item to be denied in run B,
-whose root `1` contains it. A tail probe (runs/70-list-latency-2.md (archived evidence `runs/70-list-latency-2.md`))
+whose root `1` contains it. A tail probe ((private archive) (private archive))
 measured pages of 50 at a 1,911 ms maximum. v5 sets pages of 50 (BR-201 v3,
 BR-202 v3, BR-211 v3, BR-213 v3, D-02) and fixes AC-23 for run B (Stress-test
 "v5 changes"). Version 4 is preserved unchanged in
@@ -52,7 +52,7 @@ BR-202 v3, BR-211 v3, BR-213 v3, D-02) and fixes AC-23 for run B (Stress-test
 
 Version 6: Claude Opus 5.5 (effort unknown), 2026-11-09, on branch
 `feat/70-f014-v6` from main `0a17373`. Owner acceptance run 2
-(runs/70-acceptance-2.md (archived evidence `runs/70-acceptance-2.md`)) passed every check but
+((private archive) (private archive)) passed every check but
 the AC-25 revocation read: kDrive refuses a removed share at once (HTTP 403,
 absent from `shared_with_me`), which the error mapping turns into
 `READ_UNAVAILABLE`, while AC-25 expected `ACCESS_DENIED`. v6 accepts either
@@ -62,7 +62,7 @@ page threshold with v5's six pages. Version 5 is preserved unchanged in
 
 Version 7: Claude Opus 5.5 (effort unknown), 2026-11-09, on branch
 `feat/70-f014-v7` from main `e057d14`. Acceptance run 3
-(runs/70-acceptance-3.md (archived evidence `runs/70-acceptance-3.md`)) showed that v5's
+((private archive) (private archive)) showed that v5's
 "six pages" for the 257-entry received folder counted MCP tool pages, which
 aggregate upstream pages; v7 counts upstream children requests instead.
 Version 6 is preserved unchanged in [history](history/F-014-v6.md).
@@ -92,7 +92,7 @@ Blocked production acceptance criteria that this feature must unblock:
 
 Evidence available ([api-notes](../docs/api-notes.md),
 [read evidence](../docs/kdrive-read-evidence.md),
-final measurements (archived evidence `runs/5-final-read-measurements-1.md`)):
+final measurements (private archive)):
 
 - Base `https://api.infomaniak.com`, `Authorization: Bearer`. Routes:
   `/2/drive/init?with=drives` (drive IDs and roles `admin`/`external`),
@@ -164,7 +164,7 @@ deployment; reviewers relying on the policy guarantees.
    (`KDRIVE_TOKEN` / `KDRIVE_TOKEN_FILE`), confined to the adapter; extraction
    worker isolation (`env: {}`, `argv: []`, `execArgv: []`) from
    [BACKLOG.md](../BACKLOG.md) and
-   the 0.3 global review (archived evidence `runs/0.3-fable-global-1.md`).
+   the 0.3 global review (private archive).
 5. Qualification: adapter contract tests replaying recorded, sanitized
    fixtures in CI; an owner-run recording target; an owner-run acceptance
    target against designated real fixtures that executes F-003 AC-19/AC-20 and
@@ -668,7 +668,7 @@ recordings and prints per-route request counts and maximum request durations
 (BR-211 v3); the author copies them to `tests/fixtures/kdrive/` after review;
 (2) CI runs the contract suite on them (BR-214); (3) after merge, the owner runs
 `make kdrive-acceptance` on actual main; (4) the orchestrator records
-`runs/70-acceptance-<n>.md` and posts sanitized results on #70, #6 and #7.
+(private archive) and posts sanitized results on #70, #6 and #7.
 Evidence never contains IDs, names, paths, cursors, ETags, URLs or the token;
 only the manifest, which stays outside the repository, maps aliases to IDs.
 
@@ -884,7 +884,7 @@ in all cases (BR-190).
   `tests/kdrive/recordings.test.ts` (`TestBR211_*`),
   `tests/kdrive/acceptance-entry.test.ts` (`TestBR212_*`),
   `tests/kdrive/sanitize.test.ts` (`TestBR213_*`), and the owner-run record
-  report `runs/70-record-<n>.md`, which quotes the recorder's per-route
+  report (private archive), which quotes the recorder's per-route
   request counts and maximum request durations (`shared_with_me` included).
 - **AC-22 (BR-214 v2)** — Given the committed recordings, When `make check` and
   CI run, Then the contract suite passes with network disabled, and the
@@ -914,7 +914,7 @@ in all cases (BR-190).
   cursor and URL, Then the summary holds those two maxima and none of the
   planted values. Verified by: `tests/kdrive/acceptance-entry.test.ts`
   (`TestBR215_*`) and owner-run
-  `make kdrive-acceptance`, report `runs/70-acceptance-<n>.md`.
+  `make kdrive-acceptance`, report (private archive).
 - **AC-24 (BR-215 v2; F-003 AC-20)** — Given in-process `main(deps)` in stdio mode
   and in HTTP insecure-loopback mode with run A and the BR-215 v2 counting spy, When an SDK client reads the binary
   through the `kdrive_info` tool and the `kdrive://` resource, Then the tool
@@ -1008,11 +1008,11 @@ in all cases (BR-190).
   transport, its tests and the address guard are built on it.
 - **D-02 — Upstream page size 50 (v5; v2 chose 100, v1 256).** Every listing
   route uses `limit=50`. Evidence: the 2026-11-08 probe
-  (runs/70-list-latency-1.md (archived evidence `runs/70-list-latency-1.md`)) put 256 entries
+  ((private archive) (private archive)) put 256 entries
   with `with=path,parents,capabilities` at 3,552–7,340 ms; the 2026-11-09
-  owner acceptance on main `7b1769f` (runs/70-acceptance-1.md (archived evidence `runs/70-acceptance-1.md`))
+  owner acceptance on main `7b1769f` ((private archive) (private archive))
   saw a 100-entry page at 5,010 ms, and the
-  tail probe (runs/70-list-latency-2.md (archived evidence `runs/70-list-latency-2.md`), 3 full
+  tail probe ((private archive) (private archive), 3 full
   traversals of the 1,001-child folder) measured 100 entries at median
   2,459 ms / max 3,926 ms and 50 entries at median 1,360 ms / max 1,911 ms;
   owner decision 2026-11-09. Server time dominates, a full traversal takes
@@ -1152,7 +1152,7 @@ None.
 
 ### Round 1 — 2026-11-05
 
-Review: runs/70-spec-review-1.md (archived evidence `runs/70-spec-review-1.md`) (draft
+Review: (private archive) (private archive) (draft
 `f73ab18`, verdict `changes`, 7 major, 5 minor). All findings retained.
 
 1. **Major, token held outside the closure — retained.** BR-208 now removes
@@ -1201,7 +1201,7 @@ it now expects `ReadFailure(404)`.
 
 ### Round 2 — 2026-11-05
 
-Review `runs/70-spec-review-2.md` (changes: 1 major, 5 minor), all retained;
+Review (private archive) (changes: 1 major, 5 minor), all retained;
 applied by the orchestrator directly to save an author round (owner go,
 2026-11-05).
 
@@ -1226,7 +1226,7 @@ applied by the orchestrator directly to save an author round (owner go,
 
 ### Round 3 — 2026-11-05
 
-Diff-only review `runs/70-spec-review-3.md` (changes: 2 minor), both retained
+Diff-only review (private archive) (changes: 2 minor), both retained
 and applied by the orchestrator; the following Fable spec pass reviews the
 whole spec including these edits instead of a fourth Opus round (orchestrator
 decision, token economy).
@@ -1240,7 +1240,7 @@ decision, token economy).
 
 ### Fable spec pass 1 — 2026-11-05
 
-Review `runs/70-spec-fable-1.md` (changes: 1 major, 3 minor), all retained and
+Review (private archive) (changes: 1 major, 3 minor), all retained and
 applied by the orchestrator; per owner policy the change returns to an Opus
 review (diff-only, owner go 2026-11-05).
 
@@ -1258,7 +1258,7 @@ review (diff-only, owner go 2026-11-05).
 
 ### Opus review after the Fable pass — 2026-11-05
 
-Diff-only review `runs/70-spec-review-4.md` (approve, 4 minor), all retained
+Diff-only review (private archive) (approve, 4 minor), all retained
 and applied by the orchestrator; a short diff-only check precedes the freeze.
 
 - minor, "transport" vs the `{lookup, connect}` seam: retained. BR-216 defines
@@ -1275,7 +1275,7 @@ and applied by the orchestrator; a short diff-only check precedes the freeze.
 
 ### Pre-freeze check — 2026-11-05
 
-Diff-only check `runs/70-spec-review-5.md` (changes: 3 minor), all retained and
+Diff-only check (private archive) (changes: 3 minor), all retained and
 applied by the orchestrator: TLS options become an allowlist (exact key set
 `{host, port, servername}`, forwarded unchanged, AST source test); the
 `onRequest` observer is called once per HTTP request including retries and the
@@ -1289,9 +1289,9 @@ review round. The code review verifies AC-to-test coverage of the edited ACs.
 
 ### v2 changes — 2026-11-08
 
-Sources: latency probe (archived evidence `runs/70-list-latency-1.md`) and owner decision
-(page size), code review round 1 (archived evidence `runs/70-code-review-1.md`) "Author
-interpretations" (wording), Fable code pass 1 (archived evidence `runs/70-code-fable-1.md`)
+Sources: latency probe (private archive) and owner decision
+(page size), code review round 1 (private archive) "Author
+interpretations" (wording), Fable code pass 1 (private archive)
 and the owner decision of 2026-11-07 (TLS).
 
 - Page size 256 → 100 (D-02): BR-201 v2, BR-202 v2, route table, AC-11
@@ -1333,8 +1333,8 @@ and the owner decision of 2026-11-07 (TLS).
   changing F-006's frozen contract, while a smaller page (50 entries, about
   0.85 s) would halve every batch against the owner's 100-entry decision.
   Residual risk: a scope with a long run of filtered entries can time out
-  repeatedly. BR-211 v2 and BR-215 v2 require `runs/70-record-<n>.md` and
-  `runs/70-acceptance-<n>.md` to report the maximum page and invocation
+  repeatedly. BR-211 v2 and BR-215 v2 require (private archive) and
+  (private archive) to report the maximum page and invocation
   durations, so the margin is checked on real data; if acceptance shows a
   timeout, lowering the per-invocation list bound is an F-006 owner decision.
 - Recording plan (BR-211 v2, AC-21): the recorder previously stopped after 8
@@ -1415,7 +1415,7 @@ Claude Opus 5.5 (effort unknown). Every finding retained:
 
 ### Fable spec pass v2 — 2026-11-08
 
-Fable 5.1 approved `7a35077` (runs/70-freeze-2.md). One minor, retained: the
+Fable 5.1 approved `7a35077` (private archive). One minor, retained: the
 `business-rules/README.md` allocated and active counts now include F-015
 (233 allocated; 163 active, 7 superseded, 63 pending).
 
@@ -1461,7 +1461,7 @@ findings retained.
 
 ### Fable spec pass v3 — 2026-11-09
 
-Fable 5.1 approved `098359c` (runs/70-freeze-3.md); round-2 fixes verified.
+Fable 5.1 approved `098359c` (private archive); round-2 fixes verified.
 Three minors retained: AC-21 splits the real-ID and form-violation messages;
 `query` is recorded as `[name, value]` pairs, so only path placeholders are
 added to the printable names; the Recorded-members heading cites v2 BRs.
@@ -1491,7 +1491,7 @@ recipient-side mount name differing from the owner's name fails closed as
 
 ### Fable spec pass v4 — 2026-11-09
 
-Fable 5.1 approved `2e15369` (runs/70-freeze-4.md); round-1 minors verified.
+Fable 5.1 approved `2e15369` (private archive); round-1 minors verified.
 Two minors retained at freeze: chain members must be live directories on the
 requested drive (`type`, `drive_id`, `status`), as F-004 requires; the
 recipient-side mount-rename case is recorded in `BACKLOG.md`.
@@ -1501,7 +1501,7 @@ recipient-side mount-rename case is recorded in `BACKLOG.md`.
 
 Source: owner acceptance run on main `7b1769f` (AC-23 run B failed: a
 children page of 5,010 ms, and the outside-scope denial check, which cannot
-hold in run B) and the tail probe of runs/70-list-latency-2.md. Owner go for v5 the same day, recorded in runs/70-list-latency-2.md (archived evidence `runs/70-list-latency-2.md`).
+hold in run B) and the tail probe of (private archive). Owner go for v5 the same day, recorded in (private archive) (private archive).
 
 - Page size 100 → 50: BR-201 v3, BR-202 v3 (routes and entry cap), BR-211 v3
   (21 and 6 pages; nonterminal cap 16 → 32 pages), BR-213 v3 (exempt `limit`
@@ -1519,7 +1519,7 @@ hold in run B) and the tail probe of runs/70-list-latency-2.md. Owner go for v5 
   calls take about 6.8–9.6 s, inside the 10,000 ms invocation deadline. The v2
   argument that rejected 50 ("twice the calls for no deadline need") is
   superseded by the measured peaks.
-- First owner acceptance run on main `7b1769f`: runs/70-acceptance-1.md (archived evidence `runs/70-acceptance-1.md`).
+- First owner acceptance run on main `7b1769f`: (private archive) (private archive).
 - Request budgets at 50 per page: BR-211 worst case 5 folders × 32 pages + 34
   other requests = 194 ≤ 200 (realistic plan about 61); BR-215: run 1 used
   60 GET in 60,355 ms at 100 per page, pages of 50 add about 20 requests for
@@ -1532,17 +1532,17 @@ hold in run B) and the tail probe of runs/70-list-latency-2.md. Owner go for v5 
 Opus 5.5 reviewed `c8cb4f8`: changes, four minors, all retained: the BR-201
 v2 History line restored; the BR index rows moved to the current versions;
 the capacity impact of pages of 50 recorded under "v5 changes"; the failed
-acceptance run recorded in runs/70-acceptance-1.md and linked.
+acceptance run recorded in (private archive) and linked.
 
 ### Fable spec pass v5 — 2026-11-09
 
-Fable 5.1 approved `eba8ec2` (runs/70-freeze-5.md); round-1 minors verified.
+Fable 5.1 approved `eba8ec2` (private archive); round-1 minors verified.
 Three minors applied at freeze: BR-211 and BR-215 budgets recomputed for
 pages of 50, owner decision cited.
 
 ### v6 changes — 2026-11-09
 
-Source: owner acceptance run 2 on main `0a17373` (runs/70-acceptance-2.md)
+Source: owner acceptance run 2 on main `0a17373` (private archive)
 and two read-only owner-run probes after it: the revocable share was absent
 from `shared_with_me`, its metadata returned 403, the received root stayed
 readable, and the packaged CLI returned `READ_UNAVAILABLE` for the revoked
@@ -1563,14 +1563,14 @@ changes ship in the implementation phase with these checks.
 
 ### Fable pass v6 — 2026-11-09
 
-Fable 5.1 approved `223bd85` (spec and acceptance script; runs/70-freeze-6.md);
+Fable 5.1 approved `223bd85` (spec and acceptance script; (private archive));
 round-1 fixes verified. One minor kept as a note: the AC-25 discovery checks
 read only the first `kdrive_shared_with_me` page, enough for the two-entry
 fixture.
 
 ### v7 changes — 2026-11-09
 
-Source: acceptance run 3 on main `e057d14` (runs/70-acceptance-3.md): the
+Source: acceptance run 3 on main `e057d14` (private archive): the
 AC-25 check counting tool pages failed (fewer than six) although run 2 had
 counted at least three, so tool pages hold more than 50 entries. AC-25 now
 counts upstream children requests (≥ 6) during the scoped listing. Owner go

@@ -10,7 +10,7 @@ version: 1
 
 Autonomous freeze by the orchestrator on2026-11-02T23:42:29Z, exact reviewed SHA
 `f5a2cfdfab03bea5f1ee4cf482af80e69127cb18`, after fresh independent
-round1 approval (archived evidence `runs/10-spec-review-1.md`). The ticket is ready, no question
+round1 approval (private archive). The ticket is ready, no question
 remains and the user was notified of this SHA and the decisions.
 
 #10 (archive issue 10) adds bounded binary
@@ -48,9 +48,9 @@ their original production ACs and separately authorized provider evidence.
 - Tests first, named BR unit coverage, bounded synthetic SDK wire integration,
   package checks, and truthful composition/representation documentation.
 - Synchronize accepted #9 F-006/BR-060 v2/BR-065 v2/BR-072–081/capability markers
-  from its actual-main acceptance (archived evidence `runs/9-acceptance-1.md`). Carry unchanged
-  review3 (archived evidence `runs/9-pr45-review-3.md`), acceptance1 and
-  usage-summary1 (archived evidence `runs/9-usage-summary-1.md`) in this reviewed PR.
+  from its actual-main acceptance (private archive). Carry unchanged
+  review3 (private archive), acceptance1 and
+  usage-summary1 (private archive) in this reviewed PR.
 - Version BR-060 to v3 for its same-purpose registration contract. Preserve
   F-005/F-006 frozen definitions; later BR-060 v3 governs #10 registration.
 

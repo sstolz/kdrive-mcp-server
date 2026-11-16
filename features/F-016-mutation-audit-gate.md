@@ -39,7 +39,7 @@ What already exists on the base:
   does not change the read path.
 - `KDRIVE_MCP_AUDIT_LOG` is parsed (F-002: `stderr` or a path resolved against
   the working directory) but unused in `src/`.
-- #16 measured write endpoints (runs/16-execution-A-1.md, -B-1.md): no 429 was
+- #16 measured write endpoints ((private archive), -B-1.md): no 429 was
   observed and no 5xx or timeout was provoked, so the classification of those
   cases below rests on HTTP semantics, not on measurement.
 
@@ -699,7 +699,7 @@ None.
 
 ## Stress-test
 
-### Review round 1 (`runs/17-spec-review-1.md`)
+### Review round 1 (private archive)
 
 1. major, retained — added BR-258, BR-070 v2, AC-25/AC-26, D-16-13; the
    commit point is the start of the intent append, since it cannot be undone.
@@ -717,7 +717,7 @@ None.
 8. minor, retained — AC-23 rows for move into a denied folder, folder trash
    with a denied descendant, and a denied create result path.
 
-### Review round 2 (`runs/17-spec-review-2.md`)
+### Review round 2 (private archive)
 
 Fixed by the orchestrator (owner delegated autonomy, 2026-11-09).
 
@@ -734,13 +734,13 @@ Fixed by the orchestrator (owner delegated autonomy, 2026-11-09).
 6. minor, retained — AC-26 asserts `mutate`'s return value and the outcome
    record; BR-258 states the audit outcome is authoritative after a cancel.
 
-### Review round 3 (`runs/17-spec-review-3.md`)
+### Review round 3 (private archive)
 
 Verdict approve; both minors applied editorially by the orchestrator: the
 exit/close bound now names the stderr-draining dependency (BR-070 v2, BR-254,
 D-16-13), and the ID note says BR-234–BR-259.
 
-### Fable decision pass (`runs/17-spec-fable-1.md`)
+### Fable decision pass (private archive)
 
 Verdict approve (no critical/major); all 7 minors folded in before freeze:
 1. `destinationDrive` member for cross-drive refusals; AC-01 row.

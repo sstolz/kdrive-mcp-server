@@ -17,17 +17,17 @@ synchronization (#50) changes no frozen v1 contract.
 
 Autonomous freeze by the orchestrator on 2026-11-03 at 07:42:54 UTC, exact
 reviewed SHA `c4d95c1`, after fresh independent Fable
-round 2 approval (archived evidence `runs/21-spec-review-2.md`) (full spec at `520a15b`) and
-round 3 diff approval (archived evidence `runs/21-spec-review-3.md`). IDs re-checked free on
+round 2 approval (private archive) (full spec at `520a15b`) and
+round 3 diff approval (private archive). IDs re-checked free on
 main `ca6f387`. The ticket is ready, no question remains and the user was
 notified of this SHA and the decisions. See the
-freeze record (archived evidence `runs/21-freeze-1.md`). Allocates BR-124–BR-143; versions
+freeze record (private archive). Allocates BR-124–BR-143; versions
 BR-100 to v2 and BR-024 to v2 (F-002 v3).
 
 #21 (archive issue 21) (P-21) implements
 the `proxy` mode of [SPEC §8](../SPEC.md) ("Contrat du mode `proxy`"). F-008
 qualified the owner's production provider, Infomaniak, as `proxy-only`
-(report (archived evidence `runs/11-acceptance-infomaniak-token-1.md`)): discovery is usable,
+(report (private archive)): discovery is usable,
 PKCE S256 is supported, the access token is opaque, a usable OIDC ID token is
 returned, `client_secret_basic`/`client_secret_post` are listed, `none` is not,
 RFC 9207 issuer identification is not advertised, and no dynamic registration
@@ -843,7 +843,7 @@ None.
 
 ### Round 1 — reviewed SHA `348c03c30ec090b0327a1adb72c50e37247b5d49`
 
-Review: runs/21-spec-review-1.md (archived evidence `runs/21-spec-review-1.md`), verdict
+Review: (private archive) (private archive), verdict
 `changes`, 0 critical, 4 major, 11 minor.
 
 | Finding | Severity | Decision | Change |
@@ -866,7 +866,7 @@ Review: runs/21-spec-review-1.md (archived evidence `runs/21-spec-review-1.md`),
 
 ### Round 2 — reviewed SHA `520a15b`
 
-Review: runs/21-spec-review-2.md (archived evidence `runs/21-spec-review-2.md`), verdict
+Review: (private archive) (private archive), verdict
 `approve`, 0 major, 9 minor. All minors applied as proposed.
 
 | Finding | Severity | Decision | Change |
@@ -881,7 +881,7 @@ Review: runs/21-spec-review-2.md (archived evidence `runs/21-spec-review-2.md`),
 | R2-08 | minor | Retained | D-9 states the P-12 dependency: published `resource` byte-identical to the audience. |
 | R2-09 | minor | Retained | Scope 8 and D-18: `docs/oauth-proxy.md` notes that strict OIDC clients may reject the alias. |
 
-Round 3 (report (archived evidence `runs/21-spec-review-3.md`), diff `520a15b..c4d95c1`,
+Round 3 (report (private archive), diff `520a15b..c4d95c1`,
 verdict `approve`, 2 minor). Retained as test readings without contract change:
 R3-01 — the absent `grant_type`/`code`/`refresh_token` cases of BR-136/BR-137/
 BR-140 are asserted under AC-17/AC-18/AC-21; R3-02 — AC-01 is verified as "one

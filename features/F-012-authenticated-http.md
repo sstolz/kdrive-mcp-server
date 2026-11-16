@@ -9,7 +9,7 @@ version: 2
 ## Context
 
 **v2 (#63), draft.** Milestone 0.2 global review M-1
-(`runs/0.2-fable-global-1.md`) found that `make http-acceptance` reads the
+(private archive) found that `make http-acceptance` reads the
 owner's upstream client secret and signing key from the git-ignored
 `secrets/` directory inside the dev checkout. That checkout is bind-mounted
 read-write at `/workspace` in every dev container, so dependency lifecycle
@@ -27,8 +27,8 @@ directory cannot exist there. BR-189 is the next unused ID after BR-188.
 
 Autonomous freeze by the orchestrator on 2026-11-03, exact reviewed SHA
 `b3a4b036e33188a4418efbd8511288571e280fb3`, after Opus reviews 1–4
-(round 4 approve (archived evidence `runs/12-spec-review-4.md`)) and the Fable
-decision pass (archived evidence `runs/12-spec-fable-1.md`) (approve, 0 critical, 0 major).
+(round 4 approve (private archive)) and the Fable
+decision pass (private archive) (approve, 0 critical, 0 major).
 The only change after that SHA is Fable minor m-3 (BR-025 frontmatter clause
 in Scope 3); m-1 went to `BACKLOG.md` and m-2 needs no change. F-002 v4 /
 BR-025 v2 and F-005 v2 / BR-059 v2 are frozen with this spec.
@@ -818,7 +818,7 @@ other cases may call `handle()` directly with a `Request` and a target.
   completes, the connector reports connected, the tool list appears and one
   read tool call returns a result. The owner also sends one unauthenticated
   `curl` request to `P` and records its status and `WWW-Authenticate`.
-  Evidence in `runs/12-acceptance-claude-1.md`: date, deployed SHA, client
+  Evidence in (private archive): date, deployed SHA, client
   surface and version, the host of `P`, the observed step results, the tool
   names listed, the curl status line and challenge, the logger event names
   and counts, and the `requested_protocol` values of `session_opened`; no
@@ -1134,7 +1134,7 @@ None.
 
 ## Stress-test
 
-Review round 1: `runs/12-spec-review-1.md` (verdict `changes`: 1 critical,
+Review round 1: (private archive) (verdict `changes`: 1 critical,
 4 major, 12 minor) on `c7bb3f0`. Author checks: SDK server and client 2.4.0
 typings and bundles read from the registry tarballs (the lockfile pins 2.4.0);
 `src/auth/proxy/pages.ts`, `src/auth/proxy/proxy.ts`, `src/config.ts`,
@@ -1200,7 +1200,7 @@ Host-less HTTP/1.1 request reaches the handler, and `req.url` keeps
 - **m-12 — retained.** Contract details names the optional `listen` port;
   AC-01 and AC-02 use it.
 
-Review round 2: `runs/12-spec-review-2.md` (verdict `changes`: 1 major, 12
+Review round 2: (private archive) (verdict `changes`: 1 major, 12
 minor) on `638a2c7`. Author checks, all inside the dev Compose service: SDK
 server 2.4.0 `dist/index.mjs` (`handlePostRequest` with `parsedBody` and
 `MAX_BATCH_SIZE = 100`; `send()` sets `mcp-session-id` on every JSON
@@ -1266,7 +1266,7 @@ probe: `keepAliveTimeout` 5000, `headersTimeout` 60000, `requestTimeout`
   timeout below 5 seconds; D-7 and Scope 6 record the connection-cap
   residual with per-client-IP connection limits as mitigation.
 
-Review round 3: `runs/12-spec-review-3.md` (verdict `changes`: 1 major, 6
+Review round 3: (private archive) (verdict `changes`: 1 major, 6
 minor) on `eef43e6`. Author checks, all inside the dev Compose service or on
 the repository files: `src/navigation.ts:162-179` (one `validated` guard,
 shared by `createNavigationController` and `createNavigationServer`, refuses
@@ -1350,7 +1350,7 @@ responses).
 
 v2 reviews done (#63): see the entries below.
 
-Round 1 (Opus 5.5 high, `runs/63-spec-review-1.md`, SHA 6fdedd4): **approve**
+Round 1 (Opus 5.5 high, (private archive), SHA 6fdedd4): **approve**
 with 5 minors, all retained and folded in by the orchestrator: (1) refuse an
 ancestor directory of the checkout; (2) physical-path `:`/newline check and
 trailing-`/` handling before the symlink test, newline variant in AC-25;
@@ -1358,7 +1358,7 @@ trailing-`/` handling before the symlink test, newline variant in AC-25;
 `node scripts/http-acceptance.ts`; (4) script arguments, port and working
 directory stated; (5) docs note on `DEV_UID` readability.
 
-Fable 5.1 pre-freeze pass (`runs/63-spec-fable-1.md`, SHA c91b980): **approve**
+Fable 5.1 pre-freeze pass ((private archive), SHA c91b980): **approve**
 with 4 minors, all retained and folded in by the orchestrator: (1) the script
 takes the `$(DOCKER)`, `$(MAKE)` and Makefile arguments like
 `scripts/sonar-entry.sh`; (2) AC-25/AC-26 assert that stderr *contains* the
@@ -1373,7 +1373,7 @@ both folded in by the orchestrator in this commit and the previous one.
 
 **Post-freeze wording sync (records PR, 2026-11-05).** PR #65 review minors
 added three refusals within D-20's intent, approved by the Fable 5.1 pre-merge
-pass without a new version (`runs/63-code-fable-1.md`): a `.`/`..` path
+pass without a new version (private archive): a `.`/`..` path
 component (SET line), an unlistable directory (unavailable line), and the
 Compose guard repeated after `build`. BR-171 v2 text now lists them. Accepted
-on actual main `7b8b52d` (evidence (archived evidence `runs/63-acceptance-1.md`)).
+on actual main `7b8b52d` (evidence (private archive)).

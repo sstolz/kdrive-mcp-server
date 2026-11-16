@@ -2,10 +2,10 @@
 
 F-001 v4 is done and its applicable rules are accepted on actual `main`
 `f2d38b32dbbd78059da6754bb11d9b8e561fd645`, 2026-11-01; see the
-acceptance evidence (archived evidence `runs/28-acceptance-1.md`). Frozen v1/v2/v3 history and
+acceptance evidence (private archive). Frozen v1/v2/v3 history and
 accepted ADR text remain immutable. F-002 v1 is preserved frozen; v2 is done after
 acceptance on actual main `88bf8caa7412988e11099a4a01f9e600aa38eeee`,
-2026-11-01; see the final evidence (archived evidence `runs/33-acceptance-1.md`) recorded in
+2026-11-01; see the final evidence (private archive) recorded in
 completed #4/#31/#33. BR-016–BR-028 are active and BR-001 is superseded by BR-016.
 GitHub issue numbers are not feature/rule IDs.
 
@@ -95,13 +95,13 @@ Version history: [v1 immutable snapshot](../features/history/F-001-v1.md),
 [v3 immutable snapshot](../features/history/F-001-v3.md),
 [history index](../features/history/README.md). Versioning does not allocate a new F ID.
 
-F-002 v1 freeze evidence: review round 1 (archived evidence `runs/4-spec-review-1.md`),
-fresh round 2 approval (archived evidence `runs/4-spec-review-2.md`) and the exact freeze record
+F-002 v1 freeze evidence: review round 1 (private archive),
+fresh round 2 approval (private archive) and the exact freeze record
 in the [immutable v1 snapshot](../features/history/F-002-v1.md).
 The [current v2](../features/F-002-configuration.md) was frozen at 21:29:17 UTC
-after fresh v2 approval (archived evidence `runs/4-spec-v2-review-1.md`) of reviewed SHA-256
+after fresh v2 approval (private archive) of reviewed SHA-256
 `7005d6d3322a10a76dff08cc6fb05dfe3641f8ab07586ca65ccf61563c100d4f`;
-see the narrow revision note (archived evidence `runs/4-spec-author-2.md`). BR-016–BR-028 retain
+see the narrow revision note (private archive). BR-016–BR-028 retain
 their v1 rule statements. No new rule becomes active through this freeze.
 F-005 v1 allocates BR-059–BR-071 for #8; records are prepared after reviewed
 freeze with implementation. F-005 v2 (frozen with F-012 under #12) versions BR-059 to v2, accepted on main `00e6fe3`: the factory accepts HTTP preflight objects and the stdio runner keeps refusing them ([v1 snapshot](../features/history/F-005-v1.md)). #9 allocates F-006 / BR-072–BR-081 v1 and versions
@@ -121,7 +121,7 @@ BR-014 and BR-015 to v2 in its [frozen quality-gate contract](../features/F-011-
 #12 allocates F-012 / BR-152–BR-171 v1 and versions BR-025 (F-002 v4) and BR-059 (F-005 v2) to v2 in its [frozen authenticated-HTTP contract](../features/F-012-authenticated-http.md); the snapshots are [F-002 v3](../features/history/F-002-v3.md) and [F-005 v1](../features/history/F-005-v1.md), and the records are accepted on main `00e6fe3` (AC-21 on 2026-11-04).
 #13 allocates F-013 / BR-172–BR-188 v1 and versions BR-015 to v4 in its [HTTP-image contract](../features/F-013-http-image.md) (v2), accepted on main `25e79ba`.
 #63 versions BR-171 to v2 and allocates BR-189 v1 in [F-012 v2](../features/F-012-authenticated-http.md) ([v1 snapshot](../features/history/F-012-v1.md)); both accepted on main `7b8b52d`.
-#70 allocates F-014 / BR-190–BR-217 v1, versions BR-016, BR-028, BR-071, BR-123 and BR-175 to v2, and proposes ADR-006 in its [production-adapter contract](../features/F-014-production-kdrive-adapter.md); later versions up to F-014 v7 version further rules (snapshots in `features/history/`); accepted on main `2a9c1e3` (evidence (archived evidence `runs/70-acceptance-4.md`)). #72 allocates F-015 / BR-218–BR-233 v1, versions BR-015 to v5 and BR-149, BR-178 and BR-183 to v2, and proposes ADR-007 in its [self-hosted-runner contract](../features/F-015-self-hosted-runner.md); F-015 v2 accepted on main `de9b283` (evidence (archived evidence `runs/72-acceptance-1.md`)). The next unused feature ID was then F-016 and the next unused business-rule ID BR-234.
+#70 allocates F-014 / BR-190–BR-217 v1, versions BR-016, BR-028, BR-071, BR-123 and BR-175 to v2, and proposes ADR-006 in its [production-adapter contract](../features/F-014-production-kdrive-adapter.md); later versions up to F-014 v7 version further rules (snapshots in `features/history/`); accepted on main `2a9c1e3` (evidence (private archive)). #72 allocates F-015 / BR-218–BR-233 v1, versions BR-015 to v5 and BR-149, BR-178 and BR-183 to v2, and proposes ADR-007 in its [self-hosted-runner contract](../features/F-015-self-hosted-runner.md); F-015 v2 accepted on main `de9b283` (evidence (private archive)). The next unused feature ID was then F-016 and the next unused business-rule ID BR-234.
 #103 allocates F-019 / BR-290 and BR-292–BR-314 v1 (BR-291 and BR-305–BR-311 are reserved for #109 and never reused) and versions BR-023, BR-124, BR-128, BR-139, BR-140, BR-142, BR-143, BR-152 and BR-169 to v2 and BR-024 to v3 in its [persistent-state contract](../features/F-019-persistent-oauth-state.md); all were accepted on actual main `68209fe` on 2026-11-11 (evidence (archive issue 103)) and are active; the owner-run real-client restart check has not been run.
 #104 allocates F-020 / BR-315–BR-321 v1, versions BR-015 to v6 and BR-122, BR-225 and BR-227 to v2, and writes ADR-009 in its [dependency-audit contract](../features/F-020-dependency-audit.md); all were accepted on actual main `b6acf86` on 2026-11-11 (evidence (archive issue 104)) and are active.
 #105 allocates F-021 / BR-322–BR-327 v1, versions BR-154, BR-156, BR-162, BR-167, BR-168, BR-180, BR-181 and BR-184 to v2 and BR-187 to v3 in its [container health-check contract](../features/F-021-container-health-check.md), with no ADR; all were accepted on actual main `e208996` on 2026-11-11 (evidence (archive issue 105)) and are active. The next unused feature ID was then F-022 and the next unused business-rule ID BR-328.
@@ -190,8 +190,8 @@ Allocation and freeze establish no working production capability.
 | [BR-028 v1](../business-rules/BR-028.md) | F-002 v1 / #4  | Prepared in feature PR              | Active                             |
 
 Foundation markers follow the actual-main
-acceptance report (archived evidence `runs/28-acceptance-1.md`). F-002 markers now follow its
-successful actual-main acceptance report (archived evidence `runs/33-acceptance-1.md`), not the
+acceptance report (private archive). F-002 markers now follow its
+successful actual-main acceptance report (private archive), not the
 freeze or merge alone. #35 synchronizes these accepted states.
 
 ### Architecture-decision ledger
@@ -201,7 +201,7 @@ all v1, accepted on 2026-11-09 (BR-042 at v2). No existing rule is superseded. T
 feature and rule IDs were F-005 and BR-059 after #7 allocated F-004 and
 BR-047–BR-058; #8 now allocates F-005 and BR-059–BR-071 as recorded above.
 #7 freezes BR-042 v2 with F-003 v2 and F-004 v1 after fresh
-independent round 2 approval (archived evidence `runs/7-spec-review-2.md`) of
+independent round 2 approval (private archive) of
 `e913aa40af932889daa88be780095ff9095706c2`, at2026-11-02 19:32:08 UTC.
 No full acceptance marker is established.
 

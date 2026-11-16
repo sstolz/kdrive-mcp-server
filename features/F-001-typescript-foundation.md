@@ -306,7 +306,7 @@ Every test names its BR in its test title/comment. Use synthetic IDs/data only.
   tests, an upload alone or issue #3's partial acceptance do not satisfy this AC.
 
 Before implementation, record a failing client-fixture test for AC-02/03 and its
-later successful run in `runs/P-03-development-1.md`. The PR maps all ACs to actual
+later successful run in (private archive). The PR maps all ACs to actual
 tests and output. After merge, repeat acceptance at the exact `main` SHA, record evidence in the
 existing issue and synchronize repository markers under the updated AGENTS workflow.
 
@@ -521,7 +521,7 @@ checkout remain execution prerequisites without host-toolchain fallback.
 ## Stress-test
 
 Version 4 author: GPT-6.1 Sol, high reasoning. Round 1 reviewer: GPT-6 Astra,
-high reasoning, fresh independent context. Report (archived evidence `runs/28-spec-review-1.md`),
+high reasoning, fresh independent context. Report (private archive),
 2026-11-01: **changes** against SHA-256
 `6c807262392fc7ad94f68a84816ac5fc22b7205a0d9ba66aabb26459739f010e`.
 
@@ -542,7 +542,7 @@ high reasoning, fresh independent context. Report (archived evidence `runs/28-sp
   one original deadline across stages, owned-work termination and no later upload.
 
 Fresh independent review of the corrected draft approved without findings:
-round 2 report (archived evidence `runs/28-spec-review-2.md`), GPT-6 Astra/high. The version 3
+round 2 report (private archive), GPT-6 Astra/high. The version 3
 review/freeze record remains in its immutable history snapshot.
 
 ## Freeze and verification
@@ -550,7 +550,7 @@ review/freeze record remains in its immutable history snapshot.
 Version 4 was autonomously frozen by the orchestrator on 2026-11-01 20:26:00 UTC.
 Exact reviewed pre-freeze SHA-256:
 `8f253c2249c6055002c8bff67bdcf3b29023daaec6982d7d304b7d18bf124eca`.
-Evidence: fresh independent approval (archived evidence `runs/28-spec-review-2.md`); ticket #28
+Evidence: fresh independent approval (private archive); ticket #28
 is ready and no open question remains. The user is notified of this hash and the
 official-scanner-only/project-token decisions; no reply is required.
 Record real RED tests for BR-014/015, implement only this revision,
@@ -564,7 +564,7 @@ tagged or package published by this spec revision's freeze.
 
 All AC-01–AC-12 were accepted on actual merged main
 `f2d38b32dbbd78059da6754bb11d9b8e561fd645` on 2026-11-01.
-The acceptance report (archived evidence `runs/28-acceptance-1.md`) records Docker/Make gates,
+The acceptance report (private archive) records Docker/Make gates,
 128 passing tests, packed-artifact checks, successful mandatory main CI and the
 current wrapper's successful official-scanner task with built-in Quality Gate
 waiting. Issues #3 and #28 are closed as completed. This #4 record synchronization

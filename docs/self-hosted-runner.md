@@ -202,7 +202,7 @@ sudo journalctl -u kdrive-ci-runner.service -f
    `sudo nft list table inet kdrive_runner`, and during a probe job `ss -Hltnp`
    filtered to that user (AC-16).
 
-Record in `runs/72-acceptance-1.md` and the ticket: the run ids, the
+Record in a ticket comment (AGENTS.md §9): the run ids, the
 `PASS`/`FAIL` lines, the canary count (0), the runner names and those outputs,
 with every host name, address and token removed.
 

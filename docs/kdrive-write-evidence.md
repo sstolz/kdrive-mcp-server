@@ -3,8 +3,8 @@
 Source: owner-authorized probes of 2026-11-04 inside one dedicated disposable
 folder, with the reviewed operator (digest `cf16cc1e…db845b`) and the
 [probe plan](kdrive-write-probe-plan.md). Records:
-Stage A (archived evidence `runs/16-execution-A-1.md`), Stage B (archived evidence `runs/16-execution-B-1.md`),
-owner decisions (archived evidence `runs/16-decisions-1.md`). Measured on one drive and one
+Stage A (private archive), Stage B (private archive),
+owner decisions (private archive). Measured on one drive and one
 account; these are observations, not provider guarantees.
 
 ## Routes measured

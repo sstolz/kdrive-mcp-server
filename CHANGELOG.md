@@ -289,7 +289,7 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
   Inline ESLint configuration comments stop the lint run. BR-144–BR-151
   (BR-144/150 v2, BR-151 v3), BR-010/012/014 v2 and BR-015 v3 are active; the
   owner configured `kdrive-pr-gate` and set `SONAR_ENABLED=true`
-  (acceptance (archived evidence `runs/50-acceptance-1.md`)).
+  (acceptance (private archive)).
 
 - Accepted #21 / F-010 on main 3fc14c3bbbd57b3c52ca4b74c07a512720f0d627: a transport-independent bounded OAuth proxy
   in `src/auth/proxy/` (RFC 8414 metadata with RFC 9207, dynamic registration
@@ -354,11 +354,11 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
   public-source claims and unmeasured cases remain distinct. The original bounded
   init attempt returned HTTP 401 and retained no body or inventory. A separately
   approved receipt-preserving retry returned HTTP 200 with three bounded ID/role
-  projections; see the sanitized retry evidence (archived evidence `runs/5-init-retry-1.md`).
+  projections; see the sanitized retry evidence (private archive).
   Authentication provisioning was fulfilled at that checkpoint; remaining fixture
   measurements were then unavailable. Documentation acceptance on main
   `62683840cbdcd8f57786200deea18bfc8c533f63` is recorded in
-  the documentation acceptance report (archived evidence `runs/5-doc-acceptance-1.md`).
+  the documentation acceptance report (private archive).
   No working adapter is established.
 - Navigable [business-rule index](business-rules/README.md) covering all 28
   allocated IDs, canonical/historical sources, accepted statuses and preserved
@@ -381,12 +381,12 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
   runtime-unavailable diagnostic. No real resolver, MCP/HTTP server or OAuth
   implementation is established. Acceptance on main
   `88bf8caa7412988e11099a4a01f9e600aa38eeee` is recorded in
-  the final acceptance report (archived evidence `runs/33-acceptance-1.md`).
+  the final acceptance report (private archive).
 - Accepted foundation for #3 / F-001 v4: diagnostic TypeScript package, isolated
   injected drive client, Docker/Make quality workflow, five mandatory CI jobs,
   V8/LCOV coverage and conditional guarded remote Sonar analysis. Acceptance on
   main `f2d38b32dbbd78059da6754bb11d9b8e561fd645` is recorded in
-  the acceptance report (archived evidence `runs/28-acceptance-1.md`). No release or working MCP
+  the acceptance report (private archive). No release or working MCP
   server is established by this foundation.
 - Accepted #2 documentation baseline: delivery policy, specification templates
   and planning records, preserving the French historical sources. Acceptance of
@@ -451,7 +451,7 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
   opaque nonstandard header equality and invalid-limit handling, preserving
   stopped attempts and explicit unknowns; synchronize workflow/learnings and
   public operational records without product or version changes. See the
-  sanitized measurements (archived evidence `runs/5-final-read-measurements-1.md`).
+  sanitized measurements (private archive).
 
 - Pending #38 acceptance: require structured per-ticket token-usage snapshots
   and measured closure reporting, separating missing, shared and unattributable
@@ -521,7 +521,7 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
   actual-main Quality Gate. F-002 v2, diagnostics, validation order and all
   existing gates remain unchanged. Both corrections and #4 passed final
   acceptance on main `88bf8caa7412988e11099a4a01f9e600aa38eeee`, including the
-  official Quality Gate; see the evidence (archived evidence `runs/33-acceptance-1.md`).
+  official Quality Gate; see the evidence (private archive).
 
 ### Removed
 

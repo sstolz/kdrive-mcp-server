@@ -62,6 +62,8 @@ summarised without identifiers.
   the closed tickets and the `runs/` evidence files) to this one, which started
   from a clean root commit (D-9). In records dated before 2026-11-12, `#N` and
   "archive issue N" refer to the archive; later records cite this repository.
+  The marker "(private archive)" stands for an evidence file of the archive's
+  `runs/` directory, which this repository does not carry (#6).
 - Archive tickets 1 and 2 ran before CI existed (independent approval plus
   local checks, never called green CI, granting no product waiver); CI is
   mandatory from archive ticket 3 onward. One direct commit initialized
