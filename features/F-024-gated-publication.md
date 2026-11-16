@@ -44,7 +44,7 @@ the spec or implement it.
   metadata-file parsing.
 - Extend `.github/workflows/release.yml` with the image job output. Update
   Makefile release targets to pass `RELEASE_IMAGE_DIGEST` to check/verify
-  for stable releases and make `GITHUB_OUTPUT` available to the image job.
+  with stable digest validation and make `GITHUB_OUTPUT` available to the image job.
   Update their closed-set policy tests for these exact changes.
 - Select npm and GHCR tags by release kind. Keep one release workflow and its
   current job order, permissions, environment and approval gates.
@@ -70,7 +70,6 @@ the spec or implement it.
   release-preparation PR of #6. While VERSION is beta, v1 text stays.
 - Changes to `docs/publishing.md` in this spec phase. The guide changes only
   in the implementation PR.
-
 - The `1.0.0` version bump, CHANGELOG promotion and README version strings.
   These belong to the release-preparation PR of #6.
 - Any publication, tag creation, real workflow dispatch or deployment approval.
@@ -107,8 +106,35 @@ before freeze and before the PR. Never reuse withdrawn IDs.
   limited to first-stable cleanup here. While VERSION is beta, BR-354 v1
   install text remains. Once VERSION is stable, tests assert that README.md
   and SPEC.md contain no `@beta` default. Explicit beta examples may remain.
-  Those install edits belong to #6, not #89.
   Verified by: AC-24, AC-32.
+- **BR-356 v2** — Keep every v1 guard, permission, runner, timeout,
+  environment and existing output. Add exactly the `publish-image` job output
+  `image_digest: ${{ steps.release-image.outputs.image_digest }}`.
+  Replace `read-back`'s `needs: [verify, publish-npm]` with
+  `needs: [verify, publish-image, publish-npm]`. All other needs stay unchanged.
+  Verified by: AC-30, AC-33.
+- **BR-357 v2** — Keep the exact v1 step order and checkout contract.
+  Add `id: release-image` only to `publish-image`'s `make release-image` step.
+  Keep `id: release-npm` on `verify`'s `make release-npm` step.
+  Verified by: AC-30, AC-33.
+- **BR-358 v2** — Keep every v1 closed-set and credential restriction.
+  Extend the allowed step IDs from only `release-npm` to `release-npm` and
+  `release-image`, at exactly the steps named by BR-357 v2.
+  Add `RELEASE_IMAGE_DIGEST: ${{ needs.publish-image.outputs.image_digest }}`
+  only to `publish-npm`'s `make release-check` and `read-back`'s
+  `make release-verify`. No `make release-npm` step receives it.
+  These two steps forward the variable for both release kinds.
+  All other step environment sets stay unchanged.
+  Verified by: AC-30, AC-33.
+- **BR-375 v2** — Keep the v1 targets, guards, commands, tarball output,
+  imports and prerequisite restrictions. Add `-e RELEASE_IMAGE_DIGEST` to
+  exactly the `release-check` and `release-verify` variable lists.
+  Keep the `release-npm` variable list unchanged. Make `GITHUB_OUTPUT`
+  available to `release-image`'s `/bin/sh scripts/release-image.sh`.
+  After a successful real stable build and metadata validation, that script
+  appends exactly one line `image_digest=<digest>` to `$GITHUB_OUTPUT` when
+  it is set. Beta and dry builds emit no image digest output.
+  Verified by: AC-30, AC-33.
 - **BR-359 v2** — Every release mode validates inputs before Git, any child
   process, Docker, a request or input interpolation. `RELEASE_VERSION` is
   exactly `MAJOR.MINOR.PATCH` or `MAJOR.MINOR.PATCH-beta.N`. Each numeric
@@ -122,7 +148,10 @@ before freeze and before the PR. Never reuse withdrawn IDs.
   input-only failure output and exit 1 remain unchanged. For stable phase
   `npm` and stable read-back, `RELEASE_IMAGE_DIGEST` joins this validation-first
   list and must match `sha256:<64 lowercase hex>`. Missing or malformed values
-  fail before any command or request. Beta does not require this input.
+  fail before any command or request. For beta check and read-back, the
+  variable must be empty or match `sha256:<64 hex>` (either hex case).
+  It is never used in a beta comparison. Any other beta value fails before
+  commands or requests with `RELEASE_IMAGE_DIGEST is not a sha256 digest`.
   Verified by: AC-25.
 - **BR-363 v2** — Stable preflight requires npm 200 with readable `versions`
   and `time` objects. The candidate is absent from both. npm `latest` is
@@ -173,8 +202,8 @@ before freeze and before the PR. Never reuse withdrawn IDs.
   beta uses one. The real build writes a buildx `--metadata-file`.
   For stable only, validate its `containerimage.digest` as `sha256:<64 lowercase hex>` and
   expose it as the `publish-image` job output `image_digest`.
-  For stable, pass that output as `RELEASE_IMAGE_DIGEST` only to phase `npm`
-  and `read-back`; add `publish-image` to read-back dependencies. The image
+  For stable, pass that output as `RELEASE_IMAGE_DIGEST` only via `publish-npm`'s `make release-check` and `read-back`'s
+  `make release-verify`; add `publish-image` to read-back dependencies. The image
   recipe writes `image_digest=<digest>` to `GITHUB_OUTPUT` after validation.
   The workflow exposes `steps.release-image.outputs.image_digest` as
   `needs.publish-image.outputs.image_digest`. Beta behavior stays unchanged. Reject a missing
@@ -214,11 +243,9 @@ before freeze and before the PR. Never reuse withdrawn IDs.
 BR-353 v1, BR-360 v1 through BR-362 v1,
 BR-364 v1 through BR-367 v1, BR-371 v1, BR-374 v1,
 BR-378 v1 and BR-379 v1 retain their accepted texts. BR-016 v3 and
-BR-178 v3 and BR-355 v1 remain unchanged. BR-356 through BR-358 and
-BR-375 retain their gates. Their workflow/output and environment-list clauses need
-pending v2 sections only for the stable digest hand-off specified here.
-BR-356 v2, BR-357 v2, BR-358 v2 and BR-375 v2 cover that plumbing;
-BR-355 remains v1. This spec does not restore the withdrawn rules
+BR-178 v3 and BR-355 v1 remain unchanged. BR-356 v2, BR-357 v2,
+BR-358 v2 and BR-375 v2 change only the digest plumbing stated above.
+Their existing gates remain. This spec does not restore the withdrawn rules
 or any dependency rule superseded by later features.
 
 In particular, an owner go names the version and commit. A successful real
@@ -288,6 +315,12 @@ Implementation removes `unsupported pre-release` and
 | 1.0.0+b                                               | `unsupported release version`                                                                                                                                 |
 | Stable candidate not greater than a published version | `stable version is not greater than every published version`                                                                                                  |
 | Non-placeholder npm latest, either release kind       | `releases after the first stable are out of scope; see #91 (F-024 v4)`                                                                                        |
+| Stable npm 404                                        | `npm registry status 404`                                                                                                                                     |
+| Candidate already published on npm                    | `version already published on npm`                                                                                                                            |
+| npm latest missing                                    | `npm placeholder missing (P-0)`                                                                                                                               |
+| Exact placeholder latest not deprecated               | `npm latest is not a deprecated placeholder (P-0)`                                                                                                            |
+| GHCR candidate present before push                    | `image already published`                                                                                                                                     |
+| Invalid non-empty beta input digest                   | `RELEASE_IMAGE_DIGEST is not a sha256 digest`                                                                                                                 |
 | Existing GHCR latest before stable push               | `GHCR latest already exists; first stable requires 404`                                                                                                       |
 | Either stable tag digest differs from run digest      | `image digest does not match RELEASE_IMAGE_DIGEST`                                                                                                            |
 | Non-SemVer time key other than created/modified       | `npm time contains a non-SemVer version key`                                                                                                                  |
@@ -301,6 +334,15 @@ Implementation removes `unsupported pre-release` and
 | Digest-line reason alternatives                       | `image digest does not match RELEASE_IMAGE_DIGEST`; `image manifest unavailable`; `image manifest invalid`                                                    |
 | New stable latest public line                         | `release-verify: image latest is public (P-3) ok` or `release-verify: image latest is public (P-3) FAIL anonymous pull failed`                                |
 | Existing printed digest, unchanged                    | `release-verify: image digest sha256:<hex>`                                                                                                                   |
+
+The #91 refusal wins when npm `latest` is both non-placeholder and not
+deprecated. In stable phase `npm`, either GHCR tag returning 404, a failed
+status or token access maps to `image manifest unavailable`. Invalid index
+content maps to `image manifest invalid`. A valid index with a different
+digest maps to `image digest does not match RELEASE_IMAGE_DIGEST`.
+
+Stable read-back does not emit the beta-only condition lines `npm beta tag`,
+`npm latest is a deprecated placeholder` or `image latest tag`.
 
 Retain existing version-platform, version-public, provenance and tarball
 lines. Add no other new read-back condition lines. Failed manifest status or
@@ -319,9 +361,12 @@ Use versioned BR citations in those tests. Tests run through `make check`.
   direct 1.0.0, tags, digest pinning, D-4 cleanup and unchanged P-0 through
   P-5. Given beta VERSION, when `BR-354 v2 install text follows VERSION`
   runs, then v1 README/SPEC expectations remain. Given stable VERSION in
-  the #6 release-prep fixture, when that test runs, then default install
+  a synthetic fixture shipped by #89, when that test runs, then default install
   lines contain no `@beta`, use `npm install -g @sstolz/kdrive-mcp-server`
   and exact execution uses `npx -y @sstolz/kdrive-mcp-server@<version>`.
+  #89 ships this synthetic stable-VERSION fixture for BR-354 v2 tests.
+  Checks against the real README.md and SPEC.md apply only once the real
+  VERSION is stable, in the release-preparation PR of #6.
   This spec phase changes neither the guide nor install strings.
 - **AC-25 (BR-359 v2)** — Given each release entry point, when versions
   `1.0.0`, `1.2.3`, `0.0.0` and `0.6.0-beta.2` are supplied with other valid
@@ -353,7 +398,9 @@ Use versioned BR citations in those tests. Tests run through `make check`.
   then only both GET bodies matching the run digest pass. Equal HEAD digests
   with different GET bytes fail. Two equal tags from another run fail.
   Missing/malformed input digest fails before commands or requests in check
-  and verify. Beta needs no digest. Both GET requests use the exact Accept
+  and verify. Beta accepts an empty digest or a valid digest in either hex
+  case, ignores it in comparisons and refuses every other value with the
+  pinned diagnostic before commands or requests. Both GET requests use the exact Accept
   list above. `F-024 v3 exact diagnostics: %s` asserts every diagnostics-table
   string and absence of both removed legacy messages in code and tests.
 - **AC-29 (BR-368 v2, BR-369 v2)** — Given fake npm and a valid stable
@@ -375,7 +422,10 @@ Use versioned BR citations in those tests. Tests run through `make check`.
   when buildx metadata is read, then its digest is validated, exported and
   passed to npm and read-back. Missing or malformed metadata stops the
   dependent jobs. Verified by:
-  `tests/release.test.ts`, `BR-368 v2 BR-370 v2 image argv: %s`.
+  `tests/release.test.ts`, `BR-368 v2 BR-370 v2 image argv: %s`, and
+  `tests/release-policy.test.ts`,
+  `BR-356 v2 BR-358 v2 stable digest plumbing: %s` and
+  `BR-375 v2 release target variables: %s`.
 - **AC-31 (BR-372 v2, BR-373 v2, BR-379 v1)** — Given stable registry
   doubles serving the exact version through npm `latest`, with provenance,
   expected tarball digest, deprecated placeholder, and this run's public GHCR
@@ -424,7 +474,9 @@ Use versioned BR citations in those tests. Tests run through `make check`.
   least permissions, job order, tagged dispatched main HEAD, CI evidence and
   environment protections remain required. Given a mutation removing a gate,
   when its test runs, then it fails. Verified by:
-  `tests/release-policy.test.ts`, existing workflow mutation tests, and
+  `tests/release-policy.test.ts`, existing workflow mutation tests,
+  `BR-356 v2 BR-358 v2 stable digest plumbing: %s`,
+  `BR-375 v2 release target variables: %s`, and
   `tests/release.test.ts`, `F-024 v3 stable release retains existing gates: %s`.
 
 - **AC-34 (v3 acceptance on main; unchanged gates)** — Given the merged
@@ -538,5 +590,17 @@ Round-1 decisions superseded by the owner narrowing:
   metadata parsing and workflow job outputs.
 - **Round 2, finding 10: retained** — Stable must exceed published betas;
   unpublished betas below existing betas keep v2 behavior before stable.
+
+- **Round 3, finding 1: retained** — Added exact v2 deltas for BR-356,
+  BR-357, BR-358 and BR-375. Pinned digest recipients, beta validation and
+  the AC-30/AC-33 policy test names.
+- **Round 3, finding 2: retained** — Pinned reused stable failures, phase
+  npm digest reasons and precedence of the #91 refusal.
+- **Round 3, finding 3: retained** — Excluded the three beta-only condition
+  lines from stable read-back.
+- **Round 3, finding 4: retained** — Assigned the synthetic stable-VERSION
+  fixture to #89 and real README/SPEC checks to stable VERSION in #6.
+- **Round 3, finding 5: retained** — Merged duplicate install-edit ownership
+  and BR-355 statements. Removed the blank line in the Out of scope list.
 
 No approval or freeze is claimed.
