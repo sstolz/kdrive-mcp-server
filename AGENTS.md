@@ -187,8 +187,9 @@ branch, go back to step 2, and review again if the code changed.
 ## 4. Tests and evidence
 
 - Every BR has a unit test that names it (`TestBR012_...` or `// BR-012`).
-- Implement only the frozen scope. Anything unrelated goes in `BACKLOG.md` as
-  one line: date, observation, location, and why it matters.
+- Implement only the frozen scope. Anything unrelated becomes a ticket in the
+  forge, with no milestone: date, observation, location, and why it matters.
+  Only a project without a forge keeps such lines in `BACKLOG.md`.
 - Never remove or disable a test or a gate to get green.
 - Evidence must match the claim. Run the command and quote its result before
   saying anything passes. Report failures and anything left unverified. Never

@@ -48,7 +48,8 @@ deletion. Merge sequentially by squash, updating shared branches by merge.
 The #2 baseline was imported through reviewed PR #24. Pending #1 settings
 remain separate; documentation acceptance does not claim #1 fully accepted or waive product
 checks. Existing user authorization persists; make routine reversible choices
-without another permission loop. Out-of-scope findings go to [BACKLOG.md](../BACKLOG.md).
+without another permission loop. Out-of-scope findings become issues
+with no milestone (AGENTS.md §4).
 
 ## Acceptance and repository markers
 
