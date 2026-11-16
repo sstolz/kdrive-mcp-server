@@ -44,9 +44,9 @@ registration contract. Existing F-007 byte/resource semantics remain unchanged.
   no external executable, native add-on or WASM codec.
 - Tests first; named BR unit tests, representative actual SDK wire checks,
   package checks and the full Docker/Make gate.
-- Synchronize accepted #10 markers and carry unchanged (private archive),
-  (private archive) and the initial
-  (private archive). Reconcile any same-marker changes from #11 with
+- Synchronize accepted #10 markers and carry the archived #10 review,
+  acceptance and usage records and the initial #14 orchestration record
+  unchanged (private archive). Reconcile any same-marker changes from #11 with
   latest main before merging; do not overwrite later accepted evidence.
 
 ### Out of scope

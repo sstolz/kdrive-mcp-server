@@ -590,7 +590,7 @@ None.
 ## Stress-test
 
 Round 1 (review (private archive), fixes in
-(private archive) (private archive)):
+(private archive)):
 
 1. major, F-003 evidence contract — retained: BR-039 v2 now states the
    amendment (live former-parent chain, named F-003 sentences no longer

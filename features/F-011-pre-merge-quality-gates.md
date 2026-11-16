@@ -10,11 +10,11 @@ version: 3
 
 **Accepted (2026-11-04)** on actual main `bc09d562eb422acd2b284be8c14e1e0806d6a118`
 with the owner's Sonar configuration (P1–P3) and real CI evidence; see
-(private archive) (private archive). Deviations from the
+(private archive). Deviations from the
 planned acceptance order (the merge preceded P2 and AC-13(b); AC-13(b) ran as
 an unmerged CI PR with an S7781 seed) are recorded there.
 
-**Version 3 (frozen, 2026-11-04).** Frozen autonomously by the orchestrator on 2026-11-04 at reviewed SHA `fb5ad17` after Opus approval of `1611a4d` ((private archive) (private archive)) and Fable approval of `fb5ad17` ((private archive) (private archive)); the Fable minors are applied in the freeze commit. The ticket is ready, no question remains, and the user is notified of the SHA and D19. The first real `sonar-pr` run after the
+**Version 3 (frozen, 2026-11-04).** Frozen autonomously by the orchestrator on 2026-11-04 at reviewed SHA `fb5ad17` after Opus approval of `1611a4d` (private archive) and Fable approval of `fb5ad17` (private archive); the Fable minors are applied in the freeze commit. The ticket is ready, no question remains, and the user is notified of the SHA and D19. The first real `sonar-pr` run after the
 owner set `SONAR_ENABLED=true` (PR #58, run 41821992074) stopped in the BR-151
 pristine export with `Unsupported Git metadata exists.`. A diagnostic job on the
 same runner (run 41822983911, git 2.56.0, the pinned `actions/checkout`
@@ -34,12 +34,12 @@ as [F-011 v2](history/F-011-v2.md).
 
 **Version 2 (frozen, 2026-11-03).** v2 frozen autonomously on 2026-11-03 by
 the orchestrator after Opus approval of `3fbee72`
-((private archive) (private archive)); minors m1–m9
+(private archive); minors m1–m9
 applied in this commit, reviewed within the PR #52 code review (economy path
 chosen by the owner).
 
  PR #52 code review round 1
-((private archive) (private archive), M1) found that
+((private archive), M1) found that
 dependency lifecycle code run by `make setup` can rewrite `.git/config` (for
 example `core.fsmonitor`) or `.git/hooks`. The `actions/checkout` post step then
 runs host `git` in the secret-bearing jobs, and post steps run even after a
@@ -945,7 +945,7 @@ confidential by owner decision, not as a credential), and the integrity of the
 ### v3 round 1 — reviewed SHA `1611a4d`
 
 Opus 5.5 high, approve, no critical or major
-((private archive) (private archive)).
+(private archive).
 
 - **m1 (minor), retained:** the T2 control column names `config.worktree` and
   BR-151 v3.
@@ -963,7 +963,7 @@ Opus 5.5 high, approve, no critical or major
 ### v3 round 2 (Fable decision pass) — reviewed SHA `fb5ad17`
 
 Fable 5.1, approve, no critical or major
-((private archive) (private archive)).
+(private archive).
 
 - **m1 (minor), retained:** AC-21 and BR-151 E-07 require the saved copy to be
   byte-identical (`cmp`).
@@ -976,7 +976,7 @@ Fable 5.1, approve, no critical or major
 
 ### Round 1 — reviewed SHA `5b7326ea57a8dcd62ede865d20ca5ef194e3dcd3`
 
-Review: (private archive) (private archive) (Fable,
+Review: (private archive) (Fable,
 devil's advocate with secrets threat model), verdict `changes`, 5 major,
 10 minor. All findings retained; majors decided by the orchestrator.
 
@@ -1018,7 +1018,7 @@ devil's advocate with secrets threat model), verdict `changes`, 5 major,
 
 ### Round 2 — reviewed SHA `3a142b6`
 
-Review: (private archive) (private archive) (Fable),
+Review: (private archive) (Fable),
 verdict `changes`, 2 major, 5 minor; round 1 fixes confirmed. All findings
 retained; majors decided by the orchestrator.
 
@@ -1052,7 +1052,7 @@ retained; majors decided by the orchestrator.
 
 ### Round 3 — reviewed SHA `232e7ef`
 
-Review: (private archive) (private archive) (Fable),
+Review: (private archive) (Fable),
 verdict `changes`, 2 major, 4 minor. All findings retained as proposed by the
 reviewer, per the orchestrator's decision.
 
@@ -1079,7 +1079,7 @@ reviewer, per the orchestrator's decision.
 
 ### Round 4 — reviewed SHA `8a8d6b5`
 
-Review: (private archive) (private archive) (Fable),
+Review: (private archive) (Fable),
 verdict `changes`, 2 major, 4 minor. All findings retained.
 
 - **F29 (major), retained, option (a) per the orchestrator:** snapshot
@@ -1113,7 +1113,7 @@ verdict `changes`, 2 major, 4 minor. All findings retained.
 
 ### Round 5 — reviewed SHA `83ebc2a`
 
-Review: (private archive) (private archive) (Fable),
+Review: (private archive) (Fable),
 verdict `changes`, 1 major, 3 minor. All findings retained as proposed.
 
 - **F35 (major), retained:** BR-150 pins the exact `--exclude` patterns
@@ -1132,7 +1132,7 @@ verdict `changes`, 1 major, 3 minor. All findings retained as proposed.
 
 ### Round 6 — reviewed SHA `a12d034`
 
-Review: (private archive) (private archive) (Fable),
+Review: (private archive) (Fable),
 verdict `approve`, 0 major, 4 minor. All minors retained as proposed.
 
 - **F39 (minor), retained:** the Make target sets a fixed
@@ -1148,7 +1148,7 @@ verdict `approve`, 0 major, 4 minor. All minors retained as proposed.
 
 ### Version 2 inputs — PR #52 code review round 1 (reviewed head `850c441`)
 
-Review: (private archive) (private archive) (Opus, effort
+Review: (private archive) (Opus, effort
 high), verdict `changes`, 2 major, 8 minor. Contract-level dispositions:
 
 - **M1 (major), retained (orchestrator decision: fix, no residual):**
@@ -1165,7 +1165,7 @@ high), verdict `changes`, 2 major, 8 minor. Contract-level dispositions:
 
 ### Version 2, round 1 — reviewed SHA `3fbee72`
 
-Review: (private archive) (private archive) (Opus,
+Review: (private archive) (Opus,
 effort high), verdict `approve`, 0 critical, 0 major, 9 minor. All minors are
 applied in the freeze commit; the orchestrator froze v2 autonomously and this
 text is reviewed within the PR #52 code review.

@@ -843,7 +843,7 @@ None.
 
 ### Round 1 — reviewed SHA `348c03c30ec090b0327a1adb72c50e37247b5d49`
 
-Review: (private archive) (private archive), verdict
+Review: (private archive), verdict
 `changes`, 0 critical, 4 major, 11 minor.
 
 | Finding | Severity | Decision | Change |
@@ -866,7 +866,7 @@ Review: (private archive) (private archive), verdict
 
 ### Round 2 — reviewed SHA `520a15b`
 
-Review: (private archive) (private archive), verdict
+Review: (private archive), verdict
 `approve`, 0 major, 9 minor. All minors applied as proposed.
 
 | Finding | Severity | Decision | Change |
