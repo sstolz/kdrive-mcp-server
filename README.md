@@ -66,14 +66,46 @@ Changes are listed in [CHANGELOG.md](CHANGELOG.md).
 - **Bounded results:** reads, downloads and listings have size, item and time
   limits; names, paths and file content are returned as untrusted data.
 
-## Quick start (Docker)
+## Quick start
 
-Run the published image `ghcr.io/sstolz/kdrive-mcp-server`, configured with
-[environment variables](#configure). You need Docker and an Infomaniak API
-token with the kDrive scope from an account with the **admin** role on every
-drive you configure (startup checks this), plus the drive ID
-([Values from the Infomaniak side](#values-from-the-infomaniak-side)). For a
-remote deployment, you also need Docker Compose and Traefik.
+### Local (stdio)
+
+You need Node.js 26.13 or later (26.x), an Infomaniak API token with the
+kDrive scope from an account with the **admin** role on every drive you
+configure (startup checks this), and the drive ID
+([Values from the Infomaniak side](#values-from-the-infomaniak-side)).
+Settings use [environment variables](#configure).
+
+Only a beta is published: `0.6.0-beta.2`, under the npm dist-tag `beta`
+([publishing](docs/publishing.md)). Pin the exact version as below. With a
+dist-tag, `npx` fetches whatever the tag points to at each start.
+
+Store your token in `/home/you/.config/kdrive/token`, a regular UTF-8 file
+containing only the token (a final newline is accepted). The token path is
+on the host, with no container mount; keep it private and readable only by
+the user running the client. The file must exist before launch; do not use
+a symlink as the token file or put a token in the client configuration.
+Paths and IDs below are fake; substitute your own values.
+
+```sh
+KDRIVE_TOKEN_FILE=/home/you/.config/kdrive/token \
+KDRIVE_ID=123456 \
+KDRIVE_MCP_ROOTS=123456:/Documents \
+KDRIVE_MCP_MODE=read \
+  npx -y @sstolz/kdrive-mcp-server@0.6.0-beta.2
+```
+
+Your AI client launches this command itself and communicates over stdin and
+stdout. Configure it under [Local client (stdio)](#local-client-stdio).
+This example exposes only `/Documents` on drive `123456`. Start in `read`
+mode, check the tools from your client, then switch to `write` only if you
+need it ([Limits and risks](#limits-and-risks)).
+
+#### With Docker
+
+You can use the published image `ghcr.io/sstolz/kdrive-mcp-server` instead.
+Docker must be running and accessible to the client. For a remote deployment,
+you also need Docker Compose and Traefik.
 
 Read the published image's digest, then pull it by digest: a beta never gets
 `latest`, and tags can be overwritten.
@@ -86,12 +118,6 @@ docker pull 'ghcr.io/sstolz/kdrive-mcp-server:0.6.0-beta.2@sha256:<digest>'
 The examples below use the version tag for readability; replace it with the
 same digest-pinned image reference after inspecting it. Paths, IDs and domains
 are fake; substitute your own values.
-
-### Local (stdio)
-
-Your AI client launches this command itself and communicates over stdin and
-stdout. Configure it under [Connect an AI client](#connect-an-ai-client).
-Docker must be running and accessible to the client.
 
 Store your token in `/home/you/.config/kdrive/token`, a regular UTF-8 file
 containing only the token (a final newline is accepted). Mount it read-only at
@@ -236,10 +262,50 @@ are in the [client compatibility matrix](docs/mcp-client-compatibility.md).
 
 ### Local client (stdio)
 
-The client starts `docker run` with the same settings and read-only token
-mount as the [quick start](#local-stdio). The server speaks MCP on stdin and
-stdout and writes its own diagnostics to stderr. The paths and IDs below are
-fake; use an absolute host path for the token file in both examples.
+The client starts `npx` with the same settings as the
+[quick start](#local-stdio). The server speaks MCP on stdin and stdout and
+writes its own diagnostics to stderr. The paths and IDs below are fake;
+use an absolute host path for the token file in both examples. Keep it
+private and readable only by the user running the client.
+
+**Claude Code** (example; `--scope user` makes the server available in every
+project):
+
+```sh
+claude mcp add kdrive --scope user \
+  -e KDRIVE_TOKEN_FILE=/home/you/.config/kdrive/token \
+  -e KDRIVE_ID=123456 \
+  -e KDRIVE_MCP_ROOTS=123456:/Documents \
+  -e KDRIVE_MCP_MODE=read \
+  -- npx -y @sstolz/kdrive-mcp-server@0.6.0-beta.2
+```
+
+**Claude Desktop** and most desktop clients (example): add the server under
+`mcpServers` in the client's JSON configuration, `claude_desktop_config.json`
+for Claude Desktop (see the client's documentation for the file location),
+then restart the client:
+
+```json
+{
+  "mcpServers": {
+    "kdrive": {
+      "command": "npx",
+      "args": ["-y", "@sstolz/kdrive-mcp-server@0.6.0-beta.2"],
+      "env": {
+        "KDRIVE_TOKEN_FILE": "/home/you/.config/kdrive/token",
+        "KDRIVE_ID": "123456",
+        "KDRIVE_MCP_ROOTS": "123456:/Documents",
+        "KDRIVE_MCP_MODE": "read"
+      }
+    }
+  }
+}
+```
+
+#### With Docker
+
+The client can start `docker run` with the same settings and read-only token
+mount as the [Docker quick start](#with-docker).
 
 **Claude Code** (example; `--scope user` makes the server available in every
 project):
@@ -285,46 +351,10 @@ then restart the client:
 }
 ```
 
-#### Alternative: installed npm CLI
-
-After [installing the npm package](#install), the client
-can start `kdrive-mcp-server` directly and pass settings as environment
-variables. The token path is then on the host, with no container mount; keep
-it private and readable by the user running the client. Use one of these
-alternatives in place of the Docker configuration above.
-
-**Claude Code** (example; `--scope user` makes the server available in every
-project):
-
-```sh
-claude mcp add kdrive --scope user \
-  -e KDRIVE_TOKEN_FILE=/home/you/.config/kdrive/token \
-  -e KDRIVE_ID=123456 \
-  -e KDRIVE_MCP_ROOTS=123456:/Documents \
-  -e KDRIVE_MCP_MODE=read \
-  -- kdrive-mcp-server
-```
-
-**Claude Desktop** and most desktop clients (example): add the server under
-`mcpServers` in the client's JSON configuration, `claude_desktop_config.json`
-for Claude Desktop (see the client's documentation for the file location),
-then restart the client:
-
-```json
-{
-  "mcpServers": {
-    "kdrive": {
-      "command": "kdrive-mcp-server",
-      "env": {
-        "KDRIVE_TOKEN_FILE": "/home/you/.config/kdrive/token",
-        "KDRIVE_ID": "123456",
-        "KDRIVE_MCP_ROOTS": "123456:/Documents",
-        "KDRIVE_MCP_MODE": "read"
-      }
-    }
-  }
-}
-```
+A [global npm install](#npm-package) also works. Use
+`-- kdrive-mcp-server` in Claude Code, or `"command": "kdrive-mcp-server"`
+without `args` in Claude Desktop. Keep the same environment variables as in
+the `npx` examples.
 
 ### Remote connector (authenticated HTTP)
 
@@ -395,13 +425,21 @@ their outcome.
 
 ## Other installation methods
 
-### npm package (published beta)
+### npm package
 
-For the packaged CLI, you need Node.js 26.13 or later (26.x). Install the
-published beta with
+For the packaged CLI, you need Node.js 26.13 or later (26.x). Use `npx` as
+shown in the [quick start](#local-stdio) and
+[client configuration](#local-client-stdio), or install the exact version
+globally:
+
+```sh
+npm install -g @sstolz/kdrive-mcp-server@0.6.0-beta.2
+```
+
+It provides the `kdrive-mcp-server` command. The moving-tag alternative is
 `npm install -g @sstolz/kdrive-mcp-server@beta`
-([publishing](docs/publishing.md)). It provides the `kdrive-mcp-server`
-command; use the [npm client configuration](#alternative-installed-npm-cli).
+([publishing](docs/publishing.md)); prefer the exact version for predictable
+updates.
 
 ### Build from a checkout of this repository
 
