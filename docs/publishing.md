@@ -37,30 +37,16 @@ the day of the 1.0 publication.
 
 ## Versions
 
-The following stable procedure is proposed by F-024 v3 (#89). It becomes
-operative only after implementation and acceptance. The accepted beta
-procedure remains in [F-024 v2 D-8](../features/history/F-024-v2.md#decisions).
-
-1.0.0 is the first stable release. It publishes directly to both defaults.
-
-- Stable: npm latest; GHCR <version> and latest
-- Beta: npm beta; GHCR <version> only
-
-From the first stable release, use:
-
-```sh
-npm install -g @sstolz/kdrive-mcp-server
-npx -y @sstolz/kdrive-mcp-server@<version>
-```
-
-Pin an exact version. Betas remain installable with @beta or an exact version.
-A beta after stable must be greater than the stable npm `latest`, such as
-`1.1.0-beta.1` after `1.0.0`. It never moves either stable default.
-Only `0.0.0-placeholder.0` is the placeholder. It stays deprecated.
-A deprecated stable npm `latest` requires owner recovery before publication.
-A stable candidate must exceed every published version except that exact
-placeholder, including betas, and the current npm `latest`, under SemVer
-precedence. `0.0.0` is refused. Image tags can move; pin images by digest.
+- The public beta was first `0.6.0-beta.1`; the current published beta is
+  `0.6.0-beta.2` (2026-11-15).
+  Each beta is published under the npm dist-tag `beta` with public access.
+- `latest` points at the deprecated placeholder `0.0.0-placeholder.0` until
+  1.0.0 is published under `latest`: a beta publish never moves it. Users
+  install `@sstolz/kdrive-mcp-server@beta` or an exact version.
+- The image gets the same version tag. A beta never gets the `latest` tag.
+  Image tags can be overwritten, so pin the image by the digest that the
+  release read-back prints.
+- `1.0.0` is the first stable release (#6).
 
 ## Release gate
 
@@ -83,18 +69,13 @@ precedence. `0.0.0` is refused. Image tags can move; pin images by digest.
    of both platforms without push. It uploads the tarball and passes its
    SHA-256 to the later jobs.
 2. `publish-image`, in the `release` environment (first approval): the checks
-   again, then the image push. The proposed v3 build writes a buildx metadata
-   file and exports `containerimage.digest` as job output `image_digest`.
+   again, then the image push.
 3. `publish-npm`, in the `release` environment (second approval): the checks
    again, then the npm publish through trusted publishing (OIDC) with
-   provenance, after comparing the tarball digest with `verify`. In v3,
-   phase `npm` rechecks npm conditions on the prior `latest` and requires
-   both stable GHCR tags to equal this run's image digest. It does not
-   repeat pre-push GHCR checks.
+   provenance, after comparing the tarball digest with `verify`.
 4. `read-back`: reads the npm package and the image back, checks provenance,
    the tarball digest, both platforms and anonymous pulls, and prints the
-   image digest. In v3, both stable tags must equal the image job output
-   passed as `RELEASE_IMAGE_DIGEST`; equal tags from another run fail.
+   image digest.
 
 With `dry_run=true` only `verify` runs. The release is dispatched from `main`
 while the release commit is `main`'s HEAD (otherwise BR-361 refuses it because
@@ -151,82 +132,31 @@ ever stored in GitHub.
 
 ### Partial-failure recovery
 
-This is the proposed v3 owner procedure, based on
-[F-024 v2 D-8](../features/history/F-024-v2.md#decisions). Rehearse it against
-local doubles before any real run. Agents never perform registry deletion.
-The image is pushed before npm. npm versions cannot be reused.
+The image is pushed before npm is published, because a GHCR version can be
+deleted while an npm version can never be reused.
 
-If npm reports failure, first establish whether it accepted the exact version.
-If it did, never publish it again. Verify manually when `read-back` was
-skipped because its dependency failed. Rerun only `read-back` when that job
-failed. Check provenance, exact tarball digest, placeholder deprecation,
-platforms, anonymous access and this run's manifest digest. A new dispatch
-of a published npm version fails preflight by design.
-
-For image-only publication, including a rejected or expired second approval,
-a failed npm preflight, or a failed image push that left a tag, proceed as
-follows. The owner records the previous npm default and its verified image
-digest before cleanup. Uncertain or unavailable registry evidence stops work.
-
-1. Confirm npm does not contain the candidate in either `versions` or `time`.
-   The exact-version request must return 404, and the package request must
-   return 200 with readable objects. A failed command is not proof of absence.
-   `verify` and `image` preflight still fail while the GHCR candidate exists.
-   A same-run `publish-npm` retry is possible only while both stable tags
-   equal that run's digest and every other gate still passes.
-2. If retry is unavailable, the owner deletes only the GHCR candidate tag
-   through the registry's owner controls. Do not delete a shared manifest
-   digest or another version. Confirm candidate GET returns 404. Preflight
-   still fails if `latest` names the partial image.
-3. The owner repoints GHCR `latest` to the verified prior stable digest, or
-   deletes GHCR `latest` if npm still names the exact placeholder. Confirm
-   with GET that `latest` and the prior stable tag hash to that prior digest,
-   or that `latest` returns 404 for the placeholder. Candidate stays 404.
-   Registry preflight now passes if all other gates pass. If cleanup cannot
-   preserve other version tags, stop for owner recovery.
-4. Redispatch only while the release commit is main HEAD. Obtain a new green
-   real dry-run dispatch for the same version and SHA before real dispatch
-   and both approvals. If main advanced, the old SHA still fails BR-361.
-   Prepare a patch bump on main, with its own tag, owner go and dry-run gate.
-   The cleanup in steps 2 and 3 is required for either route. The new candidate
-   must pass all ordering checks. No automatic cleanup occurs.
-
-Use these exact read-only checks. Set `version` to the candidate and
-`previous` to the recorded prior npm stable version, when one exists. No
-credentials are printed. The GHCR token is anonymous and pull-only. Keep
-transient responses outside the repository. Run this block in Bash.
-
-```sh
-version='<version>'
-previous='<previous-stable-version>'
-check_dir=$(mktemp -d)
-accept='application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json'
-curl --silent --show-error --output "$check_dir/npm-version.json" --write-out '%{http_code}\n' "https://registry.npmjs.org/@sstolz%2Fkdrive-mcp-server/$version"
-curl --silent --show-error --output "$check_dir/npm-package.json" --write-out '%{http_code}\n' 'https://registry.npmjs.org/@sstolz%2Fkdrive-mcp-server'
-jq --arg v "$version" '{latest: .["dist-tags"].latest, versionsHas: (.versions | has($v)), timeHas: (.time | has($v))}' "$check_dir/npm-package.json"
-curl --fail --silent --show-error --output "$check_dir/token.json" 'https://ghcr.io/token?service=ghcr.io&scope=repository:sstolz/kdrive-mcp-server:pull'
-pull_token=$(jq -er '.token' "$check_dir/token.json")
-for tag in "$version" latest "$previous"; do
-  curl --silent --show-error --header "Authorization: Bearer $pull_token" --header "Accept: $accept" --output "$check_dir/$tag.json" --write-out "$tag %{http_code}\n" "https://ghcr.io/v2/sstolz/kdrive-mcp-server/manifests/$tag"
-done
-```
-
-Require `versionsHas` and `timeHas` to be false; independently confirm both
-fields are objects and `latest` is the recorded default. Skip the previous
-tag request when that default is the placeholder. Only hash bodies from
-200 responses, after validating their index media type and platform entries.
-The exact digest check for each 200 response is:
-
-```sh
-sha256sum "$check_dir/$version.json"
-sha256sum "$check_dir/latest.json"
-sha256sum "$check_dir/$previous.json"
-```
-
-Prefix the printed hash with `sha256:` to compare it with the recorded buildx
-`containerimage.digest`. Never hash a 404 error body as an image. HEAD-only
-digests are never used. All compared tags use GET and the same Accept list.
-After step 2, require candidate 404. After step 3, require latest 404 for the
-placeholder, or two 200 bodies equal to the prior stable digest. During npm
-phase and release read-back, require both stable 200 bodies equal to this
-run's digest. An anonymous HEAD may separately check public access.
+- when npm published but `read-back` failed, re-run only the failed
+  `read-back` job or verify by hand with
+  `npm view @sstolz/kdrive-mcp-server@<version>` and
+  `docker buildx imagetools inspect ghcr.io/sstolz/kdrive-mcp-server:<version>`;
+  a new dispatch of that version is refused by BR-363, as intended;
+- when `npm publish` reports a failure, first check with `npm view` whether
+  the registry accepted it anyway; if it did, verify the published version by
+  hand with the read-back commands, and `read-back`, skipped because its
+  `needs` failed, is not re-run;
+- when the image is pushed but npm is not published (the second approval is
+  rejected, `release-check` fails in `publish-npm`, or `npm publish` reports a
+  failure and `npm view` does not find the version), re-run the `publish-npm`
+  job (its `release-check` in phase `npm` expects the pushed image), or delete
+  the GHCR version and dispatch again;
+- when the second approval expires (GitHub cancels a run waiting 30 days and
+  allows no re-run after 30 days), delete the GHCR version and dispatch again
+  while the release commit is `main`'s HEAD, otherwise release the next beta;
+- when the image push reports a failure and GHCR does not have the version,
+  re-run the failed `publish-image` job or dispatch again;
+- when the image push reports a failure but GHCR has the version,
+  `publish-npm` never ran and npm is unpublished: the owner deletes the GHCR
+  version and dispatches again, or releases the next beta;
+- deleting the GHCR version and dispatching again works only while the
+  release commit is still `main`'s HEAD (BR-361); otherwise the next beta is
+  released.
