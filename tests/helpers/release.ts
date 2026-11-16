@@ -85,6 +85,7 @@ export interface Seen {
   method: string;
   url: string;
   authorization: string | undefined;
+  accept: string | undefined;
 }
 export interface Double {
   url: string;
@@ -98,6 +99,7 @@ export async function double(route: (request: Seen) => Reply): Promise<Double> {
       method: request.method ?? "",
       url: request.url ?? "",
       authorization: request.headers.authorization,
+      accept: request.headers.accept,
     };
     seen.push(entry);
     request.resume();
@@ -217,6 +219,7 @@ export interface ReleaseState {
   latest: Reply;
   anonToken: Reply;
   anonManifest: Reply;
+  anonLatestManifest?: Reply;
   tarball: Reply;
 }
 
@@ -298,7 +301,10 @@ function ghcrRoute(state: ReleaseState, request: Seen): Reply | undefined {
     request.url,
   );
   if (!manifest) return undefined;
-  if (request.authorization === "Bearer anon-token") return state.anonManifest;
+  if (request.authorization === "Bearer anon-token")
+    return manifest[1] === "latest"
+      ? (state.anonLatestManifest ?? state.anonManifest)
+      : state.anonManifest;
   if (manifest[1] === "latest") return state.latest;
   return request.method === "HEAD" ? state.manifest : state.index;
 }
@@ -453,6 +459,7 @@ const argv = process.argv.slice(2);
 const log = (line) => fs.appendFileSync(process.env.FAKE_DOCKER_LOG, line + "\\n");
 if (argv[0] === "compose" && argv[1] === "run") {
   const env = { PATH: process.env.PATH, HOME: process.env.HOME, FAKE_NPM_LOG: process.env.FAKE_NPM_LOG, FAKE_NPM_TARBALL: process.env.FAKE_NPM_TARBALL, FAKE_DOCKER_LOG: process.env.FAKE_DOCKER_LOG };
+  if (process.env.FAKE_NPM_STATUS !== undefined) env.FAKE_NPM_STATUS = process.env.FAKE_NPM_STATUS;
   const names = [];
   let index = 2;
   while (argv[index] !== "dev") {
@@ -465,6 +472,9 @@ if (argv[0] === "compose" && argv[1] === "run") {
 }
 if (argv[0] === "login") fs.writeFileSync(process.env.FAKE_DOCKER_STDIN, fs.readFileSync(0));
 log(argv.join(" "));
+if (argv[0] === "buildx" && argv[1] === "build" && argv.includes("--metadata-file") && process.env.FAKE_BUILDX_METADATA) {
+  fs.copyFileSync(process.env.FAKE_BUILDX_METADATA, argv[argv.indexOf("--metadata-file") + 1]);
+}
 if (argv[0] === "buildx" && argv[1] === "build" && process.env.FAKE_BUILD_FAIL === "1") process.exit(1);
 process.exit(0);
 `;

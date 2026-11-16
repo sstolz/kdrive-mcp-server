@@ -5,6 +5,11 @@ import { join } from "node:path";
 import { afterAll, afterEach, describe, expect, it } from "vitest";
 import { rules } from "./helpers/image-policy.js";
 import {
+  CHECK_VARIABLES,
+  NPM_VARIABLES,
+  VERIFY_VARIABLES,
+} from "./helpers/release-policy.js";
+import {
   FAKE_DOCKER,
   FAKE_NPM,
   IMAGE_SCRIPT,
@@ -43,51 +48,6 @@ afterEach(async () => {
 
 const GOOD_SHA = "a".repeat(40);
 const TOKEN = "SYNTHETIC-RELEASE-TOKEN";
-
-// BR-375: the exact -e lists of the three scripts/release.ts targets.
-const CHECK_VARIABLES = [
-  "GITHUB_ACTIONS",
-  "GITHUB_SHA",
-  "GITHUB_TOKEN",
-  "RELEASE_VERSION",
-  "RELEASE_SHA",
-  "RELEASE_DRY_RUN",
-  "RELEASE_PHASE",
-  "RELEASE_GITHUB_API_URL",
-  "RELEASE_NPM_REGISTRY_URL",
-  "RELEASE_GHCR_URL",
-];
-const NPM_VARIABLES = [
-  "GITHUB_ACTIONS",
-  "ACTIONS_ID_TOKEN_REQUEST_URL",
-  "ACTIONS_ID_TOKEN_REQUEST_TOKEN",
-  "GITHUB_EVENT_NAME",
-  "GITHUB_REF",
-  "GITHUB_REPOSITORY",
-  "GITHUB_REPOSITORY_ID",
-  "GITHUB_REPOSITORY_OWNER_ID",
-  "GITHUB_RUN_ATTEMPT",
-  "GITHUB_RUN_ID",
-  "GITHUB_SERVER_URL",
-  "GITHUB_SHA",
-  "GITHUB_WORKFLOW_REF",
-  "RUNNER_ENVIRONMENT",
-  "RELEASE_VERSION",
-  "RELEASE_SHA",
-  "RELEASE_DRY_RUN",
-  "RELEASE_TARBALL_SHA256",
-];
-const VERIFY_VARIABLES = [
-  "GITHUB_ACTIONS",
-  "GITHUB_TOKEN",
-  "RELEASE_VERSION",
-  "RELEASE_SHA",
-  "RELEASE_DRY_RUN",
-  "RELEASE_TARBALL_SHA256",
-  "RELEASE_GITHUB_API_URL",
-  "RELEASE_NPM_REGISTRY_URL",
-  "RELEASE_GHCR_URL",
-];
 
 /** A fake bin directory with git recorded (then real git), npm and docker. */
 function fakeBin(): {
@@ -193,11 +153,6 @@ function checkEnv(
 describe("F-024 AC-05 input validation", () => {
   const cases: [string, Record<string, string>, string][] = [
     [
-      "0.6.0",
-      { RELEASE_VERSION: "0.6.0" },
-      "stable releases are out of scope (F-024 v1)",
-    ],
-    [
       "v0.6.0-beta.1",
       { RELEASE_VERSION: "v0.6.0-beta.1" },
       "version is not a SemVer version",
@@ -210,12 +165,12 @@ describe("F-024 AC-05 input validation", () => {
     [
       "0.6.0-rc.1",
       { RELEASE_VERSION: "0.6.0-rc.1" },
-      "unsupported pre-release",
+      "unsupported release version",
     ],
     [
       "0.6.0-beta.1+build",
       { RELEASE_VERSION: "0.6.0-beta.1+build" },
-      "unsupported pre-release",
+      "unsupported release version",
     ],
     ["0.6", { RELEASE_VERSION: "0.6" }, "version is not a SemVer version"],
     [
@@ -982,11 +937,6 @@ describe("F-024 AC-10 npm publish", () => {
 
   const inputCases: [string, Record<string, string>, string][] = [
     [
-      "version 0.6.0",
-      { RELEASE_VERSION: "0.6.0" },
-      "stable releases are out of scope (F-024 v1)",
-    ],
-    [
       "version v0.6.0-beta.1",
       { RELEASE_VERSION: "v0.6.0-beta.1" },
       "version is not a SemVer version",
@@ -1466,7 +1416,7 @@ describe("F-024 AC-12 read-back", () => {
     ],
   ];
   it.each(cases)(
-    "BR-372 BR-373 read-back: %s",
+    "BR-372 v2 BR-373 v2 read-back: %s",
     async (name, change, failing) => {
       const { result, server, state } = await readBack(change);
       if (failing === null) {
@@ -1497,6 +1447,16 @@ describe("F-024 AC-12 read-back", () => {
               request.authorization === "Bearer pull-token" ||
               request.authorization.startsWith("Basic "),
           ).toBe(true);
+    },
+  );
+
+  it.each(["", `sha256:${"a".repeat(64)}`, `sha256:${"A".repeat(64)}`])(
+    "BR-372 v2 BR-373 v2 read-back: ignores valid unused run digest %s",
+    async (digest) => {
+      const { result } = await readBack(() => undefined, {
+        RELEASE_IMAGE_DIGEST: digest,
+      });
+      expect(result.status, result.stdout).toBe(0);
     },
   );
 
@@ -1573,13 +1533,16 @@ describe("F-024 AC-12 read-back", () => {
       "sha is not a full commit id",
     ],
     ["dry_run=yes", { RELEASE_DRY_RUN: "yes" }, "dry_run is not a boolean"],
-  ])("BR-372 BR-373 read-back: refuses %s", async (_name, env, reason) => {
-    const { result, server, other } = await readBack(() => undefined, env);
-    expect(result.status).toBe(1);
-    expect(result.stdout).toContain(` FAIL ${reason}\n`);
-    expect(server.seen).toEqual([]);
-    expect(other.seen).toEqual([]);
-  });
+  ])(
+    "BR-372 v2 BR-373 v2 read-back: refuses %s",
+    async (_name, env, reason) => {
+      const { result, server, other } = await readBack(() => undefined, env);
+      expect(result.status).toBe(1);
+      expect(result.stdout).toContain(` FAIL ${reason}\n`);
+      expect(server.seen).toEqual([]);
+      expect(other.seen).toEqual([]);
+    },
+  );
 });
 
 describe("F-024 AC-13 Make targets and rehearsal", () => {
@@ -1902,3 +1865,1919 @@ describe("F-024 AC-13 Make targets and rehearsal", () => {
     }
   });
 });
+
+// F-024 v3 AC-25–AC-33. All registry traffic terminates at loopback doubles.
+const STABLE = "1.0.0";
+const INDEX_ACCEPT = `${OCI_INDEX}, application/vnd.docker.distribution.manifest.list.v2+json`;
+const RUN_INDEX = indexBody(["linux/amd64", "linux/arm64"]);
+const RUN_DIGEST = `sha256:${sha256(RUN_INDEX)}`;
+const AFTER_STABLE =
+  "releases after the first stable are out of scope; see #91 (F-024 v4)";
+const DIGEST_INPUT = "RELEASE_IMAGE_DIGEST is not a sha256 digest";
+const EMPTY_DIGEST =
+  "RELEASE_IMAGE_DIGEST must be empty in verify and image phases";
+type NpmFixture = {
+  versions: Record<string, Record<string, unknown>>;
+  time: Record<string, string>;
+  "dist-tags": Record<string, string>;
+};
+function stableDocument(url = ""): NpmFixture {
+  const doc = npmDocument() as NpmFixture;
+  doc.versions[STABLE] = {
+    version: STABLE,
+    dist: {
+      tarball: `${url}/tarballs/pkg.tgz`,
+      attestations: { provenance: {} },
+    },
+  };
+  doc.time[STABLE] = "2026-11-16T00:00:00.000Z";
+  doc["dist-tags"].latest = STABLE;
+  return doc;
+}
+function stableRepo(version = STABLE) {
+  const repo = releaseRepo({
+    versionFile: `${version}\n`,
+    packageVersion: version,
+    tag: "none",
+    files: {
+      "package-lock.json": JSON.stringify({
+        version,
+        packages: { "": { version } },
+      }),
+    },
+  });
+  repo.git("tag", `v${version}`, repo.sha);
+  return repo;
+}
+async function stableCheck(
+  change: (state: ReleaseState) => void = () => undefined,
+  env: Record<string, string | undefined> = {},
+) {
+  const version = env.RELEASE_VERSION ?? STABLE;
+  const repo = stableRepo(version);
+  const state = releaseState(repo.sha);
+  state.index = { status: 404 };
+  if (env.RELEASE_PHASE === "npm") {
+    state.index = { status: 200, body: RUN_INDEX };
+    state.latest = state.index;
+    state.manifest = { status: 200 };
+  }
+  change(state);
+  const server = await startDouble(state);
+  const result = await release(
+    "check",
+    repo.root,
+    checkEnv(repo, server.url, {
+      RELEASE_VERSION: version,
+      RELEASE_DRY_RUN: "false",
+      ...(env.RELEASE_PHASE === "npm"
+        ? { RELEASE_IMAGE_DIGEST: RUN_DIGEST }
+        : {}),
+      ...env,
+    }),
+  );
+  return { result, state, server, repo };
+}
+function reason(result: Result, expected: string) {
+  expect(result.status, result.stdout + result.stderr).toBe(1);
+  expect(result.stdout).toContain(` FAIL ${expected}\n`);
+}
+
+describe("F-024 v3 validation first", () => {
+  const modes = ["check", "npm", "verify", "image"];
+  async function entry(
+    mode: string,
+    overrides: Record<string, string | undefined>,
+  ) {
+    const fake = fakeBin();
+    const server = await startDouble(releaseState(GOOD_SHA));
+    const cwd = temporary("release-v3-input-");
+    const env = {
+      ...gitEnv(),
+      RELEASE_VERSION: VERSION,
+      RELEASE_SHA: GOOD_SHA,
+      RELEASE_DRY_RUN: "true",
+      RELEASE_PHASE: "verify",
+      RELEASE_TARBALL_SHA256: "a".repeat(64),
+      RELEASE_RETRY_DELAY_MS: "0",
+      FAKE_NPM_LOG: fake.npmLog,
+      FAKE_DOCKER_LOG: fake.dockerLog,
+      FAKE_DOCKER_STDIN: fake.stdin,
+      ...endpoints(server.url),
+      ...overrides,
+    };
+    const result =
+      mode === "image"
+        ? await run("/bin/sh", [IMAGE_SCRIPT], {
+            cwd,
+            env: Object.fromEntries(
+              Object.entries({
+                ...env,
+                PATH: `${fake.bin}:${process.env.PATH ?? ""}`,
+              }).filter(
+                (pair): pair is [string, string] => pair[1] !== undefined,
+              ),
+            ),
+          })
+        : await release(mode, cwd, env, fake.bin);
+    return { result, fake, server };
+  }
+  it.each(
+    modes.flatMap((mode) =>
+      ["1.0.0", "1.2.3", "0.0.0", "0.6.0-beta.2"].map((version) => [
+        `${mode} ${version}`,
+        mode,
+        version,
+      ]),
+    ),
+  )(
+    "BR-359 v2 accepts stable and beta inputs: %s",
+    async (_name, mode, version) => {
+      const { result } = await entry(mode!, { RELEASE_VERSION: version! });
+      expect(result.stdout).toContain(
+        `${mode === "image" ? "release-image" : `release-${mode}`}\u003a version ok\n`,
+      );
+    },
+  );
+  const invalid: [string, Record<string, string | undefined>, string][] = [
+    ...[
+      "01.0.0",
+      "1.00.0",
+      "1.0.00",
+      "v1.0.0",
+      " 1.0.0",
+      "1.0.0\n",
+      "1.0.0-beta.01",
+    ].map((version): [string, Record<string, string>, string] => [
+      version,
+      { RELEASE_VERSION: version },
+      "version is not a SemVer version",
+    ]),
+    ...[
+      "1.0.0-alpha.1",
+      "1.0.0-rc.1",
+      "1.0.0-beta",
+      "1.0.0-beta.1.2",
+      "1.0.0+b",
+      "1.0.0-beta.1+b",
+    ].map((version): [string, Record<string, string>, string] => [
+      version,
+      { RELEASE_VERSION: version },
+      "unsupported release version",
+    ]),
+    ["sha", { RELEASE_SHA: "A".repeat(40) }, "sha is not a full commit id"],
+    ["boolean", { RELEASE_DRY_RUN: "yes" }, "dry_run is not a boolean"],
+  ];
+  const digestCases: typeof invalid = [];
+  for (const mode of ["check", "verify"])
+    for (const digest of [
+      undefined,
+      "",
+      "sha256:ABC",
+      `sha256:${"A".repeat(64)}`,
+      `${RUN_DIGEST}\n`,
+    ])
+      digestCases.push([
+        `${mode} stable digest ${String(digest)}`,
+        {
+          RELEASE_VERSION: STABLE,
+          RELEASE_PHASE: "npm",
+          RELEASE_IMAGE_DIGEST: digest,
+        },
+        DIGEST_INPUT,
+      ]);
+  it.each([
+    ...modes.flatMap((mode) =>
+      invalid.map(
+        ([name, env, diagnostic]) =>
+          [`${mode} ${name}`, mode, env, diagnostic] as const,
+      ),
+    ),
+    [
+      "check phase",
+      "check",
+      { RELEASE_PHASE: "deploy" },
+      "phase is not a release phase",
+    ] as const,
+    ...digestCases.map(
+      ([name, env, diagnostic]) =>
+        [name, name.split(" ")[0]!, env, diagnostic] as const,
+    ),
+    ...["verify", "image"].flatMap((phase) =>
+      [RUN_DIGEST, "invalid"].map(
+        (digest) =>
+          [
+            `check ${phase} nonempty digest`,
+            "check",
+            {
+              RELEASE_VERSION: STABLE,
+              RELEASE_PHASE: phase,
+              RELEASE_IMAGE_DIGEST: digest,
+            },
+            EMPTY_DIGEST,
+          ] as const,
+      ),
+    ),
+    ...["check", "verify"].map(
+      (mode) =>
+        [
+          `${mode} invalid beta digest`,
+          mode,
+          { RELEASE_IMAGE_DIGEST: "invalid" },
+          DIGEST_INPUT,
+        ] as const,
+    ),
+  ])(
+    "BR-359 v2 refuses inputs before side effects: %s",
+    async (_name, mode, env, diagnostic) => {
+      const { result, fake, server } = await entry(mode, env);
+      reason(result, diagnostic);
+      expect(server.seen).toEqual([]);
+      expect(lines(fake.gitLog)).toEqual([]);
+      expect(lines(fake.npmLog)).toEqual([]);
+      expect(lines(fake.dockerLog)).toEqual([]);
+    },
+  );
+});
+
+describe("F-024 v3 registry phase matrices", () => {
+  type NpmCase = [string, (doc: NpmFixture) => void, string | null];
+  const cases: NpmCase[] = [
+    ["placeholder only", () => undefined, null],
+    [
+      "created and modified ignored",
+      (d) => {
+        d.time.created = "date";
+        d.time.modified = "date";
+      },
+      null,
+    ],
+    [
+      "malformed time key",
+      (d) => {
+        d.time["untrusted-key"] = "date";
+      },
+      "npm time contains a non-SemVer version key",
+    ],
+    [
+      "malformed versions key",
+      (d) => {
+        d.versions["untrusted-key"] = {};
+      },
+      "npm versions contains a non-SemVer version key",
+    ],
+    [
+      "candidate in versions",
+      (d) => {
+        d.versions[STABLE] = { version: STABLE };
+      },
+      AFTER_STABLE,
+    ],
+    [
+      "candidate in time",
+      (d) => {
+        d.time[STABLE] = "date";
+      },
+      AFTER_STABLE,
+    ],
+    [
+      "missing latest",
+      (d) => {
+        delete d["dist-tags"].latest;
+      },
+      "npm placeholder missing (P-0)",
+    ],
+    [
+      "placeholder not deprecated",
+      (d) => {
+        delete d.versions[PLACEHOLDER]!.deprecated;
+      },
+      "npm latest is not a deprecated placeholder (P-0)",
+    ],
+    [
+      "placeholder entry absent",
+      (d) => {
+        delete d.versions[PLACEHOLDER];
+      },
+      "npm latest is not a deprecated placeholder (P-0)",
+    ],
+    [
+      "placeholder empty deprecation",
+      (d) => {
+        d.versions[PLACEHOLDER]!.deprecated = "";
+      },
+      "npm latest is not a deprecated placeholder (P-0)",
+    ],
+  ];
+  it.each(
+    ["verify", "image", "npm"].flatMap((phase) =>
+      ["true", "false"].flatMap((dry) =>
+        cases.map(
+          ([name, change, diagnostic]) =>
+            [
+              `${phase} dry=${dry} ${name}`,
+              phase,
+              dry,
+              change,
+              diagnostic,
+            ] as const,
+        ),
+      ),
+    ),
+  )(
+    "BR-363 v2 npm phase matrix: %s",
+    async (_name, phase, dry, change, diagnostic) => {
+      const doc = npmDocument() as NpmFixture;
+      change(doc);
+      const { result } = await stableCheck(
+        (s) => {
+          s.npm = { status: 200, body: doc };
+        },
+        { RELEASE_PHASE: phase, RELEASE_DRY_RUN: dry },
+      );
+      if (diagnostic) reason(result, diagnostic);
+      else expect(result.status, result.stdout).toBe(0);
+      expect(result.stdout).not.toContain("untrusted-key");
+    },
+  );
+  it.each(
+    ["verify", "image", "npm"].flatMap((phase) =>
+      ["true", "false"].flatMap((dry) =>
+        [STABLE, VERSION].flatMap((version) =>
+          [
+            "latest stable",
+            "latest deprecated stable",
+            "latest beta",
+            "versions stable",
+            "time stable",
+          ].map(
+            (variant) =>
+              [
+                `${phase} ${dry} ${version} ${variant}`,
+                phase,
+                dry,
+                version,
+                variant,
+              ] as const,
+          ),
+        ),
+      ),
+    ),
+  )(
+    "BR-363 v2 npm phase matrix: %s",
+    async (_name, phase, dry, version, variant) => {
+      const doc = npmDocument() as NpmFixture;
+      if (variant.startsWith("latest")) {
+        doc["dist-tags"].latest = variant.endsWith("beta")
+          ? "0.9.0-beta.1"
+          : "0.9.0";
+        doc.versions[doc["dist-tags"].latest!] =
+          variant === "latest deprecated stable"
+            ? { deprecated: "retired" }
+            : {};
+      } else if (variant.startsWith("versions"))
+        doc.versions["0.9.0+build"] = {};
+      else doc.time["0.9.0"] = "date";
+      // #91 must win even over candidate presence, malformed keys and missing deprecation.
+      doc.versions[version] = {};
+      doc.time["untrusted-key"] = "date";
+      delete doc.versions[PLACEHOLDER]!.deprecated;
+      const { result } = await stableCheck(
+        (s) => {
+          s.npm = { status: 200, body: doc };
+        },
+        {
+          RELEASE_VERSION: version,
+          RELEASE_PHASE: phase,
+          RELEASE_DRY_RUN: dry,
+          ...(version === VERSION ? { RELEASE_IMAGE_DIGEST: "" } : {}),
+        },
+      );
+      reason(result, AFTER_STABLE);
+      expect(result.stdout).not.toContain("untrusted-key");
+    },
+  );
+  it.each([
+    [
+      "stable dry 404",
+      STABLE,
+      "true",
+      { status: 404 },
+      "npm registry status 404",
+    ],
+    [
+      "stable real 404",
+      STABLE,
+      "false",
+      { status: 404 },
+      "npm registry status 404",
+    ],
+    ["beta dry 404", VERSION, "true", { status: 404 }, null],
+    [
+      "beta real 404",
+      VERSION,
+      "false",
+      { status: 404 },
+      "npm registry status 404",
+    ],
+    [
+      "unreadable",
+      STABLE,
+      "true",
+      { status: 200, body: "{" },
+      "npm document unreadable; refer to the owner",
+    ],
+    [
+      "missing time",
+      STABLE,
+      "false",
+      { status: 200, body: { versions: {} } },
+      "npm document unreadable; refer to the owner",
+    ],
+    ["status 503", STABLE, "false", { status: 503 }, "npm registry status 503"],
+  ] as const)(
+    "BR-363 v2 npm phase matrix: %s",
+    async (_name, version, dry, npm, diagnostic) => {
+      const { result } = await stableCheck(
+        (s) => {
+          s.npm = npm;
+        },
+        { RELEASE_VERSION: version, RELEASE_DRY_RUN: dry },
+      );
+      if (diagnostic) reason(result, diagnostic);
+      else expect(result.status, result.stdout).toBe(0);
+    },
+  );
+  it.each([
+    ["1.0.0", "0.6.0-beta.2", true],
+    ["0.6.0", "0.6.0-beta.2", true],
+    ["0.5.0", "0.6.0-beta.2", false],
+    ["1.9.9", "1.10.0-beta.1", false],
+    ["1.10.0", "1.9.9-beta.1", true],
+    ["9007199254740993.0.0", "9007199254740992.999.999-beta.1", true],
+    ["9007199254740992.0.0", "9007199254740993.0.0-beta.1", false],
+    [VERSION, "0.9.0-beta.9", true],
+  ] as const)(
+    "BR-363 v2 npm phase matrix: ordering %s above %s",
+    async (candidate, published, passes) => {
+      const doc = npmDocument() as NpmFixture;
+      doc.time[published] = "date";
+      doc.versions[`${published}+build`] = { version: published };
+      const { result } = await stableCheck(
+        (s) => {
+          s.npm = { status: 200, body: doc };
+        },
+        { RELEASE_VERSION: candidate },
+      );
+      if (passes) expect(result.status, result.stdout).toBe(0);
+      else
+        reason(
+          result,
+          "stable version is not greater than every published version",
+        );
+    },
+  );
+  const ghcrCases: [string, (s: ReleaseState) => void, string | null][] = [
+    ["both absent", () => undefined, null],
+    [
+      "candidate present",
+      (s) => {
+        s.index = { status: 200, body: RUN_INDEX };
+      },
+      "image already published",
+    ],
+    [
+      "latest present",
+      (s) => {
+        s.latest = { status: 200, body: RUN_INDEX };
+      },
+      "GHCR latest already exists; first stable requires 404",
+    ],
+    [
+      "candidate unexpected",
+      (s) => {
+        s.index = { status: 503 };
+      },
+      "unexpected GHCR status 503; refer to the owner",
+    ],
+    [
+      "latest unexpected",
+      (s) => {
+        s.latest = { status: 401 };
+      },
+      "unexpected GHCR status 401; refer to the owner",
+    ],
+    [
+      "token refused",
+      (s) => {
+        s.ghcrToken = { status: 401 };
+      },
+      "unexpected GHCR token status 401; refer to the owner",
+    ],
+  ];
+  it.each(
+    ["verify", "image"].flatMap((phase) =>
+      ["true", "false"].flatMap((dry) =>
+        ghcrCases.map(
+          ([name, change, diagnostic]) =>
+            [
+              `${phase} ${dry} ${name}`,
+              phase,
+              dry,
+              change,
+              diagnostic,
+            ] as const,
+        ),
+      ),
+    ),
+  )(
+    "BR-363 v2 GHCR phase matrix: %s",
+    async (_name, phase, dry, change, diagnostic) => {
+      const { result, server } = await stableCheck(change, {
+        RELEASE_PHASE: phase,
+        RELEASE_DRY_RUN: dry,
+      });
+      if (diagnostic) reason(result, diagnostic);
+      else expect(result.status, result.stdout).toBe(0);
+      const manifests = server.seen.filter((r) =>
+        r.url.includes("/manifests/"),
+      );
+      for (const request of manifests) {
+        expect(request.method).toBe("GET");
+        expect(request.accept).toBe(INDEX_ACCEPT);
+      }
+      if (!diagnostic)
+        expect(manifests.map((r) => r.url.split("/").at(-1)).sort()).toEqual([
+          STABLE,
+          "latest",
+        ]);
+    },
+  );
+  it.each(
+    ["verify", "image", "npm"].flatMap((phase) =>
+      [
+        "",
+        RUN_DIGEST,
+        RUN_DIGEST.toUpperCase().replace("SHA256", "sha256"),
+      ].map((digest) => [`beta ${phase} ${digest}`, phase, digest] as const),
+    ),
+  )("BR-363 v2 GHCR phase matrix: %s", async (_name, phase, digest) => {
+    const { result, server } = await stableCheck(
+      (s) => {
+        s.manifest = { status: phase === "npm" ? 200 : 404 };
+        s.latest = { status: 500 };
+      },
+      {
+        RELEASE_VERSION: VERSION,
+        RELEASE_PHASE: phase,
+        RELEASE_IMAGE_DIGEST: digest,
+      },
+    );
+    expect(result.status, result.stdout).toBe(0);
+    expect(
+      server.seen
+        .filter((r) => r.url.includes("/manifests/"))
+        .map((r) => [r.method, r.url.split("/").at(-1)]),
+    ).toEqual([["HEAD", VERSION]]);
+  });
+  const binding: [string, (s: ReleaseState) => void, string | null][] = [
+    ["both raw GET bodies match", () => undefined, null],
+    ...["index", "latest"].flatMap(
+      (tag) =>
+        [
+          [
+            `${tag} 404`,
+            (s: ReleaseState) => {
+              s[tag as "index" | "latest"] = { status: 404 };
+            },
+            "image manifest unavailable",
+          ],
+          [
+            `${tag} invalid`,
+            (s: ReleaseState) => {
+              s[tag as "index" | "latest"] = { status: 200, body: "{}" };
+            },
+            "image manifest invalid",
+          ],
+          [
+            `${tag} another run despite equal HEAD digest`,
+            (s: ReleaseState) => {
+              s.manifest = {
+                status: 200,
+                headers: { "docker-content-digest": RUN_DIGEST },
+              };
+              s[tag as "index" | "latest"] = {
+                status: 200,
+                body: `${RUN_INDEX}\n`,
+              };
+            },
+            "image digest does not match RELEASE_IMAGE_DIGEST",
+          ],
+        ] as [string, (s: ReleaseState) => void, string][],
+    ),
+    [
+      "equal tags from another run",
+      (s) => {
+        s.index = { status: 200, body: `${RUN_INDEX}\n` };
+        s.latest = s.index;
+      },
+      "image digest does not match RELEASE_IMAGE_DIGEST",
+    ],
+    [
+      "token denied",
+      (s) => {
+        s.ghcrToken = { status: 403 };
+      },
+      "unexpected GHCR token status 403; refer to the owner",
+    ],
+  ];
+  it.each(binding)(
+    "BR-363 v2 stable digest binding: %s",
+    async (_name, change, diagnostic) => {
+      const { result, server } = await stableCheck(change, {
+        RELEASE_PHASE: "npm",
+      });
+      if (diagnostic) reason(result, diagnostic);
+      else expect(result.status, result.stdout).toBe(0);
+      for (const r of server.seen.filter((r) =>
+        r.url.includes("/manifests/"),
+      )) {
+        expect(r.method).toBe("GET");
+        expect(r.accept).toBe(INDEX_ACCEPT);
+      }
+    },
+  );
+});
+
+describe("F-024 v3 npm and image publication", () => {
+  async function npmPublish(
+    version: string,
+    dry: string,
+    mutate: (env: Record<string, string>, root: string) => void = () =>
+      undefined,
+    manifest: Record<string, unknown> = {},
+  ) {
+    const root = temporary("release-v3-publish-");
+    const fake = fakeBin();
+    const path = join(
+      root,
+      "artifacts",
+      `sstolz-kdrive-mcp-server-${version}.tgz`,
+    );
+    const bytes = packTarball(path, {
+      name: "@sstolz/kdrive-mcp-server",
+      version,
+      ...manifest,
+    });
+    const env = {
+      RELEASE_VERSION: version,
+      RELEASE_SHA: GOOD_SHA,
+      RELEASE_DRY_RUN: dry,
+      RELEASE_TARBALL_SHA256: sha256(bytes),
+      FAKE_NPM_LOG: fake.npmLog,
+      ACTIONS_ID_TOKEN_REQUEST_URL: "http://127.0.0.1:1/oidc",
+      ACTIONS_ID_TOKEN_REQUEST_TOKEN: "SYNTHETIC-OIDC",
+    };
+    mutate(env, root);
+    const result = await release("npm", root, env, fake.bin);
+    return { result, calls: npmCalls(fake.npmLog) };
+  }
+  it.each(
+    [STABLE, VERSION].flatMap((version) =>
+      ["true", "false"].map((dry) => [`${version} dry=${dry}`, version, dry]),
+    ),
+  )("BR-368 v2 BR-369 v2 npm exact argv: %s", async (_name, version, dry) => {
+    const { result, calls } = await npmPublish(version!, dry!);
+    expect(result.status, result.stdout).toBe(0);
+    expect(calls.map((c) => c.argv)).toEqual([
+      ["--version"],
+      [
+        "publish",
+        `./artifacts/sstolz-kdrive-mcp-server-${version}.tgz`,
+        "--tag",
+        version === STABLE ? "latest" : "beta",
+        "--access",
+        "public",
+        "--ignore-scripts",
+        "--provenance",
+        ...(dry === "true" ? ["--dry-run"] : []),
+      ],
+    ]);
+  });
+  const safeguards: [
+    string,
+    (env: Record<string, string>, root: string) => void,
+    string,
+    Record<string, unknown>?,
+  ][] = [
+    [
+      "digest",
+      (e) => {
+        e.RELEASE_TARBALL_SHA256 = "b".repeat(64);
+      },
+      "tarball digest does not match verify",
+    ],
+    [
+      "OIDC URL",
+      (e) => {
+        delete e.ACTIONS_ID_TOKEN_REQUEST_URL;
+      },
+      "OIDC environment missing",
+    ],
+    [
+      "OIDC token",
+      (e) => {
+        delete e.ACTIONS_ID_TOKEN_REQUEST_TOKEN;
+      },
+      "OIDC environment missing",
+    ],
+    [
+      "old npm",
+      (e) => {
+        e.FAKE_NPM_VERSION = "11.5.0";
+      },
+      "npm 11.5.1 or later required",
+    ],
+    [
+      "wrong inner version",
+      () => undefined,
+      "tarball package.json does not match",
+      { version: VERSION },
+    ],
+    [
+      "wrong package",
+      () => undefined,
+      "tarball package.json does not match",
+      { name: "other" },
+    ],
+    [
+      "publishConfig",
+      () => undefined,
+      "publishConfig refused",
+      { publishConfig: {} },
+    ],
+    [
+      "second tarball",
+      (_e, root) => {
+        packTarball(join(root, "artifacts", TARBALL), {
+          name: "@sstolz/kdrive-mcp-server",
+          version: VERSION,
+        });
+      },
+      "more than one tarball",
+    ],
+    ...[
+      "NODE_AUTH_TOKEN",
+      "NPM_TOKEN",
+      "NPM_ID_TOKEN",
+      "NPM_CONFIG__AUTH",
+      "NPM_CONFIG__AUTHTOKEN",
+      "NPM_CONFIG__PASSWORD",
+      "NPM_CONFIG_USERNAME",
+      "NPM_CONFIG_USERCONFIG",
+      "NPM_CONFIG_GLOBALCONFIG",
+      "node_auth_token",
+      "npm_config_//registry.npmjs.org/:_authToken",
+    ].map((name): [string, (env: Record<string, string>) => void, string] => [
+      name,
+      (e) => {
+        e[name] = "SYNTHETIC";
+      },
+      "npm token in environment refused",
+    ]),
+  ];
+  it.each(safeguards)(
+    "BR-369 v2 stable publish safeguards: %s",
+    async (_name, mutate, diagnostic, manifest) => {
+      const { result, calls } = await npmPublish(
+        STABLE,
+        "false",
+        mutate,
+        manifest,
+      );
+      reason(result, diagnostic);
+      expect(calls.filter((c) => c.argv[0] === "publish")).toEqual([]);
+    },
+  );
+
+  const metadataSample = JSON.parse(
+    readFileSync("tests/fixtures/release/buildx-metadata-stable.json", "utf8"),
+  ) as Record<string, unknown>;
+  const metadataDigest = metadataSample["containerimage.digest"] as string;
+  const metadataVariants: [string, string, string | null][] = [
+    ["recorded buildx sample", JSON.stringify(metadataSample), null],
+    [
+      "missing digest",
+      JSON.stringify({ ...metadataSample, "containerimage.digest": undefined }),
+      "buildx metadata digest is not a sha256 digest",
+    ],
+    [
+      "decoy digest",
+      JSON.stringify({
+        digest: metadataDigest,
+        "containerimage.descriptor":
+          metadataSample["containerimage.descriptor"],
+      }),
+      "buildx metadata digest is not a sha256 digest",
+    ],
+    [
+      "newline digest",
+      JSON.stringify({
+        ...metadataSample,
+        "containerimage.digest": `${metadataDigest}\nimage_digest=decoy`,
+      }),
+      "buildx metadata digest is not a sha256 digest",
+    ],
+    [
+      "uppercase digest",
+      JSON.stringify({
+        ...metadataSample,
+        "containerimage.digest": metadataDigest.toUpperCase(),
+      }),
+      "buildx metadata digest is not a sha256 digest",
+    ],
+    [
+      "null digest",
+      JSON.stringify({ ...metadataSample, "containerimage.digest": null }),
+      "buildx metadata digest is not a sha256 digest",
+    ],
+    ["malformed JSON", "{", "buildx metadata digest is not a sha256 digest"],
+  ];
+  it.each([
+    ...[STABLE, VERSION].flatMap((version) =>
+      ["true", "false"].map(
+        (dry) =>
+          [
+            `${version} dry=${dry}`,
+            version,
+            dry,
+            JSON.stringify(metadataSample),
+            null,
+            false,
+          ] as const,
+      ),
+    ),
+    ...metadataVariants
+      .slice(1)
+      .map(
+        ([name, metadata, diagnostic]) =>
+          [name, STABLE, "false", metadata, diagnostic, false] as const,
+      ),
+    [
+      "failed build logs out",
+      STABLE,
+      "false",
+      JSON.stringify(metadataSample),
+      null,
+      true,
+    ] as const,
+  ])(
+    "BR-368 v2 BR-370 v2 image argv: %s",
+    async (_name, version, dry, metadata, diagnostic, failBuild) => {
+      const fake = fakeBin();
+      const cwd = temporary("release-v3-image-");
+      const output = join(cwd, "output");
+      const metadataPath = join(cwd, "metadata.json");
+      writeFileSync(output, "existing=value\n");
+      writeFileSync(metadataPath, metadata);
+      const result = await run("/bin/sh", [IMAGE_SCRIPT], {
+        cwd,
+        env: {
+          ...gitEnv(),
+          PATH: `${fake.bin}:${process.env.PATH ?? ""}`,
+          FAKE_DOCKER_LOG: fake.dockerLog,
+          FAKE_DOCKER_STDIN: fake.stdin,
+          FAKE_BUILDX_METADATA: metadataPath,
+          FAKE_BUILD_FAIL: failBuild ? "1" : "0",
+          RELEASE_VERSION: version,
+          RELEASE_SHA: GOOD_SHA,
+          RELEASE_DRY_RUN: dry,
+          GITHUB_TOKEN: TOKEN,
+          GITHUB_OUTPUT: output,
+        },
+      });
+      const calls = lines(fake.dockerLog);
+      const builds = calls.filter((c) => c.startsWith("buildx build "));
+      expect(builds).toHaveLength(1);
+      const argv = builds[0]!.split(" ");
+      expect(argv[argv.indexOf("--platform") + 1]).toBe(
+        "linux/amd64,linux/arm64",
+      );
+      expect(argv[argv.indexOf("--target") + 1]).toBe("runtime");
+      for (const flag of [
+        "--cache-from",
+        "--cache-to",
+        "--build-arg",
+        "--secret",
+        "--load",
+        "--output",
+      ])
+        expect(argv).not.toContain(flag);
+      const tags = argv.flatMap((word, i) =>
+        word === "--tag" ? [argv[i + 1]] : [],
+      );
+      const digestLines = result.stdout
+        .split("\n")
+        .filter((line) => line.startsWith("release-image: image digest "));
+      const outputLines = lines(output).filter((line) =>
+        line.startsWith("image_digest="),
+      );
+      if (dry === "true") {
+        expect(tags).toEqual([]);
+        expect(argv).not.toContain("--push");
+        expect(calls.some((c) => c.startsWith("login"))).toBe(false);
+      } else {
+        expect(tags).toEqual([
+          `ghcr.io/sstolz/kdrive-mcp-server:${version}`,
+          ...(version === STABLE
+            ? ["ghcr.io/sstolz/kdrive-mcp-server:latest"]
+            : []),
+        ]);
+        expect(argv.filter((word) => word === "--push")).toHaveLength(1);
+        expect(argv.filter((word) => word === "--metadata-file")).toHaveLength(
+          1,
+        );
+        expect(readFileSync(fake.stdin, "utf8")).toBe(TOKEN);
+        expect(calls).toContain("logout ghcr.io");
+        expect(
+          calls.findIndex(
+            (c) =>
+              c.startsWith("login ghcr.io") && c.includes("--password-stdin"),
+          ),
+        ).toBeLessThan(calls.indexOf(builds[0]!));
+        for (const label of [
+          `org.opencontainers.image.version=${version}`,
+          `org.opencontainers.image.revision=${GOOD_SHA}`,
+          "org.opencontainers.image.source=https://github.com/sstolz/kdrive-mcp-server",
+        ])
+          expect(argv).toContain(label);
+      }
+      if (diagnostic || failBuild) {
+        expect(result.status).toBe(1);
+        if (diagnostic)
+          expect(result.stdout + result.stderr).toContain(diagnostic);
+        expect(outputLines).toEqual([]);
+        expect(digestLines).toEqual([]);
+      } else {
+        expect(result.status, result.stdout + result.stderr).toBe(0);
+        expect(outputLines).toEqual(
+          version === STABLE && dry === "false"
+            ? [`image_digest=${metadataDigest}`]
+            : [],
+        );
+        expect(digestLines).toEqual(
+          version === STABLE && dry === "false"
+            ? [`release-image: image digest ${metadataDigest}`]
+            : [],
+        );
+      }
+      expect(lines(output)[0]).toBe("existing=value");
+      expect(calls.join("\n")).not.toContain(TOKEN);
+    },
+  );
+});
+
+describe("F-024 v3 stable read-back", () => {
+  const packed = Buffer.from("stable synthetic tarball");
+  type Change = (s: ReleaseState, doc: NpmFixture) => void;
+  async function readStable(change: Change = () => undefined) {
+    const state = releaseState(GOOD_SHA);
+    const server = await startDouble(state);
+    const doc = stableDocument(server.url);
+    state.npm = { status: 200, body: doc };
+    state.tarball = { status: 200, body: packed };
+    state.index = { status: 200, body: RUN_INDEX };
+    state.latest = state.index;
+    change(state, doc);
+    const result = await release("verify", temporary("stable-readback-"), {
+      RELEASE_VERSION: STABLE,
+      RELEASE_SHA: GOOD_SHA,
+      RELEASE_DRY_RUN: "false",
+      RELEASE_IMAGE_DIGEST: RUN_DIGEST,
+      RELEASE_TARBALL_SHA256: sha256(packed),
+      GITHUB_TOKEN: TOKEN,
+      RELEASE_RETRY_DELAY_MS: "0",
+      ...endpoints(server.url),
+    });
+    return { result, state, server };
+  }
+  const npmCases: [string, Change, string | null][] = [
+    ["published first stable (read-back only recovery)", () => undefined, null],
+    [
+      "version absent",
+      (_s, d) => {
+        delete d.versions[STABLE];
+      },
+      "npm version present",
+    ],
+    [
+      "inner version differs",
+      (_s, d) => {
+        d.versions[STABLE]!.version = "1.0.1";
+      },
+      "npm version present",
+    ],
+    [
+      "time absent",
+      (_s, d) => {
+        delete d.time[STABLE];
+      },
+      "npm version present",
+    ],
+    [
+      "latest differs",
+      (_s, d) => {
+        d["dist-tags"].latest = PLACEHOLDER;
+      },
+      "npm latest tag FAIL latest does not name the version",
+    ],
+    [
+      "latest missing",
+      (_s, d) => {
+        delete d["dist-tags"].latest;
+      },
+      "npm latest tag FAIL latest does not name the version",
+    ],
+    [
+      "placeholder absent",
+      (_s, d) => {
+        delete d.versions[PLACEHOLDER];
+      },
+      "npm original placeholder deprecated FAIL original placeholder is not deprecated",
+    ],
+    [
+      "placeholder deprecation empty",
+      (_s, d) => {
+        d.versions[PLACEHOLDER]!.deprecated = "";
+      },
+      "npm original placeholder deprecated FAIL original placeholder is not deprecated",
+    ],
+    [
+      "provenance absent",
+      (_s, d) => {
+        (d.versions[STABLE]!.dist as Record<string, unknown>).attestations =
+          undefined;
+      },
+      "npm provenance",
+    ],
+    [
+      "tarball mismatch",
+      (s) => {
+        s.tarball = { status: 200, body: "other bytes" };
+      },
+      "npm tarball matches verify",
+    ],
+    [
+      "tarball 404",
+      (s) => {
+        s.tarball = { status: 404 };
+      },
+      "npm tarball matches verify",
+    ],
+    [
+      "registry 503",
+      (s) => {
+        s.npm = { status: 503 };
+      },
+      "npm version present",
+    ],
+    [
+      "appears on attempt 20",
+      (s, d) => {
+        s.npm = (attempt) => ({
+          status: 200,
+          body: attempt >= 20 ? d : npmDocument(),
+        });
+      },
+      null,
+    ],
+    [
+      "absent after attempt 20",
+      (s) => {
+        s.npm = { status: 200, body: npmDocument() };
+      },
+      "npm version present",
+    ],
+  ];
+  it.each(npmCases)(
+    "BR-372 v2 stable npm read-back: %s",
+    async (name, change, failure) => {
+      const { result, state } = await readStable(change);
+      expect(result.status, result.stdout).toBe(failure ? 1 : 0);
+      if (failure) {
+        expect(result.stdout).toContain(
+          `release-verify: ${failure}${failure.includes(" FAIL ") ? "\n" : " FAIL "}`,
+        );
+      } else {
+        for (const line of [
+          "npm latest tag ok",
+          "npm original placeholder deprecated ok",
+          "image version digest ok",
+          "image latest digest ok",
+          "image latest is public (P-3) ok",
+          `image digest ${RUN_DIGEST}`,
+        ])
+          expect(result.stdout).toContain(`release-verify: ${line}\n`);
+      }
+      expect(state.npmAttempts).toBe(name.includes("20") || failure ? 20 : 1);
+      for (const betaLine of [
+        "npm beta tag",
+        "npm latest is a deprecated placeholder",
+        "image latest tag",
+      ])
+        expect(result.stdout).not.toContain(`release-verify: ${betaLine} `);
+    },
+  );
+  const images: [string, Change, string | null][] = [
+    ["both tags bound to this run", () => undefined, null],
+    ...["index", "latest"].flatMap(
+      (tag) =>
+        [
+          [
+            `${tag} unavailable`,
+            (s: ReleaseState) => {
+              s[tag as "index" | "latest"] = { status: 404 };
+            },
+            `image ${tag === "index" ? "version" : "latest"} digest FAIL image manifest unavailable`,
+          ],
+          [
+            `${tag} invalid`,
+            (s: ReleaseState) => {
+              s[tag as "index" | "latest"] = { status: 200, body: "{}" };
+            },
+            `image ${tag === "index" ? "version" : "latest"} digest FAIL image manifest invalid`,
+          ],
+          [
+            `${tag} digest mismatch`,
+            (s: ReleaseState) => {
+              s[tag as "index" | "latest"] = {
+                status: 200,
+                body: `${RUN_INDEX}\n`,
+              };
+            },
+            `image ${tag === "index" ? "version" : "latest"} digest FAIL image digest does not match RELEASE_IMAGE_DIGEST`,
+          ],
+          [
+            `${tag} missing arm64`,
+            (s: ReleaseState) => {
+              s[tag as "index" | "latest"] = {
+                status: 200,
+                body: indexBody(["linux/amd64"]),
+              };
+            },
+            tag === "index"
+              ? "image platforms"
+              : "image latest digest FAIL image manifest invalid",
+          ],
+        ] as [string, Change, string][],
+    ),
+    [
+      "equal tags from another run",
+      (s) => {
+        s.index = { status: 200, body: `${RUN_INDEX}\n` };
+        s.latest = s.index;
+      },
+      "image version digest FAIL image digest does not match RELEASE_IMAGE_DIGEST",
+    ],
+    [
+      "token failure",
+      (s) => {
+        s.ghcrToken = { status: 401 };
+      },
+      "image version digest FAIL image manifest unavailable",
+    ],
+    [
+      "anonymous token failure",
+      (s) => {
+        s.anonToken = { status: 401 };
+      },
+      "image latest is public (P-3) FAIL anonymous pull failed",
+    ],
+    [
+      "anonymous version HEAD failure",
+      (s) => {
+        s.anonManifest = { status: 403 };
+        s.anonLatestManifest = { status: 200 };
+      },
+      "image is public (P-3)",
+    ],
+    [
+      "anonymous latest HEAD failure",
+      (s) => {
+        s.anonLatestManifest = { status: 403 };
+      },
+      "image latest is public (P-3) FAIL anonymous pull failed",
+    ],
+    [
+      "anonymous HEAD failure",
+      (s) => {
+        s.anonManifest = { status: 403 };
+      },
+      "image latest is public (P-3) FAIL anonymous pull failed",
+    ],
+  ];
+  it.each(images)(
+    "BR-373 v2 stable image read-back: %s",
+    async (_name, change, failure) => {
+      const { result, server } = await readStable(change);
+      expect(result.status, result.stdout).toBe(failure ? 1 : 0);
+      if (failure) {
+        expect(result.stdout).toContain(
+          `release-verify: ${failure}${failure.includes(" FAIL ") ? "\n" : " FAIL "}`,
+        );
+      } else {
+        expect(result.stdout).toContain(
+          `release-verify: image digest ${RUN_DIGEST}\n`,
+        );
+        expect(
+          server.seen
+            .filter((r) => r.authorization === "Bearer anon-token")
+            .map((r) => [r.method, r.url.split("/").at(-1)])
+            .sort(),
+        ).toEqual([
+          ["HEAD", STABLE],
+          ["HEAD", "latest"],
+        ]);
+      }
+      for (const r of server.seen.filter(
+        (r) =>
+          r.url.includes("/manifests/") &&
+          r.authorization === "Bearer pull-token",
+      )) {
+        expect(r.method).toBe("GET");
+        expect(r.accept).toBe(INDEX_ACCEPT);
+      }
+      expect(server.seen.every((r) => ["GET", "HEAD"].includes(r.method))).toBe(
+        true,
+      );
+    },
+  );
+});
+
+describe("F-024 v3 retained gates", () => {
+  it.each([
+    "tag",
+    "dispatched SHA",
+    "main ancestry",
+    "CI",
+    "environment reviewer",
+    "environment branch",
+  ])("F-024 v3 stable release retains existing gates: %s", async (gate) => {
+    const repo = stableRepo();
+    const state = releaseState(repo.sha);
+    state.index = { status: 404 };
+    if (gate === "tag")
+      repo.git("update-ref", `refs/tags/v${STABLE}`, repo.parent);
+    if (gate === "main ancestry")
+      repo.git("update-ref", "refs/remotes/origin/main", repo.parent);
+    if (gate === "CI") state.ciJobs = { status: 200, body: { jobs: [] } };
+    if (gate === "environment reviewer")
+      state.environment = {
+        status: 200,
+        body: { ...goodEnvironment(), protection_rules: [] },
+      };
+    if (gate === "environment branch")
+      state.policies = {
+        status: 200,
+        body: { total_count: 0, branch_policies: [] },
+      };
+    const server = await startDouble(state);
+    const result = await release(
+      "check",
+      repo.root,
+      checkEnv(repo, server.url, {
+        RELEASE_VERSION: STABLE,
+        GITHUB_SHA: gate === "dispatched SHA" ? repo.parent : repo.sha,
+      }),
+    );
+    expect(result.status, result.stdout).toBe(1);
+    const labels: Record<string, string> = {
+      tag: "release tag",
+      "dispatched SHA": "dispatched commit",
+      "main ancestry": "on main",
+      CI: "CI evidence",
+      "environment reviewer": "release environment protected",
+      "environment branch": "release environment protected",
+    };
+    const label = labels[gate]!;
+    expect(result.stdout).toMatch(
+      new RegExp(`release-check: ${label} FAIL`, "u"),
+    );
+  });
+});
+
+// An owner-action harness, never a registry client: state changes below represent
+// acknowledged outcomes of fake commands or explicit owner recovery actions.
+describe("F-024 v3 stable release and recovery", () => {
+  it.each([
+    "success",
+    "rejected second approval",
+    "expired second approval",
+    "npm preflight failed",
+    "npm publish failed",
+    "partial image push",
+    "main advanced",
+    "uncertain npm accepted",
+    "read-back failed",
+  ])(
+    "F-024 v3 stable release and recovery rehearsal: %s",
+    async (scenario) => {
+      const files: Record<string, string> = {};
+      for (const path of [
+        "Makefile",
+        "compose.yaml",
+        "Dockerfile.dev",
+        "scripts/release.ts",
+        "scripts/release-image.sh",
+      ])
+        files[path] = readFileSync(path, "utf8");
+      const repo = releaseRepo({
+        versionFile: `${STABLE}\n`,
+        packageVersion: STABLE,
+        tag: "none",
+        files: {
+          ...files,
+          "package-lock.json": JSON.stringify({
+            version: STABLE,
+            packages: { "": { version: STABLE } },
+          }),
+        },
+      });
+      repo.git("tag", `v${STABLE}`, repo.sha);
+      const fake = fakeBin();
+      const root = temporary("release-v3-rehearsal-");
+      const prepared = join(root, "prepared.tgz");
+      let packed = packTarball(prepared, {
+        name: "@sstolz/kdrive-mcp-server",
+        version: STABLE,
+      });
+      const metadata = JSON.parse(
+        readFileSync(
+          "tests/fixtures/release/buildx-metadata-stable.json",
+          "utf8",
+        ),
+      ) as Record<string, unknown>;
+      metadata["containerimage.digest"] = RUN_DIGEST;
+      const metadataPath = join(root, "metadata.json");
+      writeFileSync(metadataPath, JSON.stringify(metadata));
+      const output = join(root, "output");
+      writeFileSync(output, "");
+      let releaseVersion = STABLE;
+      let releaseSha = repo.sha;
+      const state = releaseState(repo.sha);
+      // Package versions keyed by digest: deleting one removes every tag on it.
+      const images = new Map<string, Set<string>>();
+      const route = releaseRoute(state);
+      let deletionConfirmed = true;
+      const server = await double((request) => {
+        if (request.url.includes("/manifests/")) {
+          const tag = request.url.split("/").at(-1)!;
+          const present = [...images.values()].some((tags) => tags.has(tag));
+          if (!present) return { status: 404 };
+          return {
+            status: 200,
+            body: RUN_INDEX,
+            headers: { "content-type": OCI_INDEX },
+          };
+        }
+        return route(request);
+      });
+      doubles.push(server);
+      const journal: string[] = [];
+      const command = async (
+        target: string,
+        env: Record<string, string> = {},
+      ) => {
+        const result = await run(
+          "/usr/bin/make",
+          ["--no-print-directory", target],
+          {
+            cwd: repo.root,
+            env: {
+              ...gitEnv(),
+              PATH: `${fake.bin}:${process.env.PATH ?? ""}`,
+              FAKE_NPM_LOG: fake.npmLog,
+              FAKE_NPM_TARBALL: prepared,
+              FAKE_DOCKER_LOG: fake.dockerLog,
+              FAKE_DOCKER_STDIN: fake.stdin,
+              FAKE_BUILDX_METADATA: metadataPath,
+              GITHUB_OUTPUT: output,
+              RELEASE_VERSION: releaseVersion,
+              RELEASE_SHA: releaseSha,
+              GITHUB_SHA: releaseSha,
+              RELEASE_DRY_RUN: "false",
+              GITHUB_TOKEN: TOKEN,
+              RELEASE_RETRY_DELAY_MS: "0",
+              ...endpoints(server.url),
+              ...env,
+            },
+          },
+        );
+        return result;
+      };
+      const ok = async (target: string, env: Record<string, string> = {}) => {
+        const result = await command(target, env);
+        expect(
+          result.status,
+          `${target}\n${result.stdout}\n${result.stderr}`,
+        ).toBe(0);
+        return result;
+      };
+      let imageApproval = false;
+      let npmApproval = false;
+      let verifiedTarball = "";
+      let verifiedImage = "";
+      let dryEvidence = "";
+      const verify = async (dry: boolean) => {
+        writeFileSync(output, "");
+        await ok("release-check", {
+          RELEASE_PHASE: "verify",
+          RELEASE_DRY_RUN: String(dry),
+        });
+        await ok("release-setup");
+        await ok("pack");
+        await ok("release-npm", { RELEASE_DRY_RUN: "true" });
+        await ok("image-binfmt", {
+          IMAGE_PLATFORMS: "linux/amd64 linux/arm64",
+        });
+        await ok("release-image", { RELEASE_DRY_RUN: "true" });
+        verifiedTarball = lines(output)
+          .find((line) => line.startsWith("tarball-sha256="))!
+          .split("=")[1]!;
+        expect(verifiedTarball).toBe(sha256(packed));
+        journal.push("verify");
+        if (dry) dryEvidence = `${releaseVersion}:${releaseSha}`;
+      };
+      const publishImage = async () => {
+        if (
+          !deletionConfirmed ||
+          !imageApproval ||
+          dryEvidence !== `${releaseVersion}:${releaseSha}`
+        )
+          return false;
+        imageApproval = false;
+        await ok("release-check", { RELEASE_PHASE: "image" });
+        const result = await command("release-image", {
+          ...(scenario === "partial image push"
+            ? { FAKE_BUILD_FAIL: "1" }
+            : {}),
+        });
+        // Simulate an acknowledged push (or uncertain partial push confirmed by GET).
+        images.set(RUN_DIGEST, new Set([STABLE, "latest"]));
+        if (scenario === "partial image push") {
+          expect(result.status).toBe(1);
+          return false;
+        }
+        expect(result.status, result.stdout).toBe(0);
+        verifiedImage = lines(output)
+          .find((line) => line.startsWith("image_digest="))!
+          .slice("image_digest=".length);
+        expect(verifiedImage).toBe(RUN_DIGEST);
+        journal.push("publish-image");
+        return true;
+      };
+      const publishNpm = async (fails = false, accepted = false) => {
+        if (!npmApproval) return false;
+        npmApproval = false;
+        const checked = await command("release-check", {
+          RELEASE_PHASE: "npm",
+          RELEASE_IMAGE_DIGEST: verifiedImage,
+        });
+        if (checked.status !== 0) return false;
+        const result = await command("release-npm", {
+          RELEASE_TARBALL_SHA256: verifiedTarball,
+          ACTIONS_ID_TOKEN_REQUEST_URL: "http://127.0.0.1:1/oidc",
+          ACTIONS_ID_TOKEN_REQUEST_TOKEN: "SYNTHETIC-OIDC",
+          FAKE_NPM_STATUS: fails ? "1" : "0",
+        });
+        if (result.status === 0 || accepted) {
+          state.npm = { status: 200, body: stableDocument(server.url) };
+          state.tarball = { status: 200, body: packed };
+          journal.push("publish-npm");
+        }
+        return result.status === 0;
+      };
+      const readback = () =>
+        command("release-verify", {
+          RELEASE_IMAGE_DIGEST: verifiedImage,
+          RELEASE_TARBALL_SHA256: verifiedTarball,
+        });
+      const ownerDelete = () => {
+        const doc =
+          typeof state.npm === "function"
+            ? undefined
+            : (state.npm.body as NpmFixture);
+        if (!doc || doc.versions[STABLE] || doc.time[STABLE])
+          throw new Error("npm accepted: publication blocked; see #91");
+        images.delete(RUN_DIGEST);
+        deletionConfirmed = false;
+        journal.push("owner cleanup");
+      };
+      await verify(true);
+      expect(images.size).toBe(0);
+      expect(
+        lines(fake.dockerLog).some(
+          (line) => line.includes("--push") || line.startsWith("login"),
+        ),
+      ).toBe(false);
+      expect(
+        npmCalls(fake.npmLog)
+          .filter((c) => c.argv[0] === "publish")
+          .every((c) => c.argv.includes("--dry-run")),
+      ).toBe(true);
+      await verify(false);
+      expect(await publishImage()).toBe(false);
+      imageApproval = true;
+      const pushed = await publishImage();
+      expect(await publishNpm()).toBe(false);
+      if (
+        scenario === "success" ||
+        scenario === "uncertain npm accepted" ||
+        scenario === "read-back failed"
+      ) {
+        expect(pushed).toBe(true);
+        npmApproval = true;
+        expect(
+          await publishNpm(
+            scenario === "uncertain npm accepted",
+            scenario === "uncertain npm accepted",
+          ),
+        ).toBe(scenario !== "uncertain npm accepted");
+        expect(() => {
+          ownerDelete();
+        }).toThrow("npm accepted");
+        const refused = await command("release-check", {
+          RELEASE_PHASE: "verify",
+        });
+        reason(refused, AFTER_STABLE);
+        const count = npmCalls(fake.npmLog).filter(
+          (c) => c.argv[0] === "publish",
+        ).length;
+        if (scenario === "read-back failed") {
+          state.tarball = { status: 404 };
+          expect((await readback()).status).toBe(1);
+          state.tarball = { status: 200, body: packed };
+        }
+        const result = await readback();
+        expect(result.status, result.stdout).toBe(0);
+        expect(
+          npmCalls(fake.npmLog).filter((c) => c.argv[0] === "publish"),
+        ).toHaveLength(count);
+        expect(journal.indexOf("publish-image")).toBeLessThan(
+          journal.indexOf("publish-npm"),
+        );
+      } else {
+        reason(
+          await command("release-check", { RELEASE_PHASE: "verify" }),
+          "image already published",
+        );
+        if (scenario === "npm preflight failed") {
+          state.environment = { status: 403 };
+          npmApproval = true;
+          expect(await publishNpm()).toBe(false);
+          state.environment = releaseState(repo.sha).environment;
+        }
+        if (scenario === "npm publish failed") {
+          npmApproval = true;
+          expect(await publishNpm(true)).toBe(false);
+        }
+        if (
+          [
+            "rejected second approval",
+            "npm preflight failed",
+            "npm publish failed",
+          ].includes(scenario)
+        ) {
+          // Preferred recovery: same-run failed npm job, same digest, renewed gates and approval.
+          expect(await publishNpm()).toBe(false);
+          npmApproval = true;
+          expect(await publishNpm()).toBe(true);
+          expect((await readback()).status).toBe(0);
+          expect(journal).not.toContain("owner cleanup");
+        } else {
+          // Re-run unavailable (expired, partial image job or main moved): owner cleanup first.
+          if (scenario === "main advanced")
+            repo.git("update-ref", "refs/remotes/origin/main", repo.parent);
+          ownerDelete();
+          expect(deletionConfirmed).toBe(false);
+          expect(images.size).toBe(0);
+          const absence = server.seen.length;
+          const preflight = await command("release-check", {
+            RELEASE_PHASE: "verify",
+          });
+          const reads = server.seen
+            .slice(absence)
+            .filter((r) => r.url.includes("/manifests/"));
+          expect(reads.map((r) => r.url.split("/").at(-1)).sort()).toEqual([
+            STABLE,
+            "latest",
+          ]);
+          deletionConfirmed = true;
+          if (scenario === "main advanced") {
+            expect(preflight.status).toBe(1);
+            // A new patch commit on main gets its own version, tag, go and dry-run evidence.
+            const patch = "1.0.1";
+            writeFileSync(join(repo.root, "VERSION"), `${patch}\n`);
+            writeFileSync(
+              join(repo.root, "package.json"),
+              JSON.stringify({
+                name: "@sstolz/kdrive-mcp-server",
+                version: patch,
+              }),
+            );
+            writeFileSync(
+              join(repo.root, "package-lock.json"),
+              JSON.stringify({
+                version: patch,
+                packages: { "": { version: patch } },
+              }),
+            );
+            repo.git("add", "-A");
+            repo.git("commit", "-q", "-m", "patch fixture");
+            const sha = repo.git("rev-parse", "HEAD");
+            repo.git("update-ref", "refs/remotes/origin/main", sha);
+            repo.git("tag", `v${patch}`, sha);
+            releaseVersion = patch;
+            releaseSha = sha;
+            state.ciRuns = releaseState(sha).ciRuns;
+            packed = packTarball(prepared, {
+              name: "@sstolz/kdrive-mcp-server",
+              version: patch,
+            });
+            dryEvidence = "";
+            imageApproval = true;
+            expect(await publishImage()).toBe(false);
+            await verify(true);
+            expect(dryEvidence).toBe(`${patch}:${sha}`);
+          } else {
+            expect(preflight.status, preflight.stdout).toBe(0);
+            dryEvidence = "";
+            imageApproval = true;
+            expect(await publishImage()).toBe(false);
+            await verify(true);
+          }
+        }
+      }
+      expect(
+        server.seen.filter((r) => r.url.endsWith("/environments/release"))
+          .length,
+      ).toBeGreaterThanOrEqual(3);
+      expect(
+        server.seen.filter((r) => r.url.includes("deployment-branch-policies"))
+          .length,
+      ).toBeGreaterThanOrEqual(3);
+      expect(lines(fake.dockerLog).every((line) => !line.includes(TOKEN))).toBe(
+        true,
+      );
+    },
+    30_000,
+  );
+});
+
+it("BR-354 v2 stable release procedure preserves owner gates", () => {
+  const guide = readFileSync("docs/publishing.md", "utf8").replace(
+    /\s+/gu,
+    " ",
+  );
+  for (const phrase of [
+    "explicit go for a given version and commit",
+    "green real `dry_run=true` dispatch of the same version and commit is required",
+    "before any `dry_run=false` dispatch",
+    "first approval",
+    "second approval",
+    "Agents never",
+    "owner",
+    "read-back",
+    "Re-run all jobs",
+  ])
+    expect(guide).toContain(phrase);
+  // AC-35 is a per-release evidence gate; AC-34 is actual-main acceptance.
+  // Neither an in-process rehearsal nor this documentation check is that evidence.
+  expect(guide).toMatch(/(each|every).{0,60}(release|redispatch)/iu);
+  expect(guide).toMatch(
+    /(dry.run|dry run).{0,100}(patch|recovered|redispatch)/iu,
+  );
+});
+
+// AC-28: exercise the fixed refusal strings, rather than merely searching for them.
+describe("F-024 v3 exact diagnostics", () => {
+  const cases: [
+    string,
+    Record<string, string | undefined>,
+    (s: ReleaseState) => void,
+  ][] = [
+    [
+      "version is not a SemVer version",
+      { RELEASE_VERSION: "01.0.0" },
+      () => undefined,
+    ],
+    [
+      "unsupported release version",
+      { RELEASE_VERSION: "1.0.0-rc.1" },
+      () => undefined,
+    ],
+    [EMPTY_DIGEST, { RELEASE_IMAGE_DIGEST: RUN_DIGEST }, () => undefined],
+    [
+      DIGEST_INPUT,
+      { RELEASE_PHASE: "npm", RELEASE_IMAGE_DIGEST: "invalid" },
+      () => undefined,
+    ],
+    [
+      "npm registry status 404",
+      {},
+      (s) => {
+        s.npm = { status: 404 };
+      },
+    ],
+    [
+      "npm placeholder missing (P-0)",
+      {},
+      (s) => {
+        const d = npmDocument() as NpmFixture;
+        delete d["dist-tags"].latest;
+        s.npm = { status: 200, body: d };
+      },
+    ],
+    [
+      "npm latest is not a deprecated placeholder (P-0)",
+      {},
+      (s) => {
+        s.npm = {
+          status: 200,
+          body: npmDocument({ placeholderDeprecated: false }),
+        };
+      },
+    ],
+    [
+      AFTER_STABLE,
+      {},
+      (s) => {
+        s.npm = { status: 200, body: stableDocument() };
+      },
+    ],
+    [
+      "image already published",
+      {},
+      (s) => {
+        s.index = { status: 200, body: RUN_INDEX };
+      },
+    ],
+    [
+      "GHCR latest already exists; first stable requires 404",
+      {},
+      (s) => {
+        s.latest = { status: 200, body: RUN_INDEX };
+      },
+    ],
+    [
+      "image digest does not match RELEASE_IMAGE_DIGEST",
+      { RELEASE_PHASE: "npm" },
+      (s) => {
+        s.latest = { status: 200, body: `${RUN_INDEX}\n` };
+      },
+    ],
+    [
+      "image manifest unavailable",
+      { RELEASE_PHASE: "npm" },
+      (s) => {
+        s.latest = { status: 503 };
+      },
+    ],
+    [
+      "image manifest invalid",
+      { RELEASE_PHASE: "npm" },
+      (s) => {
+        s.latest = { status: 200, body: "{}" };
+      },
+    ],
+    [
+      "npm time contains a non-SemVer version key",
+      {},
+      (s) => {
+        const d = npmDocument() as NpmFixture;
+        d.time.invalid = "date";
+        s.npm = { status: 200, body: d };
+      },
+    ],
+    [
+      "npm versions contains a non-SemVer version key",
+      {},
+      (s) => {
+        const d = npmDocument() as NpmFixture;
+        d.versions.invalid = {};
+        s.npm = { status: 200, body: d };
+      },
+    ],
+    [
+      "stable version is not greater than every published version",
+      {},
+      (s) => {
+        const d = npmDocument() as NpmFixture;
+        d.time["1.1.0-beta.1"] = "date";
+        s.npm = { status: 200, body: d };
+      },
+    ],
+    [
+      "version already published on npm",
+      { RELEASE_VERSION: VERSION },
+      (s) => {
+        s.npm = { status: 200, body: npmDocument({ published: true }) };
+      },
+    ],
+  ];
+  it.each(cases)(
+    "F-024 v3 exact diagnostics: %s",
+    async (diagnostic, env, change) => {
+      const { result } = await stableCheck(change, env);
+      reason(result, diagnostic);
+    },
+  );
+  it("F-024 v3 exact diagnostics: removed legacy messages", () => {
+    const removed = [
+      ["unsupported", "pre-release"].join(" "),
+      ["stable releases are out of scope", "(F-024 v1)"].join(" "),
+    ];
+    for (const path of [
+      "scripts/release.ts",
+      "scripts/release-image.sh",
+      "tests/release.test.ts",
+      "tests/release-policy.test.ts",
+      "tests/helpers/release.ts",
+      "tests/helpers/release-policy.ts",
+    ])
+      for (const legacy of removed)
+        expect(readFileSync(path, "utf8")).not.toContain(legacy);
+  });
+});
+
+it.each([
+  ["npm latest tag", "ok", ""],
+  ["npm latest tag", "FAIL latest does not name the version", "latest"],
+  ["npm original placeholder deprecated", "ok", ""],
+  [
+    "npm original placeholder deprecated",
+    "FAIL original placeholder is not deprecated",
+    "placeholder",
+  ],
+  ["image version digest", "ok", ""],
+  ["image latest digest", "ok", ""],
+  ...["version", "latest"].flatMap((tag) => [
+    [
+      `image ${tag} digest`,
+      "FAIL image manifest unavailable",
+      `${tag} unavailable`,
+    ],
+    [`image ${tag} digest`, "FAIL image manifest invalid", `${tag} invalid`],
+    [
+      `image ${tag} digest`,
+      "FAIL image digest does not match RELEASE_IMAGE_DIGEST",
+      `${tag} mismatch`,
+    ],
+  ]),
+  ["image latest is public (P-3)", "ok", ""],
+  [
+    "image latest is public (P-3)",
+    "FAIL anonymous pull failed",
+    "anonymous latest",
+  ],
+  [`image digest ${RUN_DIGEST}`, "", ""],
+])(
+  "F-024 v3 exact diagnostics: release-verify %s %s",
+  async (condition, outcome, mutation) => {
+    const state = releaseState(GOOD_SHA);
+    const server = await startDouble(state);
+    const doc = stableDocument(server.url);
+    const packed = Buffer.from("stable exact diagnostics tarball");
+    state.npm = { status: 200, body: doc };
+    state.tarball = { status: 200, body: packed };
+    state.index = { status: 200, body: RUN_INDEX };
+    state.latest = state.index;
+    if (mutation === "latest") doc["dist-tags"].latest = PLACEHOLDER;
+    if (mutation === "placeholder")
+      delete doc.versions[PLACEHOLDER]!.deprecated;
+    if (mutation === "anonymous latest")
+      state.anonLatestManifest = { status: 403 };
+    if (mutation?.includes(" ") && mutation !== "anonymous latest") {
+      const tag = mutation.startsWith("version") ? "index" : "latest";
+      state[tag] = mutation.endsWith("unavailable")
+        ? { status: 404 }
+        : {
+            status: 200,
+            body: mutation.endsWith("invalid") ? "{}" : `${RUN_INDEX}\n`,
+          };
+    }
+    const result = await release("verify", temporary("release-diagnostics-"), {
+      RELEASE_VERSION: STABLE,
+      RELEASE_SHA: GOOD_SHA,
+      RELEASE_DRY_RUN: "false",
+      RELEASE_IMAGE_DIGEST: RUN_DIGEST,
+      RELEASE_TARBALL_SHA256: sha256(packed),
+      RELEASE_RETRY_DELAY_MS: "0",
+      ...endpoints(server.url),
+    });
+    expect(result.status, result.stdout).toBe(mutation ? 1 : 0);
+    expect(result.stdout.split("\n")).toContain(
+      `release-verify: ${condition}${outcome ? ` ${outcome}` : ""}`,
+    );
+  },
+);
