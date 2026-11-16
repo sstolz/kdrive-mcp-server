@@ -2,7 +2,7 @@
 id: F-024
 title: Gated first stable publication
 ticket: "#89"
-status: draft
+status: frozen
 version: 3
 ---
 
@@ -276,7 +276,8 @@ environment approval. The tagged release commit is `main` HEAD at dispatch,
 equals `GITHUB_SHA`, and has successful `ci-result` evidence on `main`.
 The trusted workflow checks out the dispatched SHA, not the untrusted input.
 Environment protection is checked in every phase. Agents never dispatch a
-real run or approve a deployment. GHCR publishes before npm. Permissions,
+real run, re-run a release job, or approve a deployment; a re-run is an
+owner-only action. GHCR publishes before npm. Permissions,
 credential isolation, endpoint override refusal in CI and safe output remain
 unchanged. Verified by: AC-32, AC-33.
 
@@ -594,11 +595,16 @@ Use versioned BR citations in those tests. Tests run through `make check`.
   either versions or time. Uncertain evidence stops recovery. At this step,
   fresh verify/image preflight is **blocked: image exists**; phase npm can
   pass only with this run's digest and all unchanged gates.
-  The first option is to re-run the failed `publish-npm` job within the same
-  run, with the same image digest, every gate checked again and a new
-  `release` environment approval. Re-run is unavailable if GitHub's re-run
-  window expired, `main` advanced so a commit gate fails, run evidence is
-  uncertain, the run was cancelled, or its artifacts are gone. If that
+  The first option is for the owner to re-run the failed `publish-npm` job
+  within the same run ("Re-run failed jobs" or that job alone, never "Re-run
+  all jobs"), with the same image digest and every gate checked again.
+  GitHub may reuse the approval already granted to this job; the owner's
+  re-run is then the publication go. The behaviour observed at first
+  occurrence is recorded in `docs/observations/`. AC-32 rehearses the re-run
+  as a harness simulation. Re-run is unavailable if GitHub's re-run window
+  expired, `main` advanced so a commit gate fails, run evidence is
+  uncertain, the run was cancelled, its artifacts are gone, or "Re-run all
+  jobs" was used (verify then fails because the image exists). If that
   re-run is unavailable, the owner deletes the GHCR candidate **package version**,
   not one tag. The guide
   identifies it by the digest in `release-image: image digest sha256:<hex>`
@@ -754,4 +760,13 @@ Round-1 decisions superseded by the owner narrowing:
   only before npm accepts 1.0.0; afterwards D-4 applies until #91. Finding 2:
   `make format-check` passes; no change.
 
-No approval or freeze is claimed.
+- **Decision pass 2 (confirmation), findings 1–2: retained** — A same-run
+  re-run is owner-only, agents never re-run a release job, and GitHub may
+  reuse the earlier approval (observed behaviour recorded at first
+  occurrence; AC-32 is a harness simulation). The guide forbids "Re-run all
+  jobs", listed as an unavailable case.
+
+Frozen on 2026-11-16 (autonomous freeze, PROJECT.md D-1) after
+`89-spec-review-7-opus` (strong tier, approve) and
+`89-spec-decision-2-fable` (strongest tier, approve), with the two
+decision-pass minors folded in; freeze record on #89.
