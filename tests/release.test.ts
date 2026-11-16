@@ -1,6 +1,12 @@
 // F-024 AC-05–AC-13, AC-21: scripts/release.ts, scripts/release-image.sh and
 // the release Make targets against test doubles.
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import { afterAll, afterEach, describe, expect, it } from "vitest";
 import { rules } from "./helpers/image-policy.js";
@@ -1956,7 +1962,7 @@ describe("F-024 v3 validation first", () => {
     const fake = fakeBin();
     const server = await startDouble(releaseState(GOOD_SHA));
     const cwd = temporary("release-v3-input-");
-    const env = {
+    const env: Record<string, string | undefined> = {
       ...gitEnv(),
       RELEASE_VERSION: VERSION,
       RELEASE_SHA: GOOD_SHA,
@@ -1978,9 +1984,7 @@ describe("F-024 v3 validation first", () => {
               Object.entries({
                 ...env,
                 PATH: `${fake.bin}:${process.env.PATH ?? ""}`,
-              }).filter(
-                (pair): pair is [string, string] => pair[1] !== undefined,
-              ),
+              }),
             ),
           })
         : await release(mode, cwd, env, fake.bin);
@@ -1997,9 +2001,10 @@ describe("F-024 v3 validation first", () => {
   )(
     "BR-359 v2 accepts stable and beta inputs: %s",
     async (_name, mode, version) => {
-      const { result } = await entry(mode!, { RELEASE_VERSION: version! });
+      const { result } = await entry(mode, { RELEASE_VERSION: version });
       expect(result.stdout).toContain(
-        `${mode === "image" ? "release-image" : `release-${mode}`}\u003a version ok\n`,
+        (mode === "image" ? "release-image" : "release-" + mode) +
+          ": version ok\n",
       );
     },
   );
@@ -2235,7 +2240,7 @@ describe("F-024 v3 registry phase matrices", () => {
         doc["dist-tags"].latest = variant.endsWith("beta")
           ? "0.9.0-beta.1"
           : "0.9.0";
-        doc.versions[doc["dist-tags"].latest!] =
+        doc.versions[doc["dist-tags"].latest] =
           variant === "latest deprecated stable"
             ? { deprecated: "retired" }
             : {};
@@ -2551,7 +2556,7 @@ describe("F-024 v3 npm and image publication", () => {
       ["true", "false"].map((dry) => [`${version} dry=${dry}`, version, dry]),
     ),
   )("BR-368 v2 BR-369 v2 npm exact argv: %s", async (_name, version, dry) => {
-    const { result, calls } = await npmPublish(version!, dry!);
+    const { result, calls } = await npmPublish(version, dry);
     expect(result.status, result.stdout).toBe(0);
     expect(calls.map((c) => c.argv)).toEqual([
       ["--version"],
@@ -2816,25 +2821,29 @@ describe("F-024 v3 npm and image publication", () => {
         ])
           expect(argv).toContain(label);
       }
-      if (diagnostic || failBuild) {
-        expect(result.status).toBe(1);
-        if (diagnostic)
-          expect(result.stdout + result.stderr).toContain(diagnostic);
-        expect(outputLines).toEqual([]);
-        expect(digestLines).toEqual([]);
-      } else {
-        expect(result.status, result.stdout + result.stderr).toBe(0);
-        expect(outputLines).toEqual(
-          version === STABLE && dry === "false"
-            ? [`image_digest=${metadataDigest}`]
-            : [],
-        );
-        expect(digestLines).toEqual(
-          version === STABLE && dry === "false"
-            ? [`release-image: image digest ${metadataDigest}`]
-            : [],
-        );
-      }
+      const expectsFailure = diagnostic !== null || failBuild;
+      const assertBuildResult = () => {
+        if (expectsFailure) {
+          expect(result.status).toBe(1);
+          if (diagnostic)
+            expect(result.stdout + result.stderr).toContain(diagnostic);
+          expect(outputLines).toEqual([]);
+          expect(digestLines).toEqual([]);
+        } else {
+          expect(result.status, result.stdout + result.stderr).toBe(0);
+          expect(outputLines).toEqual(
+            version === STABLE && dry === "false"
+              ? [`image_digest=${metadataDigest}`]
+              : [],
+          );
+          expect(digestLines).toEqual(
+            version === STABLE && dry === "false"
+              ? [`release-image: image digest ${metadataDigest}`]
+              : [],
+          );
+        }
+      };
+      assertBuildResult();
       expect(lines(output)[0]).toBe("existing=value");
       expect(calls.join("\n")).not.toContain(TOKEN);
     },
@@ -3378,28 +3387,7 @@ describe("F-024 v3 stable release and recovery", () => {
         deletionConfirmed = false;
         journal.push("owner cleanup");
       };
-      await verify(true);
-      expect(images.size).toBe(0);
-      expect(
-        lines(fake.dockerLog).some(
-          (line) => line.includes("--push") || line.startsWith("login"),
-        ),
-      ).toBe(false);
-      expect(
-        npmCalls(fake.npmLog)
-          .filter((c) => c.argv[0] === "publish")
-          .every((c) => c.argv.includes("--dry-run")),
-      ).toBe(true);
-      await verify(false);
-      expect(await publishImage()).toBe(false);
-      imageApproval = true;
-      const pushed = await publishImage();
-      expect(await publishNpm()).toBe(false);
-      if (
-        scenario === "success" ||
-        scenario === "uncertain npm accepted" ||
-        scenario === "read-back failed"
-      ) {
+      const checkAcceptedRelease = async (pushed: boolean) => {
         expect(pushed).toBe(true);
         npmApproval = true;
         expect(
@@ -3420,7 +3408,13 @@ describe("F-024 v3 stable release and recovery", () => {
         ).length;
         if (scenario === "read-back failed") {
           state.tarball = { status: 404 };
-          expect((await readback()).status).toBe(1);
+          const before = server.seen.filter(
+            (r) => r.url === "/tarballs/pkg.tgz",
+          ).length;
+          reasonViaMake(await readback(), "npm tarball status 404");
+          expect(
+            server.seen.filter((r) => r.url === "/tarballs/pkg.tgz"),
+          ).toHaveLength(before + 20);
           state.tarball = { status: 200, body: packed };
         }
         const result = await readback();
@@ -3431,7 +3425,8 @@ describe("F-024 v3 stable release and recovery", () => {
         expect(journal.indexOf("publish-image")).toBeLessThan(
           journal.indexOf("publish-npm"),
         );
-      } else {
+      };
+      const checkRecovery = async () => {
         reasonViaMake(
           await command("release-check", { RELEASE_PHASE: "verify" }),
           "image already published",
@@ -3503,6 +3498,11 @@ describe("F-024 v3 stable release and recovery", () => {
             const sha = repo.git("rev-parse", "HEAD");
             repo.git("update-ref", "refs/remotes/origin/main", sha);
             repo.git("tag", `v${patch}`, sha);
+            // A new version starts a new run with a fresh artifact directory.
+            rmSync(join(repo.root, "artifacts"), {
+              recursive: true,
+              force: true,
+            });
             releaseVersion = patch;
             releaseSha = sha;
             state.ciRuns = releaseState(sha).ciRuns;
@@ -3523,6 +3523,32 @@ describe("F-024 v3 stable release and recovery", () => {
             await verify(true);
           }
         }
+      };
+      await verify(true);
+      expect(images.size).toBe(0);
+      expect(
+        lines(fake.dockerLog).some(
+          (line) => line.includes("--push") || line.startsWith("login"),
+        ),
+      ).toBe(false);
+      expect(
+        npmCalls(fake.npmLog)
+          .filter((c) => c.argv[0] === "publish")
+          .every((c) => c.argv.includes("--dry-run")),
+      ).toBe(true);
+      await verify(false);
+      expect(await publishImage()).toBe(false);
+      imageApproval = true;
+      const pushed = await publishImage();
+      expect(await publishNpm()).toBe(false);
+      if (
+        scenario === "success" ||
+        scenario === "uncertain npm accepted" ||
+        scenario === "read-back failed"
+      ) {
+        await checkAcceptedRelease(pushed);
+      } else {
+        await checkRecovery();
       }
       expect(
         server.seen.filter((r) => r.url.endsWith("/environments/release"))
@@ -3764,7 +3790,7 @@ it.each([
       delete doc.versions[PLACEHOLDER]!.deprecated;
     if (mutation === "anonymous latest")
       state.anonLatestManifest = { status: 403 };
-    if (mutation?.includes(" ") && mutation !== "anonymous latest") {
+    if (mutation.includes(" ") && mutation !== "anonymous latest") {
       const tag = mutation.startsWith("version") ? "index" : "latest";
       state[tag] = mutation.endsWith("unavailable")
         ? { status: 404 }
@@ -3784,7 +3810,7 @@ it.each([
     });
     expect(result.status, result.stdout).toBe(mutation ? 1 : 0);
     expect(result.stdout.split("\n")).toContain(
-      `release-verify: ${condition}${outcome ? ` ${outcome}` : ""}`,
+      `release-verify: ${condition}` + (outcome ? " " + outcome : ""),
     );
   },
 );

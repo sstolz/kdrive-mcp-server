@@ -111,7 +111,8 @@ function imageDigestReason(
         ? null
         : "RELEASE_IMAGE_DIGEST must be empty in verify and image phases";
     if (/^sha256:[0-9a-f]{64}$/u.test(digest)) return null;
-  } else if (digest === "" || /^sha256:[0-9a-fA-F]{64}$/u.test(digest)) return null;
+  } else if (digest === "" || /^sha256:[0-9a-fA-F]{64}$/u.test(digest))
+    return null;
   return "RELEASE_IMAGE_DIGEST is not a sha256 digest";
 }
 
@@ -447,44 +448,62 @@ function stableAbove(candidate: string, published: string): boolean {
   }
   return SEMVER.exec(published)?.[1] !== undefined;
 }
+function orderingKey(
+  name: string,
+  key: string,
+  version: string,
+): string | null {
+  if (name === "time" && (key === "created" || key === "modified")) return null;
+  if (!SEMVER.test(key)) return `npm ${name} contains a non-SemVer version key`;
+  return key !== PLACEHOLDER && !stableAbove(version, key)
+    ? "stable version is not greater than every published version"
+    : null;
+}
 function stableOrdering(document: unknown, version: string): string | null {
   for (const name of ["versions", "time"]) {
     const object = field(document, name);
     if (!isRecord(object)) return "npm document unreadable; refer to the owner";
     for (const key of Object.keys(object)) {
-      if (name === "time" && (key === "created" || key === "modified")) continue;
-      if (!SEMVER.test(key)) return `npm ${name} contains a non-SemVer version key`;
-      if (key !== PLACEHOLDER && !stableAbove(version, key))
-        return "stable version is not greater than every published version";
+      const reason = orderingKey(name, key, version);
+      if (reason !== null) return reason;
     }
   }
   return null;
 }
 
+function npmPublishedReason(
+  inputs: Inputs,
+  answer: Answer,
+  document: unknown,
+  readable: boolean,
+): string | null {
+  const stable = STABLE.test(inputs.version);
+  if (answer.status === 404)
+    return inputs.dryRun && !stable ? null : "npm registry status 404";
+  if (answer.status !== 200)
+    return `npm registry status ${String(answer.status)}`;
+  if (!readable) return "npm document unreadable; refer to the owner";
+  if (
+    hasKey(field(document, "versions"), inputs.version) ||
+    hasKey(field(document, "time"), inputs.version)
+  )
+    return "version already published on npm";
+  return stable ? stableOrdering(document, inputs.version) : null;
+}
+
 function npmChecks(report: Report, inputs: Inputs, answer: Answer): void {
   const document = answer.status === 200 ? parse(answer) : undefined;
   const readable =
-    isRecord(field(document, "versions")) &&
-    isRecord(field(document, "time"));
+    isRecord(field(document, "versions")) && isRecord(field(document, "time"));
   if (readable && afterStable(document)) {
     report.check("npm version not published", AFTER_STABLE);
     return;
   }
   const stable = STABLE.test(inputs.version);
-  let published: string | null;
-  if (answer.status === 404)
-    published = inputs.dryRun && !stable ? null : "npm registry status 404";
-  else if (answer.status !== 200)
-    published = `npm registry status ${String(answer.status)}`;
-  else if (!readable)
-    published = "npm document unreadable; refer to the owner";
-  else if (
-    hasKey(field(document, "versions"), inputs.version) ||
-    hasKey(field(document, "time"), inputs.version)
-  )
-    published = "version already published on npm";
-  else published = stable ? stableOrdering(document, inputs.version) : null;
-  report.check("npm version not published", published);
+  report.check(
+    "npm version not published",
+    npmPublishedReason(inputs, answer, document, readable),
+  );
   if (inputs.dryRun && !stable) return;
   let placeholder: string | null = null;
   if (
@@ -539,24 +558,29 @@ const manifest = (tag: string, token: string, method = "GET") =>
     },
   });
 
+async function stableGhcrCheck(
+  inputs: Inputs,
+  token: string,
+): Promise<string | null> {
+  const candidate = await manifest(inputs.version, token);
+  const latest = await manifest("latest", token);
+  if (inputs.phase === "npm")
+    return boundDigestReason(candidate) ?? boundDigestReason(latest);
+  for (const answer of [candidate, latest])
+    if (answer.status !== 200 && answer.status !== 404)
+      return `unexpected GHCR status ${String(answer.status)}; refer to the owner`;
+  if (candidate.status === 200) return "image already published";
+  return latest.status === 404
+    ? null
+    : "GHCR latest already exists; first stable requires 404";
+}
+
 /** BR-363 GHCR part, by phase. */
 async function ghcrCheck(inputs: Inputs): Promise<string | null> {
   const token = await ghcrToken(true);
   if (token.status !== 200)
     return `unexpected GHCR token status ${String(token.status)}; refer to the owner`;
-  if (STABLE.test(inputs.version)) {
-    const candidate = await manifest(inputs.version, token.token);
-    const latest = await manifest("latest", token.token);
-    if (inputs.phase === "npm")
-      return boundDigestReason(candidate) ?? boundDigestReason(latest);
-    for (const answer of [candidate, latest])
-      if (answer.status !== 200 && answer.status !== 404)
-        return `unexpected GHCR status ${String(answer.status)}; refer to the owner`;
-    if (candidate.status === 200) return "image already published";
-    return latest.status === 404
-      ? null
-      : "GHCR latest already exists; first stable requires 404";
-  }
+  if (STABLE.test(inputs.version)) return stableGhcrCheck(inputs, token.token);
   const answer = await manifest(inputs.version, token.token, "HEAD");
   if (answer.status !== 200 && answer.status !== 404)
     return `unexpected GHCR status ${String(answer.status)}; refer to the owner`;
@@ -675,6 +699,18 @@ function releaseTarball(version: string): { bytes: Buffer; manifest: unknown } {
   return { bytes, manifest };
 }
 
+function npmPublicationChecks(digest: string): void {
+  if (env("RELEASE_TARBALL_SHA256") !== digest)
+    throw new FixedExit(1, "tarball digest does not match verify");
+  if (
+    !env("ACTIONS_ID_TOKEN_REQUEST_URL") ||
+    !env("ACTIONS_ID_TOKEN_REQUEST_TOKEN")
+  )
+    throw new FixedExit(1, "OIDC environment missing");
+  if (npmTokenPresent())
+    throw new FixedExit(1, "npm token in environment refused");
+}
+
 function publishNpm(): number {
   const report = new Report("release-npm");
   const inputs = validateInputs(report, false, false);
@@ -685,17 +721,7 @@ function publishNpm(): number {
   if (!npmVersionOk()) throw new FixedExit(1, "npm 11.5.1 or later required");
   const digest = createHash("sha256").update(tarball.bytes).digest("hex");
   process.stdout.write(`release-npm: tarball sha256 ${digest}\n`);
-  if (!inputs.dryRun) {
-    if (env("RELEASE_TARBALL_SHA256") !== digest)
-      throw new FixedExit(1, "tarball digest does not match verify");
-    if (
-      !env("ACTIONS_ID_TOKEN_REQUEST_URL") ||
-      !env("ACTIONS_ID_TOKEN_REQUEST_TOKEN")
-    )
-      throw new FixedExit(1, "OIDC environment missing");
-    if (npmTokenPresent())
-      throw new FixedExit(1, "npm token in environment refused");
-  }
+  if (!inputs.dryRun) npmPublicationChecks(digest);
   const args = [
     "publish",
     `./artifacts/${TARBALL_PREFIX}${inputs.version}.tgz`,
@@ -765,20 +791,40 @@ async function npmAttempt(
       ? null
       : `npm registry status ${String(answer.status)}`;
   const stable = STABLE.test(version);
-  const present = hasKey(field(document, "versions"), version) &&
-    (!stable || (field(document, "versions", version, "version") === version &&
-      hasKey(field(document, "time"), version)));
-  const tags: Outcome = stable ? [
-    ["npm latest tag", field(document, "dist-tags", "latest") === version
-      ? null : "latest does not name the version"],
-    ["npm original placeholder deprecated", originalPlaceholderDeprecated(document)
-      ? null : "original placeholder is not deprecated"],
-  ] : [
-    ["npm beta tag", field(document, "dist-tags", "beta") === version
-      ? null : "beta does not name the version"],
-    ["npm latest is a deprecated placeholder", deprecatedLatest(document, version)
-      ? null : "latest is not a deprecated placeholder"],
-  ];
+  const present =
+    hasKey(field(document, "versions"), version) &&
+    (!stable ||
+      (field(document, "versions", version, "version") === version &&
+        hasKey(field(document, "time"), version)));
+  const tags: Outcome = stable
+    ? [
+        [
+          "npm latest tag",
+          field(document, "dist-tags", "latest") === version
+            ? null
+            : "latest does not name the version",
+        ],
+        [
+          "npm original placeholder deprecated",
+          originalPlaceholderDeprecated(document)
+            ? null
+            : "original placeholder is not deprecated",
+        ],
+      ]
+    : [
+        [
+          "npm beta tag",
+          field(document, "dist-tags", "beta") === version
+            ? null
+            : "beta does not name the version",
+        ],
+        [
+          "npm latest is a deprecated placeholder",
+          deprecatedLatest(document, version)
+            ? null
+            : "latest is not a deprecated placeholder",
+        ],
+      ];
   return [
     [
       "npm version present",
@@ -851,22 +897,40 @@ async function publicReason(version: string): Promise<string | null> {
     : `anonymous pull status ${String(pulled.status)}`;
 }
 
+async function stableImageChecks(
+  report: Report,
+  version: string,
+  token: { status: number; token: string },
+): Promise<void> {
+  const unavailable: Answer = { status: 0, body: Buffer.alloc(0), type: "" };
+  const index =
+    token.status === 200 ? await manifest(version, token.token) : unavailable;
+  const latest =
+    token.status === 200 ? await manifest("latest", token.token) : unavailable;
+  report.check(
+    "image platforms",
+    token.status === 200
+      ? indexReason(index)
+      : `GHCR token status ${String(token.status)}`,
+  );
+  report.check("image version digest", boundDigestReason(index));
+  report.check("image latest digest", boundDigestReason(latest));
+  if (indexReason(index) === null)
+    process.stdout.write(
+      `release-verify: image digest sha256:${sha256(index.body)}\n`,
+    );
+  report.check("image is public (P-3)", await publicReason(version));
+  report.check(
+    "image latest is public (P-3)",
+    (await publicReason("latest")) === null ? null : "anonymous pull failed",
+  );
+}
+
 /** BR-373: the multi-platform index, no latest tag, anonymous pulls. */
 async function imageChecks(report: Report, version: string): Promise<void> {
   const token = await ghcrToken(true);
   if (STABLE.test(version)) {
-    const unavailable: Answer = { status: 0, body: Buffer.alloc(0), type: "" };
-    const index = token.status === 200 ? await manifest(version, token.token) : unavailable;
-    const latest = token.status === 200 ? await manifest("latest", token.token) : unavailable;
-    report.check("image platforms", token.status === 200
-      ? indexReason(index) : `GHCR token status ${String(token.status)}`);
-    report.check("image version digest", boundDigestReason(index));
-    report.check("image latest digest", boundDigestReason(latest));
-    if (indexReason(index) === null)
-      process.stdout.write(`release-verify: image digest sha256:${sha256(index.body)}\n`);
-    report.check("image is public (P-3)", await publicReason(version));
-    report.check("image latest is public (P-3)", await publicReason("latest") === null
-      ? null : "anonymous pull failed");
+    await stableImageChecks(report, version, token);
     return;
   }
   let digest = "";

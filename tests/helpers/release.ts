@@ -449,7 +449,7 @@ process.exit(Number(process.env.FAKE_NPM_STATUS || "0"));
 
 /**
  * Fake docker: \`compose run … dev <command>\` runs <command> on the host with
- * only PATH, HOME and the -e names; \`compose build\`, buildx, login, logout
+ * only PATH, HOME, harness controls and the -e names; \`compose build\`, buildx, login, logout
  * and run are recorded in $FAKE_DOCKER_LOG (login stdin in $FAKE_DOCKER_STDIN).
  */
 export const FAKE_DOCKER = `#!/usr/bin/env node
@@ -459,6 +459,8 @@ const argv = process.argv.slice(2);
 const log = (line) => fs.appendFileSync(process.env.FAKE_DOCKER_LOG, line + "\\n");
 if (argv[0] === "compose" && argv[1] === "run") {
   const env = { PATH: process.env.PATH, HOME: process.env.HOME, FAKE_NPM_LOG: process.env.FAKE_NPM_LOG, FAKE_NPM_TARBALL: process.env.FAKE_NPM_TARBALL, FAKE_DOCKER_LOG: process.env.FAKE_DOCKER_LOG };
+  // The rehearsal clock is harness-only, outside the production Compose contract.
+  if (process.env.RELEASE_RETRY_DELAY_MS !== undefined) env.RELEASE_RETRY_DELAY_MS = process.env.RELEASE_RETRY_DELAY_MS;
   if (process.env.FAKE_NPM_STATUS !== undefined) env.FAKE_NPM_STATUS = process.env.FAKE_NPM_STATUS;
   const names = [];
   let index = 2;

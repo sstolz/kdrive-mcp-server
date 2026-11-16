@@ -169,13 +169,13 @@ build. Beta uses npm `beta` and only the image `<version>` tag.
 
 The following preflight matrix applies in `release-check`:
 
-| Kind | Phase | npm | GHCR |
-| --- | --- | --- | --- |
-| Beta | verify dry | 404 is allowed; otherwise readable versions/time and candidate absent | Candidate HEAD 404 |
-| Beta | verify real / image | Candidate absent from versions/time; deprecated placeholder latest | Candidate HEAD 404 |
-| Beta | npm | Same real npm preflight; publish with beta | Candidate HEAD 200 |
-| Stable | verify dry or real / image | 200, readable versions/time, candidate absent, exact deprecated placeholder latest; candidate above every published version except placeholder | Candidate and latest GET 404 |
-| Stable | npm | Same stable npm preflight; publish with latest | Candidate and latest GET indexes each hash to RELEASE_IMAGE_DIGEST |
+| Kind   | Phase                      | npm                                                                                                                                            | GHCR                                                               |
+| ------ | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| Beta   | verify dry                 | 404 is allowed; otherwise readable versions/time and candidate absent                                                                          | Candidate HEAD 404                                                 |
+| Beta   | verify real / image        | Candidate absent from versions/time; deprecated placeholder latest                                                                             | Candidate HEAD 404                                                 |
+| Beta   | npm                        | Same real npm preflight; publish with beta                                                                                                     | Candidate HEAD 200                                                 |
+| Stable | verify dry or real / image | 200, readable versions/time, candidate absent, exact deprecated placeholder latest; candidate above every published version except placeholder | Candidate and latest GET 404                                       |
+| Stable | npm                        | Same stable npm preflight; publish with latest                                                                                                 | Candidate and latest GET indexes each hash to RELEASE_IMAGE_DIGEST |
 
 For either kind, a non-placeholder npm `latest` or any stable version key in
 `versions` or `time` refuses publication: see #91 (F-024 v4). Resetting `latest`
