@@ -1937,6 +1937,11 @@ async function stableCheck(
   );
   return { result, state, server, repo };
 }
+// Commands run through GNU Make exit 2 when the recipe fails (exit 1).
+function reasonViaMake(result: Result, expected: string) {
+  expect(result.status, result.stdout + result.stderr).toBe(2);
+  expect(result.stdout).toContain(` FAIL ${expected}\n`);
+}
 function reason(result: Result, expected: string) {
   expect(result.status, result.stdout + result.stderr).toBe(1);
   expect(result.stdout).toContain(` FAIL ${expected}\n`);
@@ -3324,7 +3329,8 @@ describe("F-024 v3 stable release and recovery", () => {
         // Simulate an acknowledged push (or uncertain partial push confirmed by GET).
         images.set(RUN_DIGEST, new Set([STABLE, "latest"]));
         if (scenario === "partial image push") {
-          expect(result.status).toBe(1);
+          // GNU Make exits 2 when the recipe fails.
+          expect(result.status).toBe(2);
           return false;
         }
         expect(result.status, result.stdout).toBe(0);
@@ -3408,7 +3414,7 @@ describe("F-024 v3 stable release and recovery", () => {
         const refused = await command("release-check", {
           RELEASE_PHASE: "verify",
         });
-        reason(refused, AFTER_STABLE);
+        reasonViaMake(refused, AFTER_STABLE);
         const count = npmCalls(fake.npmLog).filter(
           (c) => c.argv[0] === "publish",
         ).length;
@@ -3426,7 +3432,7 @@ describe("F-024 v3 stable release and recovery", () => {
           journal.indexOf("publish-npm"),
         );
       } else {
-        reason(
+        reasonViaMake(
           await command("release-check", { RELEASE_PHASE: "verify" }),
           "image already published",
         );
@@ -3473,7 +3479,8 @@ describe("F-024 v3 stable release and recovery", () => {
           ]);
           deletionConfirmed = true;
           if (scenario === "main advanced") {
-            expect(preflight.status).toBe(1);
+            // GNU Make exits 2 when the recipe fails.
+            expect(preflight.status).toBe(2);
             // A new patch commit on main gets its own version, tag, go and dry-run evidence.
             const patch = "1.0.1";
             writeFileSync(join(repo.root, "VERSION"), `${patch}\n`);
@@ -3529,7 +3536,8 @@ describe("F-024 v3 stable release and recovery", () => {
         true,
       );
     },
-    30_000,
+    // Each scenario runs many Make and Compose commands; read-back failed runs two read-backs.
+    120_000,
   );
 });
 

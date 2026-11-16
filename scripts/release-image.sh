@@ -2,7 +2,7 @@
 # F-024 BR-370: multi-platform release image build on the host Docker engine.
 # The inputs are validated first (BR-359), before any interpolation or docker
 # command. A dry run builds both platforms with no output, tag or login; a real
-# run logs in with GITHUB_TOKEN on stdin, pushes the one version tag and logs
+# run logs in with GITHUB_TOKEN on stdin, pushes the selected tags and logs
 # out on exit whatever the outcome. No cache import or export, no build
 # argument and no secret mount.
 set -u
@@ -36,7 +36,7 @@ matches() {
 NUMBER='(0|[1-9][0-9]*)'
 IDENTIFIER='(0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*)'
 SEMVER="^$NUMBER\\.$NUMBER\\.$NUMBER(-$IDENTIFIER(\\.$IDENTIFIER)*)?(\\+[0-9a-zA-Z-]+(\\.[0-9a-zA-Z-]+)*)?\$"
-STABLE="^$NUMBER\\.$NUMBER\\.$NUMBER(\\+[0-9a-zA-Z-]+(\\.[0-9a-zA-Z-]+)*)?\$"
+STABLE="^$NUMBER\\.$NUMBER\\.$NUMBER\$"
 BETA="^$NUMBER\\.$NUMBER\\.$NUMBER-beta\\.$NUMBER\$"
 
 case $version in
@@ -44,12 +44,10 @@ case $version in
 *)
 	if ! matches "$version" "$SEMVER"; then
 		reason='version is not a SemVer version'
-	elif matches "$version" "$BETA"; then
+	elif matches "$version" "$BETA" || matches "$version" "$STABLE"; then
 		reason=''
-	elif matches "$version" "$STABLE"; then
-		reason='stable releases are out of scope (F-024 v1)'
 	else
-		reason='unsupported pre-release'
+		reason='unsupported release version'
 	fi
 	;;
 esac
@@ -74,10 +72,15 @@ fi
 
 builder="kdrive-release-$$"
 logged_in=false
+metadata_dir=''
 cleanup() {
 	status=$?
 	if test "$logged_in" = true; then docker logout "$REGISTRY" >/dev/null 2>&1 || true; fi
 	docker buildx rm "$builder" >/dev/null 2>&1 || true
+	if test -n "$metadata_dir"; then
+		rm -f "$metadata_dir/metadata.json"
+		rmdir "$metadata_dir"
+	fi
 	exit "$status"
 }
 trap cleanup EXIT
@@ -100,11 +103,39 @@ test -n "${GITHUB_TOKEN-}" || {
 logged_in=true
 printf '%s' "$GITHUB_TOKEN" | docker login "$REGISTRY" \
 	--username "${GITHUB_ACTOR:-x-access-token}" --password-stdin >/dev/null || exit 1
+metadata_dir=$(mktemp -d) || exit 1
+set -- --tag "$REGISTRY/$REPOSITORY:$version"
+if matches "$version" "$STABLE"; then
+	set -- "$@" --tag "$REGISTRY/$REPOSITORY:latest"
+fi
 docker buildx build --builder "$builder" \
 	--platform linux/amd64,linux/arm64 --target runtime \
-	--tag "$REGISTRY/$REPOSITORY:$version" \
+	"$@" --metadata-file "$metadata_dir/metadata.json" \
 	--label "org.opencontainers.image.source=https://github.com/$REPOSITORY" \
 	--label "org.opencontainers.image.version=$version" \
 	--label "org.opencontainers.image.revision=$sha" \
 	--push . || exit 1
 printf 'release-image: pushed %s/%s:%s\n' "$REGISTRY" "$REPOSITORY" "$version"
+
+if matches "$version" "$STABLE"; then
+	# Parse JSON inside the Docker-only dev toolchain. Stdin avoids mounting a
+	# host temporary path, and validation happens before command substitution
+	# can strip trailing newlines from an untrusted value.
+	digest=$(docker compose run --rm -T dev node -e '
+const fs = require("node:fs");
+try {
+  const metadata = JSON.parse(fs.readFileSync(0, "utf8"));
+  const digest = metadata?.["containerimage.digest"];
+  if (typeof digest !== "string" || digest.length !== 71 ||
+      !/^sha256:[0-9a-f]{64}$/.test(digest)) process.exit(1);
+  process.stdout.write(digest);
+} catch { process.exit(1); }
+' < "$metadata_dir/metadata.json") || {
+		printf '%s\n' 'release-image: buildx metadata digest is not a sha256 digest' >&2
+		exit 1
+	}
+	if test -n "${GITHUB_OUTPUT-}"; then
+		printf 'image_digest=%s\n' "$digest" >> "$GITHUB_OUTPUT" || exit 1
+	fi
+	printf 'release-image: image digest %s\n' "$digest"
+fi

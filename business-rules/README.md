@@ -679,28 +679,28 @@ to v3, accepted on actual main `e857db3` on 2026-11-13; v3 is the active rule.
 | ID                  | Version | Rule                                                                           | Source                                             | Status |
 | ------------------- | ------- | ------------------------------------------------------------------------------ | -------------------------------------------------- | ------ |
 | [BR-353](BR-353.md) | v1      | Scoped lockfile names; `make pack` writes one scoped tarball.                  | [F-024 v2](../features/F-024-gated-publication.md) | Active |
-| [BR-354](BR-354.md) | v1      | README, SPEC.md and publishing docs: scoped name, preconditions, recovery.     | [F-024 v2](../features/F-024-gated-publication.md) | Active |
+| [BR-354](BR-354.md) | v2      | First stable guide and recovery; version-dependent installs. | [F-024 v3](../features/F-024-gated-publication.md) | v2 pending acceptance; v1 active |
 | [BR-355](BR-355.md) | v1      | `release.yml`: dispatch-only, three inputs, `{}` permissions, four jobs.       | [F-024 v2](../features/F-024-gated-publication.md) | Active |
-| [BR-356](BR-356.md) | v1      | Job guards, permissions and needs; one job per publishing credential.          | [F-024 v2](../features/F-024-gated-publication.md) | Active |
-| [BR-357](BR-357.md) | v1      | Exact steps per job; checkout of the dispatched `main` HEAD only.              | [F-024 v2](../features/F-024-gated-publication.md) | Active |
-| [BR-358](BR-358.md) | v1      | Closed-set keys, step env, inputs and the single `GITHUB_TOKEN` credential.    | [F-024 v2](../features/F-024-gated-publication.md) | Active |
-| [BR-359](BR-359.md) | v1      | Input validation first: beta SemVer, full sha, boolean, phase.                 | [F-024 v2](../features/F-024-gated-publication.md) | Active |
+| [BR-356](BR-356.md) | v2      | Image digest job output and read-back dependency; existing gates retained. | [F-024 v3](../features/F-024-gated-publication.md) | v2 pending acceptance; v1 active |
+| [BR-357](BR-357.md) | v2      | Exact release step order with release-image and release-npm IDs. | [F-024 v3](../features/F-024-gated-publication.md) | v2 pending acceptance; v1 active |
+| [BR-358](BR-358.md) | v2      | Closed workflow sets with phase-specific image digest forwarding. | [F-024 v3](../features/F-024-gated-publication.md) | v2 pending acceptance; v1 active |
+| [BR-359](BR-359.md) | v2      | Stable/beta validation and phase-specific image digest inputs. | [F-024 v3](../features/F-024-gated-publication.md) | v2 pending acceptance; v1 active |
 | [BR-360](BR-360.md) | v1      | Release commit: `VERSION`, `package.json` and lockfile versions.               | [F-024 v2](../features/F-024-gated-publication.md) | Active |
 | [BR-361](BR-361.md) | v1      | Tag on the commit, commit on `main`, `GITHUB_SHA` equals the sha.              | [F-024 v2](../features/F-024-gated-publication.md) | Active |
 | [BR-362](BR-362.md) | v1      | Green `ci-result` on a `main` push or dispatch run of the sha.                 | [F-024 v2](../features/F-024-gated-publication.md) | Active |
-| [BR-363](BR-363.md) | v1      | Version unpublished; npm placeholder on `latest`; GHCR per phase.              | [F-024 v2](../features/F-024-gated-publication.md) | Active |
+| [BR-363](BR-363.md) | v2      | First-stable npm boundary, ordering and phase-specific GHCR checks. | [F-024 v3](../features/F-024-gated-publication.md) | v2 pending acceptance; v1 active |
 | [BR-364](BR-364.md) | v1      | Checks only read and all run after input validation.                           | [F-024 v2](../features/F-024-gated-publication.md) | Active |
 | [BR-365](BR-365.md) | v1      | One line per check and a summary; no token or body in output.                  | [F-024 v2](../features/F-024-gated-publication.md) | Active |
 | [BR-366](BR-366.md) | v1      | One internal-error line on stderr and exit 2.                                  | [F-024 v2](../features/F-024-gated-publication.md) | Active |
 | [BR-367](BR-367.md) | v1      | Endpoint overrides for doubles; refused in CI with exit 2.                     | [F-024 v2](../features/F-024-gated-publication.md) | Active |
-| [BR-368](BR-368.md) | v1      | npm dist-tag `beta`; one version image tag; never `latest`.                    | [F-024 v2](../features/F-024-gated-publication.md) | Active |
-| [BR-369](BR-369.md) | v1      | Checked tarball, npm >= 11.5.1, OIDC only, exact publish argv.                 | [F-024 v2](../features/F-024-gated-publication.md) | Active |
-| [BR-370](BR-370.md) | v1      | Two-platform image build; login, push and labels only for real runs.           | [F-024 v2](../features/F-024-gated-publication.md) | Active |
+| [BR-368](BR-368.md) | v2      | Beta version tag; stable npm latest and both image tags. | [F-024 v3](../features/F-024-gated-publication.md) | v2 pending acceptance; v1 active |
+| [BR-369](BR-369.md) | v2      | Checked tarball and OIDC-only exact npm argv with kind-specific tag. | [F-024 v3](../features/F-024-gated-publication.md) | v2 pending acceptance; v1 active |
+| [BR-370](BR-370.md) | v2      | Two-platform build, stable tags and validated buildx digest output. | [F-024 v3](../features/F-024-gated-publication.md) | v2 pending acceptance; v1 active |
 | [BR-371](BR-371.md) | v1      | `publish-npm` needs `publish-image`.                                           | [F-024 v2](../features/F-024-gated-publication.md) | Active |
-| [BR-372](BR-372.md) | v1      | npm read-back with retries: version, `beta`, placeholder, attestations.        | [F-024 v2](../features/F-024-gated-publication.md) | Active |
-| [BR-373](BR-373.md) | v1      | GHCR read-back: two platforms, not `latest`, public, digest printed.           | [F-024 v2](../features/F-024-gated-publication.md) | Active |
+| [BR-372](BR-372.md) | v2      | Kind-specific npm read-back, provenance and verified tarball. | [F-024 v3](../features/F-024-gated-publication.md) | v2 pending acceptance; v1 active |
+| [BR-373](BR-373.md) | v2      | Stable run digest on both public image indexes; beta unchanged. | [F-024 v3](../features/F-024-gated-publication.md) | v2 pending acceptance; v1 active |
 | [BR-374](BR-374.md) | v1      | `ci.yml` and `runner-acceptance.yml` unchanged.                                | [F-024 v2](../features/F-024-gated-publication.md) | Active |
-| [BR-375](BR-375.md) | v1      | Release Make targets: container, `-e` lists, `GITHUB_OUTPUT` digest line.      | [F-024 v2](../features/F-024-gated-publication.md) | Active |
+| [BR-375](BR-375.md) | v2      | Release target digest forwarding and image GITHUB_OUTPUT. | [F-024 v3](../features/F-024-gated-publication.md) | v2 pending acceptance; v1 active |
 | [BR-378](BR-378.md) | v1      | `release` environment requires a reviewer and admits only `main`.              | [F-024 v2](../features/F-024-gated-publication.md) | Active |
 | [BR-379](BR-379.md) | v1      | Published npm tarball digest equals the `verify` digest.                       | [F-024 v2](../features/F-024-gated-publication.md) | Active |
 | [BR-016](BR-016.md) | v3      | Scoped package name; command, server-info name and User-Agent unchanged.       | [F-024 v2](../features/F-024-gated-publication.md) | Active |
