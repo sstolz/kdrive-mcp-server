@@ -2669,6 +2669,42 @@ describe("F-024 v3 npm and image publication", () => {
     },
   );
 
+  it("BR-368 v2 BR-370 v2 image argv: parser failure before login", async () => {
+    const fake = fakeBin();
+    executable(
+      join(fake.bin, "docker"),
+      FAKE_DOCKER.replace(
+        "  const result = spawnSync(argv[index + 1]",
+        "  process.exit(1);\n  const result = spawnSync(argv[index + 1]",
+      ),
+    );
+    const result = await run("/bin/sh", [IMAGE_SCRIPT], {
+      cwd: temporary("release-v3-image-parser-"),
+      env: {
+        ...gitEnv(),
+        PATH: `${fake.bin}:${process.env.PATH ?? ""}`,
+        FAKE_DOCKER_LOG: fake.dockerLog,
+        FAKE_DOCKER_STDIN: fake.stdin,
+        RELEASE_VERSION: STABLE,
+        RELEASE_SHA: GOOD_SHA,
+        RELEASE_DRY_RUN: "false",
+        GITHUB_TOKEN: TOKEN,
+      },
+    });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "release-image: buildx metadata digest is not a sha256 digest",
+    );
+    const calls = lines(fake.dockerLog);
+    expect(calls.some((call) => call.startsWith("compose run "))).toBe(true);
+    expect(calls.some((call) => call.startsWith("login"))).toBe(false);
+    expect(
+      calls.some(
+        (call) => call.startsWith("buildx build ") && call.includes("--push"),
+      ),
+    ).toBe(false);
+  });
+
   const metadataSample = JSON.parse(
     readFileSync("tests/fixtures/release/buildx-metadata-stable.json", "utf8"),
   ) as Record<string, unknown>;
@@ -2753,14 +2789,15 @@ describe("F-024 v3 npm and image publication", () => {
     async (name, version, dry, metadata, diagnostic, failBuild) => {
       const fake = fakeBin();
       if (name === "extra compose stdout") {
+        // Keep this case exercising real metadata after the pre-login self-check.
         executable(
           join(fake.bin, "docker"),
           FAKE_DOCKER.replace(
             "  const result = spawnSync(argv[index + 1]",
-            '  console.log("compose preamble");\n  const result = spawnSync(argv[index + 1]',
+            '  if (fs.readFileSync(process.env.FAKE_DOCKER_LOG, "utf8").includes("buildx build ")) console.log("compose preamble");\n  const result = spawnSync(argv[index + 1]',
           ).replace(
             "  process.exit(result.status === null ? 1 : result.status);",
-            '  console.log("\\ncompose epilogue");\n  process.exit(result.status === null ? 1 : result.status);',
+            '  if (fs.readFileSync(process.env.FAKE_DOCKER_LOG, "utf8").includes("buildx build ")) console.log("\\ncompose epilogue");\n  process.exit(result.status === null ? 1 : result.status);',
           ),
         );
       }

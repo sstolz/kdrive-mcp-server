@@ -229,14 +229,16 @@ re-run release jobs or touch registries.
    reuse the approval already granted to that job; the owner's re-run is
    then the publication go. Record the behavior observed at first occurrence
    in `docs/observations/`.
-3. A re-run is unavailable if the re-run window expired, main advanced so a
-   commit gate fails, run evidence is uncertain, the run was cancelled, its
-   artifacts are gone, or "Re-run all jobs" was used (verify fails because
+3. A re-run is unavailable if the re-run window expired, run evidence is
+   uncertain, the run was cancelled, its artifacts are gone, or "Re-run all
+   jobs" was used (verify fails because
    the image exists). Only when the same-run re-run is unavailable does the
    owner delete the GHCR candidate **package version**, identified by the
    digest in `release-image: image digest sha256:<hex>` and its exact
    `<version>` and `latest` tags. Delete the package version, not one tag:
-   both tags share that digest and deletion removes both.
+   both tags share that digest and deletion removes both. An advanced main
+   does not block the same-run re-run of the approved commit; it only blocks
+   a new dispatch of the old commit (step 5).
 4. Until deletion read-back confirms absence, preflight is **blocked: cleanup
    unconfirmed**. Confirm candidate and latest both GET 404. Preflight is now
    **ready: placeholder and both tags absent**, subject to all other gates.

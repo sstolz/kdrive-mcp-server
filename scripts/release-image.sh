@@ -33,6 +33,21 @@ matches() {
 	printf '%s\n' "$1" | grep -Eq "$2"
 }
 
+# Parse JSON inside the Docker-only dev toolchain. Stdin avoids mounting a
+# host temporary path; validate before substitution strips trailing newlines.
+parse_digest() {
+	docker compose run --rm -T dev node -e '
+const fs = require("node:fs");
+try {
+  const metadata = JSON.parse(fs.readFileSync(0, "utf8"));
+  const digest = metadata?.["containerimage.digest"];
+  if (typeof digest !== "string" || digest.length !== 71 ||
+      !/^sha256:[0-9a-f]{64}$/.test(digest)) process.exit(1);
+  process.stdout.write(digest);
+} catch { process.exit(1); }
+'
+}
+
 NUMBER='(0|[1-9][0-9]*)'
 IDENTIFIER='(0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*)'
 SEMVER="^$NUMBER\\.$NUMBER\\.$NUMBER(-$IDENTIFIER(\\.$IDENTIFIER)*)?(\\+[0-9a-zA-Z-]+(\\.[0-9a-zA-Z-]+)*)?\$"
@@ -100,10 +115,25 @@ test -n "${GITHUB_TOKEN-}" || {
 	printf '%s\n' 'release-image: GITHUB_TOKEN missing' >&2
 	exit 1
 }
+if matches "$version" "$STABLE"; then
+	metadata_dir=$(mktemp -d) || exit 1
+	fixture_digest='sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'
+	printf '{"containerimage.digest":"%s"}\n' "$fixture_digest" > "$metadata_dir/metadata.json" || exit 1
+	digest=$(parse_digest < "$metadata_dir/metadata.json") || {
+		printf '%s\n' 'release-image: buildx metadata digest is not a sha256 digest' >&2
+		exit 1
+	}
+	if test "${#digest}" -ne 71 || ! matches "$digest" '^sha256:[0-9a-f]{64}$' || test "$digest" != "$fixture_digest"; then
+		printf '%s\n' 'release-image: buildx metadata digest is not a sha256 digest' >&2
+		exit 1
+	fi
+	# The real build must write its own metadata; never reuse the fixture.
+	rm -f "$metadata_dir/metadata.json" || exit 1
+fi
 logged_in=true
 printf '%s' "$GITHUB_TOKEN" | docker login "$REGISTRY" \
 	--username "${GITHUB_ACTOR:-x-access-token}" --password-stdin >/dev/null || exit 1
-metadata_dir=$(mktemp -d) || exit 1
+if test -z "$metadata_dir"; then metadata_dir=$(mktemp -d) || exit 1; fi
 set -- --tag "$REGISTRY/$REPOSITORY:$version"
 if matches "$version" "$STABLE"; then
 	set -- "$@" --tag "$REGISTRY/$REPOSITORY:latest"
@@ -118,19 +148,7 @@ docker buildx build --builder "$builder" \
 printf 'release-image: pushed %s/%s:%s\n' "$REGISTRY" "$REPOSITORY" "$version"
 
 if matches "$version" "$STABLE"; then
-	# Parse JSON inside the Docker-only dev toolchain. Stdin avoids mounting a
-	# host temporary path, and validation happens before command substitution
-	# can strip trailing newlines from an untrusted value.
-	digest=$(docker compose run --rm -T dev node -e '
-const fs = require("node:fs");
-try {
-  const metadata = JSON.parse(fs.readFileSync(0, "utf8"));
-  const digest = metadata?.["containerimage.digest"];
-  if (typeof digest !== "string" || digest.length !== 71 ||
-      !/^sha256:[0-9a-f]{64}$/.test(digest)) process.exit(1);
-  process.stdout.write(digest);
-} catch { process.exit(1); }
-' < "$metadata_dir/metadata.json") || {
+	digest=$(parse_digest < "$metadata_dir/metadata.json") || {
 		printf '%s\n' 'release-image: buildx metadata digest is not a sha256 digest' >&2
 		exit 1
 	}
