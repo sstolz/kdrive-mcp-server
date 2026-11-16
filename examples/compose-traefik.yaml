@@ -22,7 +22,9 @@ services:
     ports:
       - "443:443"
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # Docker socket under /run; the Traefik image resolves its default
+      # Docker endpoint there.
+      - /run/docker.sock:/run/docker.sock:ro
       - acme:/acme
     configs:
       - source: traefik_transport
@@ -59,7 +61,10 @@ services:
       MCP_PUBLIC_URL: ${MCP_PUBLIC_URL:?set the public MCP URL}
       KDRIVE_ID: ${KDRIVE_ID:?set the kDrive ID}
       OAUTH_ISSUER: ${OAUTH_ISSUER:?set the upstream OIDC issuer URL}
-      OAUTH_ALLOWED_EMAILS: ${OAUTH_ALLOWED_EMAILS:?set the allowed email addresses}
+      # Allowlist: set at least one of the two lists (the server refuses both
+      # empty). Prefer subjects; an e-mail address can be reassigned (SPEC.md).
+      OAUTH_ALLOWED_SUBJECTS: ${OAUTH_ALLOWED_SUBJECTS:-}
+      OAUTH_ALLOWED_EMAILS: ${OAUTH_ALLOWED_EMAILS:-}
       OAUTH_UPSTREAM_CLIENT_ID: ${OAUTH_UPSTREAM_CLIENT_ID:?set the upstream client ID}
       OAUTH_ALLOWED_REDIRECT_URIS: ${OAUTH_ALLOWED_REDIRECT_URIS:?set the allowed redirect URIs}
       KDRIVE_TOKEN_FILE: /run/secrets/kdrive-token
