@@ -202,8 +202,8 @@ before freeze and before the PR. Never reuse withdrawn IDs.
   beta uses one. The real build writes a buildx `--metadata-file`.
   For stable only, validate its `containerimage.digest` as `sha256:<64 lowercase hex>` and
   expose it as the `publish-image` job output `image_digest`.
-  For stable, pass that output as `RELEASE_IMAGE_DIGEST` only via `publish-npm`'s `make release-check` and `read-back`'s
-  `make release-verify`; add `publish-image` to read-back dependencies. The image
+  Pass that output (empty for beta) as `RELEASE_IMAGE_DIGEST` only via
+  `publish-npm`'s `make release-check` and `read-back`'s `make release-verify`; add `publish-image` to read-back dependencies. The image
   recipe writes `image_digest=<digest>` to `GITHUB_OUTPUT` after validation.
   The workflow exposes `steps.release-image.outputs.image_digest` as
   `needs.publish-image.outputs.image_digest`. Beta behavior stays unchanged. Reject a missing
@@ -335,9 +335,10 @@ Implementation removes `unsupported pre-release` and
 | New stable latest public line                         | `release-verify: image latest is public (P-3) ok` or `release-verify: image latest is public (P-3) FAIL anonymous pull failed`                                |
 | Existing printed digest, unchanged                    | `release-verify: image digest sha256:<hex>`                                                                                                                   |
 
-The #91 refusal wins when npm `latest` is both non-placeholder and not
-deprecated. In stable phase `npm`, either GHCR tag returning 404, a failed
-status or token access maps to `image manifest unavailable`. Invalid index
+Once the npm document is readable, the #91 refusal takes precedence over
+every other npm condition. In stable phase `npm`, a GHCR token failure keeps
+the v1 token diagnostic; either GHCR tag returning 404 or another failed
+manifest status maps to `image manifest unavailable`. Invalid index
 content maps to `image manifest invalid`. A valid index with a different
 digest maps to `image digest does not match RELEASE_IMAGE_DIGEST`.
 
@@ -602,5 +603,9 @@ Round-1 decisions superseded by the owner narrowing:
   fixture to #89 and real README/SPEC checks to stable VERSION in #6.
 - **Round 3, finding 5: retained** — Merged duplicate install-edit ownership
   and BR-355 statements. Removed the blank line in the Out of scope list.
+- **Round 4 (diff-only), findings 1–3: retained** — A GHCR token failure in
+  stable phase `npm` keeps the v1 token diagnostic; the #91 refusal takes
+  precedence over every other npm condition once the npm document is
+  readable; BR-370 v2 forwards the image output (empty for beta).
 
 No approval or freeze is claimed.
