@@ -1,0 +1,10 @@
+{
+  "containerimage.descriptor": {
+    "mediaType": "application/vnd.oci.image.index.v1+json",
+    "digest": "sha256:d5e78967ed2fa9d256868c4925e2b505ca8147783942ae18d1bcfaa4fa521371",
+    "size": 1607
+  },
+  "containerimage.digest": "sha256:d5e78967ed2fa9d256868c4925e2b505ca8147783942ae18d1bcfaa4fa521371",
+  "image.name": "localhost:5000/ac36/kdrive:1.0.0,localhost:5000/ac36/kdrive:latest",
+  "buildx.build.ref": "ac36/ac360/<build-ref>"
+}
