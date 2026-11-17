@@ -18,8 +18,9 @@ release owners, maintainers and users of the registries' default tags.
 This is a security-sensitive full-path ticket: publication changes defaults
 and supply-chain evidence. This document is a draft, not a freeze or a release
 go. Independent strong-tier review followed by the strongest-tier decision
-pass is required before freeze. The policy recommendations identified as Q1
-and Q2 below are provisional; no implementation starts before their resolution.
+pass is required before freeze. The owner resolved Q1 and Q2 on 2026-11-17
+in issue #91; the decisions below govern this draft. No implementation starts
+before freeze.
 
 ### Implementation baseline
 
@@ -108,7 +109,10 @@ ADR-013 remains unused: no irreversible architecture choice is made here.
   AC-38, AC-39, AC-40, AC-41, AC-45.
   Change from v2: removes the blanket #91 refusal, accepts an older stable
   npm latest, accepts its matching GHCR default before stable image push,
-  and retains the new run's digest binding in phase npm.
+  compares stable candidates only against published stable versions, admits
+  a deprecated stable default for a gated stable fix, and retains the new
+  run's digest binding in phase npm. Every admitted stable advances npm
+  latest and GHCR latest; beta publication leaves both defaults unchanged.
 - **BR-372 v3** — npm read-back succeeds exactly when the npm read-back row
   for its release kind holds within the existing bounded retry loop.
   Verified by: AC-42, AC-45.
@@ -126,10 +130,12 @@ ADR-013 remains unused: no irreversible architecture choice is made here.
 
 - **BR-431 v1** — A beta candidate has strictly greater SemVer precedence
   than every published version except the original placeholder.
-  Verified by: AC-38. This is the recommended Q1 policy, not yet approved.
+  Verified by: AC-38. Policy source: owner decision 2026-11-17, issue #91.
 - **BR-432 v1** — A deprecated stable npm latest is an admissible default
   only for a stable successor authorized by the owner's version-and-SHA go.
-  Verified by: AC-40, AC-44. This is the recommended Q2 policy, not yet approved;
+  Verified by: AC-40, AC-44. The vulnerable version remains deprecated when
+  the healthy successor replaces it as default; no healthy earlier stable is required.
+  Policy source: owner decision 2026-11-17, issue #91;
   automated admission checks release kind and registry state, while the go
   remains an owner-evidence gate as in v3, not an agent-supplied bypass flag.
 - **BR-433 v1** — Cleanup of a candidate GHCR package version with a prior
@@ -184,14 +190,36 @@ below nonnumeric identifiers, nonnumeric identifiers use ASCII lexical order,
 a shorter equal prefix sorts lower, and stable exceeds prerelease at the same
 base. Build metadata never affects precedence. Registry keys may use any valid
 SemVer even though candidate syntax remains stable or beta.N only.
-A precedence-equal version with different build metadata still blocks.
+A precedence-equal version with different build metadata still blocks when
+it belongs to the candidate kind's comparison set below.
 
-Stable retains v3's strict ordering against **every** published version.
-BR-431 proposes the same for beta. Thus 1.0.1, 1.1.0 and 2.0.0 can follow
-1.0.0, subject to all intervening history; 1.1.0-beta.1 can follow 1.0.0;
-1.0.5-beta.1 after 1.1.0-beta.1 is refused; 1.0.1 after 1.1.0-beta.1 is also
-refused. Q1 asks the owner to confirm that hotfix consequence or choose a
-policy revision before freeze. No undocumented maintenance exception exists.
+A stable candidate must exceed **every published stable version** in the
+union history; prereleases do not block it. A beta candidate must exceed
+**every published version**, stable and prerelease, except P (BR-431).
+Malformed keys still refuse either kind before ordering. Thus stable
+1.1.1 can follow stable 1.1.0 and beta 1.2.0-beta.1, but stable 1.0.1 cannot
+follow stable 1.1.0. No independent stable maintenance line bypass exists.
+
+| Published history (besides P) | Candidate | Ordering result |
+| --- | --- | --- |
+| 1.0.0 | 1.0.1 / 1.1.0 / 2.0.0 | Allow each stable. |
+| 1.0.0 | 1.1.0-beta.1 | Allow beta. |
+| 1.1.0, 1.2.0-beta.1 | 1.1.1 | Allow stable; future beta does not block. |
+| 1.0.0, 1.1.0-beta.1 | 1.0.1 | Allow stable. |
+| 1.1.0 | 1.0.1 | Refuse stable hotfix below a published stable. |
+| 1.1.0, 1.2.0-beta.1 | 1.1.2-beta.1 | Refuse beta below a published beta. |
+| 1.0.0, 1.1.0-beta.1 | 1.0.5-beta.1 | Refuse beta. |
+| 1.0.5 | 1.0.5-beta.1 / 1.0.4 | Refuse each candidate. |
+| 1.0.5 | 1.0.6-beta.1 | Allow beta. |
+
+These results cover ordering only; every other gate still applies. Because
+a valid stable npm latest is the greatest published stable, every admitted
+stable necessarily exceeds it. Its image publication moves GHCR latest to
+the candidate's run digest, then npm publication moves npm latest to the
+candidate. Bootstrap creates these defaults in the same order. There is no
+admitted stable publication that leaves either latest on an older version.
+Beta publication changes only npm beta and the versioned GHCR tag; npm latest
+and GHCR latest stay untouched even when beta has greater precedence.
 
 An npm default is one of:
 
@@ -200,7 +228,7 @@ An npm default is one of:
 - **Stable:** latest is a supported plain stable version, its version entry
   records that exact version, its timestamp exists, and it is the greatest
   stable precedence in the union history. It is non-deprecated, except for
-  BR-432's proposed stable-fix path. P still exists and remains deprecated.
+  BR-432's stable-fix path. P still exists and remains deprecated.
 
 Missing latest, latest naming a beta/unknown version, incomplete default
 records, resetting latest to P after stable history, or latest behind another
@@ -229,8 +257,8 @@ closed. Beta candidate preflight keeps the existing HEAD checks.
 
 | Kind | Phase | npm | GHCR |
 | --- | --- | --- | --- |
-| Stable | verify / image | Bootstrap or stable default, including Q2 deprecated-stable exception; candidate unpublished and above all history | Candidate GET 404. Bootstrap: latest GET 404. Prior stable S: GET S and latest return valid indexes with identical raw-body hashes. |
-| Stable | npm | Same npm predicate; latest still names prior default, not candidate | Candidate and latest GET 200, valid indexes, both hashes equal RELEASE_IMAGE_DIGEST from this run. Do not compare latest to old S here. |
+| Stable | verify / image | Bootstrap or stable default, including BR-432 deprecated-stable exception; candidate unpublished and above every published stable | Candidate GET 404. Bootstrap: latest GET 404. Prior stable S: GET S and latest return valid indexes with identical raw-body hashes. Image publication then moves latest to this run's candidate digest. |
+| Stable | npm | Same npm predicate; latest still names prior default, not candidate; npm publication then moves latest to candidate | Candidate and latest GET 200, valid indexes, both hashes equal RELEASE_IMAGE_DIGEST from this run. Do not compare latest to old S here. |
 | Beta | verify / image | Bootstrap or healthy stable default; candidate unpublished and BR-431 ordering | Candidate HEAD 404; no new latest preflight request. |
 | Beta | npm | Same npm predicate; publish only with beta tag | Candidate HEAD 200; no run-digest comparison, no latest mutation. |
 | Stable | read-back | Candidate entry records exact version, candidate timestamp exists, latest equals candidate, candidate healthy, attestations present, tarball matches verify, P remains deprecated; beta need not move | Both candidate and latest valid indexes, hashes equal this run's digest; anonymous token and HEAD 200 for both. |
@@ -268,7 +296,7 @@ reason is `npm document unreadable; refer to the owner`. GHCR stays a separate
 | P selected after stable history | `npm placeholder latest cannot follow stable history` |
 | Latest behind another stable key | `npm latest is not the greatest published stable version` |
 | Deprecated stable latest for beta | `npm latest stable is deprecated; owner recovery required` |
-| Stable ordering failure, unchanged | `stable version is not greater than every published version` |
+| Stable ordering failure | `stable version is not greater than every published stable version` |
 | Beta ordering failure | `beta version is not greater than every published version` |
 | Invalid history key, unchanged | `npm versions contains a non-SemVer version key` or `npm time contains a non-SemVer version key` |
 | Candidate present in either object, unchanged | `version already published on npm` |
@@ -291,6 +319,10 @@ precedence and candidate-then-latest digest validation. Remove the blanket
 `releases after the first stable are out of scope; see #91 (F-024 v4)` and
 `GHCR latest already exists; first stable requires 404` from executable
 code and current expectations; immutable historical snapshots keep them.
+Replace the old `stable version is not greater than every published version`
+reason with the stable-only reason above. A future beta alone never produces
+a stable ordering failure. A valid deprecated stable default produces no
+default failure for a stable fix; beta retains its deprecated-default failure.
 
 The read-back report adds/replaces exactly the following lines; other v3
 lines remain as specified in the snapshot. `<reason>` below is restricted to
@@ -380,12 +412,14 @@ real mutation. Registry writes, including repointing, remain owner-only.
    registry preflight. Redispatch the original version only if it is still
    unpublished, its tagged commit is main HEAD, and a new successful dry run
    and owner go exist. If main advanced, use a new version satisfying the
-   ordering policy, a new tag, go and dry run; a patch is insufficient when
-   a published next-minor beta blocks it. Confirm cleanup before either
-   choice. No deletion, repoint or republish follows npm acceptance.
+   ordering policy, a new tag, go and dry run. Published betas cannot block
+   a stable patch above every published stable; a published higher stable
+   blocks a lower-line hotfix, and a higher published beta blocks a lower
+   beta. Confirm cleanup before either choice. No deletion, repoint or
+   republish follows npm acceptance.
 
-For Q2's recommended deprecated-default policy, the owner records the affected
-version, deprecation reason and intended fixed version/SHA in the release
+For the selected deprecated-default policy (BR-432), the owner records the
+affected version, deprecation reason and intended fixed version/SHA in the release
 ticket, leaves the vulnerable version deprecated, and gives the usual go and
 exact-pair dry-run evidence. Stable preflight permits that default and still
 requires all ordering, image, CI, provenance and approval gates. The successor
@@ -394,7 +428,8 @@ until a healthy stable latest exists. If no earlier healthy stable exists, this
 forward-fix route still works. A deprecated old image is restored only to the
 unchanged npm default during failed-fix cleanup; that restores consistency,
 not a claim that the vulnerable release is safe. If ordering blocks the desired
-hotfix, Q1 governs the version choice; deprecation is not an ordering bypass.
+hotfix, the stable-only ordering rule governs the version choice; deprecation
+is not an ordering bypass.
 
 Guide/rehearsal success states are exactly
 `recovery: registry preflight ready` (after fresh checks) and the restored
@@ -409,8 +444,8 @@ BR-354, BR-363, BR-372 and BR-373, adds proposed v3 sections and a History line
 `v3 — <implementation-PR-date> — F-024 v4 (#91) — <change described above>;
 pending acceptance, v2 stays accepted until acceptance`.
 New BR-431–BR-433 use version 1, source F-024 v4 and pending acceptance.
-Every rule gets a named unit test and concrete boundary examples; Q1/Q2
-resolutions are reflected before freeze. No BR record is edited in this phase.
+Every rule gets a named unit test and concrete boundary examples reflecting
+the owner-resolved Q1/Q2 policies. No BR record is edited in this phase.
 Acceptance and token accounting belong to #91, with per-agent model/effort,
 exposed counters and coverage limits only; no invented attribution or per-run
 repository files. Durable observations are promoted at closure. Synchronize
@@ -425,13 +460,15 @@ the Docker-only toolchain. Each planned test cites its rule/version.
 
 - **AC-37 (BR-354 v3)** — Given the guide and existing policy tests, when
   `BR-354 v3 lifecycle guide` in `tests/release-policy.test.ts` runs, then it
-  verifies the matrices, Q1/Q2 resolved policies, diagnostics, recovery command,
-  all preserved install/pinning/mutable-tag advice and unchanged owner gates.
+  verifies the matrices, owner-resolved Q1/Q2 policies, diagnostics, recovery
+  command, all preserved install/pinning/mutable-tag advice and unchanged owner gates.
 - **AC-38 (BR-363 v3, BR-431 v1)** — Given both history objects and candidates,
   when `BR-363 v3 BR-431 v1 ordering: %s` in `tests/release.test.ts` runs, then
-  the chosen precedence policy admits stable 1.0.1/1.1.0/2.0.0 after 1.0.0
-  and beta 1.1.0-beta.1 after 1.0.0, and under recommended Q1 refuses
-  1.0.5-beta.1 and stable 1.0.1 after 1.1.0-beta.1. Given stable 1.0.5 alone,
+  every ordering-table row has its stated result, including stable
+  1.1.1 after both stable 1.1.0 and beta 1.2.0-beta.1, stable 1.0.1 after
+  stable 1.0.0 and beta 1.1.0-beta.1, refusal of stable 1.0.1 after stable
+  1.1.0, and refusal of beta 1.1.2-beta.1 after beta 1.2.0-beta.1.
+  Given stable 1.0.5 alone,
   when testing 1.0.5-beta.1 or 1.0.4, then both refuse; 1.0.6-beta.1 passes.
   Given beta.9/beta.10, numeric components above 2^53, prerelease lexical and
   prefix cases, precedence-equal build metadata, time-only versions,
@@ -449,9 +486,12 @@ the Docker-only toolchain. Each planned test cites its rule/version.
 - **AC-40 (BR-363 v3, BR-432 v1)** — Given deprecated stable latest 1.0.0
   with no healthy earlier stable and candidate 1.0.1, when
   `BR-432 v1 deprecated stable recovery: %s` in `tests/release.test.ts` runs,
-  then under recommended Q2 all stable preflight phases pass valid registry
+  then all stable preflight phases pass valid registry
   state, beta refuses with the exact deprecated-default diagnostic, and
-  stable read-back succeeds only after latest selects healthy 1.0.1.
+  stable read-back succeeds only after latest selects healthy 1.0.1, with
+  1.0.0 still deprecated. Include published 1.2.0-beta.1: the stable fix
+  remains eligible. Include published stable 1.1.0 as the deprecated default:
+  candidate 1.0.1 refuses with the stable-only ordering diagnostic.
   Given missing go, dry-run evidence or deployment approval in the rehearsal,
   when the same recovery is attempted, then publication never occurs.
 - **AC-41 (BR-363 v3)** — Given S/latest indexes of the old digest, when
@@ -467,8 +507,10 @@ the Docker-only toolchain. Each planned test cites its rule/version.
   read-back fixtures, when `BR-372 v3 BR-373 v3 lifecycle read-back: %s` in
   `tests/release.test.ts` runs, then each row succeeds only with all its
   conditions; beta leaves both defaults unchanged and stable binds both
-  image tags to the run. Given each missing record, wrong version/time/tag,
-  candidate deprecation, missing provenance, wrong tarball, changed stable
+  image tags to the run. Include stable 1.1.1 after stable 1.1.0 and beta
+  1.2.0-beta.1: npm latest becomes 1.1.1 and GHCR latest becomes its run
+  digest; the beta dist-tag need not move. Given each missing record, wrong
+  version/time/tag, candidate deprecation, missing provenance, wrong tarball, changed stable
   default mapping, missing public latest or bad image hash/platform, when
   read-back runs, then it fails after bounded npm retries where applicable,
   with exactly the specified lines. Assert bootstrap regression, exactly
@@ -490,7 +532,13 @@ the Docker-only toolchain. Each planned test cites its rule/version.
   npm/Docker, when `F-024 v4 lifecycle rehearsal: %s` in
   `tests/release.test.ts` runs end to end, then later stable, post-stable
   beta and deprecated-default fix execute verify, approvals, image, npm and
-  read-back in order with exact argv and digest forwarding. Given denied or
+  read-back in order with exact argv and digest forwarding. Rehearse stable
+  1.1.1 after stable 1.1.0 and beta 1.2.0-beta.1: GHCR latest advances during
+  image publication, then npm latest advances during npm publication.
+  Rehearse the deprecated-default fix without removing its deprecation,
+  including when no healthy earlier stable exists. Refused stable 1.0.1
+  after stable 1.1.0 and beta 1.1.2-beta.1 after beta 1.2.0-beta.1 stop before
+  either publication. Given denied or
   expired second approval, npm preflight/publish failure, partial image push,
   uncertain npm success, cancelled/expired retry, missing artifact and
   advanced main, when recovery runs, then same-run npm retry is preferred,
@@ -538,10 +586,21 @@ the Docker-only toolchain. Each planned test cites its rule/version.
   default. Reject comparing GHCR latest to old npm latest in that phase:
   image publication intentionally moved it already. Reject a second workflow
   or extra promotion tag because they add credential/approval paths.
-- **D-2 History is the ordering authority.** Preserve stable ordering against
-  both history objects, exact integers and build-metadata equivalence; use a
-  full comparator for beta. Reject dist-tags-only ordering because tags can
-  move backwards or hide a published version. Beta/hotfix policy remains Q1.
+- **D-2 Kind-specific ordering (Q1).** Select stable candidates greater than
+  every published stable and beta candidates greater than every published
+  version except P (owner decision 2026-11-17, issue #91). Use both history
+  objects, exact integers and build-metadata equivalence. Published betas do
+  not block stable fixes: 1.1.1 after 1.1.0 and 1.2.0-beta.1 is eligible.
+  Every admitted stable exceeds current stable latest and moves both npm
+  latest and GHCR latest through the existing publication sequence. Betas
+  leave both defaults untouched. Refuse stable 1.0.1 after stable 1.1.0 and
+  beta 1.1.2-beta.1 after beta 1.2.0-beta.1. Reject the draft's option A
+  (both kinds above all history), because future betas would block forward
+  stable fixes. Reject option B (beta ordering only against stables and
+  same-base betas), because it allows the beta channel to move backwards.
+  Reject option C (independent maintenance lines for both kinds), because
+  it admits stable hotfixes below a published stable. Reject dist-tags-only
+  ordering because movable tags can hide published history.
 - **D-3 Copy and verify raw bytes.** Use the existing Docker buildx toolchain's
   single-source imagetools command and raw GET hashes. Reject rebuilds,
   JSON reconstruction, multi-source creation and HEAD-only proof because
@@ -550,37 +609,23 @@ the Docker-only toolchain. Each planned test cites its rule/version.
 - **D-4 Forward-only npm recovery.** Retain same-run owner npm retry before
   owner cleanup, and no npm deletion/republish after acceptance. Reject
   automatic rollback or agent-issued registry commands because uncertain
-  outcomes and digest-wide deletion require owner reconciliation. Deprecated
-  default admission is Q2; no new secret, bypass flag or npm mutation command
-  is introduced by its recommended option.
+  outcomes and digest-wide deletion require owner reconciliation. Select Q2
+  option A: a gated forward stable fix while the vulnerable default remains
+  deprecated, even without a healthy earlier stable (owner decision
+  2026-11-17, issue #91). Beta remains blocked until healthy stable latest;
+  the fixed successor must read back healthy. No deprecation removal,
+  ordering bypass, new secret, bypass flag or npm mutation command is added.
+  Reject Q2 option B (first repoint npm latest to a healthy prior stable),
+  because it requires an exception to the greatest-stable-default predicate
+  and has no recovery path when no healthy prior stable exists.
 - **D-5 Preserve accepted contracts and evidence.** Archive v3 verbatim,
   version four same-purpose BRs, allocate BR-431–BR-433 provisionally and
   leave implementation records pending. Reject rewriting v3 evidence or
   claiming current registry state from a historical fixture. No ADR is
-  allocated for these reversible script/guide choices; unresolved release
-  policy is not recorded as an architectural decision.
+  allocated for these reversible script/guide choices; the resolved release
+  policies are recorded in D-2 and D-4.
 
 ## Open questions
-
-1. **Q1 — Ordering and maintenance releases.** Option A (recommended): keep
-   stable greater than every published version and require beta likewise;
-   refuse 1.0.5-beta.1 and stable 1.0.1 after 1.1.0-beta.1. This preserves the
-   stated stable ordering scope and one monotonically advancing beta channel,
-   but requires a fix at or beyond the beta line. Option B: retain strict
-   stable ordering, order betas only against all stables plus betas of the
-   same base, and allow lower-line betas to move `beta` backwards. Option C:
-   permit independent maintenance lines for stable and beta; this changes
-   the requested all-published stable policy and requires an explicit scope
-   revision. Confirm A or select B/C; the draft matrices/ACs currently use A.
-2. **Q2 — Deprecated stable latest.** Option A (recommended): allow a gated
-   forward stable fix with the vulnerable default still deprecated, including
-   when no healthy older release exists; owner go identifies the recovery,
-   beta remains blocked and the fixed candidate must read back healthy.
-   Option B: require the owner first to repoint npm latest to a healthy prior
-   stable, with a reviewed exception to the greatest-stable-default predicate;
-   if none exists, stop for a separate recovery decision. A avoids removing a
-   vulnerability warning and always has a forward-fix route at an eligible
-   version. The draft BR-432 and AC-40/AC-44 currently use A.
 
 ## Residual risks
 
@@ -589,8 +634,9 @@ remain: any other same-repository workflow with packages: write can move
 latest, and image latest can precede npm until publication or owner cleanup.
 Digest pinning remains recommended. Image signing remains deferred to #92.
 The v3 temporary "no gated release after 1.0.0" limitation is resolved only
-when v4 passes acceptance. Q1's maintenance restriction and Q2's temporary
-exposure of a deprecated default need the owner's policy decision above.
+when v4 passes acceptance. Under the owner-selected policies (2026-11-17,
+issue #91), lower-line stable hotfixes below a published stable remain refused,
+and a deprecated default can remain exposed until a gated forward fix succeeds.
 No command creates a registry-wide transaction; external writes between
 checks remain possible. Recovery stops on uncertainty rather than treating
 check-before-delete as an atomic guarantee.
