@@ -37,6 +37,9 @@ the day of the 1.0 publication.
 
 ## Versions
 
+`1.0.0` is prepared for publication through the gated workflow (#6).
+Publication and the stable image digest are pending.
+
 - The public beta was first `0.6.0-beta.1`; the current published beta is
   `0.6.0-beta.2` (2026-11-15).
   Each beta is published under the npm dist-tag `beta` with public access.

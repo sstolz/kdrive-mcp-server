@@ -4,10 +4,13 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-11-17
+
 ### Added
 
-- #89 / F-024 v3 (pending acceptance): first stable release through the gated
-  workflow with npm and GHCR `latest`; later releases belong to #91.
+- #89 / F-024 v3 (implementation accepted 2026-11-17): first stable release
+  through the gated workflow with npm and GHCR `latest`; later releases
+  belong to #91.
 
 ## [0.6.0-beta.2] - 2026-11-15
 
@@ -533,3 +536,8 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
 - This repository's #1: the public-export tooling (`scripts/public-export.ts`, its tests and the
   `public-export` and `public-commit` Make targets), used once to publish this
   repository from the archive.
+
+[Unreleased]: https://github.com/sstolz/kdrive-mcp-server/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/sstolz/kdrive-mcp-server/compare/v0.6.0-beta.2...v1.0.0
+[0.6.0-beta.2]: https://github.com/sstolz/kdrive-mcp-server/compare/v0.6.0-beta.1...v0.6.0-beta.2
+[0.6.0-beta.1]: https://github.com/sstolz/kdrive-mcp-server/releases/tag/v0.6.0-beta.1
