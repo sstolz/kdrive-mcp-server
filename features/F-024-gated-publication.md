@@ -2,7 +2,7 @@
 id: F-024
 title: Stable release lifecycle
 ticket: "#91"
-status: ready-for-freeze
+status: frozen
 version: 4
 ---
 
@@ -16,11 +16,9 @@ and defines recovery when an image has published before npm fails. It affects
 release owners, maintainers and users of the registries' default tags.
 
 This is a security-sensitive full-path ticket: publication changes defaults
-and supply-chain evidence. This document is ready for freeze; it grants no
-freeze or release go. Independent strong-tier review followed by the strongest-tier decision
-pass is required before freeze. The owner resolved Q1 and Q2 on 2026-11-17
-in issue #91; the decisions below govern this draft. No implementation starts
-before freeze.
+and supply-chain evidence. This version is frozen (see the end of
+Stress-test); it grants no release go. The owner resolved Q1 and Q2 on
+2026-11-17 in issue #91; the decisions below govern this version.
 
 ### Implementation baseline
 
@@ -853,3 +851,10 @@ Inherited dispositions use the supplied `91-spec-review-1-opus` coverage summary
 - **91-spec-review-2-opus finding 1: retained** — The time-only stable recovery case requires no npm default repair but reconciles a stale GHCR latest to S's recorded digest with the byte-preserving command and GET confirmation; AC-44 rehearses that mismatch variant.
 - **91-spec-review-2-opus finding 2: retained** — Beta bootstrap verify/image use `GHCR latest exists without a stable npm default`; phase npm and read-back retain `latest names the release` when candidate comparison cannot prove a different digest.
 - **91-spec-review-2-opus finding 3: retained** — AC-39 links BR-373 v3 for beta image read-back, and BR-363 v3's change list explicitly includes the GHCR default check in every beta preflight phase.
+
+Frozen on 2026-11-17 at `ad3928e` (autonomous freeze, PROJECT.md D-1) after
+`91-spec-review-2-opus` (strong tier, approve), `91-spec-decision-1-fable`
+(strongest tier, approve), and the diff-only confirmations
+`91-spec-review-3-opus` and `91-spec-review-4-opus` (approve) of the minors
+folded in since; owner decisions Q1, Q2 and decision-pass finding 3 (option
+A) on #91; freeze record on #91.
