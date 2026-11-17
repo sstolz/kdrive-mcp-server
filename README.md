@@ -43,13 +43,13 @@ official server has them.
 It speaks standard MCP, so any compatible client can use it; only claude.ai
 has been verified end to end so far.
 
-**Status:** `1.0.0` is prepared ([VERSION](VERSION)) for the gated release
-workflow ([docs/publishing.md](docs/publishing.md)). `1.0.0` is published on npm
-`latest` and GHCR `1.0.0` and `latest`.
-The release will publish `@sstolz/kdrive-mcp-server` under npm `latest` and
-`ghcr.io/sstolz/kdrive-mcp-server:1.0.0` for `linux/amd64` and `linux/arm64`.
-Pin the image by the digest printed by release read-back; the 1.0.0 digest
-is not available yet. The examples below apply after publication.
+**Status:** `1.0.0` ([VERSION](VERSION)) was published on 2026-11-17 through
+the gated release workflow: `@sstolz/kdrive-mcp-server` under npm `latest` and
+`ghcr.io/sstolz/kdrive-mcp-server` under tags `1.0.0` and `latest` for
+`linux/amd64` and `linux/arm64`. Pin the image by its OCI index digest:
+`sha256:6f14301d4e9b0c4cd7c2f39b45f15c9b1222e92879ee10ea1131d06dac806708`.
+See the record under "First stable publication" in
+[docs/publishing.md](docs/publishing.md).
 Changes are listed in [CHANGELOG.md](CHANGELOG.md).
 
 ## What it offers

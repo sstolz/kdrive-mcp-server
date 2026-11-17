@@ -37,8 +37,10 @@ the day of the 1.0 publication.
 
 ## Versions
 
-`1.0.0` is prepared for publication through the gated workflow (#6).
-Publication and the stable image digest are pending.
+`1.0.0` is the current stable release (#6), published on 2026-11-17 (see the
+record under [First stable publication](#first-stable-publication-f-024-v3-89)).
+The image index digest is
+`sha256:6f14301d4e9b0c4cd7c2f39b45f15c9b1222e92879ee10ea1131d06dac806708`.
 
 - The public beta was first `0.6.0-beta.1`; the current published beta is
   `0.6.0-beta.2` (2026-11-15).
