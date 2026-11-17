@@ -522,10 +522,11 @@ SIGNING_KEY_FILE=./secrets/signing-key.pem
   `123456:/Private/Documents`) and, if needed, `KDRIVE_MCP_DENY` to the
   `environment` of the service; the [README](../README.md#configure) lists the settings.
   Paths follow the kDrive API tree: the personal space sits under a `Private`
-  folder that the web UI does not show. A root by folder ID avoids this path
-  segment. Deny patterns match the same full paths: a pattern without the
-  `/Private` prefix is accepted but hides nothing in the personal space. Use
-  a subfolder pattern such as `/Private/Documents/Confidential/**`. A filtered
+  folder that the web UI does not show. A root given by folder ID needs no
+  path; item paths and deny patterns still include `/Private`. An absolute
+  deny pattern written from the web UI path, such as `/Documents/Confidential/**`,
+  is accepted but matches nothing in the personal space. Write the pattern
+  from the full path, for example `/Private/Documents/Confidential/**`. A filtered
   item looks the same to the client as a missing one (`ACCESS_DENIED`).
 - The reverse proxy must preserve the `Host` header and close idle upstream
   keep-alive connections in less than 5 s, the server's keep-alive timeout;
@@ -652,10 +653,10 @@ of those combinations have been verified with this server.
   be bound, prints "The HTTP listener could not be started.". An audit log that cannot be opened prints "The audit log could not be opened or
   is not a private regular file." (check the owner and mode of the file and
   of the mount). With `restart: on-failure:3`, Compose retries three times.
-- **`[CREDENTIAL_INVALID]` with a nonempty secret file.** Stray whitespace or
-  an invisible control character in a secret file can cause this error. Only
-  one trailing newline is stripped. Rewrite the file without stray whitespace
-  or control characters, then restart.
+- **`[CREDENTIAL_INVALID]`.** An empty file, or an extra line break, carriage
+  return, tab or other control character beyond one trailing newline can cause
+  this error (a plain space does not trigger it). Rewrite the file with the
+  token only, then restart.
 - **`[PREFLIGHT_FAILED]` with `403 all_scopes`.** The kDrive API token lacks the
   `drive` scope. Create a token in **Tokens API → Créer un token** with
   **Application par défaut** and **drive — Produits Drive** (step 2), replace

@@ -52,9 +52,12 @@ parent folder ID.
 - Result: the personal space sits under a `Private` folder in the API tree,
   hidden by the web UI. `123456:/Documents` did not resolve the intended root;
   `123456:/Private/Documents` did, as did a root by folder ID. Deny patterns
-  used the same full paths: a pattern without `/Private` was accepted but hid
-  nothing, while the prefixed subfolder pattern hid the folder from listings
-  and refused listing or reading inside it with `ACCESS_DENIED`. A filtered
+  used the same full paths: an absolute pattern written from the web UI path,
+  such as `/Documents/Confidential/**`, was accepted but matched nothing in the
+  personal space. Write the pattern from the full path, for example
+  `/Private/Documents/Confidential/**`. The prefixed subfolder pattern hid the
+  folder from listings and refused listing or reading inside it with
+  `ACCESS_DENIED`. A filtered
   item looked the same to the client as a missing one. With the configured
   root, access to `/Private` and `/` was refused with `ACCESS_DENIED`; the
   drive listing showed only the configured root.

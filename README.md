@@ -180,9 +180,11 @@ The essential settings:
 | `KDRIVE_MCP_TRANSPORT`      | `stdio` or `http`.                                                                                                                                  | `stdio`            |
 
 Paths follow the kDrive API tree: the personal space sits under a `Private`
-folder that the web UI does not show. A root by folder ID avoids this path
-segment. Deny patterns match the same full paths: a pattern without the
-`/Private` prefix is accepted but hides nothing in the personal space. A
+folder that the web UI does not show. A root given by folder ID needs no path;
+item paths and deny patterns still include `/Private`. An absolute deny pattern
+written from the web UI path, such as `/Documents/Confidential/**`, is accepted
+but matches nothing in the personal space. Write the pattern from the full
+path, for example `/Private/Documents/Confidential/**`. A
 filtered item looks the same to the client as a missing one (`ACCESS_DENIED`).
 
 Never put a token in a CLI argument or in the YAML file. Size limits
@@ -639,9 +641,11 @@ Upload (`kdrive_upload`):
 Deny patterns:
 
 - Patterns match full, case-sensitive paths in the kDrive API tree, including
-  the `Private` folder hidden by the web UI. A root by folder ID avoids that
-  path segment; deny patterns still use the full paths. A pattern without the
-  `/Private` prefix is accepted but hides nothing in the personal space.
+  the `Private` folder hidden by the web UI. A root given by folder ID needs no
+  path; item paths and deny patterns still include `/Private`. An absolute
+  pattern written from the web UI path, such as `/Documents/Confidential/**`,
+  is accepted but matches nothing in the personal space. Write the pattern
+  from the full path, for example `/Private/Documents/Confidential/**`.
   `/Private/Documents/Confidential/**` covers that folder and everything below
   it; `/Private/Documents/Confidential` matches only that exact path. A
   filtered item looks the same to the client as a missing one (`ACCESS_DENIED`).
