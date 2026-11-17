@@ -412,15 +412,15 @@ fail the job and are triaged as tickets.
 
 An install of the packed tarball or of the published package (`npm install -g`)
 resolves no `zod` below 4.6.6 from the first release that includes #12
-(`0.6.0-beta.2`, and `1.0.0`) (F-027): the image route uses the dependency-free
+(`0.6.0-beta.2`; `1.0.0` also includes it) (F-027): the image route uses the dependency-free
 codecs `pngjs` and `jpeg-js` directly (see
 [ADR-010](architecture-decisions/ADR-010-direct-image-codecs.md)), and the CI
 `audit` job checks such an install of the packed tarball with
 `make install-check`. Earlier published versions (`0.6.0-beta.1` and older)
 still resolve Jimp's nested Zod 3 (`zod` 3.25.76,
 [GHSA-mrhx-c7xc-m3w5](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5)) on
-such an install, so their users upgrade to the first release that includes #12
-(`0.6.0-beta.2`) or later, such as `1.0.0`,
+such an install, so their users upgrade to `1.0.0` (or to the first release
+that includes #12, `0.6.0-beta.2`, until `1.0.0` is published)
 or use the container image, whose `npm ci` install is not affected.
 
 **Supported versions:** security fixes go to the latest 1.x release only.

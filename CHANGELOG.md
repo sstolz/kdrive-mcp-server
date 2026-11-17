@@ -14,8 +14,8 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
 
 ### Changed
 
-- The runtime is unchanged since `0.6.0-beta.2`; the package description no
-  longer says the interface may change.
+- The runtime is unchanged since `0.6.0-beta.2` apart from the reported
+  version; the package description no longer says the interface may change.
 
 ## [0.6.0-beta.2] - 2026-11-15
 
