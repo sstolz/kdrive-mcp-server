@@ -123,4 +123,10 @@ quote anyone's words.
   removed (#6). Where a decision is the owner's, the issue says
   "owner decision needed".
 
+- **D-13 — 2026-11-17 — Automatic head-branch deletion.** The repository
+  setting "Automatically delete head branches" is on: GitHub deletes a PR's
+  head branch when the PR is merged. This is the owner's standing
+  authorization required by AGENTS.md §6 for merged head branches only; any
+  other branch, file or data deletion still needs its own go.
+
 D-8 (Fable 5.2) is folded into D-3.
