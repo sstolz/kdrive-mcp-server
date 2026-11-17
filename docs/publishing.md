@@ -220,7 +220,7 @@ both approvals and read-back evidence in the release ticket. Agents never
 re-run release jobs or touch registries.
 
 **Record (2026-11-17).** The owner dispatched
-[release run 44054183190](https://github.com/sstolz/kdrive-mcp-server/actions/runs/44054183190)
+release run 44054183190
 with `dry_run=false`, version `1.0.0` and SHA
 `89dc00830a363a62108ddeb45970c43d48d08cf1`. Jobs `verify`, `publish-image`,
 `publish-npm` and `read-back` all succeeded; read-back reported
