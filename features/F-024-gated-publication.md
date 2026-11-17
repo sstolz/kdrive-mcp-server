@@ -106,7 +106,8 @@ ADR-013 remains unused: no irreversible architecture choice is made here.
   npm latest, accepts its matching GHCR default before stable image push,
   compares stable candidates only against published stable versions, admits
   a deprecated stable default for a gated stable fix, and retains the new
-  run's digest binding in phase npm. Every admitted stable advances npm
+  run's digest binding in phase npm; beta preflight checks the GHCR default
+  against the npm stable default in every phase. Every admitted stable advances npm
   latest and GHCR latest; beta publication leaves both defaults unchanged.
 - **BR-372 v3** — npm read-back succeeds exactly when the npm read-back row
   for its release kind holds within the existing bounded retry loop.
@@ -313,8 +314,8 @@ reason is `npm document unreadable; refer to the owner`. GHCR stays a separate
 | Stable npm 404, unchanged | `npm registry status 404` |
 | Candidate before image push, unchanged | `image already published` |
 | Npm default invalid or unreadable, so no validated bootstrap/S is available | `npm stable default unavailable` |
-| Bootstrap latest present | `GHCR latest exists without a stable npm default` |
-| Beta bootstrap latest present without a readable valid candidate index of a different raw-body hash | `latest names the release` |
+| Bootstrap latest present in stable preflight or beta verify/image | `GHCR latest exists without a stable npm default` |
+| Beta bootstrap latest present in phase npm or read-back without a readable valid candidate index of a different raw-body hash | `latest names the release` |
 | Prior stable S GET 404 | `previous stable image unavailable` |
 | Prior stable latest GET 404 | `GHCR latest missing for stable npm default` |
 | Prior stable S or latest invalid index | `previous stable image manifest invalid` |
@@ -328,10 +329,12 @@ status/presence before prior-default checks, then S availability, latest
 availability, index validity and hash equality. Phase npm retains v3's token
 precedence and candidate-then-latest digest validation for stable. Beta uses
 the same prior-stable availability/index/hash reasons in all preflight phases;
-bootstrap latest GET 404 passes, while GET 200 without proof of a different
-candidate digest uses `latest names the release`. Other bootstrap GET failures
-use the fixed status/token reasons above. The bootstrap-latest-present reason
-without a stable npm default remains the stable preflight reason.
+bootstrap latest GET 404 passes, while GET 200 in beta verify/image uses
+`GHCR latest exists without a stable npm default`. In beta phase npm and
+read-back, GET 200 without proof of a different candidate digest uses
+`latest names the release`. Other bootstrap GET failures use the fixed
+status/token reasons above. Stable preflight also uses
+`GHCR latest exists without a stable npm default` for bootstrap latest present.
 
 Only resolve/request S after npm latest validates as a supported plain stable
 default under the npm predicates for that kind, including record completeness,
@@ -483,8 +486,11 @@ are unavailable, stop for owner diagnosis; no automatic fallback is allowed.
 Then rerun all release gates and exact-pair dry-run/go requirements. No release
 mode gains an npm dist-tag command. If a higher stable was unpublished and is
 now time-only, leave latest on the greatest remaining `versions` stable:
-no default repair is required, but choose a new candidate above the union
-history (for example 1.0.2 after time-only 1.0.1); never attempt to republish it.
+no npm default repair is required. If GHCR latest still names the unpublished
+stable's digest, the owner reconciles it to S's recorded digest under separate
+authorization using the byte-preserving command and GET confirmation above.
+Choose a new candidate above the union history (for example 1.0.2 after
+time-only 1.0.1); never attempt to republish it.
 
 Guide/rehearsal success states are exactly
 `recovery: registry preflight ready` (after fresh checks) and the restored
@@ -530,7 +536,7 @@ the Docker-only toolchain. Each planned test cites its rule/version.
   versions-only versions, P, stage and malformed keys in either object,
   when every phase and dry-run boolean is checked, then ordering and exact
   first-failure diagnostics match this spec; created/modified alone are ignored.
-- **AC-39 (BR-363 v3)** — Given a healthy older stable S and valid candidate,
+- **AC-39 (BR-363 v3, BR-373 v3)** — Given a healthy older stable S and valid candidate,
   when `BR-363 v3 lifecycle phase matrix: %s` runs in `tests/release.test.ts`,
   then every table row passes only its stated npm/GHCR predicates. Given
   latest absent, beta, missing entry/time, stale stable, or reset P after
@@ -634,7 +640,10 @@ the Docker-only toolchain. Each planned test cites its rule/version.
   is rehearsed, then publication first refuses, manual separately authorized
   npm/GHCR default reconciliation restores matching greatest-stable defaults,
   and fresh gates admit an eligible new candidate. Include time-only 1.0.1
-  above latest 1.0.0: stable 1.0.2 needs no default repair.
+  above latest 1.0.0: stable 1.0.2 needs no npm default repair. Given GHCR
+  latest still names unpublished 1.0.1's digest, when the owner separately
+  authorizes reconciliation, then the byte-preserving command restores it
+  to S's recorded digest, GET confirms equality, and fresh gates admit 1.0.2.
   No successful/uncertain npm publication is blindly replayed. All guide
   branches run against doubles before any real-environment request.
 - **AC-45 (all changed/new rules and retained v3 gates)** — Given every
@@ -767,3 +776,6 @@ Inherited dispositions use the supplied `91-spec-review-1-opus` coverage summary
 - **91-spec-review-1-opus finding 7: retained** — Provisional allocation wording replaces the highest-file worktree observation, preserving IDs and main rechecks.
 - **91-spec-review-1-opus finding 8: retained** — Removed the stale comment-fetch statement and recorded one disposition per inherited and current finding here, using the supplied summary and preserved historical dispositions.
 - **91-spec-review-1-opus finding 9: retained** — The F-024 index row records Q1/Q2 resolved on 2026-11-17 (#91) and ready-for-freeze status, matching the spec.
+- **91-spec-review-2-opus finding 1: retained** — The time-only stable recovery case requires no npm default repair but reconciles a stale GHCR latest to S's recorded digest with the byte-preserving command and GET confirmation; AC-44 rehearses that mismatch variant.
+- **91-spec-review-2-opus finding 2: retained** — Beta bootstrap verify/image use `GHCR latest exists without a stable npm default`; phase npm and read-back retain `latest names the release` when candidate comparison cannot prove a different digest.
+- **91-spec-review-2-opus finding 3: retained** — AC-39 links BR-373 v3 for beta image read-back, and BR-363 v3's change list explicitly includes the GHCR default check in every beta preflight phase.
