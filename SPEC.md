@@ -86,8 +86,8 @@ docker run … 'ghcr.io/sstolz/kdrive-mcp-server:1.0.0@sha256:<digest>' # image 
 ```
 
 Épingler une version exacte pour des mises à jour prévisibles. Épingler l'image
-par le digest de manifeste affiché par la relecture de release. Les exemples
-1.0.0 s'appliquent après la publication.
+par le digest de manifeste affiché par la relecture de release. La version
+1.0.0 est publiée ; son digest figure dans `docs/publishing.md`.
 
 | | stdio | HTTP |
 |---|---|---|

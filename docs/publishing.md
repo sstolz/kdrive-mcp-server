@@ -37,8 +37,10 @@ the day of the 1.0 publication.
 
 ## Versions
 
-`1.0.0` is prepared for publication through the gated workflow (#6).
-Publication and the stable image digest are pending.
+`1.0.0` is the current stable release (#6), published on 2026-11-17 (see the
+record under [First stable publication](#first-stable-publication-f-024-v3-89)).
+The image index digest is
+`sha256:6f14301d4e9b0c4cd7c2f39b45f15c9b1222e92879ee10ea1131d06dac806708`.
 
 - The public beta was first `0.6.0-beta.1`; the current published beta is
   `0.6.0-beta.2` (2026-11-15).
@@ -218,6 +220,21 @@ Each release requires the exact-version, exact-SHA go and successful real
 dry run before a recovered redispatch or a new patch version too. Record
 both approvals and read-back evidence in the release ticket. Agents never
 re-run release jobs or touch registries.
+
+**Record (2026-11-17).** The owner dispatched
+release run 44054183190
+with `dry_run=false`, version `1.0.0` and SHA
+`89dc00830a363a62108ddeb45970c43d48d08cf1`. Jobs `verify`, `publish-image`,
+`publish-npm` and `read-back` all succeeded; read-back reported
+`release-verify: 0 of 13 checks failed`.
+
+- npm `@sstolz/kdrive-mcp-server` dist-tags: `latest=1.0.0`,
+  `beta=0.6.0-beta.2`; `1.0.0` was published with provenance.
+- Public GHCR image `ghcr.io/sstolz/kdrive-mcp-server`: tags `1.0.0` and
+  `latest` both resolve to OCI index
+  `sha256:6f14301d4e9b0c4cd7c2f39b45f15c9b1222e92879ee10ea1131d06dac806708`
+  (`linux/amd64`, `linux/arm64`).
+- Evidence: [#6 comment `6-release-1-claude`](https://github.com/sstolz/kdrive-mcp-server/issues/6#issuecomment-6945806696).
 
 ### Owner-only first-stable recovery (D-4)
 
