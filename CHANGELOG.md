@@ -12,6 +12,11 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
   through the gated workflow with npm and GHCR `latest`; later releases
   belong to #91.
 
+### Changed
+
+- The runtime is unchanged since `0.6.0-beta.2`; the package description no
+  longer says the interface may change.
+
 ## [0.6.0-beta.2] - 2026-11-15
 
 ### Added
