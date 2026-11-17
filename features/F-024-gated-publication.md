@@ -2,7 +2,7 @@
 id: F-024
 title: Gated first stable publication
 ticket: "#89"
-status: frozen
+status: done
 version: 3
 ---
 

@@ -268,8 +268,12 @@ this run's digest, and owner-only recovery. Later releases belong to #91.
 [BR-373 v2](business-rules/BR-373.md),
 [BR-375 v2](business-rules/BR-375.md) are active after acceptance on main
 `6a508ab` on 2026-11-17 (#89 comments `89-acceptance-1-claude` and
-`89-acceptance-2-owner`). F-024 v3 remains frozen: AC-35 runs at the release.
-Publication is pending. The beta acceptance evidence below is preserved.
+`89-acceptance-2-owner`). F-024 v3 is done: AC-35 passed on 2026-11-17
+([release run 44054183190](https://github.com/sstolz/kdrive-mcp-server/actions/runs/44054183190),
+[#89 comment `89-acceptance-3-claude`](https://github.com/sstolz/kdrive-mcp-server/issues/89#issuecomment-6945807239));
+`1.0.0` is published on npm `latest` and GHCR `1.0.0`/`latest` at OCI index
+`sha256:6f14301d4e9b0c4cd7c2f39b45f15c9b1222e92879ee10ea1131d06dac806708`.
+The beta acceptance evidence below is preserved.
 
 ## Accepted — gated beta publication
 
