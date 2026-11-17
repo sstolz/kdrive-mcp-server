@@ -264,8 +264,8 @@ Server settings (the `environment` of the service; the server reads no
 | `KDRIVE_ID`                         | The drive to serve.                                                                             | Yes, or `KDRIVE_IDS`                                         | `123456`                              |
 | `KDRIVE_IDS`                        | Several drives, comma-separated; the first is the default.                                      | Instead of `KDRIVE_ID`                                       | `123456,234567`                       |
 | `KDRIVE_MCP_MODE`                   | `read`, `write` or `share`.                                                                     | No (default `read`); set by the example                      | `read`                                |
-| `KDRIVE_MCP_ROOTS`                  | Root folders per drive, by ID or path; must cover every configured drive.                       | No (default: folder 1 of each drive)                         | `123456:/Documents`                   |
-| `KDRIVE_MCP_DENY`                   | Comma-separated, case-sensitive path patterns to hide.                                          | No                                                           | `/Private/**`                         |
+| `KDRIVE_MCP_ROOTS`                  | Root folders per drive, by ID or path; must cover every configured drive.                       | No (default: folder 1 of each drive)                         | `123456:/Private/Documents`           |
+| `KDRIVE_MCP_DENY`                   | Comma-separated, case-sensitive path patterns to hide.                                          | No                                                           | `/Private/Documents/Confidential/**`  |
 | `KDRIVE_MCP_SHARED_WITH_ME`         | `1` to read items other users shared with you.                                                  | No (default `0`)                                             | `0`                                   |
 | `KDRIVE_MCP_AUDIT_LOG`              | Write audit log: `stderr` or an absolute file path.                                             | No (default `stderr`); a file is advised in `write` mode     | `/audit/audit.jsonl`                  |
 | `OAUTH_ISSUER`                      | Issuer URL of the upstream OpenID Connect provider, exactly as its discovery document gives.    | Yes                                                          | `https://login.example.com`           |
@@ -331,7 +331,7 @@ You need:
 
 ### 1. Get the image
 
-After publication, pull the stable image, or build from source (see
+Pull the published stable image, or build from source (see
 [Current status](#current-status) for the difference).
 
 **Stable image, pinned by digest.** Read the digest of the multi-platform
@@ -391,12 +391,15 @@ time of writing.
    `<MCP_PUBLIC_URL>/oauth/callback`, here
    `https://mcp.example.com/mcp/oauth/callback`.
    Keep its client ID and client secret (step 4). Then open **Développeur** →
-   **Tokens API** → **Créer un token**: select that application, the scope
-   **drive — Produits Drive** and a validity (1 day to unlimited). Log in as
+   **Tokens API** → **Créer un token**: select **Application par défaut**, the
+   scope **drive — Produits Drive** and a validity (1 day to unlimited). Log in as
    an account that has the **admin** role on every drive you will configure:
    startup checks the role and stops with `[DRIVE_NOT_ALLOWED]` otherwise. The
    token is shown once; it goes into `secrets/kdrive-token` in step 3, never
-   into a variable or a file you commit.
+   into a variable or a file you commit. The OAuth API application only offers
+   OpenID scopes here and is used only for login (client ID/secret). A token
+   without the `drive` scope makes startup fail with `[PREFLIGHT_FAILED]`:
+   kDrive answers `403 all_scopes`.
 2. **The drive ID.** `KDRIVE_ID` is the number in the kDrive web app URL
    after `/kdrive/app/drive/`: for example, a path that contains
    `/kdrive/app/drive/123456/` gives `123456`.
@@ -516,8 +519,14 @@ SIGNING_KEY_FILE=./secrets/signing-key.pem
   [OAuth proxy notes](oauth-proxy.md#origin-discovery-procedure): a nonempty
   list makes every CIMD-capable client use CIMD.
 - To limit the server to some folders, add `KDRIVE_MCP_ROOTS` (for example
-  `123456:/Documents`) and, if needed, `KDRIVE_MCP_DENY` to the `environment`
-  of the service; the [README](../README.md#configure) lists the settings.
+  `123456:/Private/Documents`) and, if needed, `KDRIVE_MCP_DENY` to the
+  `environment` of the service; the [README](../README.md#configure) lists the settings.
+  Paths follow the kDrive API tree: the personal space sits under a `Private`
+  folder that the web UI does not show. A root by folder ID avoids this path
+  segment. Deny patterns match the same full paths: a pattern without the
+  `/Private` prefix is accepted but hides nothing in the personal space. Use
+  a subfolder pattern such as `/Private/Documents/Confidential/**`. A filtered
+  item looks the same to the client as a missing one (`ACCESS_DENIED`).
 - The reverse proxy must preserve the `Host` header and close idle upstream
   keep-alive connections in less than 5 s, the server's keep-alive timeout;
   otherwise reused sockets can produce intermittent 502 responses. With
@@ -643,6 +652,15 @@ of those combinations have been verified with this server.
   be bound, prints "The HTTP listener could not be started.". An audit log that cannot be opened prints "The audit log could not be opened or
   is not a private regular file." (check the owner and mode of the file and
   of the mount). With `restart: on-failure:3`, Compose retries three times.
+- **`[CREDENTIAL_INVALID]` with a nonempty secret file.** Stray whitespace or
+  an invisible control character in a secret file can cause this error. Only
+  one trailing newline is stripped. Rewrite the file without stray whitespace
+  or control characters, then restart.
+- **`[PREFLIGHT_FAILED]` with `403 all_scopes`.** The kDrive API token lacks the
+  `drive` scope. Create a token in **Tokens API → Créer un token** with
+  **Application par défaut** and **drive — Produits Drive** (step 2), replace
+  the token file and restart. The OAuth API application only offers OpenID
+  scopes there.
 - **`403` with `invalid_host`.** The reverse proxy did not preserve the `Host`
   header, or `MCP_HOSTNAME` differs from the host of `MCP_PUBLIC_URL`.
 - **The provider shows a redirect error at login.** The redirect URI registered

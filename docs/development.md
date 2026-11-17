@@ -348,8 +348,8 @@ are opaque: loading them proves no algorithm or cryptographic readiness.
 
 Configure `--drive-id` or `--drive-ids`; token visibility never adds drives. With
 only a list, its first drive is the default. Absent roots select folder ID 1 on
-each configured drive. Present roots, such as `7:42,8:/Documents`, must cover every
-configured drive and no others. YAML sequences can represent comma-containing
+each configured drive. Present roots, such as `7:42,8:/Private/Documents`, must
+cover every configured drive and no others. YAML sequences can represent comma-containing
 paths. No path or numeric ID authorizes a root before injected preflight.
 
 The default level is `read`; `write` and `share` are cumulative. Shared reads,
