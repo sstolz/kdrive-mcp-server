@@ -33,8 +33,9 @@ This server adds:
   (`KDRIVE_MCP_SHARED_WITH_ME`);
 - the tools above;
 - configured root folders: nothing outside them is visible;
-- deny patterns (`KDRIVE_MCP_DENY`, for example `/Private/**`): matching paths
-  are hidden from listings, search and reads, and cannot be written;
+- deny patterns (`KDRIVE_MCP_DENY`, for example
+  `/Private/Documents/Confidential/**`): matching paths are hidden from
+  listings, search and reads, and cannot be written;
 - an audit log of every write, recorded before and after it is sent.
 
 Share tools are not available yet (`share` mode registers none, #20); the
@@ -87,14 +88,14 @@ Paths and IDs below are fake; substitute your own values.
 ```sh
 KDRIVE_TOKEN_FILE=/home/you/.config/kdrive/token \
 KDRIVE_ID=123456 \
-KDRIVE_MCP_ROOTS=123456:/Documents \
+KDRIVE_MCP_ROOTS=123456:/Private/Documents \
 KDRIVE_MCP_MODE=read \
   npx -y @sstolz/kdrive-mcp-server@1.0.0
 ```
 
 Your AI client launches this command itself and communicates over stdin and
 stdout. Configure it under [Local client (stdio)](#local-client-stdio).
-This example exposes only `/Documents` on drive `123456`. Start in `read`
+This example exposes only `/Private/Documents` on drive `123456`. Start in `read`
 mode, check the tools from your client, then switch to `write` only if you
 need it ([Limits and risks](#limits-and-risks)).
 
@@ -103,8 +104,8 @@ need it ([Limits and risks](#limits-and-risks)).
 You can use the published image `ghcr.io/sstolz/kdrive-mcp-server` instead.
 Docker must be running and accessible to the client.
 
-After publication, read the image's digest, then pull it by digest. Both the
-version tag and `latest` can be overwritten.
+Read the published image's digest, then pull it by digest. Both the version
+tag and `latest` can be overwritten.
 
 ```sh
 docker buildx imagetools inspect ghcr.io/sstolz/kdrive-mcp-server:1.0.0
@@ -128,7 +129,7 @@ file or put a token in the client configuration.
 docker run -i --rm \
   -e KDRIVE_ID=123456 \
   -e KDRIVE_MCP_MODE=read \
-  -e KDRIVE_MCP_ROOTS=123456:/Documents \
+  -e KDRIVE_MCP_ROOTS=123456:/Private/Documents \
   -e KDRIVE_TOKEN_FILE=/run/secrets/kdrive-token \
   -v /home/you/.config/kdrive/token:/run/secrets/kdrive-token:ro \
   'ghcr.io/sstolz/kdrive-mcp-server:1.0.0@sha256:<digest>'
@@ -137,7 +138,7 @@ docker run -i --rm \
 The image starts `node /app/dist/cli.js`; stdio is the default transport, so
 no command or transport argument is needed after the image name. Keep `-i`
 and omit `-t` so stdin stays open without a terminal. This example exposes
-only `/Documents` on drive `123456`. Start in `read` mode, check the tools
+only `/Private/Documents` on drive `123456`. Start in `read` mode, check the tools
 from your client, then switch to `write` only if you need it
 ([Limits and risks](#limits-and-risks)).
 
@@ -167,16 +168,24 @@ Settings come from, in priority order: CLI options, environment variables, one
 YAML file selected with `--config PATH`, then defaults. No `.env` file is read.
 The essential settings:
 
-| Environment variable        | Purpose                                                                                                                      | Default            |
-| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ------------------ |
-| `KDRIVE_TOKEN_FILE`         | Absolute path of a file holding the kDrive API token (preferred). `KDRIVE_TOKEN` passes it inline.                           | —                  |
-| `KDRIVE_ID` / `KDRIVE_IDS`  | One drive ID, or a comma-separated list whose first entry is the default drive.                                              | —                  |
-| `KDRIVE_MCP_MODE`           | `read`, `write` or `share`.                                                                                                  | `read`             |
-| `KDRIVE_MCP_ROOTS`          | Root folders per drive, by ID or path, for example `7:42,8:/Documents`. Must cover every configured drive.                   | folder 1 per drive |
-| `KDRIVE_MCP_DENY`           | Comma-separated path patterns to hide, for example `/Private/**`. Case-sensitive; see [Limits and risks](#limits-and-risks). | none               |
-| `KDRIVE_MCP_AUDIT_LOG`      | `stderr` or an absolute file path for the write audit log (`write` and `share` modes).                                       | `stderr`           |
-| `KDRIVE_MCP_SHARED_WITH_ME` | `1` to read items other users shared with you (`0` or `1`).                                                                  | `0`                |
-| `KDRIVE_MCP_TRANSPORT`      | `stdio` or `http`.                                                                                                           | `stdio`            |
+| Environment variable        | Purpose                                                                                                                                             | Default            |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ |
+| `KDRIVE_TOKEN_FILE`         | Absolute path of a file holding the kDrive API token (preferred). `KDRIVE_TOKEN` passes it inline.                                                  | —                  |
+| `KDRIVE_ID` / `KDRIVE_IDS`  | One drive ID, or a comma-separated list whose first entry is the default drive.                                                                     | —                  |
+| `KDRIVE_MCP_MODE`           | `read`, `write` or `share`.                                                                                                                         | `read`             |
+| `KDRIVE_MCP_ROOTS`          | Root folders per drive, by ID or path, for example `7:42,8:/Private/Documents`. Must cover every configured drive.                                  | folder 1 per drive |
+| `KDRIVE_MCP_DENY`           | Comma-separated path patterns to hide, for example `/Private/Documents/Confidential/**`. Case-sensitive; see [Limits and risks](#limits-and-risks). | none               |
+| `KDRIVE_MCP_AUDIT_LOG`      | `stderr` or an absolute file path for the write audit log (`write` and `share` modes).                                                              | `stderr`           |
+| `KDRIVE_MCP_SHARED_WITH_ME` | `1` to read items other users shared with you (`0` or `1`).                                                                                         | `0`                |
+| `KDRIVE_MCP_TRANSPORT`      | `stdio` or `http`.                                                                                                                                  | `stdio`            |
+
+Paths follow the kDrive API tree: the personal space sits under a `Private`
+folder that the web UI does not show. A root given by folder ID needs no path;
+item paths and deny patterns still include `/Private`. An absolute deny pattern
+written from the web UI path, such as `/Documents/Confidential/**`, is accepted
+but matches nothing in the personal space. Write the pattern from the full
+path, for example `/Private/Documents/Confidential/**`. A
+filtered item looks the same to the client as a missing one (`ACCESS_DENIED`).
 
 Never put a token in a CLI argument or in the YAML file. Size limits
 (`KDRIVE_MCP_MAX_READ_BYTES`, `KDRIVE_MCP_MAX_OUTPUT_CHARS`, …), the HTTP and
@@ -196,9 +205,8 @@ Manager in French at the time of writing; Infomaniak may rename them. The
 [deployment guide](docs/deployment.md#2-collect-the-infomaniak-values-and-register-the-oauth-client)
 describes the same steps in order.
 
-- **API application** (needed for the token, and for the OAuth client of a
-  remote deployment). In the Manager: **Utilisateurs et profils** → **Mon
-  profil** → **Développeur** → **Application API** → **Créer une nouvelle
+- **API application** (for OAuth login in a remote deployment only). In the
+  Manager: **Utilisateurs et profils** → **Mon profil** → **Développeur** → **Application API** → **Créer une nouvelle
   application**. Choose the type **Application** and any name. The
   application URL field is the OAuth redirect (callback) URI. For a local
   test, enter `http://127.0.0.1:8765/callback`. For a deployment, enter `<MCP_PUBLIC_URL>/oauth/callback`, for example
@@ -207,7 +215,7 @@ describes the same steps in order.
   uses them as `OAUTH_UPSTREAM_CLIENT_ID` and the client secret file.
 - **API token** (`KDRIVE_TOKEN_FILE`). In the Manager: **Utilisateurs et
   profils** → **Mon profil** → **Développeur** → **Tokens API** → **Créer un
-  token**. Select the application created above, the scope **drive — Produits
+  token**. Select **Application par défaut**, the scope **drive — Produits
   Drive**, and a validity (1 day, 1 month, 6 months, 1 year or unlimited; a
   shorter validity limits the damage of a leak but needs renewal). Log in as
   an account with the **admin** role on every drive you configure. Infomaniak's
@@ -216,7 +224,10 @@ describes the same steps in order.
   token list in the Manager:
   <https://manager.infomaniak.com/v3/ng/accounts/token/list>. The token is
   shown once: store it in a file only you can read, never in a CLI argument or
-  a committed file.
+  a committed file. The OAuth API application above only offers OpenID scopes
+  here and is used only for login (client ID/secret). A token without the
+  `drive` scope makes startup fail with `[PREFLIGHT_FAILED]`: kDrive answers
+  `403 all_scopes`.
 - **Drive ID** (`KDRIVE_ID`). The number in the kDrive web app URL after
   `/kdrive/app/drive/`: for example,
   `https://ksuite.infomaniak.com/kdrive/app/drive/123456/…` gives `123456`.
@@ -275,7 +286,7 @@ project):
 claude mcp add kdrive --scope user \
   -e KDRIVE_TOKEN_FILE=/home/you/.config/kdrive/token \
   -e KDRIVE_ID=123456 \
-  -e KDRIVE_MCP_ROOTS=123456:/Documents \
+  -e KDRIVE_MCP_ROOTS=123456:/Private/Documents \
   -e KDRIVE_MCP_MODE=read \
   -- npx -y @sstolz/kdrive-mcp-server@1.0.0
 ```
@@ -294,7 +305,7 @@ then restart the client:
       "env": {
         "KDRIVE_TOKEN_FILE": "/home/you/.config/kdrive/token",
         "KDRIVE_ID": "123456",
-        "KDRIVE_MCP_ROOTS": "123456:/Documents",
+        "KDRIVE_MCP_ROOTS": "123456:/Private/Documents",
         "KDRIVE_MCP_MODE": "read"
       }
     }
@@ -314,7 +325,7 @@ project):
 claude mcp add kdrive --scope user -- docker run -i --rm \
   -e KDRIVE_ID=123456 \
   -e KDRIVE_MCP_MODE=read \
-  -e KDRIVE_MCP_ROOTS=123456:/Documents \
+  -e KDRIVE_MCP_ROOTS=123456:/Private/Documents \
   -e KDRIVE_TOKEN_FILE=/run/secrets/kdrive-token \
   -v /home/you/.config/kdrive/token:/run/secrets/kdrive-token:ro \
   'ghcr.io/sstolz/kdrive-mcp-server:1.0.0@sha256:<digest>'
@@ -339,7 +350,7 @@ then restart the client:
         "-e",
         "KDRIVE_MCP_MODE=read",
         "-e",
-        "KDRIVE_MCP_ROOTS=123456:/Documents",
+        "KDRIVE_MCP_ROOTS=123456:/Private/Documents",
         "-e",
         "KDRIVE_TOKEN_FILE=/run/secrets/kdrive-token",
         "-v",
@@ -629,8 +640,15 @@ Upload (`kdrive_upload`):
 
 Deny patterns:
 
-- Patterns match full, case-sensitive paths. `/private/**` covers the folder
-  and everything below it; `/private` matches only that exact path.
+- Patterns match full, case-sensitive paths in the kDrive API tree, including
+  the `Private` folder hidden by the web UI. A root given by folder ID needs no
+  path; item paths and deny patterns still include `/Private`. An absolute
+  pattern written from the web UI path, such as `/Documents/Confidential/**`,
+  is accepted but matches nothing in the personal space. Write the pattern
+  from the full path, for example `/Private/Documents/Confidential/**`.
+  `/Private/Documents/Confidential/**` covers that folder and everything below
+  it; `/Private/Documents/Confidential` matches only that exact path. A
+  filtered item looks the same to the client as a missing one (`ACCESS_DENIED`).
 - Patterns match the exact stored code points. Write the NFC form of a
   non-ASCII pattern to cover names these tools create, and keep (or add) the
   stored form for any existing item whose name is not NFC; replacing a

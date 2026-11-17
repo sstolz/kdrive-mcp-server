@@ -21,6 +21,17 @@ parent folder ID.
   OAuth proxy of this server (`proxy-only`), never by direct token validation.
 - Evidence: (private archive).
 
+### kDrive token scope
+
+- Date: 2026-11-17.
+- Method: owner-run personal deployment of `1.0.0` with a claude.ai connector.
+- Result: in **Tokens API → Créer un token**, the OAuth API application only
+  offered OpenID scopes. **Application par défaut** offered **drive — Produits
+  Drive**. A token without the `drive` scope received `403 all_scopes` from
+  kDrive and startup failed with `[PREFLIGHT_FAILED]`. The OAuth application's
+  client ID and secret are used only for login.
+- Evidence: [issue #99](https://github.com/sstolz/kdrive-mcp-server/issues/99).
+
 ### Drive initialisation
 
 - Date: 2026-11-02.
@@ -30,6 +41,27 @@ parent folder ID.
   HTTP 200 with one projection per accessible drive (ID and role). A bare
   `GET /2/drive` was reported as 422 in the earlier historical notes.
 - Evidence: (private archive); summary in `docs/kdrive-read-evidence.md`.
+
+## Paths and configured roots
+
+### Hidden personal-space segment and deny patterns
+
+- Date: 2026-11-17.
+- Method: owner-run personal deployment of `1.0.0` with a claude.ai connector;
+  path-root, folder-ID root, listing and read checks.
+- Result: the personal space sits under a `Private` folder in the API tree,
+  hidden by the web UI. `123456:/Documents` did not resolve the intended root;
+  `123456:/Private/Documents` did, as did a root by folder ID. Deny patterns
+  used the same full paths: an absolute pattern written from the web UI path,
+  such as `/Documents/Confidential/**`, was accepted but matched nothing in the
+  personal space. Write the pattern from the full path, for example
+  `/Private/Documents/Confidential/**`. The prefixed subfolder pattern hid the
+  folder from listings and refused listing or reading inside it with
+  `ACCESS_DENIED`. A filtered
+  item looked the same to the client as a missing one. With the configured
+  root, access to `/Private` and `/` was refused with `ACCESS_DENIED`; the
+  drive listing showed only the configured root.
+- Evidence: [issue #99](https://github.com/sstolz/kdrive-mcp-server/issues/99).
 
 ## Reads
 
