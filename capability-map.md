@@ -250,7 +250,7 @@ cites #104, or from `## [Unreleased]` while no release section exists.
 Accepted on actual main `e857db3` on 2026-11-13 (`make check` rc=0, 4032 tests;
 AC-06 changelog diff checked; [evidence](https://github.com/sstolz/kdrive-mcp-server/issues/2#issuecomment-6852513497)).
 
-## Pending acceptance — gated first stable publication
+## Accepted — gated first stable publication
 
 [F-024 v3](features/F-024-gated-publication.md) (#89): first stable release
 through the existing gated workflow, npm `latest`, both GHCR tags bound to
@@ -266,9 +266,10 @@ this run's digest, and owner-only recovery. Later releases belong to #91.
 [BR-370 v2](business-rules/BR-370.md),
 [BR-372 v2](business-rules/BR-372.md),
 [BR-373 v2](business-rules/BR-373.md),
-[BR-375 v2](business-rules/BR-375.md) are pending acceptance;
-their v1 versions stay accepted until v2 acceptance. The accepted beta
-capability and its evidence below remain in force.
+[BR-375 v2](business-rules/BR-375.md) are active after acceptance on main
+`6a508ab` on 2026-11-17 (#89 comments `89-acceptance-1-claude` and
+`89-acceptance-2-owner`). F-024 v3 remains frozen: AC-35 runs at the release.
+Publication is pending. The beta acceptance evidence below is preserved.
 
 ## Accepted — gated beta publication
 

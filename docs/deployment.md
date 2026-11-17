@@ -26,12 +26,12 @@ share tool yet (#20).
 
 There are two ways to get the runtime image:
 
-- **Published beta.** `0.6.0-beta.2` is published on GHCR as
-  `ghcr.io/sstolz/kdrive-mcp-server:0.6.0-beta.2`, for `linux/amd64` and
-  `linux/arm64`. A beta never gets the `latest` tag, and image tags can be
-  overwritten, so pin the image by its digest
-  ([publishing](publishing.md#versions), and step 1 below); for `0.6.0-beta.2`
-  it is `sha256:6e561933d78e1443db3b67356d6d081362531158c77cd8a47fe895e1a5d5a866`.
+- **Stable release (publication pending).** `1.0.0` is prepared for GHCR as
+  `ghcr.io/sstolz/kdrive-mcp-server:1.0.0`, for `linux/amd64` and
+  `linux/arm64`. Image tags, including `latest`, can be overwritten, so pin
+  the image by the manifest digest printed by release read-back
+  ([publishing](publishing.md#versions), and step 1 below). The 1.0.0 digest
+  is not available yet; use the examples after publication.
 - **Build from source.** `make image` builds the image from a checkout of
   `main`, with every merged change ([Build](#build)). A local build loads the
   image into the local engine only; nothing is published to a registry by
@@ -277,7 +277,7 @@ Server settings (the `environment` of the service; the server reads no
 | `OAUTH_ALLOWED_REDIRECT_URIS`       | Callback URLs of your AI clients; matching rules below.                                         | Yes                                                          | `https://client.example.org/callback` |
 | `OAUTH_AUDIENCE`                    | Token audience.                                                                                 | No (defaults to `MCP_PUBLIC_URL`)                            | leave unset                           |
 | `OAUTH_STATE_FILE`                  | SQLite file that keeps clients and logins across restarts.                                      | No                                                           | `/audit/oauth-state.sqlite`           |
-| `OAUTH_ALLOWED_CLIENT_ID_ORIGINS`   | Origins allowed for Client ID Metadata Documents (available in `0.6.0-beta.2`).                 | No (empty by default)                                        | leave unset                           |
+| `OAUTH_ALLOWED_CLIENT_ID_ORIGINS`   | Origins allowed for Client ID Metadata Documents (available since `0.6.0-beta.2`).              | No (empty by default)                                        | leave unset                           |
 
 `OAUTH_ALLOWED_EMAILS` and `OAUTH_ALLOWED_SUBJECTS` together need at least one
 entry. Redirect URIs match byte for byte, except that the port of an `http`
@@ -290,23 +290,23 @@ reason; the configuration reference gives every setting, bound and error code.
 Compose variables (read only by Compose, from the shell or a `.env` file next
 to `compose.yaml`; they hold no secret value):
 
-| Variable                      | Role                                                                   | Required?                    | Example                                                         |
-| ----------------------------- | ---------------------------------------------------------------------- | ---------------------------- | --------------------------------------------------------------- |
-| `KDRIVE_MCP_IMAGE`            | Runtime image: the published beta pinned by digest, or your local tag. | Yes                          | `ghcr.io/sstolz/kdrive-mcp-server:0.6.0-beta.2@sha256:<digest>` |
-| `MCP_PUBLIC_URL`              | Passed to the server (see above).                                      | Yes                          | `https://mcp.example.com/mcp`                                   |
-| `MCP_HOSTNAME`                | Host name of the Traefik rule; the host of `MCP_PUBLIC_URL`.           | Yes                          | `mcp.example.com`                                               |
-| `KDRIVE_ID`                   | Passed to the server (see above).                                      | Yes                          | `123456`                                                        |
-| `OAUTH_ISSUER`                | Passed to the server (see above).                                      | Yes                          | `https://login.example.com`                                     |
-| `OAUTH_UPSTREAM_CLIENT_ID`    | Passed to the server (see above).                                      | Yes                          | `00000000-fake-client-id`                                       |
-| `OAUTH_ALLOWED_EMAILS`        | Passed to the server (see above).                                      | Yes                          | `you@example.com`                                               |
-| `OAUTH_ALLOWED_REDIRECT_URIS` | Passed to the server (see above).                                      | Yes                          | `https://client.example.org/callback`                           |
-| `MCP_HTTP_TRUSTED_PROXIES`    | Passed to the server; read at startup (see step 4).                    | No (empty by default)        | leave unset                                                     |
-| `TRAEFIK_NETWORK`             | External Docker network that Traefik and the container share.          | Yes                          | `proxy`                                                         |
-| `TRAEFIK_ENTRYPOINT`          | Traefik HTTPS entrypoint name.                                         | Yes                          | `websecure`                                                     |
-| `KDRIVE_TOKEN_SECRET_FILE`    | Host path of the kDrive token file.                                    | Yes                          | `./secrets/kdrive-token`                                        |
-| `UPSTREAM_CLIENT_SECRET_FILE` | Host path of the upstream client secret file.                          | Yes                          | `./secrets/upstream-client-secret`                              |
-| `SIGNING_KEY_FILE`            | Host path of the signing key file.                                     | Yes                          | `./secrets/signing-key.pem`                                     |
-| `AUDIT_DIR`                   | Host directory mounted at `/audit` once you uncomment the `volumes`.   | Only with the `volumes` line | `./audit`                                                       |
+| Variable                      | Role                                                                  | Required?                    | Example                                                  |
+| ----------------------------- | --------------------------------------------------------------------- | ---------------------------- | -------------------------------------------------------- |
+| `KDRIVE_MCP_IMAGE`            | Runtime image: the release image pinned by digest, or your local tag. | Yes                          | `ghcr.io/sstolz/kdrive-mcp-server:1.0.0@sha256:<digest>` |
+| `MCP_PUBLIC_URL`              | Passed to the server (see above).                                     | Yes                          | `https://mcp.example.com/mcp`                            |
+| `MCP_HOSTNAME`                | Host name of the Traefik rule; the host of `MCP_PUBLIC_URL`.          | Yes                          | `mcp.example.com`                                        |
+| `KDRIVE_ID`                   | Passed to the server (see above).                                     | Yes                          | `123456`                                                 |
+| `OAUTH_ISSUER`                | Passed to the server (see above).                                     | Yes                          | `https://login.example.com`                              |
+| `OAUTH_UPSTREAM_CLIENT_ID`    | Passed to the server (see above).                                     | Yes                          | `00000000-fake-client-id`                                |
+| `OAUTH_ALLOWED_EMAILS`        | Passed to the server (see above).                                     | Yes                          | `you@example.com`                                        |
+| `OAUTH_ALLOWED_REDIRECT_URIS` | Passed to the server (see above).                                     | Yes                          | `https://client.example.org/callback`                    |
+| `MCP_HTTP_TRUSTED_PROXIES`    | Passed to the server; read at startup (see step 4).                   | No (empty by default)        | leave unset                                              |
+| `TRAEFIK_NETWORK`             | External Docker network that Traefik and the container share.         | Yes                          | `proxy`                                                  |
+| `TRAEFIK_ENTRYPOINT`          | Traefik HTTPS entrypoint name.                                        | Yes                          | `websecure`                                              |
+| `KDRIVE_TOKEN_SECRET_FILE`    | Host path of the kDrive token file.                                   | Yes                          | `./secrets/kdrive-token`                                 |
+| `UPSTREAM_CLIENT_SECRET_FILE` | Host path of the upstream client secret file.                         | Yes                          | `./secrets/upstream-client-secret`                       |
+| `SIGNING_KEY_FILE`            | Host path of the signing key file.                                    | Yes                          | `./secrets/signing-key.pem`                              |
+| `AUDIT_DIR`                   | Host directory mounted at `/audit` once you uncomment the `volumes`.  | Only with the `volumes` line | `./audit`                                                |
 
 The secret files hold the values themselves, for example a kDrive token file
 containing `example-token-not-real`; step 3 below writes them.
@@ -331,15 +331,15 @@ You need:
 
 ### 1. Get the image
 
-Either pull the published beta, or build from source (see
+After publication, pull the stable image, or build from source (see
 [Current status](#current-status) for the difference).
 
-**Published beta, pinned by digest.** Read the digest of the multi-platform
+**Stable image, pinned by digest.** Read the digest of the multi-platform
 image, then pull it by that digest:
 
 ```sh
-docker buildx imagetools inspect ghcr.io/sstolz/kdrive-mcp-server:0.6.0-beta.2
-docker pull ghcr.io/sstolz/kdrive-mcp-server:0.6.0-beta.2@sha256:<digest>
+docker buildx imagetools inspect ghcr.io/sstolz/kdrive-mcp-server:1.0.0
+docker pull 'ghcr.io/sstolz/kdrive-mcp-server:1.0.0@sha256:<digest>'
 ```
 
 `<digest>` is the hexadecimal value after `sha256:` on the `Digest:` line of
@@ -459,8 +459,8 @@ Protect access to that socket and keep the ACME storage private.
 
 This step explains the existing-Traefik example. Copy
 it into the deployment directory as `compose.yaml`, from your checkout or
-from the repository at the tag that matches your image (`v0.6.0-beta.2` for
-the published beta). What it contains:
+from the repository at the tag that matches your image (`v1.0.0` for
+the stable release). What it contains:
 
 - **Service hardening.** UID/GID 1000, a read-only root file system, no
   capabilities, `no-new-privileges`, `init`, `restart: on-failure:3`, and
@@ -491,8 +491,8 @@ values below are fake; for the Infomaniak issuer, see the
 [README](../README.md#values-from-the-infomaniak-side):
 
 ```sh
-# Published beta pinned by digest (step 1), or kdrive-mcp-server:runtime-amd64
-KDRIVE_MCP_IMAGE=ghcr.io/sstolz/kdrive-mcp-server:0.6.0-beta.2@sha256:<digest>
+# Release image pinned by digest (step 1), or kdrive-mcp-server:runtime-amd64
+KDRIVE_MCP_IMAGE=ghcr.io/sstolz/kdrive-mcp-server:1.0.0@sha256:<digest>
 MCP_PUBLIC_URL=https://mcp.example.com/mcp
 MCP_HOSTNAME=mcp.example.com
 KDRIVE_ID=123456

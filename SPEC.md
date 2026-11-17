@@ -79,10 +79,15 @@ dans `docs/api-notes.md`.
 Un seul paquet npm, un seul binaire :
 
 ```
-npx @sstolz/kdrive-mcp-server                  # stdio (défaut), clients locaux
-npx @sstolz/kdrive-mcp-server --http --port 3000 # Streamable HTTP, derrière un reverse proxy
-docker run … ghcr.io/<owner>/kdrive-mcp-server # image du projet, mode HTTP
+npm install -g @sstolz/kdrive-mcp-server
+npx -y @sstolz/kdrive-mcp-server@1.0.0                  # stdio (défaut), clients locaux
+npx -y @sstolz/kdrive-mcp-server@1.0.0 --http --port 3000 # Streamable HTTP, derrière un reverse proxy
+docker run … 'ghcr.io/sstolz/kdrive-mcp-server:1.0.0@sha256:<digest>' # image du projet, mode HTTP
 ```
+
+Épingler une version exacte pour des mises à jour prévisibles. Épingler l'image
+par le digest de manifeste affiché par la relecture de release. Les exemples
+1.0.0 s'appliquent après la publication.
 
 | | stdio | HTTP |
 |---|---|---|

@@ -1,8 +1,5 @@
 # kdrive-mcp-server
 
-> **Beta: the interface may change before 1.0.** Tool names, parameters,
-> settings and outputs can still change between beta versions.
->
 > **Unofficial project, not affiliated with Infomaniak.** It is not endorsed
 > or supported by Infomaniak, and it is distinct from the
 > `@infomaniak/mcp-server-kdrive` npm package. Infomaniak and kDrive are named
@@ -46,11 +43,12 @@ official server has them.
 It speaks standard MCP, so any compatible client can use it; only claude.ai
 has been verified end to end so far.
 
-**Status:** beta `0.6.0-beta.2` ([VERSION](VERSION)) is published through
-the gated release workflow ([docs/publishing.md](docs/publishing.md)): the
-container image is `ghcr.io/sstolz/kdrive-mcp-server:0.6.0-beta.2`
-(`linux/amd64` and `linux/arm64`; pin it by digest: for `0.6.0-beta.2` it
-is `sha256:6e561933d78e1443db3b67356d6d081362531158c77cd8a47fe895e1a5d5a866`), and the npm package is `@sstolz/kdrive-mcp-server@beta`.
+**Status:** `1.0.0` is prepared ([VERSION](VERSION)) for the gated release
+workflow ([docs/publishing.md](docs/publishing.md)). Publication is pending.
+The release will publish `@sstolz/kdrive-mcp-server` under npm `latest` and
+`ghcr.io/sstolz/kdrive-mcp-server:1.0.0` for `linux/amd64` and `linux/arm64`.
+Pin the image by the digest printed by release read-back; the 1.0.0 digest
+is not available yet. The examples below apply after publication.
 Changes are listed in [CHANGELOG.md](CHANGELOG.md).
 
 ## What it offers
@@ -74,11 +72,9 @@ configure (startup checks this), and the drive ID
 ([Values from the Infomaniak side](#values-from-the-infomaniak-side)).
 Settings use [environment variables](#configure).
 
-Only betas are published; the current one is `0.6.0-beta.2`, under the npm
-dist-tag `beta` ([publishing](docs/publishing.md)). `latest` points to a
-deprecated placeholder, so never run the package without a version. Pin the
-exact version as below: with a dist-tag, `npx` fetches whatever the tag points
-to at each start.
+The first stable release uses npm `latest` ([publishing](docs/publishing.md)).
+Pin an exact version as below for predictable updates: with a dist-tag,
+`npx` fetches whatever the tag points to at each start.
 
 Store your token in `/home/you/.config/kdrive/token`, a regular UTF-8 file
 containing only the token (a final newline is accepted). The token path is
@@ -92,7 +88,7 @@ KDRIVE_TOKEN_FILE=/home/you/.config/kdrive/token \
 KDRIVE_ID=123456 \
 KDRIVE_MCP_ROOTS=123456:/Documents \
 KDRIVE_MCP_MODE=read \
-  npx -y @sstolz/kdrive-mcp-server@0.6.0-beta.2
+  npx -y @sstolz/kdrive-mcp-server@1.0.0
 ```
 
 Your AI client launches this command itself and communicates over stdin and
@@ -106,16 +102,16 @@ need it ([Limits and risks](#limits-and-risks)).
 You can use the published image `ghcr.io/sstolz/kdrive-mcp-server` instead.
 Docker must be running and accessible to the client.
 
-Read the published image's digest, then pull it by digest: a beta never gets
-`latest`, and tags can be overwritten.
+After publication, read the image's digest, then pull it by digest. Both the
+version tag and `latest` can be overwritten.
 
 ```sh
-docker buildx imagetools inspect ghcr.io/sstolz/kdrive-mcp-server:0.6.0-beta.2
-docker pull 'ghcr.io/sstolz/kdrive-mcp-server:0.6.0-beta.2@sha256:<digest>'
+docker buildx imagetools inspect ghcr.io/sstolz/kdrive-mcp-server:1.0.0
+docker pull 'ghcr.io/sstolz/kdrive-mcp-server:1.0.0@sha256:<digest>'
 ```
 
-The examples below use the version tag for readability; replace it with the
-same digest-pinned image reference after inspecting it. Paths, IDs and domains
+Replace `<digest>` in the examples below with the manifest digest printed by
+release read-back or confirmed by inspection. Paths, IDs and domains
 are fake; substitute your own values.
 
 Store your token in `/home/you/.config/kdrive/token`, a regular UTF-8 file
@@ -134,7 +130,7 @@ docker run -i --rm \
   -e KDRIVE_MCP_ROOTS=123456:/Documents \
   -e KDRIVE_TOKEN_FILE=/run/secrets/kdrive-token \
   -v /home/you/.config/kdrive/token:/run/secrets/kdrive-token:ro \
-  ghcr.io/sstolz/kdrive-mcp-server:0.6.0-beta.2
+  'ghcr.io/sstolz/kdrive-mcp-server:1.0.0@sha256:<digest>'
 ```
 
 The image starts `node /app/dist/cli.js`; stdio is the default transport, so
@@ -280,7 +276,7 @@ claude mcp add kdrive --scope user \
   -e KDRIVE_ID=123456 \
   -e KDRIVE_MCP_ROOTS=123456:/Documents \
   -e KDRIVE_MCP_MODE=read \
-  -- npx -y @sstolz/kdrive-mcp-server@0.6.0-beta.2
+  -- npx -y @sstolz/kdrive-mcp-server@1.0.0
 ```
 
 **Claude Desktop** and most desktop clients (example): add the server under
@@ -293,7 +289,7 @@ then restart the client:
   "mcpServers": {
     "kdrive": {
       "command": "npx",
-      "args": ["-y", "@sstolz/kdrive-mcp-server@0.6.0-beta.2"],
+      "args": ["-y", "@sstolz/kdrive-mcp-server@1.0.0"],
       "env": {
         "KDRIVE_TOKEN_FILE": "/home/you/.config/kdrive/token",
         "KDRIVE_ID": "123456",
@@ -320,7 +316,7 @@ claude mcp add kdrive --scope user -- docker run -i --rm \
   -e KDRIVE_MCP_ROOTS=123456:/Documents \
   -e KDRIVE_TOKEN_FILE=/run/secrets/kdrive-token \
   -v /home/you/.config/kdrive/token:/run/secrets/kdrive-token:ro \
-  ghcr.io/sstolz/kdrive-mcp-server:0.6.0-beta.2
+  'ghcr.io/sstolz/kdrive-mcp-server:1.0.0@sha256:<digest>'
 ```
 
 **Claude Desktop** and most desktop clients (example): add the server under
@@ -347,7 +343,7 @@ then restart the client:
         "KDRIVE_TOKEN_FILE=/run/secrets/kdrive-token",
         "-v",
         "/home/you/.config/kdrive/token:/run/secrets/kdrive-token:ro",
-        "ghcr.io/sstolz/kdrive-mcp-server:0.6.0-beta.2"
+        "ghcr.io/sstolz/kdrive-mcp-server:1.0.0@sha256:<digest>"
       ]
     }
   }
@@ -432,17 +428,17 @@ their outcome.
 
 For the packaged CLI, you need Node.js 26.13 or later (26.x). Use `npx` as
 shown in the [quick start](#local-stdio) and
-[client configuration](#local-client-stdio), or install the exact version
+[client configuration](#local-client-stdio), or install the stable package
 globally:
 
 ```sh
-npm install -g @sstolz/kdrive-mcp-server@0.6.0-beta.2
+npm install -g @sstolz/kdrive-mcp-server
 ```
 
-It provides the `kdrive-mcp-server` command. The moving-tag alternative is
-`npm install -g @sstolz/kdrive-mcp-server@beta`
-([publishing](docs/publishing.md)); prefer the exact version for predictable
-updates.
+It provides the `kdrive-mcp-server` command. Pin an exact version for
+predictable updates, for example `npm install -g @sstolz/kdrive-mcp-server@1.0.0`.
+Betas remain available with `@beta` or an exact version
+([publishing](docs/publishing.md)).
 
 ### Build from a checkout of this repository
 
@@ -451,13 +447,13 @@ You need Docker with Compose and GNU Make 3.81 or later.
 ```sh
 make setup        # build the development container and install dependencies
 make image        # container image: kdrive-mcp-server:runtime-<arch>
-make pack         # npm package: ./artifacts/sstolz-kdrive-mcp-server-0.6.0-beta.2.tgz
+make pack         # npm package: ./artifacts/sstolz-kdrive-mcp-server-1.0.0.tgz
 ```
 
 `make image IMAGE_PLATFORMS=linux/amd64` builds one architecture only. A
 local build pushes nothing to a registry. To use the CLI on your machine,
 install the package with
-`npm install -g ./artifacts/sstolz-kdrive-mcp-server-0.6.0-beta.2.tgz` (keep
+`npm install -g ./artifacts/sstolz-kdrive-mcp-server-1.0.0.tgz` (keep
 the leading `./`, without which npm reads the argument as a GitHub shorthand); it
 provides the `kdrive-mcp-server` command. `kdrive-mcp-server --help` and
 `--version` need no configuration.
