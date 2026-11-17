@@ -78,10 +78,14 @@ dans `docs/api-notes.md`.
 
 Un seul paquet npm, un seul binaire :
 
+Pin an exact version for predictable updates. Pin the image by the manifest
+digest printed by release read-back. The 1.0.0 examples apply after publication.
+
 ```
-npx @sstolz/kdrive-mcp-server                  # stdio (défaut), clients locaux
-npx @sstolz/kdrive-mcp-server --http --port 3000 # Streamable HTTP, derrière un reverse proxy
-docker run … ghcr.io/<owner>/kdrive-mcp-server # image du projet, mode HTTP
+npm install -g @sstolz/kdrive-mcp-server
+npx -y @sstolz/kdrive-mcp-server@1.0.0                  # stdio (défaut), clients locaux
+npx -y @sstolz/kdrive-mcp-server@1.0.0 --http --port 3000 # Streamable HTTP, derrière un reverse proxy
+docker run … 'ghcr.io/sstolz/kdrive-mcp-server:1.0.0@sha256:<digest>' # image du projet, mode HTTP
 ```
 
 | | stdio | HTTP |
