@@ -44,7 +44,8 @@ It speaks standard MCP, so any compatible client can use it; only claude.ai
 has been verified end to end so far.
 
 **Status:** `1.0.0` is prepared ([VERSION](VERSION)) for the gated release
-workflow ([docs/publishing.md](docs/publishing.md)). Publication is pending.
+workflow ([docs/publishing.md](docs/publishing.md)). `1.0.0` is published on npm
+`latest` and GHCR `1.0.0` and `latest`.
 The release will publish `@sstolz/kdrive-mcp-server` under npm `latest` and
 `ghcr.io/sstolz/kdrive-mcp-server:1.0.0` for `linux/amd64` and `linux/arm64`.
 Pin the image by the digest printed by release read-back; the 1.0.0 digest
