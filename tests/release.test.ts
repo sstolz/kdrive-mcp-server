@@ -4150,6 +4150,13 @@ describe("F-024 v4 AC-39 AC-40 AC-41 AC-45 lifecycle matrices", () => {
       "original placeholder is not deprecated",
     ],
     [
+      "placeholder non-string deprecation",
+      (_s, d) => {
+        d.versions[PLACEHOLDER]!.deprecated = false;
+      },
+      "npm document unreadable; refer to the owner",
+    ],
+    [
       "P reset with versions stable",
       (_s, d) => {
         d["dist-tags"].latest = PLACEHOLDER;
@@ -4611,6 +4618,13 @@ describe("F-024 v4 AC-42 AC-45 read-back", () => {
         d.versions[PLACEHOLDER]!.deprecated = "";
       },
       "npm original placeholder deprecated FAIL original placeholder is not deprecated",
+    ],
+    [
+      "original placeholder non-string deprecation",
+      (_s, d) => {
+        d.versions[PLACEHOLDER]!.deprecated = false;
+      },
+      "npm original placeholder deprecated FAIL npm document unreadable; refer to the owner",
     ],
     [
       "provenance absent",

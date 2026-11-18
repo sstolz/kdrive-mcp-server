@@ -591,10 +591,11 @@ restoration_failure() {
 recovery_dir=$(mktemp -d) || restoration_failure
 trap 'rm -rf "$recovery_dir"' EXIT
 accept='application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json'
-curl --fail --silent --show-error \
-  --user "x-access-token:$GITHUB_TOKEN" \
+curl --config - --fail --silent --show-error \
   'https://ghcr.io/token?scope=repository:sstolz/kdrive-mcp-server:pull&service=ghcr.io' \
-  --output "$recovery_dir/token.json" || restoration_failure
+  --output "$recovery_dir/token.json" <<EOF || restoration_failure
+user = "x-access-token:$GITHUB_TOKEN"
+EOF
 pull_token=$(node -e '
 const fs = require("node:fs");
 try {
@@ -604,10 +605,12 @@ try {
 } catch { process.exit(1); }
 ' "$recovery_dir/token.json") || restoration_failure
 for reference in "$S" latest; do
-  curl --fail --silent --show-error \
-    --header "Accept: $accept" --header "Authorization: Bearer $pull_token" \
+  curl --config - --fail --silent --show-error \
+    --header "Accept: $accept" \
     "https://ghcr.io/v2/sstolz/kdrive-mcp-server/manifests/$reference" \
-    --output "$recovery_dir/$reference.json" || restoration_failure
+    --output "$recovery_dir/$reference.json" <<EOF || restoration_failure
+header = "Authorization: Bearer $pull_token"
+EOF
   node -e '
 const fs = require("node:fs");
 const crypto = require("node:crypto");

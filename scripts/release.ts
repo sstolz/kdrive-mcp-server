@@ -522,8 +522,8 @@ function defaultReason(document: unknown, stable: boolean): string | null {
     !hasKey(field(document, "time"), latest)
   )
     return "npm latest version record incomplete";
-  if (!originalPlaceholderDeprecated(document))
-    return "original placeholder is not deprecated";
+  const placeholderReason = originalPlaceholderReason(document);
+  if (placeholderReason !== null) return placeholderReason;
   if (latest !== PLACEHOLDER)
     return stableDefaultReason(document, latest, stable);
   const keys = [
@@ -592,9 +592,13 @@ function npmChecks(
   return { reason, previous: validatedPrevious(reason, latest) };
 }
 
-function originalPlaceholderDeprecated(document: unknown): boolean {
+function originalPlaceholderReason(document: unknown): string | null {
   const deprecated = field(document, "versions", PLACEHOLDER, "deprecated");
-  return typeof deprecated === "string" && deprecated !== "";
+  if (deprecated !== undefined && typeof deprecated !== "string")
+    return UNREADABLE;
+  return deprecated === undefined || deprecated === ""
+    ? "original placeholder is not deprecated"
+    : null;
 }
 /** A GHCR pull token, with GITHUB_TOKEN or anonymous. */
 async function ghcrToken(
@@ -945,9 +949,7 @@ async function npmAttempt(
     ["npm candidate not deprecated", candidateHealth(document, version)],
     [
       "npm original placeholder deprecated",
-      originalPlaceholderDeprecated(document)
-        ? null
-        : "original placeholder is not deprecated",
+      originalPlaceholderReason(document),
     ],
     [
       "npm provenance",

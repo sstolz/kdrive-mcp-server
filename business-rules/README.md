@@ -128,8 +128,8 @@ unique tests. Historical-only rules retain their original AC targets without
 invented obsolete implementations. See the migration evidence (private archive)
 and each record's Verification for preserved historical limits.
 
-All 428 allocated IDs have records, including merged lot D (`67c101a`).
-Withdrawn BR-376/BR-377 remain excluded and never reused. Next free BR-431.
+All 431 allocated IDs have records, including merged lot D (`67c101a`).
+Withdrawn BR-376/BR-377 remain excluded and never reused. Next free BR-434.
 
 ## Maintaining this index
 
@@ -704,7 +704,7 @@ to v3, accepted on actual main `e857db3` on 2026-11-13; v3 is the active rule.
 | [BR-360](BR-360.md) | v1      | Release commit: `VERSION`, `package.json` and lockfile versions.               | [F-024 v2](../features/F-024-gated-publication.md) | Active                |
 | [BR-361](BR-361.md) | v1      | Tag on the commit, commit on `main`, `GITHUB_SHA` equals the sha.              | [F-024 v2](../features/F-024-gated-publication.md) | Active                |
 | [BR-362](BR-362.md) | v1      | Green `ci-result` on a `main` push or dispatch run of the sha.                 | [F-024 v2](../features/F-024-gated-publication.md) | Active                |
-| [BR-363](BR-363.md) | v3      | First-stable npm boundary, ordering and phase-specific GHCR checks.            | [F-024 v4](../features/F-024-gated-publication.md) | Pending v3; v2 active |
+| [BR-363](BR-363.md) | v3      | Union-history ordering, validated npm defaults and phase-specific GHCR checks. | [F-024 v4](../features/F-024-gated-publication.md) | Pending v3; v2 active |
 | [BR-364](BR-364.md) | v1      | Checks only read and all run after input validation.                           | [F-024 v2](../features/F-024-gated-publication.md) | Active                |
 | [BR-365](BR-365.md) | v1      | One line per check and a summary; no token or body in output.                  | [F-024 v2](../features/F-024-gated-publication.md) | Active                |
 | [BR-366](BR-366.md) | v1      | One internal-error line on stderr and exit 2.                                  | [F-024 v2](../features/F-024-gated-publication.md) | Active                |
@@ -714,7 +714,7 @@ to v3, accepted on actual main `e857db3` on 2026-11-13; v3 is the active rule.
 | [BR-370](BR-370.md) | v2      | Two-platform build, stable tags and validated buildx digest output.            | [F-024 v3](../features/F-024-gated-publication.md) | Active (v2)           |
 | [BR-371](BR-371.md) | v1      | `publish-npm` needs `publish-image`.                                           | [F-024 v2](../features/F-024-gated-publication.md) | Active                |
 | [BR-372](BR-372.md) | v3      | Kind-specific npm read-back, provenance and verified tarball.                  | [F-024 v4](../features/F-024-gated-publication.md) | Pending v3; v2 active |
-| [BR-373](BR-373.md) | v3      | Stable run digest on both public image indexes; beta unchanged.                | [F-024 v4](../features/F-024-gated-publication.md) | Pending v3; v2 active |
+| [BR-373](BR-373.md) | v3      | Stable run digest on both tags; beta checks against the stable default.        | [F-024 v4](../features/F-024-gated-publication.md) | Pending v3; v2 active |
 | [BR-374](BR-374.md) | v1      | `ci.yml` and `runner-acceptance.yml` unchanged.                                | [F-024 v2](../features/F-024-gated-publication.md) | Active                |
 | [BR-375](BR-375.md) | v2      | Release target digest forwarding and image GITHUB_OUTPUT.                      | [F-024 v3](../features/F-024-gated-publication.md) | Active (v2)           |
 | [BR-378](BR-378.md) | v1      | `release` environment requires a reviewer and admits only `main`.              | [F-024 v2](../features/F-024-gated-publication.md) | Active                |
@@ -1057,7 +1057,7 @@ accepted on actual main `f72a15b` on 2026-11-15 (#67 comment `6902168340`).
 BR-387 v2 is active and changes only the #16 Fixed entry location to the first
 matching release section, with Unreleased fallback and the BR-321 v4 archive
 cutoff. No new BR or ADR.
-Next free IDs: F-044, BR-431, ADR-013.
+Next free IDs: F-044, BR-434, ADR-013.
 
 | ID                  | Version | Rule                                                          | Source                                                            | Status |
 | ------------------- | ------- | ------------------------------------------------------------- | ----------------------------------------------------------------- | ------ |
