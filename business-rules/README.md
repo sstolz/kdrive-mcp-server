@@ -696,7 +696,7 @@ to v3, accepted on actual main `e857db3` on 2026-11-13; v3 is the active rule.
 | ID                  | Version | Rule                                                                           | Source                                             | Status      |
 | ------------------- | ------- | ------------------------------------------------------------------------------ | -------------------------------------------------- | ----------- |
 | [BR-353](BR-353.md) | v1      | Scoped lockfile names; `make pack` writes one scoped tarball.                  | [F-024 v2](../features/F-024-gated-publication.md) | Active      |
-| [BR-354](BR-354.md) | v3      | First stable guide and recovery; version-dependent installs.                   | [F-024 v4](../features/F-024-gated-publication.md) | Active (v3) |
+| [BR-354](BR-354.md) | v3      | Stable/beta lifecycle guide, recovery and version-dependent installs.          | [F-024 v4](../features/F-024-gated-publication.md) | Active (v3) |
 | [BR-355](BR-355.md) | v1      | `release.yml`: dispatch-only, three inputs, `{}` permissions, four jobs.       | [F-024 v2](../features/F-024-gated-publication.md) | Active      |
 | [BR-356](BR-356.md) | v2      | Image digest job output and read-back dependency; existing gates retained.     | [F-024 v3](../features/F-024-gated-publication.md) | Active (v2) |
 | [BR-357](BR-357.md) | v2      | Exact release step order with release-image and release-npm IDs.               | [F-024 v3](../features/F-024-gated-publication.md) | Active (v2) |
