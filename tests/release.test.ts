@@ -4908,6 +4908,27 @@ describe("F-024 v4 AC-43 byte-preserving owner restoration", () => {
       const root = temporary("guide-restoration-");
       const log = join(root, "docker.jsonl");
       const result = await runRecoveryBlock(root, server.url, digest, log);
+      const tokenRequests = server.seen.filter((r) =>
+        r.url.startsWith("/token?"),
+      );
+      for (const request of tokenRequests) {
+        expect(request.authorization).toBe(
+          `Basic ${Buffer.from("x-access-token:SYNTHETIC-RECOVERY-TOKEN").toString("base64")}`,
+        );
+      }
+      const manifests = server.seen.filter((r) =>
+        r.url.includes("/manifests/"),
+      );
+      for (const request of manifests) {
+        expect(request.method).toBe("GET");
+        expect(request.authorization).toBe("Bearer pull-token");
+      }
+      const curlCalls = lines(`${log}.curl`);
+      expect(curlCalls).toHaveLength(tokenRequests.length + manifests.length);
+      for (const argv of curlCalls) {
+        expect(argv).not.toContain("SYNTHETIC-RECOVERY-TOKEN");
+        expect(argv).not.toContain("pull-token");
+      }
       const assertFailure = () => {
         expect(result.status).not.toBe(0);
         expect(result.stdout + result.stderr).toContain(`${diagnostic}\n`);
@@ -4923,6 +4944,8 @@ describe("F-024 v4 AC-43 byte-preserving owner restoration", () => {
       };
       const assertSuccess = () => {
         expect(result.status, result.stdout + result.stderr).toBe(0);
+        expect(tokenRequests).toHaveLength(1);
+        expect(curlCalls).toHaveLength(3);
         expect(result.stdout).toContain(
           `recovery: GHCR latest restored ${PREVIOUS_DIGEST}\n`,
         );

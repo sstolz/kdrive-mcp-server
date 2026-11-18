@@ -89,13 +89,16 @@ export async function runRecoveryBlock(
 ) {
   const bin = join(root, "bin");
   // curl is replaced only to route the fixed public origin to the loopback double.
-  // The guide's flags, methods, Accept header and raw response bytes are retained.
+  // Record argv before routing; retain stdin, headers and raw response bytes.
   executable(
     join(bin, "curl"),
     `#!/usr/bin/env node
 const { spawnSync } = require("node:child_process");
-const args = process.argv.slice(2).map(arg => arg.replace(/^https:\\/\\/ghcr\\.io/, process.env.RECOVERY_REGISTRY));
-const result = spawnSync("/usr/bin/curl", args, { stdio: "inherit" });
+const fs = require("node:fs");
+const args = process.argv.slice(2);
+fs.appendFileSync(process.env.RECOVERY_LOG + ".curl", JSON.stringify(args) + "\\n");
+const routed = args.map(arg => arg.replace(/^https:\\/\\/ghcr\\.io/, process.env.RECOVERY_REGISTRY));
+const result = spawnSync("/usr/bin/curl", routed, { stdio: "inherit" });
 process.exit(result.status === null ? 1 : result.status);
 `,
   );
