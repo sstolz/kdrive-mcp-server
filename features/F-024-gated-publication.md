@@ -88,7 +88,7 @@ ADR-013 remains unused: no irreversible architecture choice is made here.
 ### Changed rules
 
 - **BR-354 v3** — The publishing guide specifies the v4 phase matrices and
-  recovery procedure in this document. Verified by: AC-37, AC-44.
+  recovery procedure in this document. Verified by: AC-37, AC-43, AC-44, AC-48.
   Change from v2: replaces first-stable-only wording and recovery with later
   stable/beta behavior and byte-preserving default restoration; all v2 naming,
   tarball references, precondition order, dry-run evidence, dispatch, install
@@ -117,7 +117,7 @@ ADR-013 remains unused: no irreversible architecture choice is made here.
   must be non-deprecated for either kind; exact-version, timestamp, provenance,
   verified tarball and original-placeholder evidence remain mandatory.
 - **BR-373 v3** — Image read-back succeeds exactly when the GHCR read-back
-  row for its release kind holds. Verified by: AC-42, AC-45.
+  row for its release kind holds. Verified by: AC-39, AC-42, AC-45.
   Change from v2: after stable, beta latest must match the versioned image of
   the npm stable default; first-stable and later-stable read-back still bind
   both stable tags to this run, with unchanged public access/platform checks.
@@ -138,7 +138,7 @@ ADR-013 remains unused: no irreversible architecture choice is made here.
 - **BR-433 v1** — Cleanup of a candidate GHCR package version with a prior
   stable default is permitted only after GET confirms latest restored to the
   recorded prior digest while the prior version still serves that digest.
-  Verified by: AC-43, AC-44. npm absence and owner authority are prerequisites
+  Verified by: AC-43, AC-44, AC-46. npm absence and owner authority are prerequisites
   of the recovery procedure, not authority granted by this draft.
 
 ### Retained v3 rules
@@ -265,6 +265,9 @@ closed. Beta candidate preflight keeps the existing HEAD checks.
 | Beta | read-back | Candidate entry records exact version and timestamp, beta equals candidate, candidate healthy, attestations and verified tarball present, P remains deprecated; latest is bootstrap or healthy greatest stable, different from candidate | Candidate valid index and anonymous HEAD 200. Bootstrap: latest absent or a different digest as in v3. Stable S: S and latest valid indexes with equal hashes, different from candidate; anonymous token and latest HEAD 200. |
 
 npm read-back keeps 20 attempts, 15 seconds apart, and performs no mutations.
+Beta's `image latest tag` check uses the final attempt's npm document to
+validate the default and derive S, whether that attempt succeeds or exhausts
+the loop; it never uses a document from an earlier attempt.
 For every beta preflight phase, GET latest after the candidate HEAD check.
 With bootstrap (also the retained npm-404 beta dry-run exception), latest
 GET 404 passes. If latest GET 200, GET the candidate and require a valid index
@@ -341,7 +344,8 @@ default under the npm predicates for that kind, including record completeness,
 ordering among `versions`, P evidence and deprecation policy. Never construct
 an S URL from an unvalidated registry key. If npm default validation fails or
 the document is unreadable, report `release-check: GHCR image FAIL npm stable default unavailable`
-without requesting S or latest; this takes precedence over GHCR candidate/default
+before requesting a GHCR token; make no GHCR request at all, including the
+candidate request. This takes precedence over token and candidate/default
 failures. The retained npm-404 beta dry-run exception uses bootstrap checks
 instead. For beta read-back, the identical invalid or unreadable default
 condition reports `release-verify: image latest tag FAIL npm stable default unavailable`
@@ -403,8 +407,14 @@ real mutation. Registry writes, including repointing, remain owner-only.
    against it. Resolve the still-current npm stable default S to its GHCR
    versioned index; record `previous_digest` from raw GET bytes and confirm
    it against the release ticket's prior read-back evidence. Require S's
-   index/digest to be distinct from the candidate and its original version
-   tag to remain present. Unknown candidate digest, changed npm default,
+   original version tag to remain present; for deletion, also require its
+   index/digest to be distinct from the candidate. If only the candidate digest is unknown, but npm
+   absence, unchanged valid npm default S and its prior read-back evidence
+   are certain, use the restore-only branch: run step 4 with `previous_digest`
+   confirmed against that evidence and GET-confirm S/latest, perform no
+   deletion, burn the candidate version and use a new version for the next
+   release through step 6. Restoration does not depend on candidate identity.
+   Otherwise, unknown candidate digest, changed npm default,
    missing prior evidence, extra tags on the candidate package version,
    shared prior/candidate digest, or any uncertain state stops with
    `recovery blocked: image identity uncertain`. Deletion must identify the
@@ -420,8 +430,15 @@ real mutation. Registry writes, including repointing, remain owner-only.
      --tag "$image:latest" "$image@$previous_digest"
    ```
 
+   The guide supplies one executable fenced shell block containing the digest
+   format guard, this exact command, raw GET/hash commands with the exact
+   Accept header above, and the confirmation/diagnostic branches below.
+   AC-43 extracts and executes that block verbatim against fake Docker and
+   the registry double; the harness does not re-implement the prose.
+   The guide states the buildx version qualified by AC-46, including support
+   for `--prefer-index=false`; an older version's safe refusal blocks recovery.
    `previous_digest` must match `sha256:<64 lowercase hex>` and must not be
-   empty; the guide checks it before the command and reports
+   empty; the executable block checks it before the command and reports
    `recovery blocked: image identity uncertain` on failure, without invoking
    Docker. This is a single-index
    copy, supported by the [Docker command contract](https://docs.docker.com/reference/cli/docker/buildx/imagetools/create/).
@@ -458,7 +475,9 @@ real mutation. Registry writes, including repointing, remain owner-only.
    ordering policy, a new tag, go and dry run. Published betas cannot block
    a stable patch above every published stable; a published higher stable
    blocks a lower-line hotfix, and a higher published beta blocks a lower
-   beta. Confirm cleanup before either choice. No deletion, repoint or
+   beta. Confirm cleanup before either choice, except that the restore-only
+   branch requires confirmed restoration, no deletion and a new version.
+   No deletion, repoint or
    republish follows npm acceptance.
 
 For the selected deprecated-default policy (BR-432), the owner records the
@@ -472,7 +491,10 @@ forward-fix route still works. A deprecated old image is restored only to the
 unchanged npm default during failed-fix cleanup; that restores consistency,
 not a claim that the vulnerable release is safe. If ordering blocks the desired
 hotfix, the stable-only ordering rule governs the version choice; deprecation
-is not an ordering bypass.
+is not an ordering bypass. Do not roll back npm `latest` to a healthy older
+stable during an incident: if done while the vulnerable greatest stable
+remains in `versions`, npm and GHCR `latest` must first be restored to that
+vulnerable greatest stable before the forward fix can ship.
 
 If npm latest is behind a stable key still in `versions` (for example after
 a manual dist-tag edit), stop publication with the pinned greatest-stable
@@ -484,7 +506,12 @@ the byte-preserving command and GET confirmation above. A deprecated greatest
 stable admits only the BR-432 forward stable fix. If records or image evidence
 are unavailable, stop for owner diagnosis; no automatic fallback is allowed.
 Then rerun all release gates and exact-pair dry-run/go requirements. No release
-mode gains an npm dist-tag command. If a higher stable was unpublished and is
+mode gains an npm dist-tag command. For any state with a valid npm default
+and GHCR latest differing from S, including an unknown candidate digest,
+the owner may separately authorize restore-only reconciliation to S's
+recorded digest using step 4 and GET confirmation, without deleting anything;
+burn any uncertain candidate version and use a new version for the next release.
+If a higher stable was unpublished and is
 now time-only, leave latest on the greatest remaining `versions` stable:
 no npm default repair is required. If GHCR latest still names the unpublished
 stable's digest, the owner reconciles it to S's recorded digest under separate
@@ -568,9 +595,11 @@ the Docker-only toolchain. Each planned test cites its rule/version.
   1.0.0 still deprecated. Include published 1.2.0-beta.1: the stable fix
   remains eligible. Include published stable 1.1.0 as the deprecated default:
   candidate 1.0.1 refuses with the stable-only ordering diagnostic.
-  Given withheld exact-pair successful dry-run run evidence or denied
-  deployment approval in the GitHub double, when the same recovery is
-  attempted, then publication never occurs. The human version-and-SHA go
+  Given withheld exact-pair successful dry-run evidence in the rehearsal
+  harness's owner model (as for approvals in v3 AC-32), or denied deployment
+  approval in the GitHub double, when the same recovery is attempted, then
+  publication never occurs. No release-check predicate reads dry-run runs
+  or is added for this evidence. The human version-and-SHA go
   is checked as release-ticket evidence under AC-48, not simulated as an
   automated registry predicate.
 - **AC-41 (BR-363 v3)** — Given S/latest indexes of the old digest, when
@@ -597,8 +626,9 @@ the Docker-only toolchain. Each planned test cites its rule/version.
 - **AC-43 (BR-433 v1, BR-354 v3)** — Given a digest-keyed registry double
   holding old S and partially published candidate/latest, when
   `BR-433 v1 byte preserving restoration: %s` in `tests/release.test.ts`
-  drives the guide's exact imagetools command through fake Docker and the
-  GET hash checks, then it restores raw bytes before candidate deletion;
+  extracts and executes the guide's single fenced recovery block verbatim
+  (digest-format guard, exact imagetools command and raw GET/hash confirmation)
+  through fake Docker and the registry double, then it restores raw bytes before candidate deletion;
   deletion removes all tags on the candidate digest and leaves S/latest.
   Given post-stable beta cleanup with npm candidate absent and healthy S,
   when the beta branch runs, then it deletes only the distinct candidate
@@ -610,6 +640,11 @@ the Docker-only toolchain. Each planned test cites its rule/version.
   recovery runs, then it prints the precise blocked state and performs no
   dependent deletion or publication. Assert both bootstrap and prior-stable
   branches, no empty digest command, and no deletion after npm acceptance.
+  Given both image tags pushed but no candidate digest recorded and same-run
+  retry unavailable, when the restore-only branch runs with certain npm
+  absence and prior S read-back evidence, then GET confirms S/latest restored
+  to `previous_digest`, no deletion occurs, the candidate version is burned
+  and the next release requires a new version.
 - **AC-44 (BR-354 v3, BR-432 v1, BR-433 v1)** — Given the existing real
   release entry paths and bounded Git/GitHub/npm/GHCR doubles plus fake
   npm/Docker, when `F-024 v4 lifecycle rehearsal: %s` in
@@ -639,8 +674,14 @@ the Docker-only toolchain. Each planned test cites its rule/version.
   Given npm latest behind a stable still in `versions`, when owner recovery
   is rehearsed, then publication first refuses, manual separately authorized
   npm/GHCR default reconciliation restores matching greatest-stable defaults,
-  and fresh gates admit an eligible new candidate. Include time-only 1.0.1
-  above latest 1.0.0: stable 1.0.2 needs no npm default repair. Given GHCR
+  and fresh gates admit an eligible new candidate.
+  Given vulnerable deprecated greatest stable 1.1.0 still in `versions` and
+  npm latest rolled back to healthy 1.0.0, when the rehearsal attempts a fix,
+  then it refuses with `npm latest is not the greatest published stable version`;
+  separately authorized npm/GHCR reconciliation first restores defaults to
+  deprecated 1.1.0, after which stable 1.1.1 passes all gates and beta refuses.
+  Include time-only 1.0.1 above latest 1.0.0: stable 1.0.2 needs no npm
+  default repair. Given GHCR
   latest still names unpublished 1.0.1's digest, when the owner separately
   authorizes reconciliation, then the byte-preserving command restores it
   to S's recorded digest, GET confirms equality, and fresh gates admit 1.0.2.
@@ -686,6 +727,10 @@ the Docker-only toolchain. Each planned test cites its rule/version.
   default. Reject comparing GHCR latest to old npm latest in that phase:
   image publication intentionally moved it already. Reject a second workflow
   or extra promotion tag because they add credential/approval paths.
+  Reject promoting GHCR latest only after npm succeeds: it needs
+  `packages: write` in a post-npm job, a workflow contract change. The owner
+  chose option A on 2026-11-17 (#91), accepting the v4 timing-risk extension
+  recorded below while keeping the existing workflow contract.
 - **D-2 Kind-specific ordering (Q1).** Select stable candidates greater than
   every published stable and beta candidates greater than every published
   version except P (owner decision 2026-11-17, issue #91). Use both history
@@ -729,14 +774,23 @@ the Docker-only toolchain. Each planned test cites its rule/version.
 
 ## Residual risks
 
-The owner-accepted v3 mutable GHCR latest and non-atomic registry timing gap
-remain: any other same-repository workflow with packages: write can move
-latest, and image latest can precede npm until publication or owner cleanup.
+The owner-accepted v3 mutable GHCR latest risk remains: any other
+same-repository workflow with `packages: write` can move latest.
+The non-atomic registry timing gap is extended in v4: unlike v3's first
+latest with no existing consumers, later stable publication moves existing
+latest consumers to a candidate npm may never receive. If the run is abandoned,
+the exposure has no time bound until owner restoration. Status:
+**accepted by the owner 2026-11-17 (#91)** (option A).
 Digest pinning remains recommended. Image signing remains deferred to #92.
 The v3 temporary "no gated release after 1.0.0" limitation is resolved only
 when v4 passes acceptance. Under the owner-selected policies (2026-11-17,
 issue #91), lower-line stable hotfixes below a published stable remain refused,
 and a deprecated default can remain exposed until a gated forward fix succeeds.
+Rolling npm latest back to a healthy older stable while the vulnerable
+greatest stable remains in `versions` blocks that fix: the owner must first
+restore npm and GHCR latest to the vulnerable greatest stable under separate
+authorization. The freeze notification must name this rollback consequence
+and the v4 timing-risk extension, including its owner-accepted status.
 No command creates a registry-wide transaction; external writes between
 checks remain possible. Recovery stops on uncertainty rather than treating
 check-before-delete as an atomic guarantee.
@@ -744,6 +798,14 @@ check-before-delete as an atomic guarantee.
 ## Stress-test
 
 Inherited dispositions use the supplied `91-spec-review-1-opus` coverage summary and the preserved v3 Stress-test; they do not claim a new forge read.
+
+- **91-spec-decision-1-fable finding 1: retained** — Step 3 and AC-43 add restore-only recovery with prior read-back evidence, no deletion and a burned candidate version; reconciliation covers any valid npm default with mismatching GHCR latest.
+- **91-spec-decision-1-fable finding 2: retained** — The BR-432 guide paragraph and Residual risks state that rollback requires restoration to the vulnerable greatest stable first; AC-44 rehearses rollback plus deprecated greatest stable, and freeze notification must name the consequence.
+- **91-spec-decision-1-fable finding 3: retained** — Residual risks records the v4 timing-risk extension as accepted by the owner 2026-11-17 (#91), requires it in the freeze notification, and D-1 rejects post-npm promotion because it changes workflow permissions and contract.
+- **91-spec-decision-1-fable finding 4: retained** — AC-40 places dry-run evidence in the rehearsal harness's owner model, as in v3 AC-32, and explicitly adds no release-check predicate; AC-48 retains human ticket evidence.
+- **91-spec-decision-1-fable finding 5: retained** — Step 4 requires one executable guide block with the format guard, command and raw GET/hash confirmation; AC-43 executes it verbatim, and the guide names the buildx version qualified in AC-46.
+- **91-spec-decision-1-fable finding 6: retained** — Verified-by lists now include AC-39 for BR-373 v3, AC-43/AC-48 for BR-354 v3 and AC-46 for BR-433 v1.
+- **91-spec-decision-1-fable finding 7: retained** — Invalid preflight defaults precede token acquisition and suppress all GHCR requests; beta image-latest read-back uses the final npm attempt's document.
 
 - **89-spec-review-1-opus R1-1: retained** — SemVer and npm preflight predicates, D-2 and AC-38 compare union history with exact precedence under the owner-resolved kind-specific ordering.
 - **89-spec-review-1-opus R1-2: retained** — Registry phase matrix, D-1 and AC-41 compare prior S before stable image push and this run's digest in phase npm, avoiding comparison to the displaced S.
