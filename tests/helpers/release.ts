@@ -220,6 +220,8 @@ export interface ReleaseState {
   anonToken: Reply;
   anonManifest: Reply;
   anonLatestManifest?: Reply;
+  // Version-specific raw bytes; never alias a prior stable to the candidate.
+  references?: Record<string, Reply>;
   tarball: Reply;
 }
 
@@ -306,6 +308,8 @@ function ghcrRoute(state: ReleaseState, request: Seen): Reply | undefined {
       ? (state.anonLatestManifest ?? state.anonManifest)
       : state.anonManifest;
   if (manifest[1] === "latest") return state.latest;
+  const reference = state.references?.[manifest[1]!];
+  if (reference) return reference;
   return request.method === "HEAD" ? state.manifest : state.index;
 }
 export function releaseRoute(state: ReleaseState): (request: Seen) => Reply {
