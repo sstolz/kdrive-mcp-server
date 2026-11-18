@@ -586,6 +586,9 @@ the Docker-only toolchain. Each planned test cites its rule/version.
   or beta read-back runs, then it reports `npm stable default unavailable`
   under the specified prefix and makes no S/latest request. Assert the npm-404
   beta dry-run exception separately, and exact GET/Accept bytes for comparisons.
+  Given an invalid npm default and a token failure configured in the preflight
+  double, when preflight runs, then `npm stable default unavailable` takes
+  precedence and the double receives no GHCR token or candidate request.
 - **AC-40 (BR-363 v3, BR-432 v1)** — Given deprecated stable latest 1.0.0
   with no healthy earlier stable and candidate 1.0.1, when
   `BR-432 v1 deprecated stable recovery: %s` in `tests/release.test.ts` runs,
@@ -623,6 +626,12 @@ the Docker-only toolchain. Each planned test cites its rule/version.
   read-back runs, then it fails after bounded npm retries where applicable,
   with exactly the specified lines. Assert bootstrap regression, exactly
   20 attempts/19 waits on persistent npm failure, and zero mutation requests.
+  Given a beta read-back with a valid stable default in an early npm attempt
+  and an invalid or different stable default in the final attempt, when
+  `image latest tag` runs after npm success or retry exhaustion, then S is
+  derived only from the final document; a different valid default selects
+  that final S, and an invalid final default reports
+  `npm stable default unavailable` without S/latest requests.
 - **AC-43 (BR-433 v1, BR-354 v3)** — Given a digest-keyed registry double
   holding old S and partially published candidate/latest, when
   `BR-433 v1 byte preserving restoration: %s` in `tests/release.test.ts`
@@ -798,6 +807,9 @@ check-before-delete as an atomic guarantee.
 ## Stress-test
 
 Inherited dispositions use the supplied `91-spec-review-1-opus` coverage summary and the preserved v3 Stress-test; they do not claim a new forge read.
+
+- **91-spec-review-3-opus finding 1: retained** — AC-39 adds invalid-default precedence over a configured token failure and asserts no GHCR token or candidate request.
+- **91-spec-review-3-opus finding 2: retained** — AC-42 adds early-valid/final-invalid-or-different npm documents for beta image-latest read-back, deriving S only from the final attempt and refusing an invalid final default with the fixed diagnostic.
 
 - **91-spec-decision-1-fable finding 1: retained** — Step 3 and AC-43 add restore-only recovery with prior read-back evidence, no deletion and a burned candidate version; reconciliation covers any valid npm default with mismatching GHCR latest.
 - **91-spec-decision-1-fable finding 2: retained** — The BR-432 guide paragraph and Residual risks state that rollback requires restoration to the vulnerable greatest stable first; AC-44 rehearses rollback plus deprecated greatest stable, and freeze notification must name the consequence.
