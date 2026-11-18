@@ -83,3 +83,8 @@ development archive, not in this repository (PROJECT.md, History).
 - 2026-11-14 — Inside the dev container in the cloud session, npm fails TLS with `SELF_SIGNED_CERT_IN_CHAIN` (#12) — Use a Compose override outside the checkout that mounts the proxy CA bundle and sets `NODE_EXTRA_CA_CERTS` and `NPM_CONFIG_CAFILE`; `make audit`, `make install-check` and `make lockfile` then run, with no tracked change.
 - 2026-11-14 — A feature rehearsal that injected state directly into the acceptance entry (AC-12 of F-028) hid that the real launcher could not persist OAuth state; the gap surfaced only in code review (#3) — Rehearsals must drive the real launcher path (settings filtering, entry script) before an owner run is requested.
 - 2026-11-14 — Node's getaddrinfo-based `dns.lookup` runs on the 4-thread libuv pool and cannot be cancelled (#3) — For fetches of untrusted hosts use a per-fetch c-ares `dns.promises.Resolver` with timeout/tries and `cancel()` at the deadline.
+- 2026-11-18 — `codex exec` waits on stdin when stdin is not a TTY — Always run it with `< /dev/null`.
+- 2026-11-18 — zsh `noclobber` makes `>` fail on an existing file, skipping the command's run — Use `>|` for logs and check redirection errors.
+- 2026-11-18 — zsh parses `$var:l` and other `:x` modifiers after a variable — Write `${var}:latest` to keep the tag suffix literal.
+- 2026-11-18 — The global Git `user.name` can leak a personal name; this repository sets local `user.name` and `user.email` — Before the first branch push, compare `git log --format='%an <%ae>'` with main.
+- 2026-11-18 — A GitHub advisory can be withdrawn after it breaks `npm audit` — Re-check `gh api /advisories/<GHSA>` and its `withdrawn_at` field before building an allowlist.

@@ -2,7 +2,7 @@
 id: F-024
 title: Stable release lifecycle
 ticket: "#91"
-status: frozen
+status: done
 version: 4
 ---
 
@@ -16,8 +16,8 @@ and defines recovery when an image has published before npm fails. It affects
 release owners, maintainers and users of the registries' default tags.
 
 This is a security-sensitive full-path ticket: publication changes defaults
-and supply-chain evidence. This version is frozen (see the end of
-Stress-test); it grants no release go. The owner resolved Q1 and Q2 on
+and supply-chain evidence. This version was accepted on main `d30b3ff` on 2026-11-18
+([#91 acceptance](https://github.com/sstolz/kdrive-mcp-server/issues/91#issuecomment-6992434783)); it grants no release go. The owner resolved Q1 and Q2 on
 2026-11-17 in issue #91; the decisions below govern this version.
 
 ### Implementation baseline
