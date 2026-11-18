@@ -69,6 +69,11 @@ export function run(
       stderr += chunk.toString("utf8");
     });
     child.on("error", reject);
+    // A child may exit before reading its input; EPIPE on stdin is then
+    // expected and harmless (#106). Any other stdin error fails the run.
+    child.stdin.on("error", (error: NodeJS.ErrnoException) => {
+      if (error.code !== "EPIPE") reject(error);
+    });
     child.on("close", (status) => {
       done({ status, stdout, stderr });
     });
