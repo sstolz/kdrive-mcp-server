@@ -250,18 +250,19 @@ cites #104, or from `## [Unreleased]` while no release section exists.
 Accepted on actual main `e857db3` on 2026-11-13 (`make check` rc=0, 4032 tests;
 AC-06 changelog diff checked; [evidence](https://github.com/sstolz/kdrive-mcp-server/issues/2#issuecomment-6852513497)).
 
-## Provisional — stable release lifecycle (#91)
+## Accepted — stable release lifecycle (#91)
 
-[F-024 v4](features/F-024-gated-publication.md) prepares later stable releases,
+[F-024 v4](features/F-024-gated-publication.md) enables later stable releases,
 post-stable betas and gated forward stable fixes of deprecated defaults.
 [BR-354 v3](business-rules/BR-354.md), [BR-363 v3](business-rules/BR-363.md),
 [BR-372 v3](business-rules/BR-372.md), [BR-373 v3](business-rules/BR-373.md),
 [BR-431 v1](business-rules/BR-431.md), [BR-432 v1](business-rules/BR-432.md)
-and [BR-433 v1](business-rules/BR-433.md) are pending acceptance. Recovery
+and [BR-433 v1](business-rules/BR-433.md) are active. Recovery
 restores and GET-confirms the prior stable digest before owner cleanup;
-restore-only recovery burns an uncertain candidate version. Actual-main gate,
-CI, AC-46 tool qualification and acceptance evidence remain in #91. This entry
-grants no release authority; accepted v2 rules and historical evidence remain.
+restore-only recovery burns an uncertain candidate version. Accepted on actual
+main `d30b3ff` on 2026-11-18 ([#91 acceptance](https://github.com/sstolz/kdrive-mcp-server/issues/91#issuecomment-6992434783)).
+F-024 v4 is done. This entry grants no release authority; historical evidence
+remains preserved.
 
 ## Accepted — gated first stable publication
 
