@@ -632,7 +632,8 @@ describe("F-024 v3 documentation and digest plumbing", () => {
     expect(text).toMatch(/same-repository workflow.{0,150}overwrite/iu);
     expect(text).toMatch(/re-run.{0,150}publish-npm/iu);
     expect(text).toMatch(/never.{0,80}(delete|republish)/iu);
-    expect(text).not.toContain("$previous");
+    // AC-37 BR-354 v3 replaces the first-stable-only no-repoint expectation.
+    expect(text).toContain("--prefer-index=false");
     // The accepted beta recovery bullets remain verbatim, independently of stable recovery.
     const beta = readFileSync(
       "tests/fixtures/release/beta-recovery.md",
@@ -747,3 +748,113 @@ it.each(["release-check", "release-npm", "release-verify", "release-image"])(
     }
   },
 );
+
+// F-024 v4 AC-37, AC-43, AC-44, AC-48. This checks guide content, not a release go.
+it("BR-354 v3 lifecycle guide (AC-37 AC-48)", () => {
+  const raw = readFileSync("docs/publishing.md", "utf8");
+  const text = prose(raw);
+  for (const fragment of [
+    "every published stable version",
+    "every published version",
+    "versions",
+    "time",
+    "created",
+    "modified",
+    "0.0.0-placeholder.0",
+    "0.0.0-stage",
+    "1.1.1",
+    "1.2.0-beta.1",
+    "1.0.1",
+    "1.1.0",
+    "--prefer-index=false",
+    "previous_digest",
+    "RELEASE_IMAGE_DIGEST",
+    "Re-run failed jobs",
+    "Re-run all jobs",
+    "package version",
+    "restore-only",
+    "new version",
+    "deprecated",
+    "healthy",
+    "main HEAD",
+    "tarball",
+    "provenance",
+    "both approvals",
+    "read-back evidence",
+    "exact-version, exact-SHA go",
+    "successful real dry run",
+    "Agents never",
+    "npm install -g @sstolz/kdrive-mcp-server",
+    "npx -y @sstolz/kdrive-mcp-server@<version>",
+    "@beta",
+    "mutable",
+    "packages: write",
+    "ghcr.io/sstolz/kdrive-mcp-server@sha256:<hex>",
+  ])
+    expect(text).toContain(fragment);
+  // The guide pins every changed diagnostic, including safe owner recovery states.
+  for (const diagnostic of [
+    "npm latest tag missing",
+    "npm latest is not a supported stable default",
+    "npm latest version record incomplete",
+    "original placeholder is not deprecated",
+    "npm placeholder latest cannot follow stable history",
+    "npm latest is not the greatest published stable version",
+    "npm latest stable is deprecated; owner recovery required",
+    "stable version is not greater than every published stable version",
+    "beta version is not greater than every published version",
+    "npm stable default unavailable",
+    "GHCR latest exists without a stable npm default",
+    "previous stable image unavailable",
+    "GHCR latest missing for stable npm default",
+    "previous stable image manifest invalid",
+    "GHCR latest does not match npm stable default",
+    "candidate is deprecated",
+    "recovery blocked: npm outcome uncertain",
+    "recovery blocked: same-run npm retry unavailable",
+    "recovery blocked: image identity uncertain",
+    "recovery blocked: latest repoint failed",
+    "recovery blocked: latest restoration unconfirmed",
+    "recovery blocked: cleanup unconfirmed",
+    "recovery: GHCR latest restored",
+  ])
+    expect(text).toContain(diagnostic);
+  const table = raw
+    .split("\n")
+    .filter((row) => /^\|\s*(Stable|Beta)\s*\|/u.test(row));
+  for (const kind of ["Stable", "Beta"]) {
+    const rows = table.filter((row) => row.includes(kind));
+    for (const phase of ["verify", "image", "npm", "read-back"])
+      expect(
+        rows.some((row) => row.includes(phase)),
+        `${kind} ${phase}`,
+      ).toBe(true);
+  }
+  expect(text).toMatch(/deprecated.{0,250}stable.{0,250}(fix|successor)/iu);
+  expect(text).toMatch(/no healthy earlier stable/iu);
+  expect(text).toMatch(/beta.{0,200}(blocked|refuse).{0,200}healthy/iu);
+  expect(text).toMatch(
+    /(advanced main|main advance).{0,200}(not|doesn't|does not).{0,100}(block|prevent).{0,100}(same.run|retry)/iu,
+  );
+  expect(text).toMatch(/buildx.{0,100}v?\d+\.\d+\.\d+/iu);
+  expect(text).toMatch(/older.{0,150}(refus|block)/iu);
+  expect(text).toMatch(
+    /(post.stable beta|beta cleanup).{0,600}(no|without).{0,50}repoint/iu,
+  );
+  expect(text).toMatch(/(burn|never reuse).{0,100}(candidate|version)/iu);
+  expect(text).not.toContain(
+    "No previous stable or default-tag repointing exists in this scope",
+  );
+  expect(text).not.toContain(
+    "No new gated stable or beta release is available until #91",
+  );
+  // Preserve the accepted pre-stable instructions byte for byte after whitespace folding.
+  const beta = readFileSync("tests/fixtures/release/beta-recovery.md", "utf8");
+  for (const bullet of beta.match(/^- [\s\S]*?(?=^-(?: |$)|(?![\s\S]))/gmu) ??
+    [])
+    expect(text).toContain(prose(bullet).trim());
+  const preconditions = [...raw.matchAll(/\*\*(P-[0-5])\*\*/gu)].map(
+    (m) => m[1],
+  );
+  expect(preconditions).toEqual(["P-0", "P-1", "P-4", "P-2", "P-5", "P-3"]);
+});

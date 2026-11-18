@@ -90,8 +90,6 @@ const BETA = new RegExp(
 );
 const STABLE = new RegExp(String.raw`^${NUMBER}\.${NUMBER}\.${NUMBER}$`, "u");
 const PLACEHOLDER = "0.0.0-placeholder.0";
-const AFTER_STABLE =
-  "releases after the first stable are out of scope; see #91 (F-024 v4)";
 function versionReason(version: string): string | null {
   if (!SEMVER.test(version)) return "version is not a SemVer version";
   return STABLE.test(version) || BETA.test(version)
@@ -420,113 +418,188 @@ const npmDocument = () =>
     { headers: { accept: "application/json" } },
   );
 
-/** BR-363 v2: history prevents reopening the first-stable gate. */
-function afterStable(document: unknown): boolean {
-  const latest = field(document, "dist-tags", "latest");
-  if (latest !== undefined && latest !== PLACEHOLDER) return true;
-  return ["versions", "time"].some((name) => {
-    const object = field(document, name);
-    return (
-      isRecord(object) &&
-      Object.keys(object).some((key) => {
-        const match = SEMVER.exec(key);
-        return match !== null && match[1] === undefined;
-      })
-    );
-  });
-}
+const UNREADABLE = "npm document unreadable; refer to the owner";
 
-/** A stable candidate exceeds a published prerelease at the same base. */
-function stableAbove(candidate: string, published: string): boolean {
-  const base = published.split(/[+-]/u)[0] ?? "";
-  const left = candidate.split(".").map(BigInt);
-  const right = base.split(".").map(BigInt);
-  for (let i = 0; i < 3; i += 1) {
-    const a = left[i] ?? 0n;
-    const b = right[i] ?? 0n;
-    if (a !== b) return a > b;
-  }
-  return SEMVER.exec(published)?.[1] !== undefined;
+function historyKeys(document: unknown, name: string): string[] {
+  return Object.keys(field(document, name) as Record<string, unknown>).filter(
+    (key) => name !== "time" || (key !== "created" && key !== "modified"),
+  );
 }
-function orderingKey(
-  name: string,
-  key: string,
-  version: string,
-): string | null {
-  if (name === "time" && (key === "created" || key === "modified")) return null;
-  if (!SEMVER.test(key)) return `npm ${name} contains a non-SemVer version key`;
-  return key !== PLACEHOLDER && !stableAbove(version, key)
-    ? "stable version is not greater than every published version"
-    : null;
-}
-function stableOrdering(document: unknown, version: string): string | null {
-  for (const name of ["versions", "time"]) {
-    const object = field(document, name);
-    if (!isRecord(object)) return "npm document unreadable; refer to the owner";
-    for (const key of Object.keys(object)) {
-      const reason = orderingKey(name, key, version);
-      if (reason !== null) return reason;
-    }
-  }
+function historyReason(document: unknown): string | null {
+  for (const name of ["versions", "time"])
+    if (!isRecord(field(document, name))) return UNREADABLE;
+  for (const name of ["versions", "time"])
+    if (historyKeys(document, name).some((key) => !SEMVER.test(key)))
+      return `npm ${name} contains a non-SemVer version key`;
   return null;
 }
-
+function identifiersCompare(a: string, b: string): number {
+  const numeric = /^\d+$/u;
+  if (numeric.test(a) && numeric.test(b)) {
+    const left = BigInt(a);
+    const right = BigInt(b);
+    if (left === right) return 0;
+    return left > right ? 1 : -1;
+  }
+  if (numeric.test(a) !== numeric.test(b)) return numeric.test(a) ? -1 : 1;
+  if (a === b) return 0;
+  return a > b ? 1 : -1;
+}
+function prereleaseCompare(a: string[], b: string[]): number {
+  if (a.length === b.length && a.length === 0) return 0;
+  if (a.length === 0) return 1;
+  if (b.length === 0) return -1;
+  for (let i = 0; i < Math.max(a.length, b.length); i += 1) {
+    const left = a[i];
+    const right = b[i];
+    if (left === undefined) return -1;
+    if (right === undefined) return 1;
+    const result = identifiersCompare(left, right);
+    if (result !== 0) return result;
+  }
+  return 0;
+}
+/** Exact SemVer precedence, including arbitrary-size numeric identifiers. */
+function precedence(a: string, b: string): number {
+  const parts = (version: string) => {
+    const plain = version.split("+")[0] ?? "";
+    const dash = plain.indexOf("-");
+    return {
+      base: (dash < 0 ? plain : plain.slice(0, dash)).split("."),
+      pre: dash < 0 ? [] : plain.slice(dash + 1).split("."),
+    };
+  };
+  const left = parts(a);
+  const right = parts(b);
+  for (let i = 0; i < 3; i += 1) {
+    const result = identifiersCompare(
+      left.base[i] ?? "0",
+      right.base[i] ?? "0",
+    );
+    if (result !== 0) return result;
+  }
+  return prereleaseCompare(left.pre, right.pre);
+}
+function publishedStable(version: string): boolean {
+  return SEMVER.test(version) && SEMVER.exec(version)?.[1] === undefined;
+}
+function candidateHealth(document: unknown, version: string): string | null {
+  const entry = field(document, "versions", version);
+  if (!isRecord(entry)) return UNREADABLE;
+  const deprecated = entry.deprecated;
+  if (deprecated === undefined || deprecated === "") return null;
+  return typeof deprecated === "string"
+    ? "candidate is deprecated"
+    : UNREADABLE;
+}
+function stableDefaultReason(
+  document: unknown,
+  latest: string,
+  stable: boolean,
+): string | null {
+  if (
+    historyKeys(document, "versions").some(
+      (key) => publishedStable(key) && precedence(key, latest) > 0,
+    )
+  )
+    return "npm latest is not the greatest published stable version";
+  const health = candidateHealth(document, latest);
+  if (health === UNREADABLE) return health;
+  return health !== null && !stable
+    ? "npm latest stable is deprecated; owner recovery required"
+    : null;
+}
+/** BR-363 v3, BR-432: only a validated default may supply a GHCR reference. */
+function defaultReason(document: unknown, stable: boolean): string | null {
+  if (historyReason(document) !== null) return UNREADABLE;
+  const latest = field(document, "dist-tags", "latest");
+  if (latest === undefined) return "npm latest tag missing";
+  if (typeof latest !== "string") return UNREADABLE;
+  if (latest !== PLACEHOLDER && !STABLE.test(latest))
+    return "npm latest is not a supported stable default";
+  if (
+    field(document, "versions", latest, "version") !== latest ||
+    !hasKey(field(document, "time"), latest)
+  )
+    return "npm latest version record incomplete";
+  const placeholderReason = originalPlaceholderReason(document);
+  if (placeholderReason !== null) return placeholderReason;
+  if (latest !== PLACEHOLDER)
+    return stableDefaultReason(document, latest, stable);
+  const keys = [
+    ...historyKeys(document, "versions"),
+    ...historyKeys(document, "time"),
+  ];
+  return keys.some(publishedStable)
+    ? "npm placeholder latest cannot follow stable history"
+    : null;
+}
 function npmPublishedReason(
   inputs: Inputs,
   answer: Answer,
   document: unknown,
-  readable: boolean,
 ): string | null {
   const stable = STABLE.test(inputs.version);
   if (answer.status === 404)
     return inputs.dryRun && !stable ? null : "npm registry status 404";
   if (answer.status !== 200)
     return `npm registry status ${String(answer.status)}`;
-  if (!readable) return "npm document unreadable; refer to the owner";
-  if (
-    hasKey(field(document, "versions"), inputs.version) ||
-    hasKey(field(document, "time"), inputs.version)
-  )
-    return "version already published on npm";
-  return stable ? stableOrdering(document, inputs.version) : null;
+  const invalid = historyReason(document);
+  if (invalid !== null) return invalid;
+  const keys = [
+    ...historyKeys(document, "versions"),
+    ...historyKeys(document, "time"),
+  ];
+  if (keys.includes(inputs.version)) return "version already published on npm";
+  const compared = keys.filter(
+    (key) => key !== PLACEHOLDER && (!stable || publishedStable(key)),
+  );
+  if (compared.some((key) => precedence(inputs.version, key) <= 0))
+    return stable
+      ? "stable version is not greater than every published stable version"
+      : "beta version is not greater than every published version";
+  return null;
 }
-
-function npmChecks(report: Report, inputs: Inputs, answer: Answer): void {
+interface DefaultState {
+  reason: string | null;
+  previous: string | null;
+}
+function validatedPrevious(
+  reason: string | null,
+  latest: unknown,
+): string | null {
+  return reason === null && typeof latest === "string" && latest !== PLACEHOLDER
+    ? latest
+    : null;
+}
+function npmChecks(
+  report: Report,
+  inputs: Inputs,
+  answer: Answer,
+): DefaultState {
   const document = answer.status === 200 ? parse(answer) : undefined;
-  const readable =
-    isRecord(field(document, "versions")) && isRecord(field(document, "time"));
-  if (readable && afterStable(document)) {
-    report.check("npm version not published", AFTER_STABLE);
-    return;
-  }
-  const stable = STABLE.test(inputs.version);
   report.check(
     "npm version not published",
-    npmPublishedReason(inputs, answer, document, readable),
+    npmPublishedReason(inputs, answer, document),
   );
-  if (inputs.dryRun && !stable) return;
-  let placeholder: string | null = null;
-  if (
-    answer.status !== 200 ||
-    (stable && field(document, "dist-tags", "latest") === undefined)
-  )
-    placeholder = "npm placeholder missing (P-0)";
-  else if (!deprecatedLatest(document, inputs.version))
-    placeholder = "npm latest is not a deprecated placeholder (P-0)";
-  report.check("npm placeholder", placeholder);
-}
-
-function originalPlaceholderDeprecated(document: unknown): boolean {
-  const deprecated = field(document, "versions", PLACEHOLDER, "deprecated");
-  return typeof deprecated === "string" && deprecated !== "";
-}
-function deprecatedLatest(document: unknown, version: string): boolean {
+  const exception =
+    answer.status === 404 && inputs.dryRun && !STABLE.test(inputs.version);
+  const reason = exception
+    ? null
+    : defaultReason(document, STABLE.test(inputs.version));
+  report.check("npm default", reason);
   const latest = field(document, "dist-tags", "latest");
-  if (typeof latest !== "string" || latest === version) return false;
-  const deprecated = field(document, "versions", latest, "deprecated");
-  return typeof deprecated === "string" && deprecated !== "";
+  return { reason, previous: validatedPrevious(reason, latest) };
 }
 
+function originalPlaceholderReason(document: unknown): string | null {
+  const deprecated = field(document, "versions", PLACEHOLDER, "deprecated");
+  if (deprecated !== undefined && typeof deprecated !== "string")
+    return UNREADABLE;
+  return deprecated === undefined || deprecated === ""
+    ? "original placeholder is not deprecated"
+    : null;
+}
 /** A GHCR pull token, with GITHUB_TOKEN or anonymous. */
 async function ghcrToken(
   credential: boolean,
@@ -558,35 +631,84 @@ const manifest = (tag: string, token: string, method = "GET") =>
     },
   });
 
-async function stableGhcrCheck(
+function unexpectedStatus(answer: Answer): string | null {
+  return answer.status === 200 || answer.status === 404
+    ? null
+    : `unexpected GHCR status ${String(answer.status)}; refer to the owner`;
+}
+async function priorDefaultReason(
+  previous: string,
+  token: string,
+  readBack: boolean,
+  candidateDigest = "",
+): Promise<string | null> {
+  const prior = await manifest(previous, token);
+  const latest = await manifest("latest", token);
+  if (prior.status === 404) return "previous stable image unavailable";
+  if (prior.status !== 200)
+    return readBack
+      ? `GHCR status ${String(prior.status)}`
+      : unexpectedStatus(prior);
+  if (latest.status === 404)
+    return "GHCR latest missing for stable npm default";
+  if (latest.status !== 200)
+    return readBack
+      ? `GHCR status ${String(latest.status)}`
+      : unexpectedStatus(latest);
+  if (indexReason(prior) !== null || indexReason(latest) !== null)
+    return "previous stable image manifest invalid";
+  if (sha256(prior.body) !== sha256(latest.body))
+    return "GHCR latest does not match npm stable default";
+  return candidateDigest !== "" && sha256(latest.body) === candidateDigest
+    ? "latest names the release"
+    : null;
+}
+async function bootstrapReason(
   inputs: Inputs,
   token: string,
 ): Promise<string | null> {
-  const candidate = await manifest(inputs.version, token);
   const latest = await manifest("latest", token);
-  if (inputs.phase === "npm")
-    return boundDigestReason(candidate) ?? boundDigestReason(latest);
-  for (const answer of [candidate, latest])
-    if (answer.status !== 200 && answer.status !== 404)
-      return `unexpected GHCR status ${String(answer.status)}; refer to the owner`;
-  if (candidate.status === 200) return "image already published";
-  return latest.status === 404
-    ? null
-    : "GHCR latest already exists; first stable requires 404";
+  const status = unexpectedStatus(latest);
+  if (status !== null || latest.status === 404) return status;
+  if (STABLE.test(inputs.version))
+    return "GHCR latest exists without a stable npm default";
+  const candidate = await manifest(inputs.version, token);
+  if (
+    indexReason(candidate) === null &&
+    sha256(candidate.body) !== sha256(latest.body)
+  )
+    return null;
+  return inputs.phase === "npm"
+    ? "latest names the release"
+    : "GHCR latest exists without a stable npm default";
 }
-
-/** BR-363 GHCR part, by phase. */
-async function ghcrCheck(inputs: Inputs): Promise<string | null> {
+/** BR-363 v3: invalid npm defaults suppress every GHCR request. */
+async function ghcrCheck(
+  inputs: Inputs,
+  state: DefaultState,
+): Promise<string | null> {
+  if (state.reason !== null) return "npm stable default unavailable";
   const token = await ghcrToken(true);
   if (token.status !== 200)
     return `unexpected GHCR token status ${String(token.status)}; refer to the owner`;
-  if (STABLE.test(inputs.version)) return stableGhcrCheck(inputs, token.token);
-  const answer = await manifest(inputs.version, token.token, "HEAD");
-  if (answer.status !== 200 && answer.status !== 404)
-    return `unexpected GHCR status ${String(answer.status)}; refer to the owner`;
-  if (inputs.phase === "npm")
-    return answer.status === 200 ? null : "image not pushed";
-  return answer.status === 404 ? null : "image already published";
+  const stable = STABLE.test(inputs.version);
+  const candidate = await manifest(
+    inputs.version,
+    token.token,
+    stable ? "GET" : "HEAD",
+  );
+  if (stable && inputs.phase === "npm") {
+    const latest = await manifest("latest", token.token);
+    return boundDigestReason(candidate) ?? boundDigestReason(latest);
+  }
+  const status = unexpectedStatus(candidate);
+  if (status !== null) return status;
+  if (inputs.phase === "npm") {
+    if (candidate.status !== 200) return "image not pushed";
+  } else if (candidate.status !== 404) return "image already published";
+  return state.previous === null
+    ? bootstrapReason(inputs, token.token)
+    : priorDefaultReason(state.previous, token.token, false);
 }
 
 async function check(): Promise<number> {
@@ -595,8 +717,8 @@ async function check(): Promise<number> {
   if (!inputs) return report.summary();
   commitChecks(report, inputs);
   report.check("CI evidence", await ciEvidence(inputs.sha));
-  npmChecks(report, inputs, await npmDocument());
-  report.check("GHCR image", await ghcrCheck(inputs));
+  const state = npmChecks(report, inputs, await npmDocument());
+  report.check("GHCR image", await ghcrCheck(inputs, state));
   report.check("release environment protected", await environmentProtected());
   return report.summary();
 }
@@ -783,7 +905,7 @@ type Outcome = [string, string | null][];
 async function npmAttempt(
   version: string,
   expected: string | null,
-): Promise<Outcome> {
+): Promise<{ outcome: Outcome; document: unknown }> {
   const answer = await npmDocument();
   const document = answer.status === 200 ? parse(answer) : undefined;
   const status =
@@ -793,9 +915,8 @@ async function npmAttempt(
   const stable = STABLE.test(version);
   const present =
     hasKey(field(document, "versions"), version) &&
-    (!stable ||
-      (field(document, "versions", version, "version") === version &&
-        hasKey(field(document, "time"), version)));
+    field(document, "versions", version, "version") === version &&
+    hasKey(field(document, "time"), version);
   const tags: Outcome = stable
     ? [
         [
@@ -803,12 +924,6 @@ async function npmAttempt(
           field(document, "dist-tags", "latest") === version
             ? null
             : "latest does not name the version",
-        ],
-        [
-          "npm original placeholder deprecated",
-          originalPlaceholderDeprecated(document)
-            ? null
-            : "original placeholder is not deprecated",
         ],
       ]
     : [
@@ -819,18 +934,23 @@ async function npmAttempt(
             : "beta does not name the version",
         ],
         [
-          "npm latest is a deprecated placeholder",
-          deprecatedLatest(document, version)
-            ? null
-            : "latest is not a deprecated placeholder",
+          "npm default",
+          field(document, "dist-tags", "latest") === version
+            ? "latest names the release"
+            : defaultReason(document, false),
         ],
       ];
-  return [
+  const outcome: Outcome = [
     [
       "npm version present",
       status ?? (present ? null : "version not published"),
     ],
     ...tags,
+    ["npm candidate not deprecated", candidateHealth(document, version)],
+    [
+      "npm original placeholder deprecated",
+      originalPlaceholderReason(document),
+    ],
     [
       "npm provenance",
       field(document, "versions", version, "dist", "attestations") === undefined
@@ -842,6 +962,7 @@ async function npmAttempt(
       await tarballMatches(document, version, expected),
     ],
   ];
+  return { outcome, document };
 }
 
 function platforms(index: unknown): string[] {
@@ -926,31 +1047,64 @@ async function stableImageChecks(
   );
 }
 
+async function betaImageChecks(
+  report: Report,
+  version: string,
+  token: { status: number; token: string },
+  validDefault: boolean,
+  previous: string | null,
+): Promise<{ digest: string; latestResult: string | null }> {
+  if (token.status !== 200) {
+    const reason = `GHCR token status ${String(token.status)}`;
+    report.check("image platforms", reason);
+    return {
+      digest: "",
+      latestResult: validDefault ? reason : "npm stable default unavailable",
+    };
+  }
+  const index = await manifest(version, token.token);
+  const reason = indexReason(index);
+  const digest = reason === null ? sha256(index.body) : "";
+  report.check("image platforms", reason);
+  if (!validDefault)
+    return { digest, latestResult: "npm stable default unavailable" };
+  const latestResult =
+    previous === null
+      ? latestReason(await manifest("latest", token.token), digest)
+      : await priorDefaultReason(previous, token.token, true, digest);
+  return { digest, latestResult };
+}
+
 /** BR-373: the multi-platform index, no latest tag, anonymous pulls. */
-async function imageChecks(report: Report, version: string): Promise<void> {
+async function imageChecks(
+  report: Report,
+  version: string,
+  document: unknown,
+): Promise<void> {
   const token = await ghcrToken(true);
   if (STABLE.test(version)) {
     await stableImageChecks(report, version, token);
     return;
   }
-  let digest = "";
-  if (token.status === 200) {
-    const index = await manifest(version, token.token);
-    const reason = indexReason(index);
-    if (reason === null) digest = sha256(index.body);
-    report.check("image platforms", reason);
-    report.check(
-      "image latest tag",
-      latestReason(await manifest("latest", token.token), digest),
-    );
-  } else {
-    const reason = `GHCR token status ${String(token.status)}`;
-    report.check("image platforms", reason);
-    report.check("image latest tag", reason);
-  }
+  const validDefault = defaultReason(document, false) === null;
+  const latest = field(document, "dist-tags", "latest");
+  const previous = validatedPrevious(validDefault ? null : UNREADABLE, latest);
+  const { digest, latestResult } = await betaImageChecks(
+    report,
+    version,
+    token,
+    validDefault,
+    previous,
+  );
+  report.check("image latest tag", latestResult);
   if (digest !== "")
     process.stdout.write(`release-verify: image digest sha256:${digest}\n`);
   report.check("image is public (P-3)", await publicReason(version));
+  if (previous !== null)
+    report.check(
+      "image latest is public (P-3)",
+      (await publicReason("latest")) === null ? null : "anonymous pull failed",
+    );
 }
 
 function retryDelay(): number {
@@ -969,14 +1123,15 @@ async function verify(): Promise<number> {
   const digest = env("RELEASE_TARBALL_SHA256") ?? "";
   const expected = /^[0-9a-f]{64}$/u.test(digest) ? digest : null;
   let outcome: Outcome = [];
+  let document: unknown;
   for (let attempt = 1; attempt <= ATTEMPTS; attempt += 1) {
-    outcome = await npmAttempt(inputs.version, expected);
+    ({ outcome, document } = await npmAttempt(inputs.version, expected));
     if (expected === null || outcome.every(([, reason]) => reason === null))
       break;
     if (attempt < ATTEMPTS) await sleep(retryDelay());
   }
   for (const [name, reason] of outcome) report.check(name, reason);
-  await imageChecks(report, inputs.version);
+  await imageChecks(report, inputs.version, document);
   return report.summary();
 }
 

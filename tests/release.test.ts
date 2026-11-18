@@ -4,12 +4,20 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  renameSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
 import { afterAll, afterEach, describe, expect, it } from "vitest";
 import { rules } from "./helpers/image-policy.js";
+import {
+  RecoveryRegistry,
+  PREVIOUS_INDEX,
+  PREVIOUS_DIGEST,
+  RECOVERY_ACCEPT,
+  runRecoveryBlock,
+} from "./helpers/release-recovery.js";
 import {
   CHECK_VARIABLES,
   NPM_VARIABLES,
@@ -388,8 +396,7 @@ describe("F-024 AC-08 registry checks", () => {
       "true",
       "verify",
       (s) => {
-        // F-024 v3 (BR-363 v2): a non-placeholder latest is the #91 refusal,
-        // so this case keeps the valid pre-1.0 registry state.
+        // AC-39 BR-363 v3: retain a valid bootstrap registry state.
         s.npm = { status: 200, body: npmDocument({}) };
       },
       [],
@@ -426,7 +433,7 @@ describe("F-024 AC-08 registry checks", () => {
       (s) => {
         s.npm = { status: 503 };
       },
-      ["npm version not published"],
+      ["npm version not published", "npm default", "GHCR image"],
     ],
     ["GHCR manifest 404", "true", "verify", () => undefined, []],
     [
@@ -495,8 +502,8 @@ describe("F-024 AC-08 registry checks", () => {
       (s) => {
         s.npm = { status: 404 };
       },
-      ["npm version not published", "npm placeholder"],
-      "npm placeholder missing (P-0)",
+      ["npm version not published", "npm default", "GHCR image"],
+      "npm registry status 404",
     ],
     [
       "dry run false deprecated placeholder on latest",
@@ -515,8 +522,8 @@ describe("F-024 AC-08 registry checks", () => {
           body: npmDocument({ placeholderDeprecated: false }),
         };
       },
-      ["npm placeholder"],
-      "npm latest is not a deprecated placeholder (P-0)",
+      ["npm default", "GHCR image"],
+      "original placeholder is not deprecated",
     ],
     [
       "dry run false dist-tags without latest",
@@ -525,8 +532,8 @@ describe("F-024 AC-08 registry checks", () => {
       (s) => {
         s.npm = { status: 200, body: npmDocument({ latest: undefined }) };
       },
-      ["npm placeholder"],
-      "npm latest is not a deprecated placeholder (P-0)",
+      ["npm default", "GHCR image"],
+      "npm latest tag missing",
     ],
     [
       "phase npm GHCR manifest 200",
@@ -1344,23 +1351,19 @@ describe("F-024 AC-12 read-back", () => {
     [
       "latest is the sole version (P-0 skipped)",
       npm({ placeholder: false, latest: VERSION }),
-      "npm latest is a deprecated placeholder",
+      "npm default",
     ],
     ["beta points elsewhere", npm({ beta: PLACEHOLDER }), "npm beta tag"],
     [
       "latest moved to the new version",
       npm({ latest: VERSION }),
-      "npm latest is a deprecated placeholder",
+      "npm default",
     ],
-    [
-      "latest missing",
-      npm({ latest: undefined }),
-      "npm latest is a deprecated placeholder",
-    ],
+    ["latest missing", npm({ latest: undefined }), "npm default"],
     [
       "latest names a non-deprecated version",
       npm({ placeholderDeprecated: false }),
-      "npm latest is a deprecated placeholder",
+      "npm default",
     ],
     ["attestations missing", npm({ attestations: false }), "npm provenance"],
     ["the index lacks linux/arm64", index(["linux/amd64"]), "image platforms"],
@@ -1876,8 +1879,7 @@ const STABLE = "1.0.0";
 const INDEX_ACCEPT = `${OCI_INDEX}, application/vnd.docker.distribution.manifest.list.v2+json`;
 const RUN_INDEX = indexBody(["linux/amd64", "linux/arm64"]);
 const RUN_DIGEST = `sha256:${sha256(RUN_INDEX)}`;
-const AFTER_STABLE =
-  "releases after the first stable are out of scope; see #91 (F-024 v4)";
+const PUBLISHED_ON_NPM = "version already published on npm";
 const DIGEST_INPUT = "RELEASE_IMAGE_DIGEST is not a sha256 digest";
 const EMPTY_DIGEST =
   "RELEASE_IMAGE_DIGEST must be empty in verify and image phases";
@@ -2140,42 +2142,42 @@ describe("F-024 v3 registry phase matrices", () => {
       (d) => {
         d.versions[STABLE] = { version: STABLE };
       },
-      AFTER_STABLE,
+      PUBLISHED_ON_NPM,
     ],
     [
       "candidate in time",
       (d) => {
         d.time[STABLE] = "date";
       },
-      AFTER_STABLE,
+      PUBLISHED_ON_NPM,
     ],
     [
       "missing latest",
       (d) => {
         delete d["dist-tags"].latest;
       },
-      "npm placeholder missing (P-0)",
+      "npm latest tag missing",
     ],
     [
       "placeholder not deprecated",
       (d) => {
         delete d.versions[PLACEHOLDER]!.deprecated;
       },
-      "npm latest is not a deprecated placeholder (P-0)",
+      "original placeholder is not deprecated",
     ],
     [
       "placeholder entry absent",
       (d) => {
         delete d.versions[PLACEHOLDER];
       },
-      "npm latest is not a deprecated placeholder (P-0)",
+      "npm latest version record incomplete",
     ],
     [
       "placeholder empty deprecation",
       (d) => {
         d.versions[PLACEHOLDER]!.deprecated = "";
       },
-      "npm latest is not a deprecated placeholder (P-0)",
+      "original placeholder is not deprecated",
     ],
   ];
   it.each(
@@ -2247,7 +2249,7 @@ describe("F-024 v3 registry phase matrices", () => {
       } else if (variant.startsWith("versions"))
         doc.versions["0.9.0+build"] = {};
       else doc.time["0.9.0"] = "date";
-      // #91 must win even over candidate presence, malformed keys and missing deprecation.
+      // AC-38 AC-45 BR-363 v3: malformed history wins over presence and ordering.
       doc.versions[version] = {};
       doc.time["untrusted-key"] = "date";
       delete doc.versions[PLACEHOLDER]!.deprecated;
@@ -2262,7 +2264,7 @@ describe("F-024 v3 registry phase matrices", () => {
           ...(version === VERSION ? { RELEASE_IMAGE_DIGEST: "" } : {}),
         },
       );
-      reason(result, AFTER_STABLE);
+      reason(result, "npm time contains a non-SemVer version key");
       expect(result.stdout).not.toContain("untrusted-key");
     },
   );
@@ -2320,12 +2322,12 @@ describe("F-024 v3 registry phase matrices", () => {
   it.each([
     ["1.0.0", "0.6.0-beta.2", true],
     ["0.6.0", "0.6.0-beta.2", true],
-    ["0.5.0", "0.6.0-beta.2", false],
-    ["1.9.9", "1.10.0-beta.1", false],
+    ["0.5.0", "0.6.0-beta.2", true],
+    ["1.9.9", "1.10.0-beta.1", true],
     ["1.10.0", "1.9.9-beta.1", true],
     ["9007199254740993.0.0", "9007199254740992.999.999-beta.1", true],
-    ["9007199254740992.0.0", "9007199254740993.0.0-beta.1", false],
-    [VERSION, "0.9.0-beta.9", true],
+    ["9007199254740992.0.0", "9007199254740993.0.0-beta.1", true],
+    [VERSION, "0.9.0-beta.9", false],
   ] as const)(
     "BR-363 v2 npm phase matrix: ordering %s above %s",
     async (candidate, published, passes) => {
@@ -2338,12 +2340,16 @@ describe("F-024 v3 registry phase matrices", () => {
         },
         { RELEASE_VERSION: candidate },
       );
-      if (passes) expect(result.status, result.stdout).toBe(0);
-      else
-        reason(
-          result,
-          "stable version is not greater than every published version",
-        );
+      // AC-38 BR-363 v3: prereleases never block a stable; beta ordering
+      // remains authoritative even before the first stable.
+      exactCheck(
+        result,
+        "npm version not published",
+        passes
+          ? null
+          : "beta version is not greater than every published version",
+      );
+      expect(result.status, result.stdout).toBe(passes ? 0 : 1);
     },
   );
   const ghcrCases: [string, (s: ReleaseState) => void, string | null][] = [
@@ -2360,7 +2366,7 @@ describe("F-024 v3 registry phase matrices", () => {
       (s) => {
         s.latest = { status: 200, body: RUN_INDEX };
       },
-      "GHCR latest already exists; first stable requires 404",
+      "GHCR latest exists without a stable npm default",
     ],
     [
       "candidate unexpected",
@@ -2442,12 +2448,16 @@ describe("F-024 v3 registry phase matrices", () => {
         RELEASE_IMAGE_DIGEST: digest,
       },
     );
-    expect(result.status, result.stdout).toBe(0);
+    // AC-39 BR-363 v3: beta now validates the bootstrap GHCR default.
+    reason(result, "unexpected GHCR status 500; refer to the owner");
     expect(
       server.seen
         .filter((r) => r.url.includes("/manifests/"))
         .map((r) => [r.method, r.url.split("/").at(-1)]),
-    ).toEqual([["HEAD", VERSION]]);
+    ).toEqual([
+      ["HEAD", VERSION],
+      ["GET", "latest"],
+    ]);
   });
   const binding: [string, (s: ReleaseState) => void, string | null][] = [
     ["both raw GET bodies match", () => undefined, null],
@@ -3052,7 +3062,7 @@ describe("F-024 v3 stable read-back", () => {
       expect(state.npmAttempts).toBe(name.includes("20") || failure ? 20 : 1);
       for (const betaLine of [
         "npm beta tag",
-        "npm latest is a deprecated placeholder",
+        "npm default",
         "image latest tag",
       ])
         expect(result.stdout).not.toContain(`release-verify: ${betaLine} `);
@@ -3460,7 +3470,7 @@ describe("F-024 v3 stable release and recovery", () => {
         const refused = await command("release-check", {
           RELEASE_PHASE: "verify",
         });
-        reasonViaMake(refused, AFTER_STABLE);
+        reasonViaMake(refused, PUBLISHED_ON_NPM);
         const count = npmCalls(fake.npmLog).filter(
           (c) => c.argv[0] === "publish",
         ).length;
@@ -3513,7 +3523,8 @@ describe("F-024 v3 stable release and recovery", () => {
           expect((await readback()).status).toBe(0);
           expect(journal).not.toContain("owner cleanup");
         } else {
-          // Re-run unavailable (expired, partial image job or main moved): owner cleanup first.
+          // This owner model selects an unavailable retry; advanced main alone
+          // does not make the original run ineligible (AC-44).
           if (scenario === "main advanced") {
             writeFileSync(join(repo.root, "main-advanced.txt"), "new change\n");
             repo.git("add", "main-advanced.txt");
@@ -3686,7 +3697,7 @@ describe("F-024 v3 exact diagnostics", () => {
       },
     ],
     [
-      "npm placeholder missing (P-0)",
+      "npm latest tag missing",
       {},
       (s) => {
         const d = npmDocument() as NpmFixture;
@@ -3695,7 +3706,7 @@ describe("F-024 v3 exact diagnostics", () => {
       },
     ],
     [
-      "npm latest is not a deprecated placeholder (P-0)",
+      "original placeholder is not deprecated",
       {},
       (s) => {
         s.npm = {
@@ -3705,7 +3716,7 @@ describe("F-024 v3 exact diagnostics", () => {
       },
     ],
     [
-      AFTER_STABLE,
+      PUBLISHED_ON_NPM,
       {},
       (s) => {
         s.npm = { status: 200, body: stableDocument() };
@@ -3719,7 +3730,7 @@ describe("F-024 v3 exact diagnostics", () => {
       },
     ],
     [
-      "GHCR latest already exists; first stable requires 404",
+      "GHCR latest exists without a stable npm default",
       {},
       (s) => {
         s.latest = { status: 200, body: RUN_INDEX };
@@ -3765,11 +3776,11 @@ describe("F-024 v3 exact diagnostics", () => {
       },
     ],
     [
-      "stable version is not greater than every published version",
+      "stable version is not greater than every published stable version",
       {},
       (s) => {
         const d = npmDocument() as NpmFixture;
-        d.time["1.1.0-beta.1"] = "date";
+        d.time["1.1.0"] = "date";
         s.npm = { status: 200, body: d };
       },
     ],
@@ -3792,6 +3803,14 @@ describe("F-024 v3 exact diagnostics", () => {
     const removed = [
       ["unsupported", "pre-release"].join(" "),
       ["stable releases are out of scope", "(F-024 v1)"].join(" "),
+      [
+        "releases after the first stable are out of scope;",
+        "see #91 (F-024 v4)",
+      ].join(" "),
+      ["GHCR latest already exists;", "first stable requires 404"].join(" "),
+      ["stable version is not greater than every", "published version"].join(
+        " ",
+      ),
     ];
     for (const path of [
       "scripts/release.ts",
@@ -3875,5 +3894,2049 @@ it.each([
     expect(result.stdout.split("\n")).toContain(
       `release-verify: ${condition}` + (outcome ? " " + outcome : ""),
     );
+  },
+);
+
+// F-024 v4 AC-38–AC-45. All histories and raw indexes are bounded synthetic data.
+const PRIOR_INDEX = `${RUN_INDEX}\n`;
+const LATER_STABLE = "1.1.1";
+const LATER_BETA = "1.3.0-beta.1";
+const PHASES = ["verify", "image", "npm"] as const;
+type LifecycleChange = (s: ReleaseState, d: NpmFixture) => void;
+function addVersion(d: NpmFixture, version: string) {
+  d.versions[version] = { version };
+  d.time[version] = "2026-11-17T00:00:00.000Z";
+}
+function lifecycleDocument(prior = STABLE): NpmFixture {
+  const doc = npmDocument() as NpmFixture;
+  addVersion(doc, prior);
+  doc["dist-tags"].latest = prior;
+  return doc;
+}
+// Reuse immutable release commits across the bounded registry matrices.
+const lifecycleRepos = new Map<string, ReturnType<typeof stableRepo>>();
+async function lifecycleCheck(
+  candidate: string,
+  phase: string,
+  dry: string,
+  change: LifecycleChange = () => undefined,
+) {
+  let repo = lifecycleRepos.get(candidate);
+  if (!repo) {
+    repo = stableRepo(candidate);
+    lifecycleRepos.set(candidate, repo);
+  }
+  const state = releaseState(repo.sha);
+  const doc = lifecycleDocument();
+  state.references = { [STABLE]: { status: 200, body: PRIOR_INDEX } };
+  state.index = { status: phase === "npm" ? 200 : 404, body: RUN_INDEX };
+  state.manifest = { status: phase === "npm" ? 200 : 404 };
+  state.latest = {
+    status: 200,
+    body: phase === "npm" && !candidate.includes("-") ? RUN_INDEX : PRIOR_INDEX,
+  };
+  state.npm = { status: 200, body: doc };
+  change(state, doc);
+  const server = await startDouble(state);
+  const fake = fakeBin();
+  const result = await release(
+    "check",
+    repo.root,
+    checkEnv(repo, server.url, {
+      RELEASE_VERSION: candidate,
+      RELEASE_PHASE: phase,
+      RELEASE_DRY_RUN: dry,
+      RELEASE_IMAGE_DIGEST:
+        phase === "npm" && !candidate.includes("-") ? RUN_DIGEST : "",
+    }),
+    fake.bin,
+  );
+  expect(npmCalls(fake.npmLog)).toEqual([]);
+  expect(lines(fake.dockerLog)).toEqual([]);
+  expect(
+    server.seen.every((r) => r.method === "GET" || r.method === "HEAD"),
+  ).toBe(true);
+  return { result, state, doc, server, repo };
+}
+function exactCheck(
+  result: Result,
+  condition: string,
+  diagnostic: string | null,
+) {
+  const ending = diagnostic ? "FAIL " + diagnostic : "ok";
+  expect(line(result.stdout, "release-check", condition)).toBe(
+    `release-check: ${condition} ${ending}`,
+  );
+}
+function comparedGets(server: Double) {
+  const gets = server.seen.filter(
+    (r) => r.url.includes("/manifests/") && r.method === "GET",
+  );
+  for (const request of gets) expect(request.accept).toBe(INDEX_ACCEPT);
+  return gets.map((r) => r.url.split("/").at(-1));
+}
+
+describe("F-024 v4 AC-38 union-history ordering", () => {
+  const rows: [string[], string, boolean][] = [
+    [["1.0.0"], "1.0.1", true],
+    [["1.0.0"], "1.1.0", true],
+    [["1.0.0"], "2.0.0", true],
+    [["1.0.0"], "1.1.0-beta.1", true],
+    [["1.1.0", "1.2.0-beta.1"], "1.1.1", true],
+    [["1.0.0", "1.1.0-beta.1"], "1.0.1", true],
+    [["1.1.0"], "1.0.1", false],
+    [["1.1.0", "1.2.0-beta.1"], "1.1.2-beta.1", false],
+    [["1.0.0", "1.1.0-beta.1"], "1.0.5-beta.1", false],
+    [["1.0.5"], "1.0.5-beta.1", false],
+    [["1.0.5"], "1.0.4", false],
+    [["1.0.5"], "1.0.6-beta.1", true],
+    [["1.1.0-beta.9"], "1.1.0-beta.10", true],
+    [["1.1.0-beta.10"], "1.1.0-beta.9", false],
+    [["9007199254740992.999.999"], "9007199254740993.0.0", true],
+    [["9007199254740993.0.0"], "9007199254740992.999.999", false],
+    [["1.1.0-beta.9007199254740992"], "1.1.0-beta.9007199254740993", true],
+    [["1.1.0-beta.9007199254740993"], "1.1.0-beta.9007199254740992", false],
+    [["1.1.0-1"], "1.1.0-beta.1", true],
+    [["1.1.0-alpha.z"], "1.1.0-beta.1", true],
+    [["1.1.0-Beta.999"], "1.1.0-beta.1", true],
+    [["1.1.0-betaz"], "1.1.0-beta.1", false],
+    [["1.9007199254740992.9"], "1.9007199254740993.0", true],
+    [["1.0.9007199254740993"], "1.0.9007199254740992", false],
+    [["1.1.0-rc.1"], "1.1.0-beta.1", false],
+    [["1.1.0-beta"], "1.1.0-beta.1", true],
+    [["1.1.0-beta.1.0"], "1.1.0-beta.1", false],
+    [["1.1.0-beta.1+build"], "1.1.0-beta.1", false],
+    [["1.1.0+build"], "1.1.0", false],
+    [[PLACEHOLDER], "0.0.0-beta.1", true],
+    [["0.0.0-stage"], "0.0.0-beta.1", false],
+  ];
+  it.each(
+    rows.flatMap(([history, candidate, passes]) =>
+      ["versions", "time", "both"].map(
+        (where) =>
+          [
+            `${candidate} after ${history.join(",")} in ${where}`,
+            history,
+            candidate,
+            passes,
+            where,
+          ] as const,
+      ),
+    ),
+  )(
+    "BR-363 v3 BR-431 v1 ordering: %s",
+    async (_name, history, candidate, passes, where) => {
+      for (const phase of PHASES)
+        for (const dry of ["true", "false"]) {
+          const { result } = await lifecycleCheck(
+            candidate,
+            phase,
+            dry,
+            (s, d) => {
+              // Bootstrap isolates ordering from default validation. Stable versions in
+              // history intentionally invalidate P; ordering still reports independently.
+              const bootstrap = npmDocument() as NpmFixture;
+              Object.assign(d, bootstrap);
+              for (const version of history) {
+                if (version === PLACEHOLDER) continue;
+                if (where !== "time") d.versions[version] = { version };
+                if (where !== "versions") d.time[version] = "date";
+              }
+              s.latest = { status: 404 };
+              d.time.created = "date";
+              d.time.modified = "date";
+            },
+          );
+          exactCheck(
+            result,
+            "npm version not published",
+            passes
+              ? null
+              : candidate.includes("-")
+                ? "beta version is not greater than every published version"
+                : "stable version is not greater than every published stable version",
+          );
+          if (!passes) expect(result.status).toBe(1);
+        }
+    },
+    120_000,
+  );
+
+  it.each(["versions", "time"] as const)(
+    "BR-363 v3 BR-431 v1 ordering: malformed %s precedes candidate presence and ordering (AC-38 AC-45)",
+    async (where) => {
+      for (const phase of PHASES)
+        for (const dry of ["true", "false"]) {
+          const { result } = await lifecycleCheck(
+            LATER_BETA,
+            phase,
+            dry,
+            (_s, d) => {
+              addVersion(d, LATER_BETA);
+              addVersion(d, "9.0.0");
+              if (where === "versions") d.versions["unsafe/key"] = {};
+              else d.time["unsafe/key"] = "date";
+              if (where === "versions") d.time["also-invalid"] = "date";
+            },
+          );
+          exactCheck(
+            result,
+            "npm version not published",
+            `npm ${where} contains a non-SemVer version key`,
+          );
+          expect(result.stdout).not.toContain("unsafe/key");
+        }
+    },
+    120_000,
+  );
+});
+
+describe("F-024 v4 AC-39 AC-40 AC-41 AC-45 lifecycle matrices", () => {
+  const defaults: [string, LifecycleChange, string][] = [
+    [
+      "missing latest",
+      (_s, d) => {
+        delete d["dist-tags"].latest;
+      },
+      "npm latest tag missing",
+    ],
+    [
+      "beta default",
+      (_s, d) => {
+        d["dist-tags"].latest = "1.0.1-beta.1";
+      },
+      "npm latest is not a supported stable default",
+    ],
+    [
+      "unsafe key",
+      (_s, d) => {
+        d["dist-tags"].latest = "../unsafe";
+      },
+      "npm latest is not a supported stable default",
+    ],
+    [
+      "missing record",
+      (_s, d) => {
+        delete d.versions[STABLE];
+      },
+      "npm latest version record incomplete",
+    ],
+    [
+      "wrong version",
+      (_s, d) => {
+        d.versions[STABLE]!.version = "1.0.1";
+      },
+      "npm latest version record incomplete",
+    ],
+    [
+      "missing timestamp",
+      (_s, d) => {
+        delete d.time[STABLE];
+      },
+      "npm latest version record incomplete",
+    ],
+    [
+      "placeholder missing",
+      (_s, d) => {
+        delete d.versions[PLACEHOLDER];
+      },
+      "original placeholder is not deprecated",
+    ],
+    [
+      "placeholder healthy",
+      (_s, d) => {
+        d.versions[PLACEHOLDER]!.deprecated = "";
+      },
+      "original placeholder is not deprecated",
+    ],
+    [
+      "placeholder non-string deprecation",
+      (_s, d) => {
+        d.versions[PLACEHOLDER]!.deprecated = false;
+      },
+      "npm document unreadable; refer to the owner",
+    ],
+    [
+      "P reset with versions stable",
+      (_s, d) => {
+        d["dist-tags"].latest = PLACEHOLDER;
+      },
+      "npm placeholder latest cannot follow stable history",
+    ],
+    [
+      "P reset with time-only stable",
+      (_s, d) => {
+        d["dist-tags"].latest = PLACEHOLDER;
+        delete d.versions[STABLE];
+      },
+      "npm placeholder latest cannot follow stable history",
+    ],
+    [
+      "stale default",
+      (_s, d) => {
+        addVersion(d, "1.0.1");
+      },
+      "npm latest is not the greatest published stable version",
+    ],
+    [
+      "non-string deprecation",
+      (_s, d) => {
+        d.versions[STABLE]!.deprecated = false;
+      },
+      "npm document unreadable; refer to the owner",
+    ],
+    [
+      "unreadable document",
+      (s) => {
+        s.npm = { status: 200, body: "{" };
+      },
+      "npm document unreadable; refer to the owner",
+    ],
+  ];
+  it.each(defaults)(
+    "BR-363 v3 lifecycle phase matrix: invalid %s (AC-39 AC-45)",
+    async (_name, change, diagnostic) => {
+      for (const candidate of [LATER_STABLE, LATER_BETA])
+        for (const phase of PHASES)
+          for (const dry of ["true", "false"]) {
+            const { result, server } = await lifecycleCheck(
+              candidate,
+              phase,
+              dry,
+              (s, d) => {
+                change(s, d);
+                s.ghcrToken = { status: 403 };
+              },
+            );
+            exactCheck(result, "npm default", diagnostic);
+            exactCheck(result, "GHCR image", "npm stable default unavailable");
+            expect(
+              server.seen.filter(
+                (r) =>
+                  r.url.startsWith("/token?") || r.url.includes("/manifests/"),
+              ),
+            ).toEqual([]);
+            expect(result.stdout).not.toContain("../unsafe");
+            expect(result.status).toBe(1);
+          }
+    },
+    120_000,
+  );
+
+  it.each([LATER_STABLE, LATER_BETA])(
+    "BR-363 v3 lifecycle phase matrix: healthy older S for %s (AC-39)",
+    async (candidate) => {
+      for (const phase of PHASES)
+        for (const dry of ["true", "false"]) {
+          const { result, server } = await lifecycleCheck(
+            candidate,
+            phase,
+            dry,
+          );
+          expect(result.status, result.stdout).toBe(0);
+          exactCheck(result, "npm default", null);
+          exactCheck(result, "npm version not published", null);
+          const gets = comparedGets(server);
+          expect(gets).toContain("latest");
+          expect(gets).toContain(
+            phase === "npm" && !candidate.includes("-") ? candidate : STABLE,
+          );
+          if (candidate.includes("-")) {
+            const manifests = server.seen.filter((r) =>
+              r.url.includes("/manifests/"),
+            );
+            expect([
+              manifests[0]!.method,
+              manifests[0]!.url.split("/").at(-1),
+            ]).toEqual(["HEAD", candidate]);
+          }
+        }
+    },
+    120_000,
+  );
+
+  it.each(["1.0.2", "1.0.1", "1.0.0"])(
+    "BR-363 v3 lifecycle phase matrix: time-only stable candidate %s (AC-39)",
+    async (candidate) => {
+      for (const phase of PHASES) {
+        const { result } = await lifecycleCheck(
+          candidate,
+          phase,
+          "false",
+          (_s, d) => {
+            d.time["1.0.1"] = "date";
+          },
+        );
+        exactCheck(result, "npm default", null);
+        exactCheck(
+          result,
+          "npm version not published",
+          candidate === "1.0.2" ? null : "version already published on npm",
+        );
+        expect(result.status, result.stdout).toBe(
+          candidate === "1.0.2" ? 0 : 1,
+        );
+      }
+    },
+  );
+
+  it.each([LATER_STABLE, LATER_BETA])(
+    "BR-363 v3 lifecycle phase matrix: npm 404 for %s (AC-39)",
+    async (candidate) => {
+      for (const phase of PHASES)
+        for (const dry of ["true", "false"]) {
+          const { result, server } = await lifecycleCheck(
+            candidate,
+            phase,
+            dry,
+            (s) => {
+              s.npm = { status: 404 };
+              s.latest = { status: 404 };
+            },
+          );
+          const allowed = candidate.includes("-") && dry === "true";
+          expect(result.status, result.stdout).toBe(allowed ? 0 : 1);
+          exactCheck(
+            result,
+            "npm version not published",
+            allowed ? null : "npm registry status 404",
+          );
+          if (!allowed) expect(comparedGets(server)).toEqual([]);
+        }
+    },
+    120_000,
+  );
+
+  const imageCases: [string, LifecycleChange, string][] = [
+    [
+      "S absent",
+      (s) => {
+        s.references![STABLE] = { status: 404 };
+      },
+      "previous stable image unavailable",
+    ],
+    [
+      "latest absent",
+      (s) => {
+        s.latest = { status: 404 };
+      },
+      "GHCR latest missing for stable npm default",
+    ],
+    [
+      "S invalid",
+      (s) => {
+        s.references![STABLE] = { status: 200, body: "{}" };
+      },
+      "previous stable image manifest invalid",
+    ],
+    [
+      "latest invalid",
+      (s) => {
+        s.latest = { status: 200, body: indexBody(["linux/amd64"]) };
+      },
+      "previous stable image manifest invalid",
+    ],
+    [
+      "orphan latest",
+      (s) => {
+        s.latest = { status: 200, body: RUN_INDEX };
+      },
+      "GHCR latest does not match npm stable default",
+    ],
+    [
+      "S status",
+      (s) => {
+        s.references![STABLE] = { status: 503 };
+      },
+      "unexpected GHCR status 503; refer to the owner",
+    ],
+    [
+      "latest status",
+      (s) => {
+        s.latest = { status: 401 };
+      },
+      "unexpected GHCR status 401; refer to the owner",
+    ],
+    [
+      "token status",
+      (s) => {
+        s.ghcrToken = { status: 403 };
+      },
+      "unexpected GHCR token status 403; refer to the owner",
+    ],
+  ];
+  it.each(imageCases)(
+    "BR-363 v3 BR-373 v3 lifecycle phase matrix: %s (AC-39 AC-41)",
+    async (_name, change, diagnostic) => {
+      for (const candidate of [LATER_STABLE, LATER_BETA])
+        for (const phase of PHASES) {
+          if (candidate === LATER_STABLE && phase === "npm") continue;
+          const { result, server } = await lifecycleCheck(
+            candidate,
+            phase,
+            "false",
+            change,
+          );
+          exactCheck(result, "GHCR image", diagnostic);
+          expect(result.status).toBe(1);
+          comparedGets(server);
+        }
+    },
+    120_000,
+  );
+
+  it.each([
+    "old latest",
+    "equal other run",
+    "candidate absent",
+    "candidate invalid",
+    "latest invalid",
+    "token denied",
+  ])("BR-363 v3 prior default and run binding: %s (AC-41)", async (variant) => {
+    const { result, server } = await lifecycleCheck(
+      LATER_STABLE,
+      "npm",
+      "false",
+      (s) => {
+        if (variant === "old latest")
+          s.latest = { status: 200, body: PRIOR_INDEX };
+        if (variant === "equal other run")
+          s.index = s.latest = { status: 200, body: PRIOR_INDEX };
+        if (variant === "candidate absent") s.index = { status: 404 };
+        if (variant === "candidate invalid")
+          s.index = { status: 200, body: "{}" };
+        if (variant === "latest invalid")
+          s.latest = { status: 200, body: "{}" };
+        if (variant === "token denied") s.ghcrToken = { status: 403 };
+        s.manifest = {
+          status: 200,
+          headers: { "docker-content-digest": RUN_DIGEST },
+        };
+      },
+    );
+    const diagnostic =
+      variant === "candidate absent"
+        ? "image manifest unavailable"
+        : variant.includes("invalid")
+          ? "image manifest invalid"
+          : variant === "token denied"
+            ? "unexpected GHCR token status 403; refer to the owner"
+            : "image digest does not match RELEASE_IMAGE_DIGEST";
+    exactCheck(result, "GHCR image", diagnostic);
+    expect(result.status).toBe(1);
+    expect(comparedGets(server)).not.toContain(STABLE);
+  });
+
+  it.each(["verify", "image", "npm"])(
+    "BR-432 v1 deprecated stable recovery: %s (AC-40)",
+    async (phase) => {
+      for (const candidate of ["1.0.1", LATER_BETA])
+        for (const dry of ["true", "false"]) {
+          const { result } = await lifecycleCheck(
+            candidate,
+            phase,
+            dry,
+            (_s, d) => {
+              d.versions[STABLE]!.deprecated = "vulnerable";
+              addVersion(d, "1.2.0-beta.1");
+            },
+          );
+          const beta = candidate.includes("-");
+          exactCheck(
+            result,
+            "npm default",
+            beta
+              ? "npm latest stable is deprecated; owner recovery required"
+              : null,
+          );
+          expect(result.status, result.stdout).toBe(beta ? 1 : 0);
+        }
+      const { result } = await lifecycleCheck(
+        "1.0.1",
+        phase,
+        "false",
+        (s, d) => {
+          addVersion(d, "1.1.0");
+          d["dist-tags"].latest = "1.1.0";
+          d.versions["1.1.0"]!.deprecated = "vulnerable";
+          s.references!["1.1.0"] = { status: 200, body: PRIOR_INDEX };
+        },
+      );
+      exactCheck(
+        result,
+        "npm version not published",
+        "stable version is not greater than every published stable version",
+      );
+    },
+    120_000,
+  );
+
+  it.each(["absent", "equal", "different", "invalid", "unexpected"])(
+    "BR-363 v3 lifecycle phase matrix: bootstrap beta latest %s (AC-39)",
+    async (variant) => {
+      for (const phase of PHASES) {
+        const { result, server } = await lifecycleCheck(
+          LATER_BETA,
+          phase,
+          "false",
+          (s, d) => {
+            Object.assign(d, npmDocument());
+            s.latest =
+              variant === "absent"
+                ? { status: 404 }
+                : variant === "unexpected"
+                  ? { status: 503 }
+                  : {
+                      status: 200,
+                      body: variant === "equal" ? RUN_INDEX : PRIOR_INDEX,
+                    };
+            if (variant === "invalid") s.index = { status: 200, body: "{}" };
+          },
+        );
+        const diagnostic =
+          variant === "absent" || (phase === "npm" && variant === "different")
+            ? null
+            : variant === "unexpected"
+              ? "unexpected GHCR status 503; refer to the owner"
+              : phase === "npm"
+                ? "latest names the release"
+                : "GHCR latest exists without a stable npm default";
+        exactCheck(result, "GHCR image", diagnostic);
+        expect(result.status, result.stdout).toBe(diagnostic ? 1 : 0);
+        comparedGets(server);
+      }
+    },
+    120_000,
+  );
+});
+
+const LIFECYCLE_TARBALL = Buffer.from("v4 verified tarball");
+async function lifecycleReadBack(
+  candidate: string,
+  change: LifecycleChange = () => undefined,
+) {
+  const state = releaseState(GOOD_SHA);
+  const server = await startDouble(state);
+  const doc = lifecycleDocument("1.1.0");
+  addVersion(doc, candidate);
+  doc.versions[candidate]!.dist = {
+    tarball: `${server.url}/tarballs/pkg.tgz`,
+    attestations: { provenance: {} },
+  };
+  doc["dist-tags"].beta = candidate.includes("-") ? candidate : "1.2.0-beta.1";
+  if (!candidate.includes("-")) {
+    addVersion(doc, "1.2.0-beta.1");
+    doc["dist-tags"].latest = candidate;
+  }
+  state.npm = { status: 200, body: doc };
+  state.index = { status: 200, body: RUN_INDEX };
+  state.references = {
+    "1.1.0": { status: 200, body: PRIOR_INDEX },
+    "1.2.0": { status: 200, body: `${PRIOR_INDEX}\n` },
+  };
+  state.latest = {
+    status: 200,
+    body: candidate.includes("-") ? PRIOR_INDEX : RUN_INDEX,
+  };
+  state.tarball = { status: 200, body: LIFECYCLE_TARBALL };
+  change(state, doc);
+  const root = temporary("lifecycle-readback-");
+  const waits = join(root, "waits.jsonl");
+  const clock = join(root, "clock.mjs");
+  writeFileSync(
+    clock,
+    `import timers from "node:timers/promises";
+import { appendFileSync } from "node:fs";
+import { syncBuiltinESMExports } from "node:module";
+timers.setTimeout = async (delay) => { appendFileSync(${JSON.stringify(waits)}, JSON.stringify(delay) + "\\n"); };
+syncBuiltinESMExports();
+`,
+  );
+  const result = await release("verify", root, {
+    RELEASE_VERSION: candidate,
+    RELEASE_SHA: GOOD_SHA,
+    RELEASE_DRY_RUN: "false",
+    RELEASE_IMAGE_DIGEST: candidate.includes("-") ? "" : RUN_DIGEST,
+    RELEASE_TARBALL_SHA256: sha256(LIFECYCLE_TARBALL),
+    GITHUB_TOKEN: TOKEN,
+    NODE_OPTIONS: `--import=file://${clock}`,
+    ...endpoints(server.url),
+  });
+  expect(
+    server.seen.every((r) => r.method === "GET" || r.method === "HEAD"),
+  ).toBe(true);
+  return { result, state, server, doc, waits: lines(waits) };
+}
+
+describe("F-024 v4 AC-42 AC-45 read-back", () => {
+  const cases: [string, LifecycleChange, string | null][] = [
+    ["healthy", () => undefined, null],
+    [
+      "candidate absent",
+      (_s, d) => {
+        delete d.versions[
+          d["dist-tags"].beta === LATER_BETA ? LATER_BETA : LATER_STABLE
+        ];
+      },
+      "npm version present",
+    ],
+    [
+      "wrong candidate version",
+      (_s, d) => {
+        for (const v of [LATER_STABLE, LATER_BETA])
+          if (d.versions[v]) d.versions[v].version = "2.0.0";
+      },
+      "npm version present",
+    ],
+    [
+      "candidate timestamp absent",
+      (_s, d) => {
+        delete d.time[LATER_STABLE];
+        delete d.time[LATER_BETA];
+      },
+      "npm version present",
+    ],
+    [
+      "candidate deprecated",
+      (_s, d) => {
+        for (const v of [LATER_STABLE, LATER_BETA])
+          if (d.versions[v]) d.versions[v].deprecated = "vulnerable";
+      },
+      "npm candidate not deprecated FAIL candidate is deprecated",
+    ],
+    [
+      "candidate deprecation unreadable",
+      (_s, d) => {
+        for (const v of [LATER_STABLE, LATER_BETA])
+          if (d.versions[v]) d.versions[v].deprecated = 1;
+      },
+      "npm candidate not deprecated FAIL npm document unreadable; refer to the owner",
+    ],
+    [
+      "original placeholder healthy",
+      (_s, d) => {
+        d.versions[PLACEHOLDER]!.deprecated = "";
+      },
+      "npm original placeholder deprecated FAIL original placeholder is not deprecated",
+    ],
+    [
+      "original placeholder non-string deprecation",
+      (_s, d) => {
+        d.versions[PLACEHOLDER]!.deprecated = false;
+      },
+      "npm original placeholder deprecated FAIL npm document unreadable; refer to the owner",
+    ],
+    [
+      "provenance absent",
+      (_s, d) => {
+        for (const v of [LATER_STABLE, LATER_BETA])
+          if (d.versions[v])
+            (d.versions[v].dist as Record<string, unknown>).attestations =
+              undefined;
+      },
+      "npm provenance",
+    ],
+    [
+      "tarball changed",
+      (s) => {
+        s.tarball = { status: 200, body: "changed" };
+      },
+      "npm tarball matches verify",
+    ],
+    [
+      "candidate platform absent",
+      (s) => {
+        s.index = { status: 200, body: indexBody(["linux/amd64"]) };
+      },
+      "image platforms",
+    ],
+    [
+      "candidate private",
+      (s) => {
+        s.anonManifest = { status: 403 };
+      },
+      // F-024 v4 lines 360–376 retain the candidate's v3 status diagnostic.
+      "image is public (P-3) FAIL anonymous pull status 403",
+    ],
+    [
+      "latest private",
+      (s) => {
+        s.anonLatestManifest = { status: 404 };
+      },
+      "image latest is public (P-3) FAIL anonymous pull failed",
+    ],
+  ];
+  it.each(
+    cases.flatMap(([name, change, failure]) =>
+      [LATER_STABLE, LATER_BETA].map(
+        (candidate) =>
+          [`${candidate} ${name}`, candidate, change, failure] as const,
+      ),
+    ),
+  )(
+    "BR-372 v3 BR-373 v3 lifecycle read-back: %s (AC-42 AC-45)",
+    async (name, candidate, change, failure) => {
+      const { result, state, server, waits } = await lifecycleReadBack(
+        candidate,
+        change,
+      );
+      expect(result.status, result.stdout + result.stderr).toBe(
+        failure ? 1 : 0,
+      );
+      if (failure)
+        expect(result.stdout).toContain(
+          `release-verify: ${failure}${failure.includes(" FAIL ") ? "\n" : " FAIL "}`,
+        );
+      if (!failure) {
+        expect(failed(result.stdout, "release-verify")).toEqual([]);
+        expect(
+          line(result.stdout, "release-verify", "npm candidate not deprecated"),
+        ).toBe("release-verify: npm candidate not deprecated ok");
+        expect(result.stdout).toContain(
+          "release-verify: npm original placeholder deprecated ok\n",
+        );
+        expect(result.stdout).toContain(
+          `release-verify: image digest ${RUN_DIGEST}\n`,
+        );
+        expect(state.npmAttempts).toBe(1);
+        expect(waits).toEqual([]);
+      }
+      if (name.includes("candidate absent"))
+        expect(
+          line(result.stdout, "release-verify", "npm candidate not deprecated"),
+        ).toBe(
+          "release-verify: npm candidate not deprecated FAIL npm document unreadable; refer to the owner",
+        );
+      if (failure?.startsWith("npm")) {
+        expect(state.npmAttempts).toBe(20);
+        expect(waits).toEqual(Array.from({ length: 19 }, () => "15000"));
+      }
+      if (candidate === LATER_STABLE) {
+        for (const suppressed of [
+          "npm beta tag",
+          "npm default",
+          "image latest tag",
+        ])
+          expect(line(result.stdout, "release-verify", suppressed)).toBe("");
+      } else {
+        for (const suppressed of [
+          "npm latest tag",
+          "image version digest",
+          "image latest digest",
+        ])
+          expect(line(result.stdout, "release-verify", suppressed)).toBe("");
+      }
+      expect(result.stdout).not.toContain(
+        ["npm latest is a deprecated", "placeholder"].join(" "),
+      );
+      comparedGets(server);
+    },
+  );
+
+  it.each([
+    ["beta tag differs", "npm beta tag", true],
+    ["stable latest differs", "npm latest tag", false],
+    ["stable latest old bytes", "image latest digest", false],
+    ["beta stable mapping changed", "image latest tag", true],
+    [
+      "beta latest equals candidate",
+      "image latest tag FAIL latest names the release",
+      true,
+    ],
+    [
+      "beta default deprecated",
+      "npm default FAIL npm latest stable is deprecated; owner recovery required",
+      true,
+    ],
+  ] as const)(
+    "BR-372 v3 BR-373 v3 lifecycle read-back: %s (AC-42)",
+    async (name, failure, beta) => {
+      const { result, state, waits } = await lifecycleReadBack(
+        beta ? LATER_BETA : LATER_STABLE,
+        (s, d) => {
+          if (name === "beta tag differs") d["dist-tags"].beta = "1.2.0-beta.1";
+          if (name === "stable latest differs") d["dist-tags"].latest = "1.1.0";
+          if (name === "stable latest old bytes")
+            s.latest = { status: 200, body: PRIOR_INDEX };
+          if (name === "beta stable mapping changed")
+            s.latest = { status: 200, body: `${PRIOR_INDEX}\n` };
+          if (name === "beta latest equals candidate")
+            s.latest = s.references!["1.1.0"] = s.index;
+          if (name === "beta default deprecated")
+            d.versions["1.1.0"]!.deprecated = "vulnerable";
+        },
+      );
+      expect(result.status).toBe(1);
+      expect(result.stdout).toContain(
+        `release-verify: ${failure}${failure.includes(" FAIL ") ? "\n" : " FAIL "}`,
+      );
+      if (failure.startsWith("npm")) {
+        expect(state.npmAttempts).toBe(20);
+        expect(waits).toHaveLength(19);
+      }
+    },
+  );
+
+  it.each(
+    ["success", "exhaustion"].flatMap((outcome) =>
+      ["invalid", "different"].map((final) => [outcome, final] as const),
+    ),
+  )(
+    "BR-372 v3 BR-373 v3 lifecycle read-back: final document after %s is %s (AC-42)",
+    async (outcome, final) => {
+      const { result, state, server } = await lifecycleReadBack(
+        LATER_BETA,
+        (s, d) => {
+          const early = structuredClone(d);
+          delete early.versions[LATER_BETA];
+          const last = structuredClone(d);
+          if (final === "invalid") last["dist-tags"].latest = "../unsafe";
+          else {
+            addVersion(last, "1.2.0");
+            last["dist-tags"].latest = "1.2.0";
+            s.latest = s.references!["1.2.0"]!;
+          }
+          if (outcome === "exhaustion") delete last.time[LATER_BETA];
+          s.npm = (attempt) => ({
+            status: 200,
+            body: attempt === 20 ? last : early,
+          });
+        },
+      );
+      expect(state.npmAttempts).toBe(20);
+      if (final === "invalid") {
+        expect(line(result.stdout, "release-verify", "image latest tag")).toBe(
+          "release-verify: image latest tag FAIL npm stable default unavailable",
+        );
+        expect(comparedGets(server).filter((r) => r !== LATER_BETA)).toEqual(
+          [],
+        );
+      } else {
+        expect(line(result.stdout, "release-verify", "image latest tag")).toBe(
+          "release-verify: image latest tag ok",
+        );
+        expect(comparedGets(server)).toContain("1.2.0");
+        expect(comparedGets(server)).not.toContain("1.1.0");
+      }
+      expect(result.status).toBe(
+        final === "invalid" || outcome === "exhaustion" ? 1 : 0,
+      );
+    },
+  );
+
+  it("BR-372 v3 BR-373 v3 lifecycle read-back: deprecated stable fix stays deprecated historically (AC-40)", async () => {
+    const { result, doc } = await lifecycleReadBack("1.0.1", (_s, d) => {
+      delete d.versions["1.1.0"];
+      delete d.time["1.1.0"];
+      addVersion(d, STABLE);
+      d.versions[STABLE]!.deprecated = "vulnerable";
+    });
+    expect(result.status, result.stdout).toBe(0);
+    expect(doc.versions[STABLE]!.deprecated).toBe("vulnerable");
+    expect(doc["dist-tags"].latest).toBe("1.0.1");
+  });
+});
+
+function restorationVariant(
+  registry: RecoveryRegistry,
+  variant: string,
+): string {
+  if (variant === "reserialize" || variant === "fail") registry.copy = variant;
+  if (variant === "missing") registry.tags.delete(STABLE);
+  if (variant === "get failure") registry.latestReply = { status: 503 };
+  if (variant === "invalid") registry.latestReply = { status: 200, body: "{}" };
+  const invalidDigests: Record<string, string> = {
+    empty: "",
+    uppercase: PREVIOUS_DIGEST.toUpperCase(),
+    short: "sha256:abc",
+    injection: `${PREVIOUS_DIGEST}; exit 0`,
+  };
+  return invalidDigests[variant] ?? PREVIOUS_DIGEST;
+}
+
+describe("F-024 v4 AC-43 byte-preserving owner restoration", () => {
+  it.each([
+    ["exact bytes", "", null],
+    [
+      "reserialized JSON",
+      "reserialize",
+      "recovery blocked: latest restoration unconfirmed",
+    ],
+    ["command failure", "fail", "recovery blocked: latest repoint failed"],
+    [
+      "missing S",
+      "missing",
+      "recovery blocked: latest restoration unconfirmed",
+    ],
+    [
+      "GET unavailable despite matching HEAD",
+      "get failure",
+      "recovery blocked: latest restoration unconfirmed",
+    ],
+    [
+      "latest invalid",
+      "invalid",
+      "recovery blocked: latest restoration unconfirmed",
+    ],
+    ["empty digest", "empty", "recovery blocked: image identity uncertain"],
+    [
+      "uppercase digest",
+      "uppercase",
+      "recovery blocked: image identity uncertain",
+    ],
+    ["short digest", "short", "recovery blocked: image identity uncertain"],
+    [
+      "digest injection",
+      "injection",
+      "recovery blocked: image identity uncertain",
+    ],
+  ] as const)(
+    "BR-433 v1 BR-354 v3 byte preserving restoration: %s (AC-43)",
+    async (_name, variant, diagnostic) => {
+      const registry = new RecoveryRegistry();
+      registry.put(PREVIOUS_INDEX, [STABLE]);
+      registry.put(RUN_INDEX, ["1.0.1", "latest"]);
+      const server = await double(
+        (request) =>
+          registry.route(request) ?? {
+            status: 200,
+            body: { token: "pull-token" },
+          },
+      );
+      doubles.push(server);
+      const digest = restorationVariant(registry, variant);
+      const root = temporary("guide-restoration-");
+      const log = join(root, "docker.jsonl");
+      const result = await runRecoveryBlock(root, server.url, digest, log);
+      const tokenRequests = server.seen.filter((r) =>
+        r.url.startsWith("/token?"),
+      );
+      for (const request of tokenRequests) {
+        expect(request.authorization).toBe(
+          `Basic ${Buffer.from("x-access-token:SYNTHETIC-RECOVERY-TOKEN").toString("base64")}`,
+        );
+      }
+      const manifests = server.seen.filter((r) =>
+        r.url.includes("/manifests/"),
+      );
+      for (const request of manifests) {
+        expect(request.method).toBe("GET");
+        expect(request.authorization).toBe("Bearer pull-token");
+      }
+      const curlCalls = lines(`${log}.curl`);
+      expect(curlCalls).toHaveLength(tokenRequests.length + manifests.length);
+      for (const argv of curlCalls) {
+        expect(argv).not.toContain("SYNTHETIC-RECOVERY-TOKEN");
+        expect(argv).not.toContain("pull-token");
+      }
+      const assertFailure = () => {
+        expect(result.status).not.toBe(0);
+        expect(result.stdout + result.stderr).toContain(`${diagnostic}\n`);
+        expect(result.stdout).not.toContain("recovery: GHCR latest restored");
+        expect(
+          registry.journal.some((entry) => entry.startsWith("delete ")),
+        ).toBe(false);
+        expect(registry.tags.get("1.0.1")).toBe(RUN_DIGEST);
+        if (["empty", "uppercase", "short", "injection"].includes(variant)) {
+          expect(lines(log)).toEqual([]);
+          expect(server.seen).toEqual([]);
+        }
+      };
+      const assertSuccess = () => {
+        expect(result.status, result.stdout + result.stderr).toBe(0);
+        expect(tokenRequests).toHaveLength(1);
+        expect(curlCalls).toHaveLength(3);
+        expect(result.stdout).toContain(
+          `recovery: GHCR latest restored ${PREVIOUS_DIGEST}\n`,
+        );
+        expect(registry.tags.get("latest")).toBe(PREVIOUS_DIGEST);
+        const confirmations = server.seen.filter((r) =>
+          r.url.includes("/manifests/"),
+        );
+        expect(confirmations.map((r) => r.url.split("/").at(-1))).toEqual(
+          expect.arrayContaining([STABLE, "latest"]),
+        );
+        for (const r of confirmations) {
+          expect(r.method).toBe("GET");
+          expect(r.accept).toBe(RECOVERY_ACCEPT);
+        }
+        registry.deletePackage(RUN_DIGEST);
+        expect(registry.tags.has("1.0.1")).toBe(false);
+        expect(registry.tags.get(STABLE)).toBe(PREVIOUS_DIGEST);
+        expect(registry.tags.get("latest")).toBe(PREVIOUS_DIGEST);
+        expect(registry.bodies.get(PREVIOUS_DIGEST)).toBe(PREVIOUS_INDEX);
+        expect(registry.journal.indexOf("GET latest")).toBeLessThan(
+          registry.journal.indexOf(`delete ${RUN_DIGEST}`),
+        );
+      };
+      if (diagnostic) assertFailure();
+      else assertSuccess();
+    },
+  );
+});
+
+interface RecoveryEvidence {
+  owner: boolean;
+  prior: string | undefined;
+  priorDigest: string;
+  candidateDigest: string;
+  priorEvidence: boolean;
+  npmCertain: boolean;
+  restoreOnly: boolean;
+  failConfirmation: boolean;
+}
+function hasPublished(doc: NpmFixture, candidate: string): boolean {
+  return !!(doc.versions[candidate] || doc.time[candidate]);
+}
+function cleanupIdentityValid(
+  registry: RecoveryRegistry,
+  doc: NpmFixture,
+  candidate: string,
+  beta: boolean,
+  evidence: RecoveryEvidence,
+  restoreOnly: boolean,
+): boolean {
+  if (!evidence.owner) return false;
+  if (
+    evidence.prior !== undefined &&
+    !priorIdentityValid(registry, doc, evidence, restoreOnly)
+  )
+    return false;
+  if (restoreOnly) return true;
+  const attached = [...registry.tags]
+    .filter(([, digest]) => digest === evidence.candidateDigest)
+    .map(([tag]) => tag)
+    .sort();
+  const allowed = beta ? [candidate] : [candidate, "latest"].sort();
+  return (
+    !!evidence.candidateDigest &&
+    registry.tags.get(candidate) === evidence.candidateDigest &&
+    JSON.stringify(attached) === JSON.stringify(allowed)
+  );
+}
+function priorIdentityValid(
+  registry: RecoveryRegistry,
+  doc: NpmFixture,
+  evidence: RecoveryEvidence,
+  restoreOnly: boolean,
+): boolean {
+  return (
+    evidence.priorEvidence &&
+    doc["dist-tags"].latest === evidence.prior &&
+    registry.tags.get(evidence.prior!) === evidence.priorDigest &&
+    (restoreOnly || evidence.priorDigest !== evidence.candidateDigest)
+  );
+}
+async function recoveryGet(server: Double, tag: string) {
+  const response = await fetch(
+    `${server.url}/v2/sstolz/kdrive-mcp-server/manifests/${tag}`,
+    { headers: { Accept: INDEX_ACCEPT } },
+  );
+  return {
+    status: response.status,
+    digest: `sha256:${sha256(Buffer.from(await response.arrayBuffer()))}`,
+  };
+}
+async function priorConfirmed(
+  server: Double,
+  prior: string,
+  digest: string,
+): Promise<boolean> {
+  for (const tag of [prior, "latest"]) {
+    const read = await recoveryGet(server, tag);
+    if (read.status !== 200 || read.digest !== digest) return false;
+  }
+  return true;
+}
+async function cleanupConfirmed(
+  server: Double,
+  doc: NpmFixture,
+  candidate: string,
+  evidence: RecoveryEvidence,
+): Promise<boolean> {
+  if ((await recoveryGet(server, candidate)).status !== 404) return false;
+  if (!evidence.prior)
+    return (await recoveryGet(server, "latest")).status === 404;
+  return (
+    (await priorConfirmed(server, evidence.prior, evidence.priorDigest)) &&
+    doc["dist-tags"].latest === evidence.prior &&
+    !hasPublished(doc, candidate)
+  );
+}
+async function restorePrior(
+  server: Double,
+  digest: string,
+): Promise<string | null> {
+  const root = temporary("owner-recovery-");
+  const restored = await runRecoveryBlock(
+    root,
+    server.url,
+    digest,
+    join(root, "docker.jsonl"),
+  );
+  if (restored.status === 0) return null;
+  return (
+    /recovery blocked: [^\n]+/u.exec(restored.stdout + restored.stderr)?.[0] ??
+    "recovery blocked: latest restoration unconfirmed"
+  );
+}
+// AC-43 AC-44 BR-433 v1: explicit owner model, as in the v3 rehearsal.
+// Production entry paths are used for preflight/publication; this model grants
+// no real authority and mutates only a digest-keyed in-memory package double.
+async function ownerCleanup(
+  registry: RecoveryRegistry,
+  state: ReleaseState,
+  server: Double,
+  candidate: string,
+  beta: boolean,
+  evidence: RecoveryEvidence,
+): Promise<string> {
+  const npm = typeof state.npm === "function" ? undefined : state.npm;
+  if (!evidence.npmCertain || npm?.status !== 200)
+    return "recovery blocked: npm outcome uncertain";
+  const doc = npm.body as NpmFixture;
+  if (hasPublished(doc, candidate)) return "npm accepted: read-back only";
+  const prior = evidence.prior;
+  const restoreOnly =
+    evidence.restoreOnly &&
+    !evidence.candidateDigest &&
+    !beta &&
+    prior !== undefined;
+  if (
+    !cleanupIdentityValid(registry, doc, candidate, beta, evidence, restoreOnly)
+  )
+    return "recovery blocked: image identity uncertain";
+  if (prior && !beta) {
+    const failure = await restorePrior(server, evidence.priorDigest);
+    if (failure) return failure;
+  }
+  if (restoreOnly)
+    return "recovery: restored only; candidate burned; new version required";
+  // Recheck npm immediately before deletion, including a time-only acceptance.
+  if (hasPublished(doc, candidate)) return "npm accepted: read-back only";
+  if (
+    beta &&
+    prior &&
+    !(await priorConfirmed(server, prior, evidence.priorDigest))
+  )
+    return "recovery blocked: image identity uncertain";
+  return deleteConfirmedCandidate(registry, doc, server, candidate, evidence);
+}
+async function deleteConfirmedCandidate(
+  registry: RecoveryRegistry,
+  doc: NpmFixture,
+  server: Double,
+  candidate: string,
+  evidence: RecoveryEvidence,
+): Promise<string> {
+  const recheck = await fetch(`${server.url}/@sstolz%2fkdrive-mcp-server`);
+  if (recheck.status !== 200) return "recovery blocked: npm outcome uncertain";
+  const fresh = (await recheck.json()) as NpmFixture;
+  if (fresh.versions[candidate] || fresh.time[candidate])
+    return "npm accepted: read-back only";
+  if (fresh["dist-tags"].latest !== doc["dist-tags"].latest)
+    return "recovery blocked: image identity uncertain";
+  registry.deletePackage(evidence.candidateDigest);
+  if (evidence.failConfirmation) registry.put(RUN_INDEX, [candidate]);
+  if (!(await cleanupConfirmed(server, doc, candidate, evidence)))
+    return "recovery blocked: cleanup unconfirmed";
+  return "recovery: cleanup confirmed";
+}
+function recoveryEvidence(
+  overrides: Partial<RecoveryEvidence> = {},
+): RecoveryEvidence {
+  return {
+    owner: true,
+    prior: STABLE,
+    priorDigest: PREVIOUS_DIGEST,
+    candidateDigest: RUN_DIGEST,
+    priorEvidence: true,
+    npmCertain: true,
+    restoreOnly: false,
+    failConfirmation: false,
+    ...overrides,
+  };
+}
+
+function cleanupVariant(
+  registry: RecoveryRegistry,
+  doc: NpmFixture,
+  candidate: string,
+  variant: string,
+  evidence: RecoveryEvidence,
+) {
+  if (variant === "bootstrap") evidence.prior = undefined;
+  if (variant === "restore only") {
+    evidence.candidateDigest = "";
+    evidence.restoreOnly = true;
+  }
+  if (variant === "same digest") {
+    registry.put(PREVIOUS_INDEX, [candidate, "latest"]);
+    evidence.candidateDigest = PREVIOUS_DIGEST;
+  }
+  cleanupEvidenceVariant(registry, doc, variant, evidence);
+  cleanupNpmVariant(doc, candidate, variant, evidence);
+}
+function cleanupEvidenceVariant(
+  registry: RecoveryRegistry,
+  doc: NpmFixture,
+  variant: string,
+  evidence: RecoveryEvidence,
+) {
+  if (variant === "extra tag") registry.tags.set("unexpected", RUN_DIGEST);
+  if (variant === "missing evidence") evidence.priorEvidence = false;
+  if (variant === "changed npm default") doc["dist-tags"].latest = "1.0.2";
+  if (variant === "candidate unknown") evidence.candidateDigest = "";
+}
+function cleanupNpmVariant(
+  doc: NpmFixture,
+  candidate: string,
+  variant: string,
+  evidence: RecoveryEvidence,
+) {
+  if (variant === "npm accepted") addVersion(doc, candidate);
+  if (variant === "npm time accepted") doc.time[candidate] = "date";
+  if (variant === "npm uncertain") evidence.npmCertain = false;
+  if (variant === "not owner") evidence.owner = false;
+  if (variant === "cleanup unconfirmed") evidence.failConfirmation = true;
+}
+
+function expectedCleanup(variant: string, success: boolean): string {
+  if (success) return "recovery: cleanup confirmed";
+  if (variant === "restore only")
+    return "recovery: restored only; candidate burned; new version required";
+  if (variant === "npm uncertain")
+    return "recovery blocked: npm outcome uncertain";
+  if (variant.startsWith("npm ")) return "npm accepted: read-back only";
+  if (variant === "cleanup unconfirmed")
+    return "recovery blocked: cleanup unconfirmed";
+  return "recovery blocked: image identity uncertain";
+}
+
+it.each([
+  "stable",
+  "beta",
+  "bootstrap",
+  "restore only",
+  "same digest",
+  "extra tag",
+  "missing evidence",
+  "changed npm default",
+  "candidate unknown",
+  "npm accepted",
+  "npm time accepted",
+  "npm uncertain",
+  "not owner",
+  "cleanup unconfirmed",
+])(
+  "BR-433 v1 byte preserving restoration: owner branch %s (AC-43)",
+  async (variant) => {
+    const candidate = variant === "beta" ? "1.1.0-beta.1" : "1.0.1";
+    const registry = new RecoveryRegistry();
+    const state = releaseState(GOOD_SHA);
+    const doc =
+      variant === "bootstrap"
+        ? (npmDocument() as NpmFixture)
+        : lifecycleDocument();
+    state.npm = { status: 200, body: doc };
+    const route = releaseRoute(state);
+    const server = await double((r) => registry.route(r) ?? route(r));
+    doubles.push(server);
+    if (variant !== "bootstrap")
+      registry.put(PREVIOUS_INDEX, [STABLE, "latest"]);
+    registry.put(
+      RUN_INDEX,
+      variant === "beta" ? [candidate] : [candidate, "latest"],
+    );
+    const evidence = recoveryEvidence();
+    cleanupVariant(registry, doc, candidate, variant, evidence);
+    const result = await ownerCleanup(
+      registry,
+      state,
+      server,
+      candidate,
+      variant === "beta",
+      evidence,
+    );
+    const success = ["stable", "beta", "bootstrap"].includes(variant);
+    const expected = expectedCleanup(variant, success);
+    expect(result).toBe(expected);
+    const deletes = registry.journal.filter((entry) =>
+      entry.startsWith("delete "),
+    );
+    expect(deletes).toHaveLength(
+      success || variant === "cleanup unconfirmed" ? 1 : 0,
+    );
+    if (success) {
+      expect(registry.tags.has(candidate)).toBe(false);
+      expect(doc.versions[candidate]).toBeUndefined();
+      expect(doc.time[candidate]).toBeUndefined();
+      if (variant === "bootstrap") expect(registry.tags.size).toBe(0);
+      else {
+        expect(registry.tags.get(STABLE)).toBe(PREVIOUS_DIGEST);
+        expect(registry.tags.get("latest")).toBe(PREVIOUS_DIGEST);
+      }
+    }
+    if (["bootstrap", "beta"].includes(variant))
+      expect(registry.journal).not.toContain("copy");
+    if (variant === "restore only") {
+      expect(registry.tags.get(candidate)).toBe(RUN_DIGEST);
+      expect(registry.tags.get("latest")).toBe(PREVIOUS_DIGEST);
+    }
+  },
+);
+
+function lifecycleKind(scenario: string) {
+  const beta =
+    scenario === "post-stable beta" ||
+    scenario === "post-stable beta cleanup" ||
+    scenario === "lower beta refused";
+  const prior = [
+    "patch ahead of future beta",
+    "lower stable refused",
+    "vulnerable rollback reconciliation",
+  ].includes(scenario)
+    ? "1.1.0"
+    : STABLE;
+  const candidate =
+    scenario === "lower stable refused"
+      ? "1.0.1"
+      : scenario === "lower beta refused"
+        ? "1.1.2-beta.1"
+        : beta
+          ? LATER_BETA
+          : prior === "1.1.0"
+            ? "1.1.1"
+            : "1.0.2";
+  return { beta, prior, candidate };
+}
+function lifecycleFiles(): Record<string, string> {
+  const files: Record<string, string> = {};
+  for (const path of [
+    "Makefile",
+    "compose.yaml",
+    "Dockerfile.dev",
+    "scripts/release.ts",
+    "scripts/release-image.sh",
+  ])
+    files[path] = readFileSync(path, "utf8");
+  return files;
+}
+function prepareLifecycleDocument(
+  doc: NpmFixture,
+  scenario: string,
+  prior: string,
+): void {
+  if (
+    scenario.startsWith("deprecated") ||
+    scenario === "vulnerable rollback reconciliation"
+  )
+    doc.versions[prior]!.deprecated = "vulnerable";
+  if (scenario === "stale default reconciliation") addVersion(doc, "1.0.1");
+  if (scenario === "vulnerable rollback reconciliation") {
+    addVersion(doc, STABLE);
+    doc["dist-tags"].latest = STABLE;
+  }
+  if (scenario.startsWith("time-only")) doc.time["1.0.1"] = "date";
+}
+function expectMakeSuccess(target: string, result: Result): void {
+  expect(result.status, `${target}\n${result.stdout}\n${result.stderr}`).toBe(
+    0,
+  );
+}
+
+// BR-354 v3 BR-432 v1 BR-433 v1; AC-40 AC-44 AC-45.
+it.each([
+  "later stable",
+  "post-stable beta",
+  "patch ahead of future beta",
+  "deprecated fix",
+  "deprecated withheld dry-run evidence",
+  "deprecated denied environment",
+  "withheld dry-run evidence",
+  "denied image approval",
+  "denied second approval",
+  "expired second approval",
+  "npm preflight failure",
+  "npm publish failure",
+  "partial image push",
+  "uncertain npm acceptance",
+  "cancelled retry",
+  "expired retry",
+  "missing artifact",
+  "main advanced retry",
+  "main advanced cleanup",
+  "orphan blocks beta",
+  "stale default reconciliation",
+  "vulnerable rollback reconciliation",
+  "time-only history",
+  "time-only orphan reconciliation",
+  "lower stable refused",
+  "lower beta refused",
+  "post-stable beta cleanup",
+])(
+  "F-024 v4 lifecycle rehearsal: %s (AC-44)",
+  async (scenario) => {
+    const {
+      beta,
+      prior,
+      candidate: initialCandidate,
+    } = lifecycleKind(scenario);
+    let candidate = initialCandidate;
+    const files = lifecycleFiles();
+    const repo = releaseRepo({
+      versionFile: `${candidate}\n`,
+      packageVersion: candidate,
+      tag: "none",
+      files: {
+        ...files,
+        "package-lock.json": JSON.stringify({
+          version: candidate,
+          packages: { "": { version: candidate } },
+        }),
+      },
+    });
+    repo.git("tag", `v${candidate}`, repo.sha);
+    const state = releaseState(repo.sha);
+    const doc = lifecycleDocument(prior);
+    addVersion(doc, "1.2.0-beta.1");
+    doc["dist-tags"].beta = "1.2.0-beta.1";
+    prepareLifecycleDocument(doc, scenario, prior);
+    state.npm = { status: 200, body: doc };
+    const registry = new RecoveryRegistry();
+    registry.put(PREVIOUS_INDEX, [prior, "latest"]);
+    const route = releaseRoute(state);
+    const server = await double((r) => registry.route(r) ?? route(r));
+    doubles.push(server);
+    const fake = fakeBin();
+    const root = temporary("lifecycle-rehearsal-");
+    const prepared = join(root, "prepared.tgz");
+    let packed = packTarball(prepared, {
+      name: "@sstolz/kdrive-mcp-server",
+      version: candidate,
+    });
+    const output = join(root, "outputs");
+    writeFileSync(output, "");
+    const metadata = join(root, "metadata.json");
+    writeFileSync(
+      metadata,
+      JSON.stringify({ "containerimage.digest": RUN_DIGEST }),
+    );
+    const journal: string[] = [];
+    let releaseSha = repo.sha;
+    let dispatchedSha = releaseSha;
+    const command = (target: string, env: Record<string, string> = {}) =>
+      run("/usr/bin/make", ["--no-print-directory", target], {
+        cwd: repo.root,
+        env: {
+          ...gitEnv(),
+          PATH: `${fake.bin}:${process.env.PATH ?? ""}`,
+          FAKE_NPM_LOG: fake.npmLog,
+          FAKE_NPM_TARBALL: prepared,
+          FAKE_DOCKER_LOG: fake.dockerLog,
+          FAKE_DOCKER_STDIN: fake.stdin,
+          FAKE_BUILDX_METADATA: metadata,
+          GITHUB_OUTPUT: output,
+          RELEASE_VERSION: candidate,
+          RELEASE_SHA: releaseSha,
+          GITHUB_SHA: dispatchedSha,
+          RELEASE_DRY_RUN: "false",
+          GITHUB_TOKEN: TOKEN,
+          RELEASE_RETRY_DELAY_MS: "0",
+          ...endpoints(server.url),
+          ...env,
+        },
+      });
+    const ok = async (target: string, env: Record<string, string> = {}) => {
+      const result = await command(target, env);
+      expectMakeSuccess(target, result);
+      return result;
+    };
+    const refuseLower = async () => {
+      if (scenario.startsWith("lower")) {
+        reasonViaMake(
+          await command("release-check", { RELEASE_PHASE: "verify" }),
+          beta
+            ? "beta version is not greater than every published version"
+            : "stable version is not greater than every published stable version",
+        );
+        expect(npmCalls(fake.npmLog)).toEqual([]);
+        expect(lines(fake.dockerLog).some((l) => l.includes("--push"))).toBe(
+          false,
+        );
+        return true;
+      }
+      return false;
+    };
+    if (await refuseLower()) return;
+    const reconcileDefaults = async () => {
+      if (scenario.includes("reconciliation")) {
+        const stale = scenario !== "time-only orphan reconciliation";
+        if (stale) {
+          reasonViaMake(
+            await command("release-check", { RELEASE_PHASE: "verify" }),
+            "npm latest is not the greatest published stable version",
+          );
+          // Separate owner authority in the model, not an automated release bypass.
+          const greatest =
+            scenario === "stale default reconciliation" ? "1.0.1" : prior;
+          doc["dist-tags"].latest = greatest;
+          registry.tags.set(greatest, PREVIOUS_DIGEST);
+          registry.tags.set("latest", PREVIOUS_DIGEST);
+          journal.push("owner npm/GHCR reconciliation");
+        } else {
+          registry.put(RUN_INDEX, ["1.0.1", "latest"]);
+          reasonViaMake(
+            await command("release-check", { RELEASE_PHASE: "verify" }),
+            "GHCR latest does not match npm stable default",
+          );
+          const restored = await runRecoveryBlock(
+            root,
+            server.url,
+            PREVIOUS_DIGEST,
+            join(root, "restore.log"),
+          );
+          expect(restored.status, restored.stdout + restored.stderr).toBe(0);
+          journal.push("owner GHCR reconciliation");
+        }
+      }
+    };
+    await reconcileDefaults();
+    let dryEvidence = "";
+    let tarballDigest = "";
+    const verify = async (dry: boolean) => {
+      await ok("release-check", {
+        RELEASE_PHASE: "verify",
+        RELEASE_DRY_RUN: String(dry),
+      });
+      await ok("release-setup");
+      await ok("pack");
+      await ok("release-npm", { RELEASE_DRY_RUN: "true" });
+      await ok("image-binfmt", { IMAGE_PLATFORMS: "linux/amd64 linux/arm64" });
+      await ok("release-image", { RELEASE_DRY_RUN: "true" });
+      tarballDigest = lines(output)
+        .find((l) => l.startsWith("tarball-sha256="))!
+        .slice("tarball-sha256=".length);
+      expect(tarballDigest).toBe(sha256(packed));
+      if (dry) dryEvidence = `${candidate}:${releaseSha}`;
+      journal.push(dry ? "dry verify" : "verify");
+    };
+    const approvedImage = async () => {
+      await verify(true);
+      expect(registry.tags.get("latest")).toBe(PREVIOUS_DIGEST);
+      expect(doc["dist-tags"].latest).toBe(
+        scenario === "stale default reconciliation" ? "1.0.1" : prior,
+      );
+      await verify(false);
+      if (scenario.endsWith("withheld dry-run evidence")) dryEvidence = "";
+      const imageApproved = scenario !== "denied image approval";
+      if (!imageApproved || dryEvidence !== `${candidate}:${releaseSha}`) {
+        expect(registry.tags.has(candidate)).toBe(false);
+        expect(
+          npmCalls(fake.npmLog)
+            .filter((c) => c.argv[0] === "publish")
+            .every((c) => c.argv.includes("--dry-run")),
+        ).toBe(true);
+        expect(lines(fake.dockerLog).some((l) => l.includes("--push"))).toBe(
+          false,
+        );
+        return false;
+      }
+      journal.push("image approval");
+      await ok("release-check", { RELEASE_PHASE: "image" });
+      const image = await command(
+        "release-image",
+        scenario === "partial image push" ? { FAKE_BUILD_FAIL: "1" } : {},
+      );
+      expect(image.status, image.stdout).toBe(
+        scenario === "partial image push" ? 2 : 0,
+      );
+      registry.put(RUN_INDEX, beta ? [candidate] : [candidate, "latest"]);
+      journal.push("image push");
+      return true;
+    };
+    if (!(await approvedImage())) return;
+    const imageDigest = beta
+      ? ""
+      : (lines(output)
+          .find((l) => l.startsWith("image_digest="))
+          ?.slice("image_digest=".length) ?? "");
+    if (!beta && scenario !== "partial image push")
+      expect(imageDigest).toBe(RUN_DIGEST);
+    expect(registry.tags.get("latest")).toBe(
+      beta ? PREVIOUS_DIGEST : RUN_DIGEST,
+    );
+    expect(doc["dist-tags"].latest).not.toBe(candidate);
+    const checkOrphan = async () => {
+      if (scenario === "orphan blocks beta") {
+        const blocked = await release(
+          "check",
+          repo.root,
+          checkEnv(repo, server.url, {
+            RELEASE_VERSION: LATER_BETA,
+            RELEASE_DRY_RUN: "false",
+          }),
+        );
+        // Commit mismatch is independent; the registry condition still pins the orphan.
+        exactCheck(
+          blocked,
+          "GHCR image",
+          "GHCR latest does not match npm stable default",
+        );
+      }
+    };
+    await checkOrphan();
+    const advanceMain = () => {
+      writeFileSync(join(repo.root, "advance.txt"), "advanced main\n");
+      repo.git("add", "advance.txt");
+      repo.git("commit", "-q", "-m", "advance fixture main");
+      const advanced = repo.git("rev-parse", "HEAD");
+      repo.git("update-ref", "refs/remotes/origin/main", advanced);
+      repo.git("checkout", "-q", "--detach", repo.sha);
+      return advanced;
+    };
+    let advanced = "";
+    if (scenario.startsWith("main advanced")) advanced = advanceMain();
+    const publishNpm = async (
+      approved: boolean,
+      failure = false,
+      accepted = false,
+    ) => {
+      if (!approved) return false;
+      journal.push("npm approval");
+      const checked = await command("release-check", {
+        RELEASE_PHASE: "npm",
+        RELEASE_IMAGE_DIGEST: imageDigest,
+      });
+      if (checked.status !== 0) return false;
+      const published = await command("release-npm", {
+        RELEASE_TARBALL_SHA256: tarballDigest,
+        ACTIONS_ID_TOKEN_REQUEST_URL: "http://127.0.0.1:1/oidc",
+        ACTIONS_ID_TOKEN_REQUEST_TOKEN: "SYNTHETIC-OIDC",
+        FAKE_NPM_STATUS: failure ? "1" : "0",
+      });
+      if (published.status === 0 || accepted) {
+        addVersion(doc, candidate);
+        doc.versions[candidate]!.dist = {
+          tarball: `${server.url}/tarballs/pkg.tgz`,
+          attestations: { provenance: {} },
+        };
+        doc["dist-tags"][beta ? "beta" : "latest"] = candidate;
+        state.tarball = { status: 200, body: packed };
+        journal.push("npm accepted");
+      }
+      return published.status === 0;
+    };
+    const cleanupScenarios = [
+      "expired second approval",
+      "partial image push",
+      "cancelled retry",
+      "expired retry",
+      "missing artifact",
+      "main advanced cleanup",
+      "orphan blocks beta",
+      "post-stable beta cleanup",
+    ];
+    const cleanupRun = async () => {
+      if (cleanupScenarios.includes(scenario)) {
+        expect(await publishNpm(false)).toBe(false);
+        const cleaned = await ownerCleanup(
+          registry,
+          state,
+          server,
+          candidate,
+          beta,
+          recoveryEvidence({ prior }),
+        );
+        expect(cleaned).toBe("recovery: cleanup confirmed");
+        expect(registry.tags.get("latest")).toBe(PREVIOUS_DIGEST);
+        expect(doc["dist-tags"].latest).toBe(prior);
+        const replaceAdvanced = async () => {
+          dispatchedSha = advanced;
+          reasonViaMake(
+            await command("release-check", { RELEASE_PHASE: "verify" }),
+            "sha is not the dispatched commit",
+          );
+          // Cleanup authorizes neither an old-commit redispatch nor a replacement.
+          const oldCandidate = candidate;
+          repo.git("checkout", "-q", "--detach", advanced);
+          candidate = "2.0.0";
+          writeFileSync(join(repo.root, "VERSION"), `${candidate}\n`);
+          writeFileSync(
+            join(repo.root, "package.json"),
+            JSON.stringify({
+              name: "@sstolz/kdrive-mcp-server",
+              version: candidate,
+            }),
+          );
+          writeFileSync(
+            join(repo.root, "package-lock.json"),
+            JSON.stringify({
+              version: candidate,
+              packages: { "": { version: candidate } },
+            }),
+          );
+          repo.git("add", "VERSION", "package.json", "package-lock.json");
+          repo.git("commit", "-q", "-m", "replacement release fixture");
+          releaseSha = repo.git("rev-parse", "HEAD");
+          dispatchedSha = releaseSha;
+          repo.git("update-ref", "refs/remotes/origin/main", releaseSha);
+          repo.git("tag", `v${candidate}`, releaseSha);
+          state.ciRuns = releaseState(releaseSha).ciRuns;
+          packed = packTarball(prepared, {
+            name: "@sstolz/kdrive-mcp-server",
+            version: candidate,
+          });
+          dryEvidence = "";
+          expect(dryEvidence).not.toBe(`${candidate}:${releaseSha}`);
+          writeFileSync(output, "");
+          // AC-44 (F-024 v4 lines 671–676): a new dispatch has fresh artifacts.
+          renameSync(
+            join(repo.root, "artifacts"),
+            join(root, "original-artifacts"),
+          );
+          await verify(true);
+          expect(dryEvidence).toBe(`${candidate}:${releaseSha}`);
+          journal.push("replacement exact-pair owner go");
+          await verify(false);
+          await ok("release-check", { RELEASE_PHASE: "image" });
+          await ok("release-image");
+          registry.put(RUN_INDEX, [candidate, "latest"]);
+          expect(await publishNpm(true)).toBe(true);
+          await ok("release-verify", {
+            RELEASE_IMAGE_DIGEST: RUN_DIGEST,
+            RELEASE_TARBALL_SHA256: tarballDigest,
+          });
+          expect(doc.versions[oldCandidate]).toBeUndefined();
+          expect(doc["dist-tags"].latest).toBe(candidate);
+        };
+        if (advanced) await replaceAdvanced();
+        else await ok("release-check", { RELEASE_PHASE: "verify" });
+        if (scenario === "orphan blocks beta") {
+          const eligible = await release(
+            "check",
+            repo.root,
+            checkEnv(repo, server.url, {
+              RELEASE_VERSION: LATER_BETA,
+              RELEASE_DRY_RUN: "false",
+            }),
+          );
+          exactCheck(eligible, "GHCR image", null);
+        }
+        return true;
+      }
+      return false;
+    };
+    if (await cleanupRun()) return;
+    const prePublishFailures = async () => {
+      if (scenario === "deprecated denied environment") {
+        state.environment = { status: 403 };
+        const before = npmCalls(fake.npmLog).length;
+        expect(await publishNpm(true)).toBe(false);
+        expect(npmCalls(fake.npmLog)).toHaveLength(before);
+        expect(doc.versions[candidate]).toBeUndefined();
+        expect(doc.versions[prior]!.deprecated).toBe("vulnerable");
+        return true;
+      }
+      if (scenario === "denied second approval")
+        expect(await publishNpm(false)).toBe(false);
+      if (scenario === "npm preflight failure") {
+        state.environment = { status: 403 };
+        const before = npmCalls(fake.npmLog).length;
+        expect(await publishNpm(true)).toBe(false);
+        expect(npmCalls(fake.npmLog)).toHaveLength(before);
+        state.environment = releaseState(repo.sha).environment;
+      }
+      if (scenario === "npm publish failure")
+        expect(await publishNpm(true, true)).toBe(false);
+      return false;
+    };
+    if (await prePublishFailures()) return;
+    const uncertain = scenario === "uncertain npm acceptance";
+    expect(await publishNpm(true, uncertain, uncertain)).toBe(!uncertain);
+    const publishedCount = npmCalls(fake.npmLog).length;
+    expect(
+      await ownerCleanup(
+        registry,
+        state,
+        server,
+        candidate,
+        beta,
+        recoveryEvidence({ prior }),
+      ),
+    ).toBe("npm accepted: read-back only");
+    const assertPublished = async () => {
+      const verified = await ok("release-verify", {
+        RELEASE_IMAGE_DIGEST: imageDigest,
+        RELEASE_TARBALL_SHA256: tarballDigest,
+      });
+      expect(failed(verified.stdout, "release-verify")).toEqual([]);
+      expect(npmCalls(fake.npmLog)).toHaveLength(publishedCount);
+      // AC-44 (F-024 v4 lines 690–694) requires one prior reconciliation copy.
+      expect(
+        registry.journal.filter((e) => e.startsWith("delete ") || e === "copy"),
+      ).toEqual(scenario === "time-only orphan reconciliation" ? ["copy"] : []);
+      expect(doc["dist-tags"].latest).toBe(beta ? prior : candidate);
+      expect(registry.tags.get("latest")).toBe(
+        beta ? PREVIOUS_DIGEST : RUN_DIGEST,
+      );
+      if (
+        scenario.startsWith("deprecated") ||
+        scenario === "vulnerable rollback reconciliation"
+      )
+        expect(doc.versions[prior]!.deprecated).toBe("vulnerable");
+      const realPublishes = npmCalls(fake.npmLog).filter(
+        (c) => c.argv[0] === "publish" && !c.argv.includes("--dry-run"),
+      );
+      for (const call of realPublishes) {
+        expect(call.argv).toEqual([
+          "publish",
+          `./artifacts/sstolz-kdrive-mcp-server-${candidate}.tgz`,
+          "--tag",
+          beta ? "beta" : "latest",
+          "--access",
+          "public",
+          "--ignore-scripts",
+          "--provenance",
+        ]);
+      }
+      expect(
+        npmCalls(fake.npmLog).some((c) => c.argv.includes("dist-tag")),
+      ).toBe(false);
+      const push = lines(fake.dockerLog).find(
+        (l) => l.startsWith("buildx build") && l.includes("--push"),
+      )!;
+      expect(push).toContain(
+        `--tag ghcr.io/sstolz/kdrive-mcp-server:${candidate}`,
+      );
+      expect(
+        push.includes("--tag ghcr.io/sstolz/kdrive-mcp-server:latest"),
+      ).toBe(!beta);
+      expect(journal.indexOf("image push")).toBeLessThan(
+        journal.indexOf("npm accepted"),
+      );
+      expect(
+        server.seen.filter((r) => r.url.endsWith("/environments/release"))
+          .length,
+      ).toBeGreaterThanOrEqual(4);
+      if (advanced) {
+        dispatchedSha = advanced;
+        reasonViaMake(
+          await command("release-check", { RELEASE_PHASE: "verify" }),
+          "sha is not the dispatched commit",
+        );
+      }
+    };
+    await assertPublished();
+  },
+  120_000,
+);
+
+// AC-45 BR-363 v3 BR-372 v3 BR-373 v3 BR-431 v1 BR-432 v1.
+it.each([
+  [
+    "history unreadable",
+    "npm version not published",
+    "npm document unreadable; refer to the owner",
+  ],
+  [
+    "malformed versions before time",
+    "npm version not published",
+    "npm versions contains a non-SemVer version key",
+  ],
+  [
+    "candidate before ordering",
+    "npm version not published",
+    "version already published on npm",
+  ],
+  [
+    "beta ordering",
+    "npm version not published",
+    "beta version is not greater than every published version",
+  ],
+  [
+    "stable ordering",
+    "npm version not published",
+    "stable version is not greater than every published stable version",
+  ],
+  ["candidate before prior image", "GHCR image", "image already published"],
+  ["default before token", "GHCR image", "npm stable default unavailable"],
+] as const)(
+  "F-024 v4 exact diagnostics: %s (AC-45)",
+  async (variant, condition, diagnostic) => {
+    const candidate =
+      variant === "beta ordering" ? "1.0.1-beta.1" : LATER_STABLE;
+    const { result } = await lifecycleCheck(
+      candidate,
+      "verify",
+      "false",
+      (s, d) => {
+        if (variant === "history unreadable")
+          s.npm = { status: 200, body: { versions: {}, time: [] } };
+        if (variant === "malformed versions before time") {
+          d.versions["unsafe/versions"] = {};
+          d.time["unsafe/time"] = "date";
+          addVersion(d, candidate);
+        }
+        if (variant === "candidate before ordering") {
+          addVersion(d, candidate);
+          addVersion(d, "9.0.0");
+        }
+        if (variant === "beta ordering" || variant === "stable ordering")
+          addVersion(d, "2.0.0");
+        if (variant === "candidate before prior image") {
+          s.index = { status: 200, body: RUN_INDEX };
+          s.references![STABLE] = { status: 404 };
+          s.latest = { status: 503 };
+        }
+        if (variant === "default before token") {
+          delete d["dist-tags"].latest;
+          s.ghcrToken = { status: 403 };
+          s.index = { status: 200, body: RUN_INDEX };
+        }
+      },
+    );
+    exactCheck(result, condition, diagnostic);
+    expect(result.status).toBe(1);
+    expect(result.stdout).not.toMatch(/unsafe\/(?:versions|time)/u);
+  },
+);
+
+// AC-39 AC-42 AC-45 BR-372 v3 BR-373 v3: pin beta's separate default-image report.
+it.each([
+  ["S absent", "previous stable image unavailable"],
+  ["S invalid", "previous stable image manifest invalid"],
+  ["latest absent", "GHCR latest missing for stable npm default"],
+  ["latest invalid", "previous stable image manifest invalid"],
+  ["S status", "GHCR status 503"],
+  ["latest status", "GHCR status 503"],
+  ["token status", "GHCR token status 403"],
+  ["unsafe default", "npm stable default unavailable"],
+  ["unreadable default", "npm stable default unavailable"],
+] as const)(
+  "BR-372 v3 BR-373 v3 lifecycle read-back: beta %s (AC-42)",
+  async (variant, diagnostic) => {
+    const { result, server } = await lifecycleReadBack(LATER_BETA, (s, d) => {
+      if (variant === "S absent") s.references!["1.1.0"] = { status: 404 };
+      if (variant === "S invalid")
+        s.references!["1.1.0"] = { status: 200, body: "{}" };
+      if (variant === "latest absent") s.latest = { status: 404 };
+      if (variant === "latest invalid") s.latest = { status: 200, body: "{}" };
+      if (variant === "S status") s.references!["1.1.0"] = { status: 503 };
+      if (variant === "latest status") s.latest = { status: 503 };
+      if (variant === "token status") s.ghcrToken = { status: 403 };
+      if (variant === "unsafe default") d["dist-tags"].latest = "../unsafe";
+      if (variant === "unreadable default") s.npm = { status: 200, body: "{" };
+    });
+    expect(line(result.stdout, "release-verify", "image latest tag")).toBe(
+      `release-verify: image latest tag FAIL ${diagnostic}`,
+    );
+    expect(result.status).toBe(1);
+    if (diagnostic === "npm stable default unavailable") {
+      expect(comparedGets(server).filter((tag) => tag !== LATER_BETA)).toEqual(
+        [],
+      );
+      expect(result.stdout).not.toContain("../unsafe");
+    }
   },
 );

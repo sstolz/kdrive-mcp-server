@@ -4,6 +4,18 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
 
 ## [Unreleased]
 
+### Added
+
+- #91 / F-024 v4 (pending acceptance): later stable and post-stable beta
+  lifecycle gates, exact union-history SemVer ordering and a gated forward
+  stable fix for deprecated defaults.
+
+### Changed
+
+- #91 / F-024 v4 (pending acceptance): npm and image read-back validate healthy
+  candidates and stable defaults; the publishing guide specifies owner-only
+  byte-preserving default restoration before digest-keyed orphan cleanup.
+
 ## [1.0.0] - 2026-11-17
 
 ### Added
