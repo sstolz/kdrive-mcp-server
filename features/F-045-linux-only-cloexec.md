@@ -2,7 +2,7 @@
 id: F-045
 title: Linux-only close-on-exec flag
 ticket: "#96"
-status: draft
+status: frozen
 version: 1
 ---
 
@@ -186,3 +186,7 @@ Add Linux characterization assertions before changing production code.
   and stated that the versioned BRs are authoritative.
 - Round 1, finding 7: retained — Merged exact flag and creation-mode checks
   into AC-01 and AC-02. AC-03 now checks only that header opens pass no mode.
+
+Frozen on 2026-11-19 (autonomous freeze, PROJECT.md D-1) after
+`96-spec-review-2-opus` (strong tier, approve, no findings); freeze record on
+#96.
