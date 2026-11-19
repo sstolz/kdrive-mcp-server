@@ -589,6 +589,12 @@ and resources, both configured-tree runs (A and B) with a 1,001-child
 traversal, received shares (discovery, reads, refusals, revocation after 60 s)
 and a version change. Read-only: no mutation reaches kDrive.
 
+[F-044 v1](features/F-044-root-path-resolution-errors.md) (#88),
+[BR-207 v2](business-rules/BR-207.md) (pending acceptance): unresolved path
+components return `null`, while upstream failures, malformed responses and
+budget failures keep rejecting; pagination and request traces are unchanged.
+BR-207 v1 stays the accepted rule until v2 acceptance on actual main.
+
 ## Accepted — separate received-share policy
 
 Accepted 2026-11-09: [F-004 v1](features/F-004-received-share-policy.md),
@@ -664,6 +670,12 @@ drive-role and root-resolution validation. See
 [BR-024 v1](business-rules/BR-024.md), [BR-025 v1](business-rules/BR-025.md),
 [BR-026 v1](business-rules/BR-026.md), [BR-027 v1](business-rules/BR-027.md) and
 [BR-028 v1](business-rules/BR-028.md).
+
+[F-044 v1](features/F-044-root-path-resolution-errors.md) (#88),
+[BR-021 v2](business-rules/BR-021.md) (pending acceptance): missing, ambiguous
+or non-directory path components give `ROOT_NOT_RESOLVED (roots)`; upstream
+resolution failures retain `PREFLIGHT_FAILED (preflight)`.
+BR-021 v1 stays the accepted rule until v2 acceptance on actual main.
 
 Local preparation selects stdio or HTTP but always reports that its runtime is
 unimplemented. Preflight is tested through synthetic injected dependencies;

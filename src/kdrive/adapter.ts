@@ -505,7 +505,7 @@ export function createKdriveAdapter(
           throw readUnavailable();
         }
       }
-      if (matches.length !== 1) throw readUnavailable();
+      if (matches.length !== 1) return null;
       return matches[0] as { id: number; type: "dir" | "file" };
     }
     return Object.freeze({
@@ -545,8 +545,9 @@ export function createKdriveAdapter(
         if (!components.length)
           current = { id: 1, type: await own(driveId, 1) };
         for (const component of components) {
-          if (current.type !== "dir") throw readUnavailable();
-          current = await child(driveId, current.id, component);
+          const next = await child(driveId, current.id, component);
+          if (next?.type !== "dir") return null;
+          current = next;
         }
         return { driveId, id: current.id, type: current.type };
       },
