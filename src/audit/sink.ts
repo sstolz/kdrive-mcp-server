@@ -1,4 +1,5 @@
 import { constants, close, fdatasync, fstat, open, write } from "node:fs";
+import { closeOnExecFlag } from "../open-flags.js";
 
 /** BR-237: the identity of the caller of a gate run. */
 export type AuditIdentity =
@@ -368,8 +369,6 @@ export const productionFilePort: AuditFilePort = Object.freeze({
     }),
 });
 
-/** Linux O_CLOEXEC; Node does not export it, and libuv also sets it on open. */
-const O_CLOEXEC = 0o2000000;
 /**
  * BR-239 flags. O_NONBLOCK makes an open of a FIFO without reader fail instead
  * of blocking startup; it has no effect on a regular file.
@@ -380,7 +379,7 @@ export const AUDIT_OPEN_FLAGS =
   constants.O_CREAT |
   constants.O_NOFOLLOW |
   constants.O_NONBLOCK |
-  O_CLOEXEC;
+  closeOnExecFlag();
 
 export interface FileSinkOptions {
   readonly port?: AuditFilePort;

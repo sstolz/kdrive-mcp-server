@@ -2,11 +2,14 @@
 id: F-044
 title: Root path resolution errors
 ticket: "#88"
-status: frozen
+status: done
 version: 1
 ---
 
 ## Context
+
+Accepted on actual main `3f6e291` on 2026-11-19 ([#88 acceptance](https://github.com/sstolz/kdrive-mcp-server/issues/88#issuecomment-7005778721)).
+BR-021 v2 and BR-207 v2 are active.
 
 Startup users can select a root such as `7:/Documents`. If no child has that
 exact name, startup reports `PREFLIGHT_FAILED (preflight)`. This suggests a

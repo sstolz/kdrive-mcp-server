@@ -3,6 +3,7 @@ import { spawn, execFileSync } from "node:child_process";
 import { EventEmitter } from "node:events";
 import {
   chmodSync,
+  constants,
   lstatSync,
   mkdirSync,
   mkdtempSync,
@@ -68,6 +69,45 @@ function fakePort(state: FakePortState): AuditFilePort {
     close: () => Promise.resolve(),
   };
 }
+
+describe("F-045 audit open flags", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.resetModules();
+  });
+
+  const baseFlags =
+    constants.O_WRONLY |
+    constants.O_APPEND |
+    constants.O_CREAT |
+    constants.O_NOFOLLOW |
+    constants.O_NONBLOCK;
+
+  async function expectAuditOpen(platform: NodeJS.Platform, flags: number) {
+    vi.stubGlobal("process", { ...process, platform });
+    vi.resetModules();
+    const { openFileSink: openSink } = await import("../src/audit/sink.js");
+    const open = vi.fn<AuditFilePort["open"]>().mockResolvedValue(3);
+    const port = { ...fakePort({ calls: [], writes: [] }), open };
+    const sink = await openSink("/audit.log", { port });
+    try {
+      expect(open.mock.calls).toEqual([["/audit.log", flags, 0o600]]);
+    } finally {
+      await sink.close();
+    }
+  }
+
+  it("BR-239 v2 linux preserves exact open flags", async () => {
+    await expectAuditOpen("linux", baseFlags | 0o2000000);
+  });
+
+  it.each(["darwin", "win32"] as const)(
+    "BR-239 v2 non-linux omits Linux close-on-exec flag",
+    async (platform) => {
+      await expectAuditOpen(platform, baseFlags);
+    },
+  );
+});
 function errno(code: string) {
   return Object.assign(new Error(`synthetic ${code}`), { code });
 }

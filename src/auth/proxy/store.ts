@@ -6,6 +6,7 @@ import {
   type SQLOutputValue,
 } from "node:sqlite";
 import { HttpStartupError, type OAuthStateCode } from "../../http/errors.js";
+import { closeOnExecFlag } from "../../open-flags.js";
 import {
   acceptableCimdClientId,
   meetsCimdClientIdSyntax,
@@ -56,15 +57,14 @@ const SQLITE_BUSY = 5;
 const SQLITE_LOCKED = 6;
 const SQLITE_CORRUPT = 11;
 const SQLITE_NOTADB = 26;
-/** Linux O_CLOEXEC; Node does not export it, and libuv also sets it on open. */
-const O_CLOEXEC = 0o2000000;
 const CREATE_FLAGS =
   constants.O_WRONLY |
   constants.O_CREAT |
   constants.O_EXCL |
   constants.O_NOFOLLOW |
-  O_CLOEXEC;
-const HEADER_FLAGS = constants.O_RDONLY | constants.O_NOFOLLOW | O_CLOEXEC;
+  closeOnExecFlag();
+const HEADER_FLAGS =
+  constants.O_RDONLY | constants.O_NOFOLLOW | closeOnExecFlag();
 const HEADER_MAGIC = Buffer.from("SQLite format 3\0", "latin1");
 const HEADER_BYTES = 100;
 const HASH_BYTES = 32;
