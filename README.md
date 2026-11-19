@@ -392,7 +392,8 @@ walks through it with Docker Compose and Traefik; in short:
    MCP_PUBLIC_URL: https://mcp.example.com/mcp
    OAUTH_ISSUER: https://login.infomaniak.com # Infomaniak; no trailing slash
    OAUTH_UPSTREAM_CLIENT_ID: 00000000-fake-client-id
-   OAUTH_ALLOWED_EMAILS: you@example.com
+   OAUTH_ALLOWED_SUBJECTS: subject-1
+   OAUTH_ALLOWED_EMAILS: ""
    OAUTH_ALLOWED_REDIRECT_URIS: https://claude.ai/api/mcp/auth_callback
    ```
 
@@ -402,8 +403,10 @@ walks through it with Docker Compose and Traefik; in short:
    provider, and the server checks your identity against the allowlist.
 
 Prefer `OAUTH_ALLOWED_SUBJECTS` from `OAUTH_ISSUER`: the `(iss, sub)` pair is
-the reference identity. `OAUTH_ALLOWED_EMAILS` is a separate, optional mechanism
-that requires an exact address match and `email_verified=true`. It is
+the reference identity. Either list may be unset or empty; the server requires
+at least one combined entry across both lists. `OAUTH_ALLOWED_EMAILS` is a
+separate, optional mechanism that requires an exact address match and
+`email_verified=true`. It is
 discouraged because an address can change or be reassigned.
 
 **claude.ai** (verified): add a custom connector with the URL

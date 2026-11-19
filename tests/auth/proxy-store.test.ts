@@ -311,7 +311,7 @@ async function tryChild(path: string): Promise<string> {
   return line;
 }
 
-// ---- AC-03 --------------------------------------------------------------------
+// ---- F-045 open flags ---------------------------------------------------------
 
 describe("F-045 state-store open flags", () => {
   afterEach(() => {

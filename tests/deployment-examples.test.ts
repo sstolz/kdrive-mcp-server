@@ -17,6 +17,7 @@ import {
   validateComposeHealth,
   validateComposeAdmission,
   validateDeploymentDoc,
+  validateAllowlistGuidance,
   validateHygiene,
 } from "./helpers/deployment.js";
 
@@ -50,11 +51,10 @@ const compose = parse(composeText) as Compose;
 const services = Object.values(compose.services);
 const service = services[0] as Service;
 const VARIABLE = /^\$\{[A-Z][A-Z0-9_]*:\?[^}]+\}$/u;
-const SAMPLE: Record<string, string> = {
+const REQUIRED_SAMPLE: Record<string, string> = {
   MCP_PUBLIC_URL: "https://mcp.example.com/mcp",
   KDRIVE_ID: "1",
   OAUTH_ISSUER: "https://idp.example.com",
-  OAUTH_ALLOWED_EMAILS: "user@example.com",
   OAUTH_UPSTREAM_CLIENT_ID: "client.example.com",
   OAUTH_ALLOWED_REDIRECT_URIS: "https://client.example.org/callback",
 };
@@ -82,6 +82,36 @@ function credentials(): Record<string, string> {
       return [`/run/secrets/${name}`, path];
     }),
   );
+}
+
+/** Resolve parsed Compose expressions before passing settings to the server. */
+function composeEnvironment(
+  files: Record<string, string>,
+  optional: Record<string, string | undefined> = {},
+): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(service.environment).map(([name, value]) => {
+      if (VARIABLE.test(value)) {
+        const supplied = REQUIRED_SAMPLE[name] ?? optional[name];
+        if (!supplied)
+          throw new Error(`Missing required Compose value: ${name}`);
+        return [name, supplied];
+      }
+      if (value === `\${${name}:-}`) return [name, optional[name] ?? ""];
+      return [name, files[value] ?? value];
+    }),
+  );
+}
+
+function expectProxyIdentity(
+  config: Awaited<ReturnType<typeof loadConfiguration>>,
+  subjects: string[],
+  emails: string[],
+): void {
+  expect(config.transport).toBe("http");
+  expect(config.oauthMode).toBe("proxy");
+  expect(config.oauthAllowedSubjects).toEqual(subjects);
+  expect(config.oauthAllowedEmails).toEqual(emails);
 }
 
 function durationSeconds(value: string): number {
@@ -130,7 +160,8 @@ describe("F-013 AC-07 deployment examples", () => {
     expect(targets).toHaveLength(3);
     for (const entry of service.secrets)
       expect(compose.secrets[entry.source]?.file).toMatch(VARIABLE);
-    for (const name of Object.keys(SAMPLE)) expect(env[name]).toMatch(VARIABLE);
+    for (const name of Object.keys(REQUIRED_SAMPLE))
+      expect(env[name]).toMatch(VARIABLE);
   });
 
   it("BR-184 routes a Traefik Host rule to port 3000", () => {
@@ -149,13 +180,9 @@ describe("F-013 AC-07 deployment examples", () => {
 
   it("BR-184 Compose environment loads as HTTP proxy configuration", async () => {
     const files = credentials();
-    const env: Record<string, string> = {};
-    for (const [name, value] of Object.entries(service.environment))
-      env[name] = VARIABLE.test(value)
-        ? (SAMPLE[name] ?? "")
-        : value === "${MCP_HTTP_TRUSTED_PROXIES:-}"
-          ? ""
-          : (files[value] ?? value);
+    const env = composeEnvironment(files, {
+      OAUTH_ALLOWED_EMAILS: "user@example.com",
+    });
     const config = await loadConfiguration({ argv: [], env, cwd: directory });
     expect(config.transport).toBe("http");
     expect(config.oauthMode).toBe("proxy");
@@ -191,6 +218,138 @@ describe("F-013 AC-07 deployment examples", () => {
     });
     expect(config.transport).toBe("http");
     expect(config.oauthMode).toBe("proxy");
+  });
+});
+
+it("BR-024 v5 parsed Compose settings characterize the combined allowlist requirement", async () => {
+  const env = composeEnvironment(credentials(), {
+    OAUTH_ALLOWED_EMAILS: "user@example.com",
+  });
+  for (const [subjects, emails] of [
+    ["subject-1", ""],
+    ["", "user@example.com"],
+    ["subject-1", "user@example.com"],
+    ["", ""],
+  ] as const) {
+    const loading = loadConfiguration({
+      argv: [],
+      env: {
+        ...env,
+        OAUTH_ALLOWED_SUBJECTS: subjects,
+        OAUTH_ALLOWED_EMAILS: emails,
+      },
+      cwd: directory,
+    });
+    if (!subjects && !emails) {
+      await expect(loading).rejects.toMatchObject({
+        name: "ConfigurationError",
+        code: "MISSING_REQUIRED",
+        setting: "oauthAllowedSubjects",
+        message:
+          "Configuration error [MISSING_REQUIRED] (oauthAllowedSubjects).",
+      });
+    } else {
+      expectProxyIdentity(
+        await loading,
+        subjects ? [subjects] : [],
+        emails ? [emails] : [],
+      );
+    }
+  }
+});
+
+describe("F-046 Compose identity allowlists", () => {
+  it("BR-184 v4 AC-01 Compose passes both optional allowlists with exact guidance", () => {
+    expect(service.environment.OAUTH_ALLOWED_SUBJECTS).toBe(
+      "${OAUTH_ALLOWED_SUBJECTS:-}",
+    );
+    expect(service.environment.OAUTH_ALLOWED_EMAILS).toBe(
+      "${OAUTH_ALLOWED_EMAILS:-}",
+    );
+    const issuerLine = composeText
+      .split("\n")
+      .find((line) => line.trimStart().startsWith("OAUTH_ISSUER:"));
+    expect(issuerLine).toBeDefined();
+    const block = [
+      issuerLine,
+      "      # Allowlist: set at least one of the two lists (the server refuses both",
+      "      # empty). Prefer subjects; an e-mail address can be reassigned (SPEC.md).",
+      "      OAUTH_ALLOWED_SUBJECTS: ${OAUTH_ALLOWED_SUBJECTS:-}",
+      "      OAUTH_ALLOWED_EMAILS: ${OAUTH_ALLOWED_EMAILS:-}",
+    ].join("\n");
+    expect(composeText).toContain(block);
+  });
+
+  it.each([undefined, ""])(
+    "BR-184 v4 BR-024 v5 AC-02 Compose loads subjects only",
+    async (emails) => {
+      const env = composeEnvironment(credentials(), {
+        OAUTH_ALLOWED_SUBJECTS: "subject-1",
+        OAUTH_ALLOWED_EMAILS: emails,
+      });
+      expectProxyIdentity(
+        await loadConfiguration({ argv: [], env, cwd: directory }),
+        ["subject-1"],
+        [],
+      );
+    },
+  );
+
+  it.each([undefined, ""])(
+    "BR-184 v4 BR-024 v5 AC-03 Compose loads emails only",
+    async (subjects) => {
+      const env = composeEnvironment(credentials(), {
+        OAUTH_ALLOWED_SUBJECTS: subjects,
+        OAUTH_ALLOWED_EMAILS: "user@example.com",
+      });
+      expectProxyIdentity(
+        await loadConfiguration({ argv: [], env, cwd: directory }),
+        [],
+        ["user@example.com"],
+      );
+    },
+  );
+
+  it("BR-184 v4 BR-024 v5 AC-04 Compose loads both allowlists", async () => {
+    const env = composeEnvironment(credentials(), {
+      OAUTH_ALLOWED_SUBJECTS: "subject-1",
+      OAUTH_ALLOWED_EMAILS: "user@example.com",
+    });
+    expectProxyIdentity(
+      await loadConfiguration({ argv: [], env, cwd: directory }),
+      ["subject-1"],
+      ["user@example.com"],
+    );
+  });
+
+  it.each([
+    [undefined, undefined],
+    [undefined, ""],
+    ["", undefined],
+    ["", ""],
+  ])(
+    "BR-184 v4 BR-024 v5 AC-05 Compose refuses both empty allowlists",
+    async (subjects, emails) => {
+      const env = composeEnvironment(credentials(), {
+        OAUTH_ALLOWED_SUBJECTS: subjects,
+        OAUTH_ALLOWED_EMAILS: emails,
+      });
+      await expect(
+        loadConfiguration({ argv: [], env, cwd: directory }),
+      ).rejects.toMatchObject({
+        name: "ConfigurationError",
+        code: "MISSING_REQUIRED",
+        setting: "oauthAllowedSubjects",
+        message:
+          "Configuration error [MISSING_REQUIRED] (oauthAllowedSubjects).",
+      });
+    },
+  );
+
+  it("BR-187 v4 AC-08 deployment guidance explains either or both allowlists", () => {
+    expect(() => {
+      validateAllowlistGuidance(docText);
+    }).not.toThrow();
   });
 });
 
@@ -380,7 +539,7 @@ describe("F-021 AC-10 health check deployment", () => {
   });
 });
 
-it("BR-184 v3 AC-21 the Compose example passes an optional empty trusted-proxy list", async () => {
+it("BR-184 v4 AC-06 the Compose example passes an optional empty trusted-proxy list", async () => {
   expect(service.environment.MCP_HTTP_TRUSTED_PROXIES).toBe(
     "${MCP_HTTP_TRUSTED_PROXIES:-}",
   );
@@ -389,16 +548,10 @@ it("BR-184 v3 AC-21 the Compose example passes an optional empty trusted-proxy l
   }).not.toThrow();
   const files = credentials();
   for (const trusted of ["", "192.0.2.0/24"]) {
-    const env = Object.fromEntries(
-      Object.entries(service.environment).map(([name, value]) => [
-        name,
-        name === "MCP_HTTP_TRUSTED_PROXIES"
-          ? trusted
-          : VARIABLE.test(value)
-            ? (SAMPLE[name] ?? "")
-            : (files[value] ?? value),
-      ]),
-    );
+    const env = composeEnvironment(files, {
+      MCP_HTTP_TRUSTED_PROXIES: trusted,
+      OAUTH_ALLOWED_EMAILS: "user@example.com",
+    });
     const config = await loadConfiguration({ argv: [], env, cwd: directory });
     expect(config.httpTrustedProxies).toEqual(trusted ? [trusted] : []);
   }
@@ -426,20 +579,34 @@ it("BR-184 v3 AC-21 the Compose example passes an optional empty trusted-proxy l
   }).toThrow();
 });
 
-it("BR-186 v2 AC-21 required and optional variables match the Compose header", () => {
+it("BR-186 v3 AC-07 required and optional variables match the Compose header", () => {
   expect(() => {
     validateHygiene("examples/compose.yaml", composeText);
   }).not.toThrow();
+  const optionalHeader =
+    "# Optional trusted proxies (F-035, accepted on main 703bece) and identity allowlists (F-046) below.";
   const mutations = [
     composeText.replace(/\$\{MCP_PUBLIC_URL:\?[^}]+\}/u, "${MCP_PUBLIC_URL:-}"),
-    composeText.replace(
-      "${MCP_HTTP_TRUSTED_PROXIES:-}",
-      "${MCP_HTTP_TRUSTED_PROXIES:-127.0.0.1}",
-    ),
+    ...[
+      "MCP_HTTP_TRUSTED_PROXIES",
+      "OAUTH_ALLOWED_SUBJECTS",
+      "OAUTH_ALLOWED_EMAILS",
+    ].flatMap((name) => [
+      composeText.replace(`\${${name}:-}`, `\${${name}:-nonempty}`),
+      composeText.replace(`\${${name}:-}`, `\${${name}:?set value}`),
+    ]),
+    `${composeText}\nextra: \${EXTRA_OPTIONAL:-}\n`,
+    composeText.replace(optionalHeader, ""),
+    composeText.replace(optionalHeader, `${optionalHeader} altered`),
     composeText.replace(
       /^# Required installation-specific values.*$/mu,
       "# Every installation-specific value is a required variable.",
     ),
+    composeText.replace(
+      "# optional values may use ${NAME:-} with an empty default.",
+      "",
+    ),
+    composeText.replace("# Credentials are file secrets only.", ""),
   ];
   for (const text of mutations) {
     expect(text).not.toBe(composeText);

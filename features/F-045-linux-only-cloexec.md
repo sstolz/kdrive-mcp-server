@@ -2,11 +2,14 @@
 id: F-045
 title: Linux-only close-on-exec flag
 ticket: "#96"
-status: frozen
+status: done
 version: 1
 ---
 
 ## Context
+
+Accepted on actual main `b65a1e5` on 2026-11-19 ([#96 acceptance](https://github.com/sstolz/kdrive-mcp-server/issues/96#issuecomment-7007926600)).
+BR-239 v2, BR-293 v2 and BR-295 v3 are active.
 
 The audit file sink and the persistent OAuth state store each define
 `O_CLOEXEC = 0o2000000`. This is the Linux value. Both pass it to file opens
