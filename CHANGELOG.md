@@ -16,6 +16,10 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
   candidates and stable defaults; the publishing guide specifies owner-only
   byte-preserving default restoration before digest-keyed orphan cleanup.
 
+### Fixed
+
+- #88 / F-044 (pending acceptance): unresolved root path components report `ROOT_NOT_RESOLVED (roots)` while upstream resolution failures retain `PREFLIGHT_FAILED (preflight)`.
+
 ## [1.0.0] - 2026-11-17
 
 ### Added
