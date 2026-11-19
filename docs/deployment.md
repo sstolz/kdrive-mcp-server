@@ -120,6 +120,15 @@ UID 1000, the runtime user. Secrets are never passed as environment values or
 build arguments, and never enter the image: `.dockerignore` excludes secret
 files, environment files and keys from the build context.
 
+For all three secret files, maximal leading and trailing sequences of U+0020
+SPACE, U+0009 TAB, U+000D CR and U+000A LF are removed after checking the raw
+file limit (16,384 bytes for token/upstream secret; 65,536 for signing key).
+Empty results are refused. Other bytes, including NBSP, BOM and NUL, are not
+trimmed. Interior spaces remain valid in token/upstream secrets; interior ASCII
+controls remain invalid, and fatal UTF-8 decoding still applies. Signing-key
+interior bytes and PKCS#8/P-256 validation are unchanged. Direct environment
+credentials are never trimmed and retain their existing validation.
+
 ## Shutdown
 
 `docker stop` (or `docker compose stop`) sends SIGTERM. SIGTERM triggers the
@@ -427,8 +436,11 @@ time of writing.
 ### 3. Provision the three secret files
 
 Put them in a `secrets` directory readable by UID 1000 (the runtime user) and
-by nobody else. Each file is read once at startup; one trailing newline is
-ignored.
+by nobody else. Each file is read once at startup. Leading and trailing
+U+0020 SPACE, U+0009 TAB, U+000D CR and U+000A LF are removed, including
+repeated or mixed padding; an empty result is refused. Interior token/secret
+spaces remain valid and interior controls remain invalid. Environment
+credentials are never trimmed.
 
 ```sh
 sudo install -d -m 0700 -o 1000 -g 1000 secrets
@@ -659,10 +671,12 @@ of those combinations have been verified with this server.
   be bound, prints "The HTTP listener could not be started.". An audit log that cannot be opened prints "The audit log could not be opened or
   is not a private regular file." (check the owner and mode of the file and
   of the mount). With `restart: on-failure:3`, Compose retries three times.
-- **`[CREDENTIAL_INVALID]`.** An empty file, or an extra line break, carriage
-  return, tab or other control character beyond one trailing newline can cause
-  this error (a plain space does not trigger it). Rewrite the file with the
-  token only, then restart.
+- **`[CREDENTIAL_INVALID]`.** A secret file empty after removal of leading and
+  trailing U+0020 SPACE, U+0009 TAB, U+000D CR and U+000A LF causes this error.
+  Token/upstream-secret files also reject invalid UTF-8 and interior ASCII
+  controls, including tabs, CR and LF; interior spaces remain valid. Other
+  Unicode whitespace, BOM and NUL are not trimmed. Environment credentials
+  are never trimmed. Correct the selected file, then restart.
 - **`[PREFLIGHT_FAILED]` with `403 all_scopes`.** The kDrive API token lacks the
   `drive` scope. Create a token in **Tokens API → Créer un token** with
   **Application par défaut** and **drive — Produits Drive** (step 2), replace

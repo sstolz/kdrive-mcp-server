@@ -12,7 +12,9 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
 
 ### Changed
 
-- #112 / F-046 (pending acceptance): the Compose example accepts subjects, e-mails or both identity allowlists; deployment guidance explains the combined requirement and prefers subjects because an e-mail address can be reassigned.
+- #111 / F-047 / BR-026 v2 (pending acceptance): selected token, upstream-secret and signing-key files remove surrounding SPACE, TAB, CR and LF after raw-byte bounds; empty results fail, while interior validation, inline values and guarded reads remain unchanged.
+
+- #112 / F-046 (accepted 2026-11-19 on main `e8ae20d`; [#112 acceptance](https://github.com/sstolz/kdrive-mcp-server/issues/112#issuecomment-7014711154)): the Compose example accepts subjects, e-mails or both identity allowlists; deployment guidance explains the combined requirement and prefers subjects because an e-mail address can be reassigned.
 - #91 / F-024 v4 (accepted 2026-11-18): npm and image read-back validate healthy
   candidates and stable defaults; the publishing guide specifies owner-only
   byte-preserving default restoration before digest-keyed orphan cleanup.

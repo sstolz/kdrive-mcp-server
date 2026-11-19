@@ -279,7 +279,9 @@ export function validateAllowlistGuidance(text: string): void {
   const [server = "", compose = ""] = settings.split("Compose variables (");
   for (const table of [server, compose]) {
     for (const name of ["OAUTH_ALLOWED_SUBJECTS", "OAUTH_ALLOWED_EMAILS"]) {
-      const rows = table.split("|");
+      const rows = table
+        .split("|")
+        .map((cell) => cell.replaceAll(/\s+/gu, " ").trim());
       const index = rows.findIndex((cell) => cell.trim() === `\`${name}\``);
       check(index >= 0, `allowlist table row ${name}`);
       check(
@@ -290,7 +292,9 @@ export function validateAllowlistGuidance(text: string): void {
     }
   }
   // Only the prose after the server table, before the Compose-variable table.
-  const prose = server.slice(server.lastIndexOf("|") + 1);
+  const prose = server
+    .slice(server.lastIndexOf("|") + 1)
+    .replaceAll(/\s+/gu, " ");
   for (const phrase of [
     "OAUTH_ALLOWED_SUBJECTS",
     "OAUTH_ALLOWED_EMAILS",

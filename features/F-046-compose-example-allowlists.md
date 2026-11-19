@@ -2,7 +2,7 @@
 id: F-046
 title: Compose example identity allowlists
 ticket: "#112"
-status: frozen
+status: done
 version: 1
 ---
 
@@ -275,3 +275,7 @@ checks stated in Scope; no unit test is added for prose-only synchronization.
 - **112-spec-1-reviewer, finding 2 (minor) — retained.** Remove Startup from Scope's alignment list and AC-08 because it contains no allowlist text.
 - **112-spec-1-reviewer, finding 3 (minor) — retained.** AC-08 now fixes assertions per table, adjacent prose and step-by-step `.env` example, including exact `Required?` cells, to make the guidance testable.
 - **112-spec-1-reviewer, finding 4 (minor) — retained.** Specify the exact replacement header line naming optional allowlists and align BR-184 v4, BR-186 v3 and AC-07 so the header describes all optional settings.
+
+## Acceptance synchronization
+
+Accepted on actual main `e8ae20d`, 2026-11-19 ([#112 acceptance](https://github.com/sstolz/kdrive-mcp-server/issues/112#issuecomment-7014711154)). Status synchronized in #111.

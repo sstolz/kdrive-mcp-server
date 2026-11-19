@@ -1,6 +1,8 @@
 import { createHash, createPublicKey, randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
+import { loadConfiguration, ConfigurationError } from "../../src/config.js";
+import { SIGNING_KEY_ERROR } from "../../src/auth/proxy/keys.js";
 import { AuthConfigurationError } from "../../src/auth/access-token.js";
 import {
   createOAuthProxy,
@@ -135,3 +137,196 @@ describe("F-028 AC-13 production composition has no CIMD seam", () => {
     expect(main).not.toContain("clientMetadataSeam");
   });
 });
+
+function loadSyntheticSigning(content: Uint8Array) {
+  return loadConfiguration({
+    argv: [],
+    env: {
+      KDRIVE_ID: "7",
+      KDRIVE_TOKEN: "SYNTHETIC_TOKEN",
+      KDRIVE_MCP_TRANSPORT: "http",
+      MCP_PUBLIC_URL: "https://service.example.com/mcp",
+      OAUTH_MODE: "proxy",
+      OAUTH_ISSUER: "https://issuer.example.org",
+      OAUTH_ALLOWED_SUBJECTS: "synthetic-subject",
+      OAUTH_UPSTREAM_CLIENT_ID: "synthetic-client",
+      OAUTH_UPSTREAM_CLIENT_SECRET: "SYNTHETIC_CLIENT_SECRET",
+      OAUTH_SIGNING_KEY_FILE: "/synthetic/key",
+      OAUTH_ALLOWED_REDIRECT_URIS: "https://client.example.net/callback",
+    },
+    readFile: () => Promise.resolve(content),
+  });
+}
+function signingBytes(
+  config: Awaited<ReturnType<typeof loadConfiguration>>,
+): Uint8Array {
+  if (!config.oauthSigningKey) throw new Error("expected signing bytes");
+  return config.oauthSigningKey;
+}
+function expectSigningConstruction(content: Uint8Array, kid: string) {
+  const result = construct(content);
+  expect(result.proxy.kid).toBe(kid);
+  expect(result.clock).not.toHaveBeenCalled();
+  expect(result.random).not.toHaveBeenCalled();
+  expect(result.fetchJson).not.toHaveBeenCalled();
+  expect(result.postForm).not.toHaveBeenCalled();
+}
+function expectSigningRefusal(content: Uint8Array) {
+  let caught: unknown;
+  try {
+    construct(content);
+  } catch (error) {
+    caught = error;
+  }
+  expect(caught).toBeInstanceOf(AuthConfigurationError);
+  if (!(caught instanceof AuthConfigurationError))
+    throw new Error("expected signing refusal");
+  expect(caught.message).toBe(SIGNING_KEY_ERROR);
+}
+// The generated fixture has only a terminal LF as outer padding.
+const unpaddedSyntheticPem = () => syntheticPem().replace(/\n$/u, "");
+
+for (const variant of [
+  {
+    name: "BR-026 v2 BR-124 v2 AC-15 signing trailing LF",
+    padding: ["\n", "\n\n"],
+  },
+  {
+    name: "BR-026 v2 BR-124 v2 AC-16 signing trailing CRLF",
+    padding: ["\r\n", "\r\n\r\n"],
+  },
+]) {
+  it.each(variant.padding)(variant.name, async (padding) => {
+    const pem = unpaddedSyntheticPem();
+    const loaded = signingBytes(
+      await loadSyntheticSigning(Buffer.from(pem + padding)),
+    );
+    expect(Buffer.from(loaded).equals(Buffer.from(pem))).toBe(true);
+    expectSigningConstruction(loaded, construct(pem).proxy.kid);
+  });
+}
+it.each([
+  [" \t", "\t "],
+  ["\r\n\t ", " \t\r\n"],
+])(
+  "BR-026 v2 BR-124 v2 AC-17 signing surrounding spaces and tabs",
+  async (prefix, suffix) => {
+    const pem = unpaddedSyntheticPem();
+    const loaded = signingBytes(
+      await loadSyntheticSigning(Buffer.from(prefix + pem + suffix)),
+    );
+    expect(Buffer.from(loaded).equals(Buffer.from(pem))).toBe(true);
+    expectSigningConstruction(loaded, construct(pem).proxy.kid);
+  },
+);
+it.each(["", " ", "\t", "\r", "\n", " \t\r\n\n"])(
+  "BR-026 v2 BR-124 v2 AC-18 signing empty after trim",
+  async (content) => {
+    await expect(
+      loadSyntheticSigning(Buffer.from(content)),
+    ).rejects.toBeInstanceOf(ConfigurationError);
+    await expect(
+      loadSyntheticSigning(Buffer.from(content)),
+    ).rejects.toMatchObject({
+      code: "CREDENTIAL_INVALID",
+      setting: "oauthSigningKeyFile",
+    });
+  },
+);
+// Direct construction pins the existing parser independently of file loading.
+// These expectations require execution in the project's Docker gate.
+it.each(["LF", "CRLF", "space", "tab"] as const)(
+  "BR-026 v2 BR-124 v2 AC-19 signing interior whitespace",
+  async (variant) => {
+    const pem = unpaddedSyntheticPem();
+    const content =
+      variant === "CRLF"
+        ? pem.replaceAll("\n", "\r\n")
+        : variant === "LF"
+          ? pem
+          : pem.replace(
+              /(-----BEGIN PRIVATE KEY-----\n[A-Za-z0-9+/=])/u,
+              `$1${variant === "space" ? " " : "\t"}`,
+            );
+    const original = Buffer.from(content);
+    const accepted = variant === "LF" || variant === "CRLF";
+    if (accepted) expectSigningConstruction(original, construct(pem).proxy.kid);
+    else expectSigningRefusal(original);
+    const loaded = signingBytes(await loadSyntheticSigning(original));
+    expect(Buffer.from(loaded).equals(original)).toBe(true);
+    if (accepted) expectSigningConstruction(loaded, construct(pem).proxy.kid);
+    else expectSigningRefusal(loaded);
+  },
+);
+it.each(["\u00a0", "\ufeff", "\u2003"])(
+  "BR-026 v2 BR-124 v2 AC-20 signing nontrimmed Unicode",
+  async (edge) => {
+    const pem = unpaddedSyntheticPem();
+    const original = Buffer.from(edge + pem + (edge === "\u2003" ? "" : edge));
+    // Characterized on the unchanged parser: each of these inputs is refused
+    // by direct construction, so the loaded bytes must be refused the same way.
+    expectSigningRefusal(original);
+    const loaded = signingBytes(await loadSyntheticSigning(original));
+    expect(Buffer.from(loaded).equals(original)).toBe(true);
+    expectSigningRefusal(loaded);
+  },
+);
+it.each(["NUL", "invalid UTF-8"])(
+  "BR-026 v2 BR-124 v2 AC-21 signing NUL and invalid encoding",
+  async (variant) => {
+    const pem = unpaddedSyntheticPem();
+    const core = Buffer.concat([
+      Buffer.from([variant === "NUL" ? 0 : 0xff]),
+      Buffer.from(pem),
+    ]);
+    const loaded = signingBytes(
+      await loadSyntheticSigning(
+        Buffer.concat([Buffer.from(" \t"), core, Buffer.from("\n")]),
+      ),
+    );
+    expect(Buffer.from(loaded).equals(core)).toBe(true);
+    expectSigningRefusal(loaded);
+  },
+);
+it("BR-026 v2 BR-023 v4 AC-22 raw file budgets precede trimming", async () => {
+  const pem = unpaddedSyntheticPem();
+  const loaded = signingBytes(
+    await loadSyntheticSigning(
+      Buffer.from(" ".repeat(65536 - Buffer.byteLength(pem)) + pem),
+    ),
+  );
+  expect(Buffer.from(loaded).equals(Buffer.from(pem))).toBe(true);
+  expectSigningConstruction(loaded, construct(pem).proxy.kid);
+});
+it.each(["P-384", "RSA", "Ed25519", "public", "two blocks", "corrupted"])(
+  "BR-026 v2 BR-124 v2 AC-25 padding cannot bypass key qualification",
+  async (variant) => {
+    let pem: string;
+    switch (variant) {
+      case "P-384":
+        pem = syntheticPem("ec", "P-384");
+        break;
+      case "RSA":
+        pem = syntheticPem("rsa");
+        break;
+      case "Ed25519":
+        pem = syntheticPem("ed25519");
+        break;
+      case "public":
+        pem = publicPem();
+        break;
+      case "two blocks":
+        pem = syntheticPem() + syntheticPem();
+        break;
+      default:
+        pem = syntheticPem().replace(
+          "PRIVATE KEY-----\n",
+          "PRIVATE KEY-----\nAAAA",
+        );
+    }
+    const loaded = signingBytes(
+      await loadSyntheticSigning(Buffer.from(" \t\r\n" + pem + " \t\r\n")),
+    );
+    expectSigningRefusal(loaded);
+  },
+);

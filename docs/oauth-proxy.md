@@ -10,6 +10,15 @@ mounts them on HTTP routes (see "HTTP server" below).
 - The file holds exactly one PEM `PRIVATE KEY` block (PKCS#8) with an EC P-256
   private key. Any other key type, curve or format is refused at start with one
   fixed message.
+- After its 65,536-byte raw limit check, loading removes maximal leading and
+  trailing sequences of U+0020 SPACE, U+0009 TAB, U+000D CR and U+000A LF.
+  An empty result is refused. Other bytes (including NBSP, BOM and NUL) and
+  all interior bytes remain unchanged locally; the existing signing parser
+  retains its Unicode-whitespace grammar and initial-BOM decoding behavior.
+  The PKCS#8/P-256 requirement is unchanged. Token/upstream-secret files use
+  the same boundary normalization, retain interior spaces, and still reject
+  interior ASCII controls and invalid UTF-8. Environment credentials are
+  never trimmed and retain their existing validation.
 - The owner provisions the file; the server never generates a key.
 - The key's `kid` is its RFC 7638 thumbprint. Restarting with the same file
   keeps issued access tokens valid until they expire (one hour). Replacing the

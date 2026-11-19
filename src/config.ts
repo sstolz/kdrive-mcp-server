@@ -87,6 +87,16 @@ async function loadYaml(
     return fail("CONFIG_SYNTAX", "configFile");
   }
 }
+/** BR-026 v2: trim only four ASCII boundary bytes after the raw read limit. */
+function trimSecretFile(data: Uint8Array): Uint8Array {
+  const padding = (byte: number | undefined) =>
+    byte === 0x20 || byte === 0x09 || byte === 0x0d || byte === 0x0a;
+  let start = 0;
+  let end = data.length;
+  while (start < end && padding(data[start])) start += 1;
+  while (end > start && padding(data[end - 1])) end -= 1;
+  return data.subarray(start, end);
+}
 async function loadSecret(
   reader: FileReader,
   values: Source,
@@ -104,7 +114,7 @@ async function loadSecret(
       true,
       file,
     );
-    value = decode(data, inline, true).replace(/\r?\n$/u, "");
+    value = decode(trimSecretFile(data), inline, true);
   }
   if (!value || controls.test(value)) fail("CREDENTIAL_INVALID", inline);
   return value;
@@ -121,13 +131,14 @@ async function loadSigning(
   reference: unknown,
 ): Promise<Uint8Array | undefined> {
   if (reference === undefined) return undefined;
-  const signing = await readSelected(
+  const data = await readSelected(
     reader,
     reference as string,
     65536,
     true,
     "oauthSigningKeyFile",
   );
+  const signing = trimSecretFile(data);
   if (!signing.length) fail("CREDENTIAL_INVALID", "oauthSigningKeyFile");
   return signing;
 }

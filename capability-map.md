@@ -1,14 +1,23 @@
 # Capability map
 
-## Provisional — Compose identity allowlists
+## Provisional — Secret-file surrounding whitespace
+
+[F-047 v1](features/F-047-secret-file-surrounding-whitespace.md) (#111),
+[BR-026 v2](business-rules/BR-026.md), pending acceptance: selected token,
+upstream-secret and signing-key files remove maximal surrounding SPACE, TAB,
+CR and LF after their raw-byte limits; empty results fail. Interior validation,
+inline credentials and guarded reads remain unchanged. BR-026 v1 stays active;
+F-047 remains frozen until acceptance and subsequent record synchronization.
+
+## Accepted — Compose identity allowlists
 
 [F-046 v1](features/F-046-compose-example-allowlists.md) (#112),
 [BR-184 v4](business-rules/BR-184.md), [BR-186 v3](business-rules/BR-186.md)
-and [BR-187 v4](business-rules/BR-187.md) are pending acceptance: the Compose
+and [BR-187 v4](business-rules/BR-187.md) are active: the Compose
 example passes subjects, e-mails or both with empty defaults, retaining the
 server's combined-entry requirement. Deployment guidance prefers subjects
-because an e-mail address can be reassigned. BR-184 v3, BR-186 v2 and BR-187 v3
-remain the accepted active rules.
+because an e-mail address can be reassigned.
+Accepted on actual main `e8ae20d`, 2026-11-19 ([#112 acceptance](https://github.com/sstolz/kdrive-mcp-server/issues/112#issuecomment-7014711154)). F-046 is done.
 
 ## Accepted — Linux-only explicit close-on-exec flag
 
