@@ -52,8 +52,9 @@ describe("BR-155 protected resource metadata", () => {
     expect(options.config.oauthIssuer).toBe(UPSTREAM);
     expect(options.config.oauthAllowedSubjects).toEqual(["user-1"]);
     expect(options.config.oauthAllowedEmails).toEqual([]);
+    // BR-026 v2: surrounding SPACE/TAB/CR/LF of the signing-key file is removed.
     expect(new TextDecoder().decode(options.config.oauthSigningKey)).toBe(
-      f.pem,
+      f.pem.trim(),
     );
     expect(options.upstream).toBe(f.upstream);
     await f.handler.close();

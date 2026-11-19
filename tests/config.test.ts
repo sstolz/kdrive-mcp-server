@@ -842,7 +842,7 @@ describe("BR-026 BR-027 bounded credentials and redaction", () => {
   it.each([
     [bytes("SYNTHETIC\n"), "SYNTHETIC", undefined],
     [bytes("SYNTHETIC\r\n"), "SYNTHETIC", undefined],
-    [bytes("SYNTHETIC\n\n"), undefined, "CREDENTIAL_INVALID"],
+    [bytes("SYNTHETIC\n\n"), "SYNTHETIC", undefined],
     [Buffer.from([0xff]), undefined, "CREDENTIAL_INVALID"],
     [bytes("x".repeat(16385)), undefined, "LIMIT_EXCEEDED"],
     [bytes(""), undefined, "CREDENTIAL_INVALID"],
@@ -1074,7 +1074,7 @@ describe("BR-018 BR-023 BR-026 BR-027 boundary and overlap regressions", () => {
     expect(c.oauthUpstreamClientSecret).toBe(
       proxy.OAUTH_UPSTREAM_CLIENT_SECRET,
     );
-    expect(c.oauthSigningKey).toEqual(Buffer.from([0xff, 0, 10]));
+    expect(c.oauthSigningKey).toEqual(Buffer.from([0xff, 0]));
     expect(readFile.mock.calls.map((c) => c[0])).toEqual([
       "/cfg",
       "/synthetic/key",
@@ -1604,3 +1604,267 @@ it.each(["stdio", "insecure", "delegate"])(
     }
   },
 );
+
+// F-047: synthetic file inputs only; readers never consult operator files.
+const whitespaceProxy = {
+  KDRIVE_MCP_TRANSPORT: "http",
+  MCP_PUBLIC_URL: "https://service.example.com/mcp",
+  OAUTH_MODE: "proxy",
+  OAUTH_ISSUER: "https://issuer.example.org",
+  OAUTH_ALLOWED_SUBJECTS: "synthetic-subject",
+  OAUTH_UPSTREAM_CLIENT_ID: "synthetic-client",
+  OAUTH_UPSTREAM_CLIENT_SECRET: "SYNTHETIC_CLIENT_SECRET",
+  OAUTH_SIGNING_KEY_FILE: "/synthetic/key",
+  OAUTH_ALLOWED_REDIRECT_URIS: "https://client.example.net/callback",
+};
+const secretFileCases = [
+  {
+    name: "token",
+    inline: "KDRIVE_TOKEN",
+    file: "KDRIVE_TOKEN_FILE",
+    setting: "token",
+    selector: "tokenFile",
+    limit: 16384,
+  },
+  {
+    name: "upstream",
+    inline: "OAUTH_UPSTREAM_CLIENT_SECRET",
+    file: "OAUTH_UPSTREAM_CLIENT_SECRET_FILE",
+    setting: "oauthUpstreamClientSecret",
+    selector: "oauthUpstreamClientSecretFile",
+    limit: 16384,
+  },
+  {
+    name: "signing",
+    inline: undefined,
+    file: "OAUTH_SIGNING_KEY_FILE",
+    setting: "oauthSigningKeyFile",
+    selector: "oauthSigningKeyFile",
+    limit: 65536,
+  },
+] as const;
+type SecretFileCase = (typeof secretFileCases)[number];
+function secretFileEnvironment(kind: SecretFileCase): Record<string, string> {
+  const env: Record<string, string> = { ...base, ...whitespaceProxy };
+  if (kind.inline) delete env[kind.inline];
+  env[kind.file] = "/synthetic/selected";
+  return env;
+}
+function loadSyntheticFile(kind: SecretFileCase, content: Uint8Array) {
+  return loadConfiguration({
+    argv: [],
+    env: secretFileEnvironment(kind),
+    readFile: (path) =>
+      Promise.resolve(
+        path === "/synthetic/selected" ? content : bytes("SYNTHETIC_KEY"),
+      ),
+  });
+}
+function loadedSecret(
+  config: Awaited<ReturnType<typeof loadConfiguration>>,
+  kind: SecretFileCase,
+): unknown {
+  if (kind.name === "signing") return config.oauthSigningKey;
+  return kind.name === "token"
+    ? config.token
+    : config.oauthUpstreamClientSecret;
+}
+
+for (const [index, kind] of secretFileCases.entries()) {
+  if (kind.name === "signing") continue;
+  const value =
+    kind.name === "token" ? "SYNTHETIC_TOKEN" : "SYNTHETIC_CLIENT_SECRET";
+  const interior = kind.name === "token" ? "TOKEN" : "CLIENT";
+  const textCase = (
+    offset: number,
+    label: string,
+    rows: readonly (readonly [Uint8Array, string | undefined])[],
+  ) => {
+    const ac = String(index * 7 + offset).padStart(2, "0");
+    it.each(rows)(
+      `BR-026 v2 AC-${ac} ${kind.name} ${label}`,
+      async (content, expected) => {
+        const operation = loadSyntheticFile(kind, content);
+        if (expected === undefined)
+          await expect(operation).rejects.toMatchObject(
+            error("CREDENTIAL_INVALID", kind.setting),
+          );
+        else expect(loadedSecret(await operation, kind)).toBe(expected);
+      },
+    );
+  };
+  textCase(
+    1,
+    "trailing LF",
+    ["\n", "\n\n"].map((edge) => [bytes(value + edge), value] as const),
+  );
+  textCase(
+    2,
+    "trailing CRLF",
+    ["\r\n", "\r\n\r\n"].map((edge) => [bytes(value + edge), value] as const),
+  );
+  textCase(3, "surrounding spaces and tabs", [
+    [bytes(" \t" + value + "\t "), value],
+    [bytes("\r\n\t " + value + " \t\r\n"), value],
+  ]);
+  textCase(
+    4,
+    "empty after trim",
+    ["", " ", "\t", "\r", "\n", " \t\r\n\n"].map(
+      (content) => [bytes(content), undefined] as const,
+    ),
+  );
+  textCase(
+    5,
+    "interior whitespace",
+    [" ", "\t", "\r", "\n"].map((separator) => {
+      const content = "SYNTHETIC" + separator + interior;
+      return [bytes(content), separator === " " ? content : undefined] as const;
+    }),
+  );
+  textCase(
+    6,
+    "nontrimmed Unicode",
+    ["\u00a0", "\ufeff", "\u2003"].map((edge) => {
+      const content = edge + value + (edge === "\u2003" ? "" : edge);
+      return [bytes(content), content] as const;
+    }),
+  );
+  textCase(7, "NUL and invalid encoding", [
+    [bytes(" \t\0" + value + "\n"), undefined],
+    [Buffer.from([0x20, 0x09, 0xff, 0x20, 0x0a]), undefined],
+  ]);
+}
+
+it.each(secretFileCases)(
+  "BR-026 v2 BR-023 v4 AC-22 raw file budgets precede trimming",
+  async (kind) => {
+    const core =
+      kind.name === "signing"
+        ? Buffer.alloc(kind.limit - 1)
+        : bytes("x".repeat(kind.limit - 1));
+    const config = await loadSyntheticFile(
+      kind,
+      Buffer.concat([core, bytes("\n")]),
+    );
+    expect(loadedSecret(config, kind)).toEqual(
+      kind.name === "signing" ? core : core.toString(),
+    );
+    for (const content of [
+      Buffer.concat([
+        core,
+        kind.name === "signing" ? Buffer.from([0, 10]) : bytes("x\n"),
+      ]),
+      bytes(" ".repeat(kind.limit + 1)),
+    ])
+      await expect(loadSyntheticFile(kind, content)).rejects.toMatchObject(
+        error("LIMIT_EXCEEDED", kind.selector),
+      );
+    await expect(
+      loadSyntheticFile(kind, bytes(" ".repeat(kind.limit))),
+    ).rejects.toMatchObject(error("CREDENTIAL_INVALID", kind.setting));
+    if (kind.name !== "signing")
+      expect(
+        loadedSecret(
+          await loadSyntheticFile(
+            kind,
+            bytes(" ".repeat(kind.limit - 1) + "x"),
+          ),
+          kind,
+        ),
+      ).toBe("x");
+  },
+);
+
+it.each(secretFileCases.filter((kind) => kind.name !== "signing"))(
+  "BR-026 v2 AC-23 inline credentials remain unchanged",
+  async (kind) => {
+    const values = [
+      " SYNTHETIC  ",
+      " ",
+      "",
+      "SYNTHETIC\n",
+      "SYNTHETIC\r\n",
+      "\tSYNTHETIC",
+      "SYNTHETIC\t",
+      "\u00a0SYNTHETIC\u00a0",
+      "\ufeffSYNTHETIC\ufeff",
+      "x".repeat(16384),
+      "x".repeat(16385),
+    ];
+    for (const value of values) {
+      const operation = loadConfiguration({
+        argv: [],
+        env: { ...base, ...whitespaceProxy, [kind.inline]: value },
+        readFile: () => Promise.resolve(bytes("SYNTHETIC_KEY")),
+      });
+      if (value.length > 16384)
+        await expect(operation).rejects.toMatchObject(
+          error("LIMIT_EXCEEDED", kind.setting),
+        );
+      else if (!value || /[\t\r\n]/u.test(value))
+        await expect(operation).rejects.toMatchObject(
+          error("CREDENTIAL_INVALID", kind.setting),
+        );
+      else expect(loadedSecret(await operation, kind)).toBe(value);
+    }
+  },
+);
+
+const diagnosticCases = secretFileCases.flatMap((kind) =>
+  [1, 7].flatMap((padding) =>
+    (["empty", "oversize", "read"] as const).map((failure) => ({
+      kind,
+      padding,
+      failure,
+    })),
+  ),
+);
+it.each(diagnosticCases)(
+  "BR-026 v2 BR-027 v1 AC-24 guarded reads and diagnostics remain unchanged",
+  async ({ kind, padding, failure }) => {
+    const log = vi.spyOn(console, "log");
+    const warn = vi.spyOn(console, "warn");
+    const stderr = vi.spyOn(console, "error");
+    const code =
+      failure === "empty"
+        ? "CREDENTIAL_INVALID"
+        : failure === "oversize"
+          ? "LIMIT_EXCEEDED"
+          : "CREDENTIAL_READ_FAILED";
+    const setting = failure === "empty" ? kind.setting : kind.selector;
+    const operation = loadConfiguration({
+      argv: [],
+      env: secretFileEnvironment(kind),
+      readFile: (path) => {
+        if (path !== "/synthetic/selected")
+          return Promise.resolve(bytes("SYNTHETIC_KEY"));
+        if (failure === "read")
+          return Promise.reject(new Error("SYNTHETIC_READ_FAILURE"));
+        return Promise.resolve(
+          bytes(
+            " ".repeat(failure === "empty" ? padding : kind.limit + padding),
+          ),
+        );
+      },
+    });
+    try {
+      await operation;
+      expect.fail("expected configuration refusal");
+    } catch (caught) {
+      expect(caught).toBeInstanceOf(ConfigurationError);
+      if (!(caught instanceof ConfigurationError)) throw caught;
+      expect(JSON.stringify(caught)).toBe(JSON.stringify({ code, setting }));
+      expect(caught.message).toBe(
+        `Configuration error [${code}] (${setting}).`,
+      );
+    }
+    expect(log).not.toHaveBeenCalled();
+    expect(warn).not.toHaveBeenCalled();
+    expect(stderr).not.toHaveBeenCalled();
+  },
+);
+
+it("BR-026 v2 inline spaces remain significant", async () => {
+  expect((await load({ KDRIVE_TOKEN: " " })).token).toBe(" ");
+});

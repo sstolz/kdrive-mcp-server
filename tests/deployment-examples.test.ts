@@ -683,3 +683,78 @@ describe("F-039 audit shutdown documentation", () => {
     },
   );
 });
+
+// F-047 AC-26 retains every scoped F-046 guidance assertion.
+function mutateAllowlistTable(
+  text: string,
+  location: "server" | "compose",
+  name: string,
+  mutate: (row: string) => string,
+): string {
+  let occurrence = 0;
+  return text.replaceAll(/^\|.*$/gmu, (row) => {
+    if (!row.includes(`\`${name}\``)) return row;
+    occurrence += 1;
+    return occurrence === (location === "server" ? 1 : 2) ? mutate(row) : row;
+  });
+}
+it.each([
+  ...(["server", "compose"] as const).flatMap((location) =>
+    ["OAUTH_ALLOWED_SUBJECTS", "OAUTH_ALLOWED_EMAILS"].map((name) =>
+      mutateAllowlistTable(docText, location, name, (row) =>
+        row.replace(
+          "No individually; at least one entry across both lists",
+          "No  individually;\n at least one  entry across both lists",
+        ),
+      ),
+    ),
+  ),
+  ...[
+    "unset or empty",
+    "server requires",
+    "at least one",
+    "combined entry",
+    "Prefer subjects",
+    "e-mail address can be reassigned",
+  ].map((phrase) => docText.replace(phrase, phrase.replaceAll(" ", " \n  "))),
+])("BR-187 v4 F-047 AC-26 guidance comparisons collapse whitespace", (text) => {
+  expect(text).not.toBe(docText);
+  expect(() => {
+    validateAllowlistGuidance(text);
+  }).not.toThrow();
+});
+it.each([
+  ...(["server", "compose"] as const).flatMap((location) => [
+    mutateAllowlistTable(docText, location, "OAUTH_ALLOWED_EMAILS", (row) =>
+      row.replace(
+        "No individually; at least one entry across both lists",
+        "Yes",
+      ),
+    ),
+    mutateAllowlistTable(docText, location, "OAUTH_ALLOWED_SUBJECTS", () => ""),
+    ...["OAUTH_ALLOWED_SUBJECTS", "OAUTH_ALLOWED_EMAILS"].map((name) =>
+      mutateAllowlistTable(docText, location, name, (row) =>
+        row.replace("at least one entry across both lists", "optional"),
+      ),
+    ),
+  ]),
+  ...["OAUTH_ALLOWED_SUBJECTS", "OAUTH_ALLOWED_EMAILS"].map((name) =>
+    docText.replace(new RegExp(`^${name}=.*$`, "mu"), ""),
+  ),
+  ...[
+    "combined entry",
+    "e-mail address can be reassigned",
+    "Prefer subjects",
+    "unset or empty",
+    "server requires",
+  ].map((phrase) => docText.replace(phrase, "omitted")),
+  docText.replace("Prefer subjects", "prefer subjects"),
+  mutateAllowlistTable(docText, "server", "OAUTH_ALLOWED_EMAILS", (row) =>
+    row.replace("No individually", "no individually"),
+  ),
+])("BR-187 v4 F-047 AC-26 negative example stays covered", (text) => {
+  expect(text).not.toBe(docText);
+  expect(() => {
+    validateAllowlistGuidance(text);
+  }).toThrow();
+});

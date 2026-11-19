@@ -79,7 +79,10 @@ Pin an exact version as below for predictable updates: with a dist-tag,
 `npx` fetches whatever the tag points to at each start.
 
 Store your token in `/home/you/.config/kdrive/token`, a regular UTF-8 file
-containing only the token (a final newline is accepted). The token path is
+containing the token. Leading and trailing U+0020 SPACE, U+0009 TAB,
+U+000D CR and U+000A LF are removed; an empty result is refused. Interior
+spaces remain valid; interior controls remain invalid. Environment credentials
+are unchanged and are never trimmed. The token path is
 on the host, with no container mount; keep it private and readable only by
 the user running the client. The file must exist before launch; do not use
 a symlink as the token file or put a token in the client configuration.
@@ -117,7 +120,10 @@ release read-back or confirmed by inspection. Paths, IDs and domains
 are fake; substitute your own values.
 
 Store your token in `/home/you/.config/kdrive/token`, a regular UTF-8 file
-containing only the token (a final newline is accepted). Mount it read-only at
+containing the token. Leading and trailing U+0020 SPACE, U+0009 TAB,
+U+000D CR and U+000A LF are removed; an empty result is refused. Interior
+spaces remain valid; interior controls remain invalid. Environment credentials
+are unchanged and are never trimmed. Mount it read-only at
 `/run/secrets/kdrive-token`; `KDRIVE_TOKEN_FILE` is the path **inside** the
 container. The image runs as UID/GID `1000:1000`, so that user must be able to
 read the mounted file. On Linux, use owner `1000:1000` and mode `0400` for the
