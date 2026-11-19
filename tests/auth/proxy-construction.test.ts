@@ -278,6 +278,7 @@ it.each(["\u00a0", "\ufeff", "\u2003"])(
     // accepted in CI), so no fixed outcome is pinned: the loaded bytes must
     // equal the original and give the identical construction outcome.
     const direct = signingOutcome(original);
+    if ("error" in direct) expect(direct.error).toBe(SIGNING_KEY_ERROR);
     const loaded = signingBytes(await loadSyntheticSigning(original));
     expect(Buffer.from(loaded).equals(original)).toBe(true);
     expect(signingOutcome(loaded)).toEqual(direct);
