@@ -204,7 +204,7 @@ export function validateDeploymentDoc(text: string): void {
     check(secrets.includes(phrase), `Secrets states ${phrase}`);
 }
 
-/** F-035 BR-184 v3 / BR-186 v2: one optional empty Compose variable. */
+/** F-046 BR-184 v4 / BR-186 v3: exactly three optional empty variables. */
 export function validateComposeAdmission(text: string): void {
   const lines = text.split("\n");
   const index = lines.findIndex((line) =>
@@ -242,15 +242,73 @@ export function validateComposeAdmission(text: string): void {
     ),
     "old header claim",
   );
+  check(
+    header
+      .split("\n")
+      .includes(
+        "# Optional trusted proxies (F-035, accepted on main 703bece) and identity allowlists (F-046) below.",
+      ),
+    "optional-settings header",
+  );
+  const optional = [
+    "MCP_HTTP_TRUSTED_PROXIES",
+    "OAUTH_ALLOWED_SUBJECTS",
+    "OAUTH_ALLOWED_EMAILS",
+  ];
+  for (const name of optional)
+    check(
+      lines.some((line) => line.trim() === `${name}: \${${name}:-}`),
+      `optional empty variable ${name}`,
+    );
   const settings = lines
     .filter((line) => !line.trimStart().startsWith("#"))
     .join("\n");
   for (const match of settings.matchAll(/\$\{([^}]+)\}/gu)) {
     const variable = match[1] ?? "";
     check(
-      variable === "MCP_HTTP_TRUSTED_PROXIES:-" ||
+      optional.some((name) => variable === `${name}:-`) ||
         /^[A-Z][A-Z0-9_]*:\?[^}]+$/u.test(variable),
       "required variable or optional empty default",
     );
   }
+}
+
+/** F-046 BR-187 v4: inspect only the deployment guide's scoped locations. */
+export function validateAllowlistGuidance(text: string): void {
+  const settings = section(text, "Settings of an HTTP deployment");
+  const [server = "", compose = ""] = settings.split("Compose variables (");
+  for (const table of [server, compose]) {
+    for (const name of ["OAUTH_ALLOWED_SUBJECTS", "OAUTH_ALLOWED_EMAILS"]) {
+      const rows = table.split("|");
+      const index = rows.findIndex((cell) => cell.trim() === `\`${name}\``);
+      check(index >= 0, `allowlist table row ${name}`);
+      check(
+        rows[index + 2]?.trim() ===
+          "No individually; at least one entry across both lists",
+        `allowlist requirement ${name}`,
+      );
+    }
+  }
+  // Only the prose after the server table, before the Compose-variable table.
+  const prose = server.slice(server.lastIndexOf("|") + 1);
+  for (const phrase of [
+    "OAUTH_ALLOWED_SUBJECTS",
+    "OAUTH_ALLOWED_EMAILS",
+    "either",
+    "unset or empty",
+    "server requires",
+    "at least one",
+    "combined entry",
+    "Prefer subjects",
+    "e-mail address can be reassigned",
+  ])
+    check(prose.includes(phrase), `allowlist prose ${phrase}`);
+  const marker = "\n### 4. Configure Compose behind the reverse proxy\n";
+  const start = text.indexOf(marker);
+  check(start >= 0, "Compose setup subsection");
+  const rest = text.slice(start + marker.length).split(/\n### /u)[0] ?? "";
+  const env =
+    /```sh\n([^`]*\bKDRIVE_MCP_IMAGE=[^`]*)```/u.exec(rest)?.[1] ?? "";
+  for (const name of ["OAUTH_ALLOWED_SUBJECTS", "OAUTH_ALLOWED_EMAILS"])
+    check(new RegExp(`^${name}=.*$`, "mu").test(env), `Compose .env ${name}`);
 }

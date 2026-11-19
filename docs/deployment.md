@@ -272,15 +272,18 @@ Server settings (the `environment` of the service; the server reads no
 | `OAUTH_UPSTREAM_CLIENT_ID`          | Client ID of the OAuth client registered at the provider.                                       | Yes                                                          | `00000000-fake-client-id`             |
 | `OAUTH_UPSTREAM_CLIENT_SECRET_FILE` | Path, inside the container, of the file holding that client's secret.                           | Yes; set by the example                                      | `/run/secrets/upstream-client-secret` |
 | `OAUTH_SIGNING_KEY_FILE`            | Path, inside the container, of the EC P-256 signing key.                                        | Yes; set by the example                                      | `/run/secrets/signing-key.pem`        |
-| `OAUTH_ALLOWED_EMAILS`              | Comma-separated emails allowed to log in.                                                       | Yes, or `OAUTH_ALLOWED_SUBJECTS`                             | `you@example.com`                     |
-| `OAUTH_ALLOWED_SUBJECTS`            | Comma-separated provider subjects (`sub`) allowed to log in.                                    | Instead of, or with, the emails                              | `00000000-fake-subject`               |
+| `OAUTH_ALLOWED_EMAILS`              | Comma-separated emails allowed to log in.                                                       | No individually; at least one entry across both lists        | `you@example.com`                     |
+| `OAUTH_ALLOWED_SUBJECTS`            | Comma-separated provider subjects (`sub`) allowed to log in.                                    | No individually; at least one entry across both lists        | `00000000-fake-subject`               |
 | `OAUTH_ALLOWED_REDIRECT_URIS`       | Callback URLs of your AI clients; matching rules below.                                         | Yes                                                          | `https://client.example.org/callback` |
 | `OAUTH_AUDIENCE`                    | Token audience.                                                                                 | No (defaults to `MCP_PUBLIC_URL`)                            | leave unset                           |
 | `OAUTH_STATE_FILE`                  | SQLite file that keeps clients and logins across restarts.                                      | No                                                           | `/audit/oauth-state.sqlite`           |
 | `OAUTH_ALLOWED_CLIENT_ID_ORIGINS`   | Origins allowed for Client ID Metadata Documents (available since `0.6.0-beta.2`).              | No (empty by default)                                        | leave unset                           |
 
-`OAUTH_ALLOWED_EMAILS` and `OAUTH_ALLOWED_SUBJECTS` together need at least one
-entry. Redirect URIs match byte for byte, except that the port of an `http`
+`OAUTH_ALLOWED_SUBJECTS` and `OAUTH_ALLOWED_EMAILS`: either list may be
+unset or empty; the server requires at least one combined entry across both
+lists. Prefer subjects because an e-mail address can be reassigned.
+E-mail entries require an exact address match and `email_verified=true`.
+Redirect URIs match byte for byte, except that the port of an `http`
 loopback URI on `127.0.0.1`, `[::1]` or `localhost` may vary (RFC 8252 §7.3).
 The callback URL of each client is in the [client compatibility matrix](mcp-client-compatibility.md); the example value
 above is a placeholder, not a real client. Size and time limits
@@ -290,23 +293,24 @@ reason; the configuration reference gives every setting, bound and error code.
 Compose variables (read only by Compose, from the shell or a `.env` file next
 to `compose.yaml`; they hold no secret value):
 
-| Variable                      | Role                                                                  | Required?                    | Example                                                  |
-| ----------------------------- | --------------------------------------------------------------------- | ---------------------------- | -------------------------------------------------------- |
-| `KDRIVE_MCP_IMAGE`            | Runtime image: the release image pinned by digest, or your local tag. | Yes                          | `ghcr.io/sstolz/kdrive-mcp-server:1.0.0@sha256:<digest>` |
-| `MCP_PUBLIC_URL`              | Passed to the server (see above).                                     | Yes                          | `https://mcp.example.com/mcp`                            |
-| `MCP_HOSTNAME`                | Host name of the Traefik rule; the host of `MCP_PUBLIC_URL`.          | Yes                          | `mcp.example.com`                                        |
-| `KDRIVE_ID`                   | Passed to the server (see above).                                     | Yes                          | `123456`                                                 |
-| `OAUTH_ISSUER`                | Passed to the server (see above).                                     | Yes                          | `https://login.example.com`                              |
-| `OAUTH_UPSTREAM_CLIENT_ID`    | Passed to the server (see above).                                     | Yes                          | `00000000-fake-client-id`                                |
-| `OAUTH_ALLOWED_EMAILS`        | Passed to the server (see above).                                     | Yes                          | `you@example.com`                                        |
-| `OAUTH_ALLOWED_REDIRECT_URIS` | Passed to the server (see above).                                     | Yes                          | `https://client.example.org/callback`                    |
-| `MCP_HTTP_TRUSTED_PROXIES`    | Passed to the server; read at startup (see step 4).                   | No (empty by default)        | leave unset                                              |
-| `TRAEFIK_NETWORK`             | External Docker network that Traefik and the container share.         | Yes                          | `proxy`                                                  |
-| `TRAEFIK_ENTRYPOINT`          | Traefik HTTPS entrypoint name.                                        | Yes                          | `websecure`                                              |
-| `KDRIVE_TOKEN_SECRET_FILE`    | Host path of the kDrive token file.                                   | Yes                          | `./secrets/kdrive-token`                                 |
-| `UPSTREAM_CLIENT_SECRET_FILE` | Host path of the upstream client secret file.                         | Yes                          | `./secrets/upstream-client-secret`                       |
-| `SIGNING_KEY_FILE`            | Host path of the signing key file.                                    | Yes                          | `./secrets/signing-key.pem`                              |
-| `AUDIT_DIR`                   | Host directory mounted at `/audit` once you uncomment the `volumes`.  | Only with the `volumes` line | `./audit`                                                |
+| Variable                      | Role                                                                  | Required?                                             | Example                                                  |
+| ----------------------------- | --------------------------------------------------------------------- | ----------------------------------------------------- | -------------------------------------------------------- |
+| `KDRIVE_MCP_IMAGE`            | Runtime image: the release image pinned by digest, or your local tag. | Yes                                                   | `ghcr.io/sstolz/kdrive-mcp-server:1.0.0@sha256:<digest>` |
+| `MCP_PUBLIC_URL`              | Passed to the server (see above).                                     | Yes                                                   | `https://mcp.example.com/mcp`                            |
+| `MCP_HOSTNAME`                | Host name of the Traefik rule; the host of `MCP_PUBLIC_URL`.          | Yes                                                   | `mcp.example.com`                                        |
+| `KDRIVE_ID`                   | Passed to the server (see above).                                     | Yes                                                   | `123456`                                                 |
+| `OAUTH_ISSUER`                | Passed to the server (see above).                                     | Yes                                                   | `https://login.example.com`                              |
+| `OAUTH_UPSTREAM_CLIENT_ID`    | Passed to the server (see above).                                     | Yes                                                   | `00000000-fake-client-id`                                |
+| `OAUTH_ALLOWED_EMAILS`        | Passed to the server (see above).                                     | No individually; at least one entry across both lists | `you@example.com`                                        |
+| `OAUTH_ALLOWED_SUBJECTS`      | Passed to the server (see above).                                     | No individually; at least one entry across both lists | `subject-1`                                              |
+| `OAUTH_ALLOWED_REDIRECT_URIS` | Passed to the server (see above).                                     | Yes                                                   | `https://client.example.org/callback`                    |
+| `MCP_HTTP_TRUSTED_PROXIES`    | Passed to the server; read at startup (see step 4).                   | No (empty by default)                                 | leave unset                                              |
+| `TRAEFIK_NETWORK`             | External Docker network that Traefik and the container share.         | Yes                                                   | `proxy`                                                  |
+| `TRAEFIK_ENTRYPOINT`          | Traefik HTTPS entrypoint name.                                        | Yes                                                   | `websecure`                                              |
+| `KDRIVE_TOKEN_SECRET_FILE`    | Host path of the kDrive token file.                                   | Yes                                                   | `./secrets/kdrive-token`                                 |
+| `UPSTREAM_CLIENT_SECRET_FILE` | Host path of the upstream client secret file.                         | Yes                                                   | `./secrets/upstream-client-secret`                       |
+| `SIGNING_KEY_FILE`            | Host path of the signing key file.                                    | Yes                                                   | `./secrets/signing-key.pem`                              |
+| `AUDIT_DIR`                   | Host directory mounted at `/audit` once you uncomment the `volumes`.  | Only with the `volumes` line                          | `./audit`                                                |
 
 The secret files hold the values themselves, for example a kDrive token file
 containing `example-token-not-real`; step 3 below writes them.
@@ -501,7 +505,9 @@ MCP_HOSTNAME=mcp.example.com
 KDRIVE_ID=123456
 OAUTH_ISSUER=https://login.example.com
 OAUTH_UPSTREAM_CLIENT_ID=00000000-fake-client-id
-OAUTH_ALLOWED_EMAILS=you@example.com
+# Set either or both lists; prefer provider subjects.
+OAUTH_ALLOWED_SUBJECTS=subject-1
+OAUTH_ALLOWED_EMAILS=
 OAUTH_ALLOWED_REDIRECT_URIS=https://client.example.org/callback
 TRAEFIK_NETWORK=proxy
 TRAEFIK_ENTRYPOINT=websecure

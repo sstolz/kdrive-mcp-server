@@ -108,6 +108,7 @@ describe("F-045 audit open flags", () => {
     },
   );
 });
+
 function errno(code: string) {
   return Object.assign(new Error(`synthetic ${code}`), { code });
 }

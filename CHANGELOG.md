@@ -12,13 +12,14 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
 
 ### Changed
 
+- #112 / F-046 (pending acceptance): the Compose example accepts subjects, e-mails or both identity allowlists; deployment guidance explains the combined requirement and prefers subjects because an e-mail address can be reassigned.
 - #91 / F-024 v4 (accepted 2026-11-18): npm and image read-back validate healthy
   candidates and stable defaults; the publishing guide specifies owner-only
   byte-preserving default restoration before digest-keyed orphan cleanup.
 
 ### Fixed
 
-- #96 / F-045 (pending acceptance): audit and OAuth state file opens apply the explicit Linux close-on-exec flag only on Linux, preserving all other flags and modes.
+- #96 / F-045 (accepted 2026-11-19; [#96 acceptance](https://github.com/sstolz/kdrive-mcp-server/issues/96#issuecomment-7007926600)): audit and OAuth state file opens apply the explicit Linux close-on-exec flag only on Linux, preserving all other flags and modes.
 - #88 / F-044 (accepted 2026-11-19; [#88 acceptance](https://github.com/sstolz/kdrive-mcp-server/issues/88#issuecomment-7005778721)): unresolved root path components report `ROOT_NOT_RESOLVED (roots)` while upstream resolution failures retain `PREFLIGHT_FAILED (preflight)`.
 
 ## [1.0.0] - 2026-11-17

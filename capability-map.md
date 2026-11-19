@@ -1,13 +1,24 @@
 # Capability map
 
-## Provisional — Linux-only explicit close-on-exec flag
+## Provisional — Compose identity allowlists
+
+[F-046 v1](features/F-046-compose-example-allowlists.md) (#112),
+[BR-184 v4](business-rules/BR-184.md), [BR-186 v3](business-rules/BR-186.md)
+and [BR-187 v4](business-rules/BR-187.md) are pending acceptance: the Compose
+example passes subjects, e-mails or both with empty defaults, retaining the
+server's combined-entry requirement. Deployment guidance prefers subjects
+because an e-mail address can be reassigned. BR-184 v3, BR-186 v2 and BR-187 v3
+remain the accepted active rules.
+
+## Accepted — Linux-only explicit close-on-exec flag
 
 [F-045 v1](features/F-045-linux-only-cloexec.md) (#96),
 [BR-239 v2](business-rules/BR-239.md), [BR-293 v2](business-rules/BR-293.md)
-and [BR-295 v3](business-rules/BR-295.md) are pending acceptance: audit-file
+and [BR-295 v3](business-rules/BR-295.md) (accepted): audit-file
 opens, state-file creation and state-header reads include the explicit Linux
 close-on-exec flag only on Linux. Other flags and modes stay unchanged.
-BR-239 v1, BR-293 v1 and BR-295 v2 remain the accepted active rules.
+BR-239 v2, BR-293 v2 and BR-295 v3 are active after acceptance on actual main
+`b65a1e5` on 2026-11-19 ([#96 acceptance](https://github.com/sstolz/kdrive-mcp-server/issues/96#issuecomment-7007926600)); F-045 is done.
 
 ## Accepted — queue changelog release sections
 
