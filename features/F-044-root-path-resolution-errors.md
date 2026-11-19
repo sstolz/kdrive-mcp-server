@@ -28,11 +28,20 @@ and `tests/kdrive/adapter-preflight.test.ts`.
 ## Scope
 
 Classify path resolution failures through the production adapter and
-configuration preflight. Preserve fail-closed startup and sanitized diagnostics.
-Version BR-021 and BR-207 in place. Allocate no new BR or ADR.
+configuration preflight. The change touches only startup preflight:
+`createPreflight` in `src/kdrive/adapter.ts`, called from `src/config.ts`.
+Runtime tool errors and codes are unchanged. Preserve fail-closed startup and
+sanitized diagnostics. Version BR-021 and BR-207 in place. Allocate no new BR
+or ADR.
 
-F-044 is the next free feature ID in this worktree and the local `main` tree.
-F-043 is the highest existing feature ID. Remote allocation is not checked.
+The existing `TestBR207_%s_gives_PREFLIGHT_FAILED` tests in
+`tests/kdrive/adapter-preflight.test.ts` pin `PREFLIGHT_FAILED` for
+"file as intermediate", "missing name" and "duplicated name". Under BR-207 v2,
+re-expect these three cases as `ROOT_NOT_RESOLVED (roots)` and rename them.
+Never delete them. "init 401" and "missing ID root" stay `PREFLIGHT_FAILED`.
+
+F-044 was the next free feature ID on `main` on 2026-11-19 (checked by the
+orchestrator). Re-check before the PR is marked ready.
 
 This is an error classification change. It changes no authorization decision
 or permitted root. It is not security-sensitive.
@@ -59,23 +68,28 @@ This draft does not activate either version.
   resolve because any component has zero exact-name matches, several
   exact-name matches or a non-directory match fails the entire preflight with
   `ROOT_NOT_RESOLVED (roots)`. An upstream HTTP error, timeout or malformed
-  response during resolution still gives `PREFLIGHT_FAILED (preflight)`.
+  kDrive response during resolution still gives `PREFLIGHT_FAILED (preflight)`.
   This refines v1's sentence “Absent, ambiguous, wrong-ID, wrong-drive,
   non-directory, malformed or rejected results fail the entire preflight.”
   Rejected callbacks still give `PREFLIGHT_FAILED`; explicit unresolved
-  results give `ROOT_NOT_RESOLVED`. Other v1 validation and error mappings
+  results give `ROOT_NOT_RESOLVED`. A malformed resolver return value keeps
+  the v1 `ROOT_NOT_RESOLVED` mapping. Other v1 validation and error mappings
   remain intact. No partial configuration escapes and no later selector runs
   after a failure. Verified by: AC-01–AC-07.
 - **BR-207 v2** — v1 holds with two replacements. Remove “a non-directory
   intermediate component, zero or several matches for a component” from v1's
-  rejection list. For these path outcomes, `resolveDirectory` returns an
-  explicit unresolved result instead of rejecting. A unique final match
-  still returns its own `type`, including `file`. Replace “`src/config.ts`
+  rejection list. `resolveDirectory` resolves to `null` when a path component
+  has zero exact-name matches, several exact-name matches or a non-directory
+  match. This includes a final file. A unique final directory match still
+  returns its directory record. Replace “`src/config.ts`
   maps any rejection to `PREFLIGHT_FAILED`, and a resolved non-directory to
   `ROOT_NOT_RESOLVED`” with: explicit unresolved path results and returned
   non-directories map to `ROOT_NOT_RESOLVED (roots)`; upstream failures and
-  other rejections map to `PREFLIGHT_FAILED (preflight)`. Missing ID metadata
-  and the 64-component, 1,024-request and 120,000 ms bounds retain v1 behavior.
+  other rejections map to `PREFLIGHT_FAILED (preflight)`. A malformed kDrive
+  response rejects and gives `PREFLIGHT_FAILED (preflight)`. A malformed
+  resolver return value keeps the v1 `ROOT_NOT_RESOLVED` mapping. Missing ID
+  metadata and the 64-component, 1,024-request and 120,000 ms bounds retain
+  v1 behavior.
   `inspectDrive` is unchanged. Names still match exactly and case-sensitively.
   Each component uses the same complete listing pages as v1. The request
   sequence and count stay unchanged for identical responses. No probe or retry
@@ -95,9 +109,14 @@ and the later selector sends no request. Test names start with `BR-207 v2`.
 
 - **AC-01 (BR-021 v2, BR-207 v2)** — Given `7:/Documents` and zero children
   named `Documents`, When preflight runs, Then it fails with
-  `ROOT_NOT_RESOLVED (roots)` after one init and one listing request.
+  `ROOT_NOT_RESOLVED (roots)`. Init is counted once per configured drive for
+  the whole preflight, including the earlier valid selector. The failing
+  selector sends one listing request. Earlier-selector listing requests are
+  counted separately.
   Verified by: `BR-207 v2 missing first component gives ROOT_NOT_RESOLVED`.
-  The request count excludes the shared earlier-selector setup.
+  An adapter unit test, `BR-207 v2 unresolved components resolve to null`,
+  asserts `null` directly for zero matches, several matches and a
+  non-directory match at an intermediate or final component.
 - **AC-02 (BR-021 v2, BR-207 v2)** — Given `7:/Documents` and two distinct
   children named `Documents`, When preflight runs, Then it fails with
   `ROOT_NOT_RESOLVED (roots)`, whether both are directories or one is a file.
@@ -128,15 +147,17 @@ and the later selector sends no request. Test names start with `BR-207 v2`.
   two listing requests excluding earlier-selector setup. Verified by:
   `BR-207 v2 complete pagination determines unique path matches`.
 - **AC-07 (BR-021 v2, BR-207 v2)** — Given `7:/Documents/Reports`, When an
-  HTTP error, timeout or malformed response occurs at the first or deeper
-  component, Then preflight fails with `PREFLIGHT_FAILED (preflight)`.
+  HTTP error, timeout or malformed kDrive response occurs at the first or
+  deeper component, Then preflight fails with `PREFLIGHT_FAILED (preflight)`.
   A failure on a later listing page still gives that result after zero, one
   or several matches on earlier pages. No retry or later selector runs.
   Verified by: `BR-207 v2 upstream failures at every component remain PREFLIGHT_FAILED`
   in `tests/kdrive/adapter-preflight.test.ts`, and
   `BR-021 v2 unresolved results and resolver rejections remain distinct`
   in `tests/config-preflight.test.ts`. The latter checks explicit unresolved
-  results, returned files and unexpected callback rejections separately.
+  results, returned files, malformed resolver return values and unexpected
+  callback rejections separately. Malformed resolver return values keep the
+  v1 `ROOT_NOT_RESOLVED (roots)` mapping.
 - **AC-08 (BR-207 v2)** — Given the same synthetic responses as v1 for a
   successful path, missing name, duplicate name, intermediate file, final
   file, paginated path or upstream failure, When preflight runs, Then its
@@ -145,13 +166,22 @@ and the later selector sends no request. Test names start with `BR-207 v2`.
   failure and existing budget failures retain their codes and request bounds.
   Verified by: `BR-207 v2 classification preserves request traces` in
   `tests/kdrive/adapter-preflight.test.ts`, with pre-change characterization
-  traces and the existing `TestBR207_*` budget and numeric-ID cases.
+  traces and the existing `TestBR207_*` budget and numeric-ID cases. Rename
+  and re-expect the existing `TestBR207_%s_gives_PREFLIGHT_FAILED` cases
+  "file as intermediate", "missing name" and "duplicated name" as
+  `ROOT_NOT_RESOLVED (roots)` under BR-207 v2. Never delete these three cases.
+  "init 401" and "missing ID root" stay `PREFLIGHT_FAILED`.
 
 ## Decisions
 
-- Use the existing explicit unresolved-result channel. Keep callback
-  rejections for upstream and other operational failures. Do not classify by
-  exception message. This preserves the configuration error boundary.
+- Use `null` as the unresolved result from `resolveDirectory` for zero
+  matches, several matches or a non-directory match at any path component.
+  `src/config.ts` already maps any non-directory-record value to
+  `ROOT_NOT_RESOLVED (roots)`. A malformed resolver return value keeps this
+  v1 mapping. Keep callback rejections for upstream and other operational
+  failures, including a malformed kDrive response, which gives
+  `PREFLIGHT_FAILED (preflight)`. Do not classify by exception message. This
+  preserves the configuration error boundary.
 - Reject a new error code. `ROOT_NOT_RESOLVED (roots)` already describes the
   failure and keeps the public diagnostic format stable.
 - Reject case-insensitive matching. It changes which directory is selected
@@ -168,4 +198,24 @@ and the later selector sends no request. Test names start with `BR-207 v2`.
 
 ## Stress-test
 
-Independent spec review is pending. This document remains a draft.
+- Round 1, finding 1: retained — Scope and AC-08 require renaming and
+  re-expecting the three existing path failure cases as
+  `ROOT_NOT_RESOLVED (roots)` under BR-207 v2. They are never deleted. Init 401 and missing ID
+  root keep `PREFLIGHT_FAILED`.
+- Round 1, finding 2: retained — `resolveDirectory` resolves to `null` for
+  zero matches, several matches or a non-directory match. Decisions names the
+  existing `src/config.ts` mapping. AC-01 adds a direct adapter unit
+  assertion of `null`.
+- Round 1, finding 3: retained — Malformed kDrive responses reject with
+  `PREFLIGHT_FAILED`. Malformed resolver return values keep the v1
+  `ROOT_NOT_RESOLVED` mapping.
+- Round 1, finding 4: retained — Scope limits the change to startup
+  `createPreflight`, called from `src/config.ts`. Runtime tool errors and
+  codes stay unchanged.
+- Round 1, finding 5: retained — AC-01 counts init once per configured drive
+  for the whole preflight. It counts the failing selector's listing request
+  separately.
+- Round 1, finding 6: retained — Scope records the orchestrator's feature ID
+  check on `main` on 2026-11-19 and requires a re-check before PR readiness.
+
+This document remains a draft.
