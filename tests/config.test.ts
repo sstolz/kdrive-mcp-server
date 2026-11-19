@@ -1865,6 +1865,6 @@ it.each(diagnosticCases)(
   },
 );
 
-it("BR-026 v1 inline spaces remain significant", async () => {
+it("BR-026 v2 inline spaces remain significant", async () => {
   expect((await load({ KDRIVE_TOKEN: " " })).token).toBe(" ");
 });
