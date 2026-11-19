@@ -2,7 +2,7 @@
 id: F-044
 title: Root path resolution errors
 ticket: "#88"
-status: draft
+status: frozen
 version: 1
 ---
 
@@ -143,8 +143,9 @@ and the later selector sends no request. Test names start with `BR-207 v2`.
   resolves `7:/Documents`, Then no match on page 1 and one directory match on
   page 2 resolves. One match on each page fails with
   `ROOT_NOT_RESOLVED (roots)`. Zero across both pages also fails with that
-  code and setting. All three cases read both pages once, for one init and
-  two listing requests excluding earlier-selector setup. Verified by:
+  code and setting. All three cases read both pages once: the failing or
+  resolving selector sends two listing requests. Init is counted once per
+  configured drive for the whole preflight. Verified by:
   `BR-207 v2 complete pagination determines unique path matches`.
 - **AC-07 (BR-021 v2, BR-207 v2)** — Given `7:/Documents/Reports`, When an
   HTTP error, timeout or malformed kDrive response occurs at the first or
@@ -218,4 +219,8 @@ and the later selector sends no request. Test names start with `BR-207 v2`.
 - Round 1, finding 6: retained — Scope records the orchestrator's feature ID
   check on `main` on 2026-11-19 and requires a re-check before PR readiness.
 
-This document remains a draft.
+- Round 2 (diff-only), finding 1: retained — AC-06 counts requests with the
+  AC-01 wording.
+
+Frozen on 2026-11-19 (autonomous freeze, PROJECT.md D-1) after
+`88-spec-review-2-opus` (strong tier, approve); freeze record on #88.
