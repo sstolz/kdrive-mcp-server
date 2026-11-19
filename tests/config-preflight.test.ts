@@ -145,3 +145,54 @@ it("BR-027 sanitizes throwing getters and forged dependency diagnostics", async 
     }),
   ).rejects.toMatchObject({ code: "PREFLIGHT_FAILED", setting: "preflight" });
 });
+
+it.each([
+  { label: "explicit unresolved", value: null, rejects: false },
+  {
+    label: "returned file",
+    value: { driveId: 8, id: 10, type: "file" },
+    rejects: false,
+  },
+  { label: "absent return", value: undefined, rejects: false },
+  { label: "malformed object", value: {}, rejects: false },
+  { label: "malformed primitive", value: "invalid", rejects: false },
+  { label: "malformed array", value: [], rejects: false },
+  {
+    label: "malformed directory ID",
+    value: { driveId: 8, id: 0, type: "dir" },
+    rejects: false,
+  },
+  { label: "unexpected rejection", value: null, rejects: true },
+])(
+  "BR-021 v2 unresolved results and resolver rejections remain distinct — $label",
+  async ({ value, rejects }) => {
+    const trace: string[] = [];
+    const resolveDirectory = vi.fn(async (id: number) => {
+      await Promise.resolve();
+      trace.push(`root:${id}`);
+      if (id === 7) return { driveId: 7, id: 42, type: "dir" };
+      if (rejects) throw new Error("SYNTHETIC_CALLBACK_FAILURE");
+      return value;
+    });
+    const operation = preflightConfiguration(await local(), {
+      inspectDrive: async (id) => {
+        await Promise.resolve();
+        trace.push(`drive:${id}`);
+        return { id, role: "admin" };
+      },
+      resolveDirectory,
+    });
+    const resolved = vi.fn();
+    const failed = vi.fn();
+    await operation.then(resolved, failed);
+    expect(resolved).not.toHaveBeenCalled();
+    expect(failed).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        code: rejects ? "PREFLIGHT_FAILED" : "ROOT_NOT_RESOLVED",
+        setting: rejects ? "preflight" : "roots",
+      }),
+    );
+    expect(trace).toEqual(["drive:7", "drive:8", "root:7", "root:8"]);
+    expect(resolveDirectory).toHaveBeenCalledTimes(2);
+  },
+);
