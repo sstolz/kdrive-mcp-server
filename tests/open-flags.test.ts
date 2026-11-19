@@ -37,7 +37,7 @@ it.each([
 );
 
 it("BR-239 v2 BR-293 v2 BR-295 v3 Linux flag literal exists only in the shared helper", () => {
-  const matches = readdirSync("src", { recursive: true })
+  const matches = readdirSync("src", { recursive: true, encoding: "utf8" })
     .filter((path) => path.endsWith(".ts"))
     .filter((path) =>
       readFileSync(join("src", path), "utf8").includes("0o2000000"),

@@ -384,6 +384,7 @@ describe("F-045 state-store open flags", () => {
         path,
         binding,
         allowedRedirectUris: ALLOWED,
+        clock: () => new Date(NOW),
         port: { file: fixture.file, openDatabase },
       }),
     ).toThrow(LINES.OAUTH_STATE_UNAVAILABLE);

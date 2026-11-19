@@ -1,5 +1,14 @@
 # Capability map
 
+## Provisional — Linux-only explicit close-on-exec flag
+
+[F-045 v1](features/F-045-linux-only-cloexec.md) (#96),
+[BR-239 v2](business-rules/BR-239.md), [BR-293 v2](business-rules/BR-293.md)
+and [BR-295 v3](business-rules/BR-295.md) are pending acceptance: audit-file
+opens, state-file creation and state-header reads include the explicit Linux
+close-on-exec flag only on Linux. Other flags and modes stay unchanged.
+BR-239 v1, BR-293 v1 and BR-295 v2 remain the accepted active rules.
+
 ## Accepted — queue changelog release sections
 
 [F-043 v1](features/F-043-queue-changelog-release-sections.md) (#67) (accepted 2026-11-15),
@@ -590,10 +599,11 @@ traversal, received shares (discovery, reads, refusals, revocation after 60 s)
 and a version change. Read-only: no mutation reaches kDrive.
 
 [F-044 v1](features/F-044-root-path-resolution-errors.md) (#88),
-[BR-207 v2](business-rules/BR-207.md) (pending acceptance): unresolved path
+[BR-207 v2](business-rules/BR-207.md) (accepted): unresolved path
 components return `null`, while upstream failures, malformed responses and
 budget failures keep rejecting; pagination and request traces are unchanged.
-BR-207 v1 stays the accepted rule until v2 acceptance on actual main.
+BR-207 v2 is active after acceptance on actual main `3f6e291` on
+2026-11-19 ([#88 acceptance](https://github.com/sstolz/kdrive-mcp-server/issues/88#issuecomment-7005778721)); F-044 is done.
 
 ## Accepted — separate received-share policy
 
@@ -672,10 +682,11 @@ drive-role and root-resolution validation. See
 [BR-028 v1](business-rules/BR-028.md).
 
 [F-044 v1](features/F-044-root-path-resolution-errors.md) (#88),
-[BR-021 v2](business-rules/BR-021.md) (pending acceptance): missing, ambiguous
+[BR-021 v2](business-rules/BR-021.md) (accepted): missing, ambiguous
 or non-directory path components give `ROOT_NOT_RESOLVED (roots)`; upstream
 resolution failures retain `PREFLIGHT_FAILED (preflight)`.
-BR-021 v1 stays the accepted rule until v2 acceptance on actual main.
+BR-021 v2 is active after acceptance on actual main `3f6e291` on
+2026-11-19 ([#88 acceptance](https://github.com/sstolz/kdrive-mcp-server/issues/88#issuecomment-7005778721)); F-044 is done.
 
 Local preparation selects stdio or HTTP but always reports that its runtime is
 unimplemented. Preflight is tested through synthetic injected dependencies;
