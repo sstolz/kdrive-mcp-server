@@ -2,6 +2,7 @@
 import { execFileSync, spawn } from "node:child_process";
 import {
   chmodSync,
+  constants,
   copyFileSync,
   existsSync,
   linkSync,
@@ -20,13 +21,14 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { DatabaseSync } from "node:sqlite";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   OAUTH_STATE_APPLICATION_ID,
   OAUTH_STATE_MAX_BYTES,
   openOAuthStateStore,
   productionFilePort,
   type OAuthStateFilePort,
+  type OAuthStateFileStat,
   type OAuthStateStoreOptions,
   type OAuthStateStorePort,
   type StoredClient,
@@ -310,6 +312,125 @@ async function tryChild(path: string): Promise<string> {
 }
 
 // ---- AC-03 --------------------------------------------------------------------
+
+describe("F-045 state-store open flags", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.resetModules();
+  });
+
+  const path = "/state/state.db";
+  const createFlags =
+    constants.O_WRONLY |
+    constants.O_CREAT |
+    constants.O_EXCL |
+    constants.O_NOFOLLOW;
+  const headerFlags = constants.O_RDONLY | constants.O_NOFOLLOW;
+
+  function flagFilePort(existing: boolean) {
+    let present = existing;
+    const header = Buffer.alloc(100);
+    header.write("SQLite format 3\0", "latin1");
+    header[18] = 1;
+    header[19] = 1;
+    const open = vi.fn<OAuthStateFilePort["open"]>().mockImplementation(() => {
+      present = true;
+      return 7;
+    });
+    const close = vi.fn<OAuthStateFilePort["close"]>();
+    const file: OAuthStateFilePort = {
+      lstat(target): OAuthStateFileStat {
+        const directory = target === "/state";
+        if (!directory && (target !== path || !present))
+          throw Object.assign(new Error("absent"), { code: "ENOENT" });
+        return {
+          isFile: () => !directory,
+          isDirectory: () => directory,
+          dev: 1,
+          ino: directory ? 1 : 2,
+          uid: 1000,
+          mode: directory ? 0o40700 : 0o100600,
+          nlink: 1,
+          size: existing ? header.length : 0,
+        };
+      },
+      open,
+      read: (_fd, buffer, offset, position) => {
+        return header.copy(buffer, offset, position);
+      },
+      close,
+      geteuid: () => 1000,
+    };
+    return { file, open, close };
+  }
+
+  async function captureStateOpen(
+    platform: NodeJS.Platform,
+    existing: boolean,
+  ) {
+    vi.stubGlobal("process", { ...process, platform });
+    vi.resetModules();
+    const { openOAuthStateStore: openStore } =
+      await import("../../src/auth/proxy/store.js");
+    const fixture = flagFilePort(existing);
+    // Stop after file checks: simulated-platform opens never reach SQLite.
+    const openDatabase = vi
+      .fn<OAuthStateStorePort["openDatabase"]>()
+      .mockImplementation(() => {
+        throw new Error("database boundary");
+      });
+    expect(() =>
+      openStore({
+        path,
+        binding,
+        allowedRedirectUris: ALLOWED,
+        port: { file: fixture.file, openDatabase },
+      }),
+    ).toThrow(LINES.OAUTH_STATE_UNAVAILABLE);
+    expect(openDatabase.mock.calls).toEqual([[path]]);
+    expect(fixture.close.mock.calls).toEqual([[7]]);
+    return fixture.open.mock.calls;
+  }
+
+  it("BR-293 v2 linux preserves exact creation flags", async () => {
+    expect(await captureStateOpen("linux", false)).toEqual([
+      [path, createFlags | 0o2000000, 0o600],
+    ]);
+  });
+
+  it("BR-295 v3 linux preserves exact header flags", async () => {
+    expect(await captureStateOpen("linux", true)).toEqual([
+      [path, headerFlags | 0o2000000],
+    ]);
+  });
+
+  it.each(["darwin", "win32"] as const)(
+    "BR-293 v2 non-linux omits Linux close-on-exec flag",
+    async (platform) => {
+      expect(await captureStateOpen(platform, false)).toEqual([
+        [path, createFlags, 0o600],
+      ]);
+    },
+  );
+
+  it.each(["darwin", "win32"] as const)(
+    "BR-295 v3 non-linux omits Linux close-on-exec flag",
+    async (platform) => {
+      expect(await captureStateOpen(platform, true)).toEqual([
+        [path, headerFlags],
+      ]);
+    },
+  );
+
+  it.each(["linux", "darwin", "win32"] as const)(
+    "BR-295 v3 header open passes no mode",
+    async (platform) => {
+      const calls = await captureStateOpen(platform, true);
+      expect(calls).toHaveLength(1);
+      expect(calls[0]).toHaveLength(2);
+    },
+  );
+});
 
 describe("BR-293 file and directory checks (AC-03)", () => {
   it("BR-293 a missing parent is refused", () => {
