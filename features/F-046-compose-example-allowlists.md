@@ -2,7 +2,7 @@
 id: F-046
 title: Compose example identity allowlists
 ticket: "#112"
-status: ready-for-freeze
+status: frozen
 version: 1
 ---
 
