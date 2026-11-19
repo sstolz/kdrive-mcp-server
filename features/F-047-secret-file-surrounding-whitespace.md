@@ -29,6 +29,17 @@ Targeted inspection found these three runtime secret-file sources:
 | `OAUTH_UPSTREAM_CLIENT_SECRET_FILE` (`oauthUpstreamClientSecretFile`, `--oauth-upstream-client-secret-file`) | The same `loadSecret` path and text validation | `CREDENTIAL_INVALID/oauthUpstreamClientSecret`; read and size errors use `oauthUpstreamClientSecretFile` |
 | `OAUTH_SIGNING_KEY_FILE` (`oauthSigningKeyFile`, `--oauth-signing-key-file`) | `loadSigning`: bounded nonempty opaque bytes; subsequently `src/auth/proxy/keys.ts` parses exactly one PKCS#8 PEM EC P-256 private key | Empty bytes: `CREDENTIAL_INVALID/oauthSigningKeyFile`; invalid key: `AuthConfigurationError` with the fixed `SIGNING_KEY_ERROR` message |
 
+The PEM parser already accepts outer whitespace on both sides: its anchored
+regex in `src/auth/proxy/keys.ts` uses Unicode `\s*` before the opening
+and after the closing delimiter. ASCII trimming changes signing-key validation
+behavior only for nonempty files consisting entirely of the four trim bytes:
+currently `loadSigning` accepts them unchanged, then proxy construction throws
+`AuthConfigurationError` with `SIGNING_KEY_ERROR` because no PEM block matches;
+afterward loading fails earlier with `CREDENTIAL_INVALID/oauthSigningKeyFile`.
+An already empty file has that configuration error today. Nonempty signing
+content keeps the same interior bytes and the same subsequent parser.
+These outcomes follow from the inspected branches, not a runtime measurement.
+
 `src/config-schema.ts` inventories no additional runtime `*_FILE` secret.
 `OAUTH_STATE_FILE` names a SQLite state store, not a secret-content input.
 `SIGNING_KEY_FILE` in Compose selects the host mount for the same signing
@@ -123,9 +134,9 @@ but is not needed here.
    supplied [#112 acceptance evidence](https://github.com/sstolz/kdrive-mcp-server/issues/112#issuecomment-7014711154)
    on actual main `e8ae20d`. This is acceptance synchronization, not a new
    version of those rules. Include the three deferred minor review items:
-   - Add a test for the BR-187 v4 negative example, or remove that unsupported
-     example from its record; prefer the test if it expresses the accepted
-     guidance contract, without expanding that contract.
+   - Add a parameterized test for every alternative in the BR-187 v4 negative
+     example and retain the example, without expanding the accepted guidance
+     contract.
    - Add a sentence to the BR-184 v3 and BR-186 v2 Verification lines that
      their AC-21 tests were renamed to the F-046 AC-06/AC-07 tests,
      respectively. Preserve their historical accepted text and history.
@@ -136,7 +147,7 @@ but is not needed here.
 
 ### Out of scope
 
-- #110, #105 and unrelated deployment work.
+- #110, #105, BR-014 and unrelated deployment work.
 - Changes to secret formats, key types, curves, lengths, entropy requirements,
   sources, precedence or selector syntax; adding secret discovery or fallback.
 - Trimming inline environment credentials, normalizing interior whitespace,
@@ -149,10 +160,12 @@ but is not needed here.
 Retain existing IDs and purposes. Add BR-026 v2 as `pending acceptance` with
 source F-047 v1; do not activate it before acceptance. No new BR is allocated.
 
-- **BR-026 v2** — A selected credential source is loaded under the existing
-  v1 guarded-source contract with its file-content normalization replaced by
-  maximal surrounding U+0020/U+0009/U+000D/U+000A removal for each of the three
-  secret-file kinds, followed by the unchanged content checks on the result.
+- **BR-026 v2** — Selected token, upstream-secret and signing-key files are
+  read under their raw byte limits (16,384 bytes for token/upstream-secret,
+  65,536 for signing-key), their maximal leading and trailing
+  U+0020/U+0009/U+000D/U+000A sequences are removed, an empty result gives
+  `CREDENTIAL_INVALID`, the unchanged content checks follow on the result,
+  and inline environment values are never trimmed.
   Verified by: AC-01–AC-25.
 
 This is one guarded-loading statement; Scope defines its exact normalization
@@ -164,6 +177,28 @@ unqualified expectations.
 BR-023 v4 remains unchanged: its byte budgets and validation bounds do not
 change. Clarify references to normalization in the pending BR-026 v2 record,
 without changing BR-023's accepted statement or input-byte accounting.
+
+During implementation, make these explicit citation/wording dispositions:
+
+- In `tests/config-value-boundaries.test.ts` and the BR-026 v2 record,
+  re-cite P-BR026-001–P-BR026-022 as BR-026 v2, preserving their IDs,
+  inputs and assertions: all these boundary outcomes remain valid under v2.
+  In particular, `P-BR026-004 BR-026 v1: counts token LF in the 16384-byte
+  file budget` becomes `P-BR026-004 BR-026 v2: counts token LF in the
+  16384-byte file budget`; its LF wording stays because that fixture still
+  counts and removes LF. `P-BR026-005 BR-026 v1: rejects token file overflow
+  before LF stripping` becomes `P-BR026-005 BR-026 v2: rejects token file
+  overflow before LF stripping`; its LF wording stays because this raw-byte
+  overflow still precedes removal of that fixture's LF. The BR-026 v2 example
+  for P-BR026-004 describes removal of its sole LF, without implying that only
+  one LF can be removed in general; historical v1 expectations stay labelled.
+- Keep `selected input bytes before URL canonicalization/newline stripping`
+  in `business-rules/BR-023.md` and `business-rules/BR-024.md`: the inspected
+  phrase describes budget ordering, which remains accurate because newline
+  stripping is still part of file normalization after raw-byte accounting.
+  Neither rule needs a version change for this wording.
+- BR-014 stays out of scope; no statement, test or citation for it changes.
+
 BR-027 v1 remains unchanged: stable redaction already excludes values and
 configuration details; no normalization diagnostics are introduced.
 BR-124 v2 remains unchanged: key parsing and cryptographic qualification
@@ -233,7 +268,7 @@ from construction outcomes, preserving the existing no-port-I/O checks.
 | AC-16 / BR-026 v2, BR-124 v2 | `P + "\r\n"`, also two CRLF pairs | Loading then construction run | Loaded bytes equal P; same successful key and `kid` | signing trailing CRLF |
 | AC-17 / BR-026 v2, BR-124 v2 | `" \t" + P + "\t "`, also `"\r\n\t " + P + " \t\r\n"` | Loading then construction run | Loaded bytes equal P; same successful key and `kid` | signing surrounding spaces and tabs |
 | AC-18 / BR-026 v2 | Empty bytes, `" "`, `"\t"`, `"\r"`, `"\n"`, or `" \t\r\n\n"` | Loading runs | `CREDENTIAL_INVALID/oauthSigningKeyFile` before proxy construction | signing empty after trim |
-| AC-19 / BR-026 v2, BR-124 v2 | P with LF or CRLF internal PEM line endings; alternatively insert one space or tab inside a base64 line | Loading then construction run | Interior bytes unchanged; valid line-ending variants succeed with the same `kid`; inserted space/tab fail with the existing fixed signing-key error | signing interior whitespace |
+| AC-19 / BR-026 v2, BR-124 v2 | P with LF or CRLF internal PEM line endings; alternatively insert one space or tab inside a base64 line | Loading then construction run | First characterize direct construction from each exact variant before implementation and pin its result; loaded interior bytes remain unchanged and construction matches that direct result: same `kid` on success or the same fixed signing-key error on refusal | signing interior whitespace |
 | AC-20 / BR-026 v2, BR-124 v2 | `"\u00a0" + P + "\u00a0"`, `"\ufeff" + P + "\ufeff"`, or `"\u2003" + P` | Loading then construction run | Nonmember bytes retained exactly locally; construction has the identical outcome as direct construction from those unmodified bytes: same `kid` on success or the same fixed signing-key error on refusal | signing nontrimmed Unicode |
 | AC-21 / BR-026 v2, BR-124 v2 | `" \t\0" + P + "\n"`, also byte `ff` before P between ASCII padding | Loading then construction run | Local result retains NUL/invalid byte and remains nonempty; construction fails with the existing fixed signing-key error, not a new configuration error | signing NUL and invalid encoding |
 
@@ -245,6 +280,15 @@ from construction outcomes, preserving the existing no-port-I/O checks.
   removed), 16,384 times plus LF (refused), and 16,385 spaces (refused);
   signing with 65,535 zero bytes plus LF (locally accepted as 65,535 zero
   bytes), 65,536 zero bytes plus LF (refused), and 65,537 spaces (refused).
+  Also test whitespace-only files exactly at each limit: 16,384 spaces
+  for each text secret and 65,536 spaces for signing give
+  `CREDENTIAL_INVALID` with `token`, `oauthUpstreamClientSecret` and
+  `oauthSigningKeyFile`, respectively, not `LIMIT_EXCEEDED`. Test 16,383
+  spaces plus one valid `x` for each text secret: exactly 16,384 raw bytes
+  are accepted and normalize to `x`. For signing, pad P with ASCII spaces
+  to exactly 65,536 raw bytes: loading yields P and proxy construction
+  succeeds with P's `kid`; verify this construction in
+  `tests/auth/proxy-construction.test.ts` under the same AC-22 test name.
   Every overflow is `LIMIT_EXCEEDED` with its file selector setting, rather
   than an empty/content error. Signing's opaque synthetic bytes do not claim
   cryptographic validity. Retain the existing 65,536-zero-byte local success.
@@ -289,12 +333,14 @@ from construction outcomes, preserving the existing no-port-I/O checks.
   Then the variants pass; altered case, missing guidance and per-location
   omissions still fail. In `tests/deployment-examples.test.ts`, add
   `BR-187 v4 F-047 AC-26 guidance comparisons collapse whitespace` and
-  `BR-187 v4 F-047 AC-26 negative example stays covered` if the negative
-  example is retained. If it is removed, diff review verifies that removal
-  and the second test is unnecessary. Retain F-046 AC-01–AC-08 checks.
+  `BR-187 v4 F-047 AC-26 negative example stays covered` unconditionally,
+  with separate rows for an unconditional `Yes` e-mail requirement, a missing
+  subject row or assignment, and missing combined-requirement or reassignment
+  guidance in each scoped location. Each mutation fails validation; retain
+  the BR-187 v4 negative example and F-046 AC-01–AC-08 checks.
 
-For AC-20, characterize each exact input through the existing parser before
-implementation and pin that result. Its regex permits outer Unicode
+For AC-19 and AC-20, characterize each exact input through the existing
+parser before implementation and pin that result. Its regex permits outer Unicode
 whitespace and its decoder consumes an initial BOM, but `createPrivateKey`
 also validates the PEM envelope; regex acceptance alone is not proof of
 successful key construction. The equality of loaded and original bytes and
@@ -320,10 +366,14 @@ No real secret or live provider is needed for acceptance.
   a different contract.
 - Apply trimming to signing bytes too. PEM is an ASCII envelope around
   base64-encoded PKCS#8 key data; outer space, tab, CR and LF are envelope
-  padding, not key entropy. Removing the final PEM newline is safe: the
-  existing parser permits no whitespace after the closing delimiter. Interior
-  line breaks and base64 remain untouched. Keep local opaque-byte handling
-  and the later fatal UTF-8/PEM/key checks as separate stages.
+  padding, not key entropy. The existing PEM regex already accepts Unicode
+  whitespace on both sides of the delimiters. The safety argument rests on
+  preserving interior bytes and the existing fatal UTF-8/PEM/key parsing,
+  including line breaks and base64, rather than changing parser acceptance.
+  For nonempty files made solely of the four trim bytes, the existing later
+  `AuthConfigurationError` becomes earlier
+  `CREDENTIAL_INVALID/oauthSigningKeyFile`; empty files already fail there.
+  Keep local opaque-byte handling and later key checks as separate stages.
 - **Threat analysis.** Token/upstream edge padding becomes provisioning
   syntax under the owner's decision. These values are opaque; the code has
   no provider-specific length/entropy minimum, and this spec does not invent
@@ -355,3 +405,10 @@ No real secret or live provider is needed for acceptance.
 ## Open questions
 
 ## Stress-test
+
+- **111-spec-1-reviewer / 1 / major — retained.** The inspected PEM regex accepts outer Unicode whitespace on both sides; corrected the safety argument and the whitespace-only signing error stage/identity before and after.
+- **111-spec-1-reviewer / 2 / minor — retained.** BR-026 v2 now states the file limits, exact trim set, empty-result error, subsequent checks and unchanged inline handling in one standalone sentence.
+- **111-spec-1-reviewer / 3 / minor — retained.** AC-22 now distinguishes exact-limit empty results and valid padded content from over-limit raw-byte refusal using the limits verified in `loadSecret`/`loadSigning`.
+- **111-spec-1-reviewer / 4 / minor — retained.** The inspected BR-187 v4 negative example is retained and its missing parameterized coverage is an unconditional AC-26 requirement.
+- **111-spec-1-reviewer / 5 / minor — retained.** AC-19 requires characterization against direct construction from identical bytes because regex acceptance alone does not establish the unmeasured CRLF construction outcome.
+- **111-spec-1-reviewer / 6 / minor — retained.** Verified boundary-test citations are re-cited as v2, accurate LF/budget-order wording is explicitly kept with reasons, and BR-014 remains out of scope.
