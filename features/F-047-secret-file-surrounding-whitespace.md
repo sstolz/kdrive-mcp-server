@@ -2,7 +2,7 @@
 id: F-047
 title: Secret file surrounding whitespace
 ticket: "#111"
-status: ready-for-freeze
+status: frozen
 version: 1
 ---
 
