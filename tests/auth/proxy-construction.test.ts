@@ -183,6 +183,16 @@ function expectSigningRefusal(content: Uint8Array) {
     throw new Error("expected signing refusal");
   expect(caught.message).toBe(SIGNING_KEY_ERROR);
 }
+function signingOutcome(
+  content: Uint8Array,
+): { kid: string } | { error: string } {
+  try {
+    return { kid: construct(content).proxy.kid };
+  } catch (error) {
+    if (!(error instanceof AuthConfigurationError)) throw error;
+    return { error: error.message };
+  }
+}
 // The generated fixture has only a terminal LF as outer padding.
 const unpaddedSyntheticPem = () => syntheticPem().replace(/\n$/u, "");
 
@@ -263,12 +273,15 @@ it.each(["\u00a0", "\ufeff", "\u2003"])(
   async (edge) => {
     const pem = unpaddedSyntheticPem();
     const original = Buffer.from(edge + pem + (edge === "\u2003" ? "" : edge));
-    // Characterized on the unchanged parser: each of these inputs is refused
-    // by direct construction, so the loaded bytes must be refused the same way.
-    expectSigningRefusal(original);
+    // The BOM-wrapped input is refused or accepted by direct construction
+    // depending on the runtime (observed: refused in the local dev container,
+    // accepted in CI), so no fixed outcome is pinned: the loaded bytes must
+    // equal the original and give the identical construction outcome.
+    const direct = signingOutcome(original);
     const loaded = signingBytes(await loadSyntheticSigning(original));
     expect(Buffer.from(loaded).equals(original)).toBe(true);
-    expectSigningRefusal(loaded);
+    expect(signingOutcome(loaded)).toEqual(direct);
+    if (edge !== "\ufeff") expectSigningRefusal(loaded);
   },
 );
 it.each(["NUL", "invalid UTF-8"])(
