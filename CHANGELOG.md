@@ -4,6 +4,8 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-11-20
+
 ### Added
 
 - #91 / F-024 v4 (accepted 2026-11-18): later stable and post-stable beta
@@ -12,10 +14,13 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
 
 ### Changed
 
+- #111 and #112 are small features released in this patch version by owner decision.
 - #111 / F-047 / BR-026 v2 (accepted 2026-11-19 on main `c58e7bb`; [#111 acceptance](https://github.com/sstolz/kdrive-mcp-server/issues/111#issuecomment-7021357708)): selected token, upstream-secret and signing-key files remove surrounding SPACE, TAB, CR and LF after raw-byte bounds; empty results fail, while interior validation, inline values and guarded reads remain unchanged.
   Upgrade: a secret-file value that intentionally starts or ends with SPACE, TAB,
   CR or LF loses it; use the inline environment value instead. Earlier versions remove only one trailing LF or CRLF from token and upstream-secret files, refuse other surrounding TAB, CR or LF and keep surrounding SPACE in the value, so a rollback needs files without padding.
 - #112 / F-046 (accepted 2026-11-19 on main `e8ae20d`; [#112 acceptance](https://github.com/sstolz/kdrive-mcp-server/issues/112#issuecomment-7014711154)): the Compose example accepts subjects, e-mails or both identity allowlists; deployment guidance explains the combined requirement and prefers subjects because an e-mail address can be reassigned.
+  Upgrade: Compose no longer refuses an unset `OAUTH_ALLOWED_EMAILS`; the
+  server refuses at startup when both identity allowlists are empty.
 - #91 / F-024 v4 (accepted 2026-11-18): npm and image read-back validate healthy
   candidates and stable defaults; the publishing guide specifies owner-only
   byte-preserving default restoration before digest-keyed orphan cleanup.
@@ -24,6 +29,9 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
 
 - #96 / F-045 (accepted 2026-11-19; [#96 acceptance](https://github.com/sstolz/kdrive-mcp-server/issues/96#issuecomment-7007926600)): audit and OAuth state file opens apply the explicit Linux close-on-exec flag only on Linux, preserving all other flags and modes.
 - #88 / F-044 (accepted 2026-11-19; [#88 acceptance](https://github.com/sstolz/kdrive-mcp-server/issues/88#issuecomment-7005778721)): unresolved root path components report `ROOT_NOT_RESOLVED (roots)` while upstream resolution failures retain `PREFLIGHT_FAILED (preflight)`.
+  Upgrade: a root path with a missing, duplicate or non-folder component now
+  reports `ROOT_NOT_RESOLVED (roots)` instead of `PREFLIGHT_FAILED (preflight)`;
+  update scripts matching the old code.
 
 ## [1.0.0] - 2026-11-17
 
@@ -563,7 +571,8 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
   `public-export` and `public-commit` Make targets), used once to publish this
   repository from the archive.
 
-[Unreleased]: https://github.com/sstolz/kdrive-mcp-server/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/sstolz/kdrive-mcp-server/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/sstolz/kdrive-mcp-server/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/sstolz/kdrive-mcp-server/compare/v0.6.0-beta.2...v1.0.0
 [0.6.0-beta.2]: https://github.com/sstolz/kdrive-mcp-server/compare/v0.6.0-beta.1...v0.6.0-beta.2
 [0.6.0-beta.1]: https://github.com/sstolz/kdrive-mcp-server/releases/tag/v0.6.0-beta.1

@@ -80,14 +80,15 @@ Un seul paquet npm, un seul binaire :
 
 ```
 npm install -g @sstolz/kdrive-mcp-server
-npx -y @sstolz/kdrive-mcp-server@1.0.0                  # stdio (défaut), clients locaux
-npx -y @sstolz/kdrive-mcp-server@1.0.0 --http --port 3000 # Streamable HTTP, derrière un reverse proxy
-docker run … 'ghcr.io/sstolz/kdrive-mcp-server:1.0.0@sha256:<digest>' # image du projet, mode HTTP
+npx -y @sstolz/kdrive-mcp-server@1.0.1                  # stdio (défaut), clients locaux
+npx -y @sstolz/kdrive-mcp-server@1.0.1 --http --port 3000 # Streamable HTTP, derrière un reverse proxy
+docker run … 'ghcr.io/sstolz/kdrive-mcp-server:1.0.1@sha256:<digest>' # image du projet, mode HTTP
 ```
 
 Épingler une version exacte pour des mises à jour prévisibles. Épingler l'image
 par le digest de manifeste affiché par la relecture de release. La version
 1.0.0 est publiée ; son digest figure dans `docs/publishing.md`.
+The 1.0.1 examples apply after publication.
 
 | | stdio | HTTP |
 |---|---|---|

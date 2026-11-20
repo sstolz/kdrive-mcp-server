@@ -26,11 +26,11 @@ share tool yet (#20).
 
 There are two ways to get the runtime image:
 
-- **Stable release (publication pending).** `1.0.0` is prepared for GHCR as
-  `ghcr.io/sstolz/kdrive-mcp-server:1.0.0`, for `linux/amd64` and
+- **Stable release (publication pending).** `1.0.1` is prepared for GHCR as
+  `ghcr.io/sstolz/kdrive-mcp-server:1.0.1`, for `linux/amd64` and
   `linux/arm64`. Image tags, including `latest`, can be overwritten, so pin
   the image by the manifest digest printed by release read-back
-  ([publishing](publishing.md#versions), and step 1 below). The 1.0.0 digest
+  ([publishing](publishing.md#versions), and step 1 below). The 1.0.1 digest
   is not available yet; use the examples after publication.
 - **Build from source.** `make image` builds the image from a checkout of
   `main`, with every merged change ([Build](#build)). A local build loads the
@@ -304,7 +304,7 @@ to `compose.yaml`; they hold no secret value):
 
 | Variable                      | Role                                                                  | Required?                                             | Example                                                  |
 | ----------------------------- | --------------------------------------------------------------------- | ----------------------------------------------------- | -------------------------------------------------------- |
-| `KDRIVE_MCP_IMAGE`            | Runtime image: the release image pinned by digest, or your local tag. | Yes                                                   | `ghcr.io/sstolz/kdrive-mcp-server:1.0.0@sha256:<digest>` |
+| `KDRIVE_MCP_IMAGE`            | Runtime image: the release image pinned by digest, or your local tag. | Yes                                                   | `ghcr.io/sstolz/kdrive-mcp-server:1.0.1@sha256:<digest>` |
 | `MCP_PUBLIC_URL`              | Passed to the server (see above).                                     | Yes                                                   | `https://mcp.example.com/mcp`                            |
 | `MCP_HOSTNAME`                | Host name of the Traefik rule; the host of `MCP_PUBLIC_URL`.          | Yes                                                   | `mcp.example.com`                                        |
 | `KDRIVE_ID`                   | Passed to the server (see above).                                     | Yes                                                   | `123456`                                                 |
@@ -344,15 +344,15 @@ You need:
 
 ### 1. Get the image
 
-Pull the published stable image, or build from source (see
+After publication, pull the stable image, or build from source (see
 [Current status](#current-status) for the difference).
 
 **Stable image, pinned by digest.** Read the digest of the multi-platform
 image, then pull it by that digest:
 
 ```sh
-docker buildx imagetools inspect ghcr.io/sstolz/kdrive-mcp-server:1.0.0
-docker pull 'ghcr.io/sstolz/kdrive-mcp-server:1.0.0@sha256:<digest>'
+docker buildx imagetools inspect ghcr.io/sstolz/kdrive-mcp-server:1.0.1
+docker pull 'ghcr.io/sstolz/kdrive-mcp-server:1.0.1@sha256:<digest>'
 ```
 
 `<digest>` is the hexadecimal value after `sha256:` on the `Digest:` line of
@@ -478,8 +478,8 @@ Protect access to that socket and keep the ACME storage private.
 
 This step explains the existing-Traefik example. Copy
 it into the deployment directory as `compose.yaml`, from your checkout or
-from the repository at the tag that matches your image (`v1.0.0` for
-the stable release). What it contains:
+from the repository at the tag that matches your image (`v1.0.1` after
+publication). What it contains:
 
 - **Service hardening.** UID/GID 1000, a read-only root file system, no
   capabilities, `no-new-privileges`, `init`, `restart: on-failure:3`, and
@@ -511,7 +511,7 @@ values below are fake; for the Infomaniak issuer, see the
 
 ```sh
 # Release image pinned by digest (step 1), or kdrive-mcp-server:runtime-amd64
-KDRIVE_MCP_IMAGE=ghcr.io/sstolz/kdrive-mcp-server:1.0.0@sha256:<digest>
+KDRIVE_MCP_IMAGE=ghcr.io/sstolz/kdrive-mcp-server:1.0.1@sha256:<digest>
 MCP_PUBLIC_URL=https://mcp.example.com/mcp
 MCP_HOSTNAME=mcp.example.com
 KDRIVE_ID=123456
