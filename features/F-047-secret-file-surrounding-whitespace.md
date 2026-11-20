@@ -2,7 +2,7 @@
 id: F-047
 title: Secret file surrounding whitespace
 ticket: "#111"
-status: frozen
+status: done
 version: 1
 ---
 
@@ -412,3 +412,7 @@ No real secret or live provider is needed for acceptance.
 - **111-spec-1-reviewer / 4 / minor — retained.** The inspected BR-187 v4 negative example is retained and its missing parameterized coverage is an unconditional AC-26 requirement.
 - **111-spec-1-reviewer / 5 / minor — retained.** AC-19 requires characterization against direct construction from identical bytes because regex acceptance alone does not establish the unmeasured CRLF construction outcome.
 - **111-spec-1-reviewer / 6 / minor — retained.** Verified boundary-test citations are re-cited as v2, accurate LF/budget-order wording is explicitly kept with reasons, and BR-014 remains out of scope.
+
+## Acceptance synchronization
+
+Accepted on actual main `c58e7bb`, 2026-11-19 ([#111 acceptance](https://github.com/sstolz/kdrive-mcp-server/issues/111#issuecomment-7021357708)). Status synchronized in this records update.

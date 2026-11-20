@@ -662,7 +662,7 @@ of those combinations have been verified with this server.
   without its value, for example `[MISSING_REQUIRED]` for an unset setting,
   `[CREDENTIAL_READ_FAILED]` for a secret file that is missing or not readable
   by UID 1000, `[CREDENTIAL_INVALID]` for an empty or non-UTF-8 secret file, `[DRIVE_NOT_ALLOWED]` when the token's account is not admin of a
-  drive or a root names a drive that is not configured, `[ROOT_NOT_RESOLVED]` for a root that is not a folder, and
+  drive or a root names a drive that is not configured, `[ROOT_NOT_RESOLVED]` for a root path that is missing, ambiguous or not a folder, and
   `[PREFLIGHT_FAILED]` when kDrive refused or did not answer the startup
   checks. The [configuration reference](../features/F-002-configuration.md)
   lists every code. HTTP startup refusals print a fixed sentence instead, for

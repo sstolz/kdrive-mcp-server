@@ -1722,14 +1722,13 @@ for (const [index, kind] of secretFileCases.entries()) {
       return [bytes(content), separator === " " ? content : undefined] as const;
     }),
   );
-  textCase(
-    6,
-    "nontrimmed Unicode",
-    ["\u00a0", "\ufeff", "\u2003"].map((edge) => {
+  textCase(6, "nontrimmed Unicode", [
+    ...["\u00a0", "\ufeff", "\u2003"].map((edge) => {
       const content = edge + value + (edge === "\u2003" ? "" : edge);
       return [bytes(content), content] as const;
     }),
-  );
+    [bytes(" \u00a0" + value + "\u00a0\n"), "\u00a0" + value + "\u00a0"],
+  ]);
   textCase(7, "NUL and invalid encoding", [
     [bytes(" \t\0" + value + "\n"), undefined],
     [Buffer.from([0x20, 0x09, 0xff, 0x20, 0x0a]), undefined],

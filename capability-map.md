@@ -1,13 +1,13 @@
 # Capability map
 
-## Provisional — Secret-file surrounding whitespace
+## Accepted — Secret-file surrounding whitespace
 
 [F-047 v1](features/F-047-secret-file-surrounding-whitespace.md) (#111),
-[BR-026 v2](business-rules/BR-026.md), pending acceptance: selected token,
+[BR-026 v2](business-rules/BR-026.md) is active: selected token,
 upstream-secret and signing-key files remove maximal surrounding SPACE, TAB,
 CR and LF after their raw-byte limits; empty results fail. Interior validation,
-inline credentials and guarded reads remain unchanged. BR-026 v1 stays active;
-F-047 remains frozen until acceptance and subsequent record synchronization.
+inline credentials and guarded reads remain unchanged.
+Accepted on actual main `c58e7bb`, 2026-11-19 ([#111 acceptance](https://github.com/sstolz/kdrive-mcp-server/issues/111#issuecomment-7021357708)). F-047 is done.
 
 ## Accepted — Compose identity allowlists
 
