@@ -44,14 +44,15 @@ official server has them.
 It speaks standard MCP, so any compatible client can use it; only claude.ai
 has been verified end to end so far.
 
-**Status:** `1.0.0` ([VERSION](VERSION)) was published on 2026-11-17 through
+**Status:** `1.0.0` was published on 2026-11-17 through
 the gated release workflow: `@sstolz/kdrive-mcp-server` under npm `latest` and
 `ghcr.io/sstolz/kdrive-mcp-server` under tags `1.0.0` and `latest` for
 `linux/amd64` and `linux/arm64`. Pin the image by its OCI index digest:
 `sha256:6f14301d4e9b0c4cd7c2f39b45f15c9b1222e92879ee10ea1131d06dac806708`.
 See the record under "First stable publication" in
 [docs/publishing.md](docs/publishing.md).
-Changes are listed in [CHANGELOG.md](CHANGELOG.md).
+Version `1.0.1` is prepared ([VERSION](VERSION)); its install examples below
+apply after publication. Changes are listed in [CHANGELOG.md](CHANGELOG.md).
 
 ## What it offers
 
@@ -93,7 +94,7 @@ KDRIVE_TOKEN_FILE=/home/you/.config/kdrive/token \
 KDRIVE_ID=123456 \
 KDRIVE_MCP_ROOTS=123456:/Private/Documents \
 KDRIVE_MCP_MODE=read \
-  npx -y @sstolz/kdrive-mcp-server@1.0.0
+  npx -y @sstolz/kdrive-mcp-server@1.0.1
 ```
 
 Your AI client launches this command itself and communicates over stdin and
@@ -104,15 +105,15 @@ need it ([Limits and risks](#limits-and-risks)).
 
 #### With Docker
 
-You can use the published image `ghcr.io/sstolz/kdrive-mcp-server` instead.
+After publication, you can use the image `ghcr.io/sstolz/kdrive-mcp-server` instead.
 Docker must be running and accessible to the client.
 
-Read the published image's digest, then pull it by digest. Both the version
+After publication, read the image's digest, then pull it by digest. Both the version
 tag and `latest` can be overwritten.
 
 ```sh
-docker buildx imagetools inspect ghcr.io/sstolz/kdrive-mcp-server:1.0.0
-docker pull 'ghcr.io/sstolz/kdrive-mcp-server:1.0.0@sha256:<digest>'
+docker buildx imagetools inspect ghcr.io/sstolz/kdrive-mcp-server:1.0.1
+docker pull 'ghcr.io/sstolz/kdrive-mcp-server:1.0.1@sha256:<digest>'
 ```
 
 Replace `<digest>` in the examples below with the manifest digest printed by
@@ -138,7 +139,7 @@ docker run -i --rm \
   -e KDRIVE_MCP_ROOTS=123456:/Private/Documents \
   -e KDRIVE_TOKEN_FILE=/run/secrets/kdrive-token \
   -v /home/you/.config/kdrive/token:/run/secrets/kdrive-token:ro \
-  'ghcr.io/sstolz/kdrive-mcp-server:1.0.0@sha256:<digest>'
+  'ghcr.io/sstolz/kdrive-mcp-server:1.0.1@sha256:<digest>'
 ```
 
 The image starts `node /app/dist/cli.js`; stdio is the default transport, so
@@ -294,7 +295,7 @@ claude mcp add kdrive --scope user \
   -e KDRIVE_ID=123456 \
   -e KDRIVE_MCP_ROOTS=123456:/Private/Documents \
   -e KDRIVE_MCP_MODE=read \
-  -- npx -y @sstolz/kdrive-mcp-server@1.0.0
+  -- npx -y @sstolz/kdrive-mcp-server@1.0.1
 ```
 
 **Claude Desktop** and most desktop clients (example): add the server under
@@ -307,7 +308,7 @@ then restart the client:
   "mcpServers": {
     "kdrive": {
       "command": "npx",
-      "args": ["-y", "@sstolz/kdrive-mcp-server@1.0.0"],
+      "args": ["-y", "@sstolz/kdrive-mcp-server@1.0.1"],
       "env": {
         "KDRIVE_TOKEN_FILE": "/home/you/.config/kdrive/token",
         "KDRIVE_ID": "123456",
@@ -334,7 +335,7 @@ claude mcp add kdrive --scope user -- docker run -i --rm \
   -e KDRIVE_MCP_ROOTS=123456:/Private/Documents \
   -e KDRIVE_TOKEN_FILE=/run/secrets/kdrive-token \
   -v /home/you/.config/kdrive/token:/run/secrets/kdrive-token:ro \
-  'ghcr.io/sstolz/kdrive-mcp-server:1.0.0@sha256:<digest>'
+  'ghcr.io/sstolz/kdrive-mcp-server:1.0.1@sha256:<digest>'
 ```
 
 **Claude Desktop** and most desktop clients (example): add the server under
@@ -361,7 +362,7 @@ then restart the client:
         "KDRIVE_TOKEN_FILE=/run/secrets/kdrive-token",
         "-v",
         "/home/you/.config/kdrive/token:/run/secrets/kdrive-token:ro",
-        "ghcr.io/sstolz/kdrive-mcp-server:1.0.0@sha256:<digest>"
+        "ghcr.io/sstolz/kdrive-mcp-server:1.0.1@sha256:<digest>"
       ]
     }
   }
@@ -457,7 +458,7 @@ npm install -g @sstolz/kdrive-mcp-server
 ```
 
 It provides the `kdrive-mcp-server` command. Pin an exact version for
-predictable updates, for example `npm install -g @sstolz/kdrive-mcp-server@1.0.0`.
+predictable updates, for example `npm install -g @sstolz/kdrive-mcp-server@1.0.1`.
 Betas remain available with `@beta` or an exact version
 ([publishing](docs/publishing.md)).
 
@@ -468,13 +469,13 @@ You need Docker with Compose and GNU Make 3.81 or later.
 ```sh
 make setup        # build the development container and install dependencies
 make image        # container image: kdrive-mcp-server:runtime-<arch>
-make pack         # npm package: ./artifacts/sstolz-kdrive-mcp-server-1.0.0.tgz
+make pack         # npm package: ./artifacts/sstolz-kdrive-mcp-server-1.0.1.tgz
 ```
 
 `make image IMAGE_PLATFORMS=linux/amd64` builds one architecture only. A
 local build pushes nothing to a registry. To use the CLI on your machine,
 install the package with
-`npm install -g ./artifacts/sstolz-kdrive-mcp-server-1.0.0.tgz` (keep
+`npm install -g ./artifacts/sstolz-kdrive-mcp-server-1.0.1.tgz` (keep
 the leading `./`, without which npm reads the argument as a GitHub shorthand); it
 provides the `kdrive-mcp-server` command. `kdrive-mcp-server --help` and
 `--version` need no configuration.

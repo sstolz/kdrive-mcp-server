@@ -85,7 +85,7 @@ without inventing earlier BR versions. [The capability map](../capability-map.md
 entries from accepted capabilities. Keep [Unreleased](../CHANGELOG.md) truthful.
 F-001 v1 established the initial unreleased version at 0.1.0; #3 created VERSION
 and package metadata. The first beta was 0.6.0-beta.1 (#2); the current version
-is 1.0.0. Changes accumulate under Unreleased until an explicitly
+is 1.0.1. Changes accumulate under Unreleased until an explicitly
 authorized release; documentation updates do not bump the
 version, create a tag or publish a release.
 
