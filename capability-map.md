@@ -8,7 +8,7 @@
 and [BR-027 v2](business-rules/BR-027.md): planned redacted startup warnings
 for deny patterns proved outside all known configured roots and the enabled
 received namespace, preserving BR-040's raw-prefix exception and runtime
-filtering. Pending implementation and acceptance; no working capability or
+filtering. Pending acceptance; no working capability or
 execution is claimed. Acceptance evidence belongs in
 [#110](https://github.com/sstolz/kdrive-mcp-server/issues/110).
 

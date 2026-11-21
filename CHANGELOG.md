@@ -6,7 +6,7 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
 
 ### Added
 
-- #110 / F-048 (pending implementation and acceptance): redacted stderr
+- #110 / F-048 (pending acceptance): redacted stderr
   startup warnings for deny patterns proved outside known applicable roots,
   with conservative wildcard and folder-sharing exceptions; startup eligibility
   and runtime filtering remain unchanged.

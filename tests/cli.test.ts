@@ -14,6 +14,24 @@ import { runMain, stdioClient } from "./helpers/main.js";
 import { success, providerItem } from "./helpers/kdrive.js";
 import { warningNodes } from "./helpers/deny-root-warning.js";
 
+// F-048 test tables (lookups instead of nested conditionals).
+const failureCodes: Readonly<Record<string, string>> = {
+  drive: "DRIVE_NOT_ALLOWED",
+  "unresolved-path": "ROOT_NOT_RESOLVED",
+};
+function errorCode(row: string): string {
+  return failureCodes[row] ?? "PREFLIGHT_FAILED";
+}
+function errorSetting(row: string, code: string): string {
+  if (row === "drive") return "driveIds";
+  return code === "PREFLIGHT_FAILED" ? "preflight" : "roots";
+}
+const expectedIndexes: Readonly<Record<string, readonly number[]>> = {
+  YAML: [1],
+  environment: [0],
+  CLI: [1, 2],
+};
+
 // F-048 BR-435 v1: real main and synthetic kDrive, without a real account.
 it("TestBR435_stdio_warns_without_refusal", async () => {
   const f = await warningFixture();
@@ -70,14 +88,9 @@ it.each(["drive", "unresolved-path", "missing-id", "malformed", "upstream"])(
         lookup: f.lookup,
         connect: f.connect,
       });
-      const code =
-        row === "drive"
-          ? "DRIVE_NOT_ALLOWED"
-          : row === "unresolved-path"
-            ? "ROOT_NOT_RESOLVED"
-            : "PREFLIGHT_FAILED";
+      const code = errorCode(row);
       expect(run.stderr()).toBe(
-        `Configuration error [${code}] (${row === "drive" ? "driveIds" : code === "PREFLIGHT_FAILED" ? "preflight" : "roots"}).\n`,
+        `Configuration error [${code}] (${errorSetting(row, code)}).\n`,
       );
       expect(run.exits).toEqual([1]);
       expect(run.stdout()).toBe("");
@@ -230,8 +243,7 @@ it.each(["YAML", "environment", "CLI"])(
           "/Private/Documents/**,/CliMismatch/**,/SecondMismatch/**",
         );
       run = await runMain({ argv, env, lookup: f.lookup, connect: f.connect });
-      const indices =
-        source === "YAML" ? [1] : source === "environment" ? [0] : [1, 2];
+      const indices = expectedIndexes[source] ?? [];
       expect(run.stderr()).toBe(indices.map(warningLine).join(""));
       expect(run.exits).toEqual([]);
       expect(run.handle).toBeDefined();
