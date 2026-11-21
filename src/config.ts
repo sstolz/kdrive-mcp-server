@@ -21,6 +21,8 @@ import {
   yamlSource,
 } from "./config-sources.js";
 import { crossFields, validateValues } from "./config-values.js";
+import type { DiagnosticRootPath } from "./deny-root-warning.js";
+import { path as checkPath } from "./policy/values.js";
 export {
   ConfigurationError,
   type ConfigurationInput,
@@ -32,6 +34,10 @@ export {
 
 const resolvedBrand: unique symbol = Symbol("resolved-configuration");
 const resolvedInstances = new WeakSet<object>();
+const diagnosticPaths = new WeakMap<
+  ResolvedConfiguration,
+  readonly DiagnosticRootPath[]
+>();
 /** BR-029: only the exact object returned by successful preflight is accepted. */
 export function isResolvedConfiguration(
   value: unknown,
@@ -206,7 +212,7 @@ async function inspectConfiguredDrive(
 async function resolveConfiguredRoot(
   resolver: PreflightResolver,
   selector: RootSelector,
-): Promise<Readonly<{ driveId: number; folderId: number }>> {
+): Promise<DiagnosticRootPath> {
   let resolved: unknown;
   try {
     resolved = await resolver.resolveDirectory(selector.driveId, selector);
@@ -223,7 +229,19 @@ async function resolveConfiguredRoot(
     (selector.kind === "id" && id !== selector.value)
   )
     fail("ROOT_NOT_RESOLVED", "roots");
-  return Object.freeze({ driveId: selector.driveId, folderId: id });
+  return Object.freeze({
+    driveId: selector.driveId,
+    folderId: id,
+    path: diagnosticPath(resolved),
+  });
+}
+/** Optional evidence cannot turn a successful identity resolution into a failure. */
+function diagnosticPath(resolved: unknown): string | null {
+  try {
+    return checkPath((resolved as Record<string, unknown>).path);
+  } catch {
+    return null;
+  }
 }
 /**
  * BR-208: a frozen copy whose `token` is empty and which has no `tokenFile`.
@@ -244,25 +262,77 @@ export async function preflightConfiguration(
   local: LocalConfiguration,
   resolver?: PreflightResolver,
 ): Promise<ResolvedConfiguration> {
+  const result = await resolveConfiguration(local, resolver);
+  diagnosticPaths.set(result.configuration, result.diagnosticRootPaths);
+  return result.configuration;
+}
+/** BR-021 v3: one resolution, with identity-bound evidence kept outside BR-029. */
+export async function preflightConfigurationWithDiagnosticPaths(
+  local: LocalConfiguration,
+  resolver?: PreflightResolver,
+  preflight: typeof preflightConfiguration = preflightConfiguration,
+): Promise<
+  Readonly<{
+    configuration: ResolvedConfiguration;
+    diagnosticRootPaths: readonly DiagnosticRootPath[];
+  }>
+> {
+  // Retain the existing composition port; call it exactly once. A replacement
+  // that supplies no startup evidence leaves every diagnostic path unknown.
+  const configuration = await preflight(local, resolver);
+  return Object.freeze({
+    configuration,
+    diagnosticRootPaths:
+      diagnosticPaths.get(configuration) ??
+      Object.freeze(
+        configuration.resolvedRoots.map((root) =>
+          Object.freeze({ ...root, path: null }),
+        ),
+      ),
+  });
+}
+async function resolveConfiguration(
+  local: LocalConfiguration,
+  resolver?: PreflightResolver,
+): Promise<
+  Readonly<{
+    configuration: ResolvedConfiguration;
+    diagnosticRootPaths: readonly DiagnosticRootPath[];
+  }>
+> {
   if (!resolver) fail("PREFLIGHT_UNAVAILABLE", "preflight");
   const roots: Array<Readonly<{ driveId: number; folderId: number }>> = [];
-  const seen = new Set<string>();
+  const evidence = new Map<string, DiagnosticRootPath>();
+  const conflicts = new Set<string>();
   try {
     for (const driveId of local.driveIds)
       await inspectConfiguredDrive(resolver, driveId);
     for (const selector of local.roots) {
       const root = await resolveConfiguredRoot(resolver, selector);
       const pair = `${String(root.driveId)}:${String(root.folderId)}`;
-      if (!seen.has(pair)) {
-        roots.push(root);
-        seen.add(pair);
+      const previous = evidence.get(pair);
+      if (!previous) {
+        roots.push(
+          Object.freeze({ driveId: root.driveId, folderId: root.folderId }),
+        );
+        evidence.set(pair, root);
+      } else if (!conflicts.has(pair) && root.path !== null) {
+        if (previous.path !== null && previous.path !== root.path) {
+          conflicts.add(pair);
+          evidence.set(pair, Object.freeze({ ...root, path: null }));
+        } else {
+          evidence.set(pair, root);
+        }
       }
     }
   } catch (error) {
     if (error instanceof ConfigurationError) throw error;
     fail("PREFLIGHT_FAILED", "preflight");
   }
-  return resolvedConfiguration(local, roots);
+  return Object.freeze({
+    configuration: resolvedConfiguration(local, roots),
+    diagnosticRootPaths: Object.freeze([...evidence.values()]),
+  });
 }
 export const configurationHelp =
   "Usage: kdrive-mcp-server [--help | --version | OPTIONS]\n" +

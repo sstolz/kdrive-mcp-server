@@ -1,7 +1,322 @@
 import { resolve } from "node:path";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { FlushPort, processPorts } from "./helpers/f039-composition.js";
 import { runDiagnostic, runGuarded } from "./helpers/diagnostic.js";
+import {
+  warningEnvironment,
+  warningFixture,
+  warningLine,
+} from "./helpers/deny-root-warning.js";
+import { runMain, stdioClient } from "./helpers/main.js";
+import { success, providerItem } from "./helpers/kdrive.js";
+import { warningNodes } from "./helpers/deny-root-warning.js";
+
+// F-048 test tables (lookups instead of nested conditionals).
+const failureCodes: Readonly<Record<string, string>> = {
+  drive: "DRIVE_NOT_ALLOWED",
+  "unresolved-path": "ROOT_NOT_RESOLVED",
+};
+function errorCode(row: string): string {
+  return failureCodes[row] ?? "PREFLIGHT_FAILED";
+}
+function errorSetting(row: string, code: string): string {
+  if (row === "drive") return "driveIds";
+  return code === "PREFLIGHT_FAILED" ? "preflight" : "roots";
+}
+const expectedIndexes: Readonly<Record<string, readonly number[]>> = {
+  YAML: [1],
+  environment: [0],
+  CLI: [1, 2],
+};
+
+// F-048 BR-435 v1: real main and synthetic kDrive, without a real account.
+it("TestBR435_stdio_warns_without_refusal", async () => {
+  const f = await warningFixture();
+  let run: Awaited<ReturnType<typeof runMain>> | undefined;
+  try {
+    run = await runMain({
+      argv: [],
+      env: warningEnvironment(),
+      lookup: f.lookup,
+      connect: f.connect,
+    });
+    expect(run.stderr()).toBe(warningLine(0));
+    expect(run.stdout()).toBe("");
+    expect(run.exits).toEqual([]);
+    expect(run.handle).toBeDefined();
+    const client = await stdioClient(run);
+    try {
+      expect((await client.listTools()).tools.length).toBeGreaterThan(0);
+    } finally {
+      await client.close();
+    }
+    expect(run.stderr()).toBe(warningLine(0));
+    expect(run.stdout()).not.toContain("deny_pattern_root_warning");
+  } finally {
+    await (run?.handle as { close(): Promise<void> } | undefined)?.close();
+    await f.close();
+  }
+});
+
+it.each(["drive", "unresolved-path", "missing-id", "malformed", "upstream"])(
+  "TestBR435_failed_preflight_has_only_existing_error %s",
+  async (row) => {
+    const f = await warningFixture();
+    let run: Awaited<ReturnType<typeof runMain>> | undefined;
+    try {
+      f.drive.overrides.push((r) => {
+        if (row === "drive" && r.path === "/2/drive/init")
+          return success({ drives: [{ id: 7, role: "external" }] });
+        if (r.path === "/3/drive/7/files/999" && row === "malformed")
+          return success({ id: 999, drive_id: 8, type: "dir", status: null });
+        if (r.path === "/3/drive/7/files/999" && row === "upstream")
+          return { status: 503, body: "SYNTHETIC_UPSTREAM_CANARY" };
+        return undefined;
+      });
+      run = await runMain({
+        argv: [],
+        env: {
+          ...warningEnvironment(),
+          KDRIVE_MCP_ROOTS:
+            row === "unresolved-path"
+              ? "7:/Private/Documents,7:/Absent"
+              : "7:/Private/Documents,7:999",
+        },
+        lookup: f.lookup,
+        connect: f.connect,
+      });
+      const code = errorCode(row);
+      expect(run.stderr()).toBe(
+        `Configuration error [${code}] (${errorSetting(row, code)}).\n`,
+      );
+      expect(run.exits).toEqual([1]);
+      expect(run.stdout()).toBe("");
+      expect(run.handle).toBeUndefined();
+      if (row !== "drive")
+        expect(
+          f.apiRequests().some((r) => r.path === "/3/drive/7/files/10/files"),
+        ).toBe(true);
+    } finally {
+      await (run?.handle as { close(): Promise<void> } | undefined)?.close();
+      await f.close();
+    }
+  },
+);
+
+it.each([false, true])(
+  "TestBR027v2_warning_shape_and_redaction throwing=%s",
+  async (throws) => {
+    const f = await warningFixture();
+    f.drive.nodes = f.drive.nodes.map((node) =>
+      node.id === 42 ? { ...node, name: "SYNTHETIC_ROOT_CANARY" } : node,
+    );
+    const stdio = await import("../src/stdio.js");
+    const audit = await import("../src/audit/sink.js");
+    const activation = vi.spyOn(stdio, "startStdioNavigation");
+    const sink = vi.spyOn(audit, "openAuditSink");
+    const offered: string[] = [];
+    let run: Awaited<ReturnType<typeof runMain>> | undefined;
+    try {
+      run = await runMain({
+        argv: [],
+        env: {
+          ...warningEnvironment(
+            "/Elsewhere/SYNTHETIC_PATTERN_CANARY/**,/Private/SYNTHETIC_ROOT_CANARY/**,/Mismatch/**",
+          ),
+          KDRIVE_MCP_ROOTS: "7:/Private/SYNTHETIC_ROOT_CANARY",
+          KDRIVE_MCP_MODE: "write",
+        },
+        lookup: f.lookup,
+        connect: f.connect,
+        onStderrWrite: (line) => {
+          if (!line.includes("deny_pattern_root_warning")) return;
+          expect(activation).not.toHaveBeenCalled();
+          expect(sink).not.toHaveBeenCalled();
+          expect(f.apiRequests().map((r) => r.path)).toEqual([
+            "/2/drive/init",
+            "/3/drive/7/files/1/files",
+            "/3/drive/7/files/10/files",
+          ]);
+          offered.push(line);
+          if (throws) throw new Error("SYNTHETIC_WRITER_CANARY");
+        },
+      });
+      expect(offered).toEqual([warningLine(0), warningLine(2)]);
+      expect(run.stderr()).toBe(throws ? "" : warningLine(0) + warningLine(2));
+      expect(run.exits).toEqual([]);
+      expect(activation).toHaveBeenCalledTimes(1);
+      const configuration = activation.mock.calls.at(0)?.[0];
+      const { isResolvedConfiguration } = await import("../src/config.js");
+      expect(isResolvedConfiguration(configuration)).toBe(true);
+      expect(configuration).not.toHaveProperty("diagnosticRootPaths");
+      expect(configuration).toHaveProperty("resolvedRoots", [
+        { driveId: 7, folderId: 42 },
+      ]);
+      const client = await stdioClient(run);
+      try {
+        await client.listTools();
+        await client.callTool({
+          name: "kdrive_info",
+          arguments: { drive_id: 7, file_id: 43 },
+        });
+      } finally {
+        await client.close();
+      }
+      await (run.handle as { close(): Promise<void> }).close();
+      expect(offered).toEqual([warningLine(0), warningLine(2)]);
+      expect(run.stdout()).not.toContain("deny_pattern_root_warning");
+    } finally {
+      await (run?.handle as { close(): Promise<void> } | undefined)?.close();
+      vi.restoreAllMocks();
+      await f.close();
+    }
+  },
+);
+
+it("TestBR027v2_no_warning_on_nonstartup_paths", async () => {
+  for (const argv of [["--help"], ["--version"], ["--deny", "relative"]]) {
+    const lookup = vi.fn(() => Promise.reject(new Error("unexpected lookup")));
+    const connect = vi.fn(() => {
+      throw new Error("unexpected connect");
+    });
+    const run = await runMain({
+      argv,
+      env: warningEnvironment(),
+      lookup,
+      connect,
+    });
+    expect(run.stderr()).toBe(
+      argv[0] === "--deny"
+        ? "Configuration error [INVALID_VALUE] (deny).\n"
+        : "",
+    );
+    expect(run.exits).toEqual(argv[0] === "--deny" ? [1] : []);
+    expect(run.stdout()).not.toContain("deny_pattern_root_warning");
+    expect(lookup).not.toHaveBeenCalled();
+    expect(connect).not.toHaveBeenCalled();
+  }
+  const { loadConfiguration } = await import("../src/config.js");
+  expect(
+    (await loadConfiguration({ argv: [], env: warningEnvironment() })).deny,
+  ).toEqual(["/Documents/Confidential/**"]);
+  const f = await warningFixture();
+  let run: Awaited<ReturnType<typeof runMain>> | undefined;
+  try {
+    run = await runMain({
+      argv: [],
+      env: warningEnvironment(""),
+      lookup: f.lookup,
+      connect: f.connect,
+    });
+    expect(run.stderr()).toBe("");
+    expect(run.exits).toEqual([]);
+    expect(run.handle).toBeDefined();
+  } finally {
+    await (run?.handle as { close(): Promise<void> } | undefined)?.close();
+    await f.close();
+  }
+});
+
+it.each(["YAML", "environment", "CLI"])(
+  "TestBR027v2_selected_list_startup %s",
+  async (source) => {
+    const directory = await mkdtemp(join(tmpdir(), "deny-warning-config-"));
+    const file = join(directory, "settings.yaml");
+    const f = await warningFixture();
+    let run: Awaited<ReturnType<typeof runMain>> | undefined;
+    try {
+      await writeFile(
+        file,
+        'deny: ["/Private/Documents/**", "/YamlMismatch/**"]\n',
+      );
+      const env: Record<string, string> = warningEnvironment();
+      delete env.KDRIVE_MCP_DENY;
+      if (source !== "YAML")
+        env.KDRIVE_MCP_DENY = "/EnvironmentMismatch/**,/Private/Documents/**";
+      const argv = ["--config", file];
+      if (source === "CLI")
+        argv.push(
+          "--deny",
+          "/Private/Documents/**,/CliMismatch/**,/SecondMismatch/**",
+        );
+      run = await runMain({ argv, env, lookup: f.lookup, connect: f.connect });
+      const indices = expectedIndexes[source] ?? [];
+      expect(run.stderr()).toBe(indices.map(warningLine).join(""));
+      expect(run.exits).toEqual([]);
+      expect(run.handle).toBeDefined();
+    } finally {
+      await (run?.handle as { close(): Promise<void> } | undefined)?.close();
+      await f.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  },
+);
+
+it.each([false, true])(
+  "TestBR434_received_namespace_startup %s",
+  async (shared) => {
+    for (const [deny, indices] of [
+      ["/Shared/Project/**", shared ? [] : [0]],
+      ["/Other/**", [0]],
+      ["/Shared2/**", [0]],
+    ] as const) {
+      const f = await warningFixture();
+      let run: Awaited<ReturnType<typeof runMain>> | undefined;
+      try {
+        run = await runMain({
+          argv: [],
+          env: {
+            ...warningEnvironment(deny),
+            KDRIVE_MCP_SHARED_WITH_ME: shared ? "1" : "0",
+          },
+          lookup: f.lookup,
+          connect: f.connect,
+        });
+        expect(run.stderr()).toBe(indices.map(warningLine).join(""));
+        expect(run.exits).toEqual([]);
+        expect(f.apiRequests()).toHaveLength(3);
+      } finally {
+        await (run?.handle as { close(): Promise<void> } | undefined)?.close();
+        await f.close();
+      }
+    }
+  },
+);
+
+// BR-021 v3 / BR-434 v1: sparse ID metadata preserves successful startup.
+it("TestBR021v3_unknown_path_startup_is_silent", async () => {
+  const f = await warningFixture();
+  let run: Awaited<ReturnType<typeof runMain>> | undefined;
+  try {
+    f.drive.overrides.push((r) =>
+      r.path === "/3/drive/7/files/42"
+        ? success({
+            ...providerItem(warningNodes, 42, 7),
+            path: "/Forged/Path",
+          })
+        : undefined,
+    );
+    run = await runMain({
+      argv: [],
+      env: { ...warningEnvironment(), KDRIVE_MCP_ROOTS: "7:42" },
+      lookup: f.lookup,
+      connect: f.connect,
+    });
+    expect(run.stderr()).toBe("");
+    expect(run.exits).toEqual([]);
+    expect(run.handle).toBeDefined();
+    expect(f.apiRequests().map((r) => r.path)).toEqual([
+      "/2/drive/init",
+      "/3/drive/7/files/42",
+    ]);
+  } finally {
+    await (run?.handle as { close(): Promise<void> } | undefined)?.close();
+    await f.close();
+  }
+});
 
 describe("BR-016 BR-028 diagnostic executable without network or deployment configuration", () => {
   const cli = resolve("dist/cli.js");

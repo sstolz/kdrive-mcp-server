@@ -45,6 +45,60 @@ function error(code: string, setting: string) {
 }
 afterEach(() => vi.restoreAllMocks());
 
+// F-048 characterization: BR-023 v4 keeps grammar and selected-list semantics.
+it("TestBR023_deny_validation_and_source_selection_unchanged", async () => {
+  const patterns = [
+    "/",
+    "/*",
+    "/Private",
+    "/Private/*",
+    "/Private/Doc?ments/**",
+    "**/Confidential/**",
+    "/Documents/Confidential/**",
+  ];
+  expect((await load({ KDRIVE_MCP_DENY: patterns.join(",") })).deny).toEqual(
+    patterns,
+  );
+  for (const pattern of ["relative", "/a/**b", "/a//b", "/a/[b]", "/a/"]) {
+    await expect(load({ KDRIVE_MCP_DENY: pattern })).rejects.toMatchObject(
+      error("INVALID_VALUE", "deny"),
+    );
+  }
+  const limit = "/" + "é".repeat(511) + "x";
+  expect(Buffer.byteLength(limit)).toBe(1024);
+  expect((await load({ KDRIVE_MCP_DENY: limit })).deny).toEqual([limit]);
+  await expect(load({ KDRIVE_MCP_DENY: limit + "x" })).rejects.toMatchObject(
+    error("LIMIT_EXCEEDED", "deny"),
+  );
+  const many = Array.from({ length: 256 }, (_, index) => `/Other${index}/**`);
+  expect((await load({ KDRIVE_MCP_DENY: many.join(",") })).deny).toEqual(many);
+  await expect(
+    load({ KDRIVE_MCP_DENY: [...many, "/Extra/**"].join(",") }),
+  ).rejects.toMatchObject(error("LIMIT_EXCEEDED", "deny"));
+  await expect(load({ KDRIVE_MCP_DENY: "/a,/a" })).rejects.toMatchObject(
+    error("INVALID_VALUE", "deny"),
+  );
+  const yaml = 'deny: ["/Yaml/**", "/Other/**"]\n';
+  const args = ["--config", "settings.yaml"];
+  expect((await load({}, args, yaml)).deny).toEqual(["/Yaml/**", "/Other/**"]);
+  expect((await load({ KDRIVE_MCP_DENY: "/Env/**" }, args, yaml)).deny).toEqual(
+    ["/Env/**"],
+  );
+  expect(
+    (
+      await load(
+        { KDRIVE_MCP_DENY: "/Env/**" },
+        [...args, "--deny", "/Cli/**,/Second/**"],
+        yaml,
+      )
+    ).deny,
+  ).toEqual(["/Cli/**", "/Second/**"]);
+  expect(
+    (await load({ KDRIVE_MCP_DENY: "/Env/**" }, [...args, "--deny", ""], yaml))
+      .deny,
+  ).toEqual([]);
+});
+
 describe("BR-017 BR-018 inventory and source precedence", () => {
   // Every one of the 34 inventory rows is represented, including both secret pairs.
   const rows = [

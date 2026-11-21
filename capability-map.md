@@ -1,5 +1,17 @@
 # Capability map
 
+## Provisional — Deny-pattern root warning
+
+[F-048 v1](features/F-048-deny-pattern-root-warning.md) (#110),
+[BR-434 v1](business-rules/BR-434.md), [BR-435 v1](business-rules/BR-435.md),
+[BR-021 v3](business-rules/BR-021.md), [BR-207 v3](business-rules/BR-207.md)
+and [BR-027 v2](business-rules/BR-027.md): planned redacted startup warnings
+for deny patterns proved outside all known configured roots and the enabled
+received namespace, preserving BR-040's raw-prefix exception and runtime
+filtering. Pending acceptance; no working capability or
+execution is claimed. Acceptance evidence belongs in
+[#110](https://github.com/sstolz/kdrive-mcp-server/issues/110).
+
 ## Accepted — Secret-file surrounding whitespace
 
 [F-047 v1](features/F-047-secret-file-surrounding-whitespace.md) (#111),

@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   loadConfiguration,
   preflightConfiguration,
+  preflightConfigurationWithDiagnosticPaths,
   type LocalConfiguration,
 } from "../../src/config.js";
 import {
@@ -55,6 +56,88 @@ const dup: Node[] = [
   ...tree,
   { id: 30, parent: 10, type: "dir", name: "docs" },
 ];
+
+// F-048 BR-207 v3: no parent lookup or second preflight to learn paths.
+it("TestBR207v3_paths_from_existing_resolution_evidence", async () => {
+  const f = (fixture = await kdriveFixture());
+  const a = await adapterFor(f);
+  for (const [selector, expected, requests] of [
+    [
+      `${DRIVE}:11`,
+      "/Private/docs",
+      ["/2/drive/init", `/3/drive/${DRIVE}/files/11`],
+    ],
+    [
+      `${DRIVE}:/Private/docs`,
+      "/Private/docs",
+      [
+        "/2/drive/init",
+        `/3/drive/${DRIVE}/files/1/files`,
+        `/3/drive/${DRIVE}/files/10/files`,
+      ],
+    ],
+    [`${DRIVE}:1`, "/", ["/2/drive/init", `/3/drive/${DRIVE}/files/1`]],
+  ] as const) {
+    const before = f.apiRequests().length;
+    const result = await preflightConfigurationWithDiagnosticPaths(
+      await local(selector),
+      a.preflight,
+    );
+    expect(result.diagnosticRootPaths).toEqual([
+      { driveId: DRIVE, folderId: expected === "/" ? 1 : 11, path: expected },
+    ]);
+    expect(
+      f
+        .apiRequests()
+        .slice(before)
+        .map((r) => r.path),
+    ).toEqual(requests);
+  }
+});
+
+it.each([
+  "missing-path",
+  "missing-parents",
+  "inconsistent-path",
+  "inconsistent-ancestry",
+  "wrong-parent-drive",
+  "raw-path-only",
+])("TestBR207v3_optional_path_failure_does_not_reject_root %s", async (row) => {
+  const f = (fixture = await kdriveFixture());
+  f.drive.overrides.push((r) => {
+    if (r.path !== `/3/drive/${DRIVE}/files/11`) return undefined;
+    const raw = providerItem(tree, 11);
+    if (row === "missing-path") delete raw.path;
+    if (row === "missing-parents") delete raw.parents;
+    if (row === "inconsistent-path") raw.path = "/Forged/docs";
+    if (row === "inconsistent-ancestry")
+      raw.parents = [{ id: 10, parent_id: 99, type: "dir", name: "Private" }];
+    if (row === "wrong-parent-drive")
+      raw.parents = [
+        { id: 10, drive_id: 8, parent_id: 1, type: "dir", name: "Private" },
+      ];
+    if (row === "raw-path-only") {
+      delete raw.parent_id;
+      delete raw.parents;
+    }
+    return success(raw);
+  });
+  const a = await adapterFor(f);
+  const result = await preflightConfigurationWithDiagnosticPaths(
+    await local(`${DRIVE}:11`),
+    a.preflight,
+  );
+  expect(result.configuration.resolvedRoots).toEqual([
+    { driveId: DRIVE, folderId: 11 },
+  ]);
+  expect(result.diagnosticRootPaths).toEqual([
+    { driveId: DRIVE, folderId: 11, path: null },
+  ]);
+  expect(f.apiRequests().map((r) => r.path)).toEqual([
+    "/2/drive/init",
+    `/3/drive/${DRIVE}/files/11`,
+  ]);
+});
 
 describe("BR-207 preflight resolution", () => {
   it("TestBR207_admin_drive_ID_root_and_unique_path_root_resolve", async () => {
@@ -395,7 +478,7 @@ describe("F-044 root path classification", () => {
   );
 
   it.each([0, 1, 2])(
-    "BR-207 v2 deeper component resolves only one exact directory — %i matches",
+    "BR-207 v3 deeper component resolves only one exact directory — %i matches",
     async (count) => {
       const nodes = [
         documents,
@@ -409,7 +492,7 @@ describe("F-044 root path classification", () => {
         listingTrace(10),
       ]);
       if (count === 1) {
-        // Pin the successful adapter record as well as config output.
+        // BR-207 v3 (F-048): the same successful walk also supplies its path.
         const a = await adapterFor(fixture!);
         await expect(
           a.preflight.resolveDirectory(7, {
@@ -417,7 +500,12 @@ describe("F-044 root path classification", () => {
             kind: "path",
             value: "/Documents/Reports",
           }),
-        ).resolves.toEqual({ driveId: 7, id: 11, type: "dir" });
+        ).resolves.toEqual({
+          driveId: 7,
+          id: 11,
+          type: "dir",
+          path: "/Documents/Reports",
+        });
       }
     },
   );

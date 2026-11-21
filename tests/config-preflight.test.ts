@@ -1,7 +1,9 @@
 import { expect, it, vi } from "vitest";
 import {
   loadConfiguration,
+  isResolvedConfiguration,
   preflightConfiguration,
+  preflightConfigurationWithDiagnosticPaths,
   type LocalConfiguration,
   type ResolvedConfiguration,
 } from "../src/config.js";
@@ -21,6 +23,171 @@ function typeBoundary(config: LocalConfiguration) {
   return resolved;
 }
 export { typeBoundary };
+
+// F-048 BR-021 v3 / BR-207 v3: optional resolver path, bound by identity.
+it("TestBR021v3_retains_identity_bound_diagnostic_paths", async () => {
+  const { classifyDenyPatterns } = await import("../src/deny-root-warning.js");
+  for (const selector of ["7:42", "7:/Private/Documents"]) {
+    const c = await loadConfiguration({
+      argv: [],
+      env: {
+        KDRIVE_ID: "7",
+        KDRIVE_TOKEN: "SYNTHETIC",
+        KDRIVE_MCP_ROOTS: selector,
+        KDRIVE_MCP_DENY: "/Documents/Confidential/**",
+      },
+    });
+    const inspectDrive = vi.fn(
+      async (id: number) => await Promise.resolve({ id, role: "admin" }),
+    );
+    const resolveDirectory = vi.fn(
+      async () =>
+        await Promise.resolve({
+          driveId: 7,
+          id: 42,
+          type: "dir",
+          path: "/Private/Documents",
+        }),
+    );
+    const result = await preflightConfigurationWithDiagnosticPaths(c, {
+      inspectDrive,
+      resolveDirectory,
+    });
+    const configuration: ResolvedConfiguration = result.configuration;
+    expect(isResolvedConfiguration(configuration)).toBe(true);
+    expect(configuration.resolvedRoots).toEqual([{ driveId: 7, folderId: 42 }]);
+    expect(configuration).not.toHaveProperty("diagnosticRootPaths");
+    expect(result.diagnosticRootPaths).toEqual([
+      { driveId: 7, folderId: 42, path: "/Private/Documents" },
+    ]);
+    expect(
+      classifyDenyPatterns(
+        configuration.deny,
+        result.diagnosticRootPaths,
+        configuration.sharedWithMe,
+      ),
+    ).toEqual([0]);
+    expect(inspectDrive).toHaveBeenCalledExactlyOnceWith(7);
+    expect(resolveDirectory).toHaveBeenCalledExactlyOnceWith(7, c.roots[0]);
+  }
+});
+
+it("TestBR021v3_unknown_or_conflicting_paths_are_conservative", async () => {
+  const { classifyDenyPatterns } = await import("../src/deny-root-warning.js");
+  for (const [roots, idPath, known] of [
+    ["7:42,8:42", null, null],
+    ["7:42,8:42,7:/Private/Documents", null, "/Private/Documents"],
+    ["7:/Private/Documents,8:42,7:42", null, "/Private/Documents"],
+    [
+      "7:42,8:42,7:/Private/Documents",
+      "/Private/Documents",
+      "/Private/Documents",
+    ],
+    ["7:42,8:42,7:/Other", "/Private/Documents", null],
+  ] as const) {
+    const c = await loadConfiguration({
+      argv: [],
+      env: {
+        KDRIVE_IDS: "7,8",
+        KDRIVE_TOKEN: "SYNTHETIC",
+        KDRIVE_MCP_ROOTS: roots,
+        KDRIVE_MCP_DENY: "/Mismatch/**",
+      },
+    });
+    const resolveDirectory = vi.fn(
+      async (
+        driveId: number,
+        selector: { kind: string; value: string | number },
+      ) =>
+        await Promise.resolve({
+          driveId,
+          id: 42,
+          type: "dir",
+          path:
+            driveId === 8
+              ? "/Second"
+              : selector.kind === "id"
+                ? idPath
+                : selector.value,
+        }),
+    );
+    const inspectDrive = vi.fn(
+      async (id: number) => await Promise.resolve({ id, role: "admin" }),
+    );
+    const result = await preflightConfigurationWithDiagnosticPaths(c, {
+      inspectDrive,
+      resolveDirectory,
+    });
+    expect(result.configuration.resolvedRoots).toEqual([
+      { driveId: 7, folderId: 42 },
+      { driveId: 8, folderId: 42 },
+    ]);
+    expect(result.diagnosticRootPaths).toEqual([
+      { driveId: 7, folderId: 42, path: known },
+      { driveId: 8, folderId: 42, path: "/Second" },
+    ]);
+    expect(
+      classifyDenyPatterns(
+        result.configuration.deny,
+        result.diagnosticRootPaths,
+        false,
+      ),
+    ).toEqual(known === null ? [] : [0]);
+    expect(resolveDirectory).toHaveBeenCalledTimes(c.roots.length);
+    expect(inspectDrive).toHaveBeenCalledTimes(2);
+  }
+});
+// F-048 characterization: BR-029 v1 / BR-021 v2 existing output and branding.
+it("TestBR029_existing_preflight_return_contract_unchanged", async () => {
+  const c = await local();
+  const inspectDrive = vi.fn(
+    async (id: number) => await Promise.resolve({ id, role: "admin" }),
+  );
+  const resolveDirectory = vi.fn(
+    async (driveId: number) =>
+      await Promise.resolve({ driveId, id: 42, type: "dir" }),
+  );
+  const result: ResolvedConfiguration = await preflightConfiguration(c, {
+    inspectDrive,
+    resolveDirectory,
+  });
+  expect(isResolvedConfiguration(result)).toBe(true);
+  expect(isResolvedConfiguration(c)).toBe(false);
+  expect(isResolvedConfiguration({ ...result })).toBe(false);
+  expect(result.resolvedRoots).toEqual([
+    { driveId: 7, folderId: 42 },
+    { driveId: 8, folderId: 42 },
+  ]);
+  expect(Object.isFrozen(result)).toBe(true);
+  expect(Object.isFrozen(result.resolvedRoots)).toBe(true);
+  expect(result).not.toHaveProperty("diagnosticRootPaths");
+  expect(result).not.toHaveProperty("configuration");
+  expect(inspectDrive).toHaveBeenCalledTimes(2);
+  expect(resolveDirectory).toHaveBeenCalledTimes(3);
+});
+
+// BR-021 v2 / BR-027 v1: pin failures after a previously resolved root.
+it("TestBR021_pre_warning_failure_characterization", async () => {
+  for (const rejects of [false, true]) {
+    const resolveDirectory = vi.fn(async (driveId: number) => {
+      await Promise.resolve();
+      if (driveId === 7) return { driveId, id: 42, type: "dir" };
+      if (rejects) throw new Error("SYNTHETIC_PRIVATE_PATH_CANARY");
+      return null;
+    });
+    await expect(
+      preflightConfiguration(await local(), {
+        inspectDrive: async (id) =>
+          await Promise.resolve({ id, role: "admin" }),
+        resolveDirectory,
+      }),
+    ).rejects.toMatchObject({
+      code: rejects ? "PREFLIGHT_FAILED" : "ROOT_NOT_RESOLVED",
+      setting: rejects ? "preflight" : "roots",
+    });
+    expect(resolveDirectory).toHaveBeenCalledTimes(2);
+  }
+});
 it("BR-021 BR-028 inspects only configured drives before roots and collapses resolved aliases", async () => {
   const trace: string[] = [];
   const c = await local();

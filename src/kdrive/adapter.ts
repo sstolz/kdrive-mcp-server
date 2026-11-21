@@ -478,13 +478,24 @@ export function createKdriveAdapter(
     }
     async function own(driveId: number, id: number) {
       const value = await success(routes.item(driveId, id));
+      let type: "dir" | "file";
       try {
         const checked = identity(wire(value).data, driveId);
         if (checked.id !== id) incomplete();
-        return checked.type;
+        type = checked.type;
       } catch {
         throw readUnavailable();
       }
+      // BR-207 v3: reuse this response; incomplete ancestry only loses evidence.
+      let path: string | null = null;
+      if (id === 1 && type === "dir") path = "/";
+      else
+        try {
+          path = treeItem(value.data, driveId).path;
+        } catch {
+          // Identity and type remain sufficient for preflight authorization.
+        }
+      return { type, path };
     }
     async function child(driveId: number, parent: number, component: string) {
       const matches: { id: number; type: "dir" | "file" }[] = [];
@@ -532,7 +543,7 @@ export function createKdriveAdapter(
           return {
             driveId,
             id: selector.value,
-            type: await own(driveId, selector.value),
+            ...(await own(driveId, selector.value)),
           };
         const components = selector.value
           .split("/")
@@ -543,13 +554,18 @@ export function createKdriveAdapter(
           type: "dir",
         };
         if (!components.length)
-          current = { id: 1, type: await own(driveId, 1) };
+          current = { id: 1, type: (await own(driveId, 1)).type };
         for (const component of components) {
           const next = await child(driveId, current.id, component);
           if (next?.type !== "dir") return null;
           current = next;
         }
-        return { driveId, id: current.id, type: current.type };
+        return {
+          driveId,
+          id: current.id,
+          type: current.type,
+          path: selector.value,
+        };
       },
     });
   }

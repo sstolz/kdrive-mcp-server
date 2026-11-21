@@ -4,6 +4,13 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
 
 ## [Unreleased]
 
+### Added
+
+- #110 / F-048 (pending acceptance): redacted stderr
+  startup warnings for deny patterns proved outside known applicable roots,
+  with conservative wildcard and folder-sharing exceptions; startup eligibility
+  and runtime filtering remain unchanged.
+
 ## [1.0.1] - 2026-11-20
 
 ### Added

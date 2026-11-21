@@ -548,6 +548,8 @@ SIGNING_KEY_FILE=./secrets/signing-key.pem
   is accepted but matches nothing in the personal space. Write the pattern
   from the full path, for example `/Private/Documents/Confidential/**`. A filtered
   item looks the same to the client as a missing one (`ACCESS_DENIED`).
+  A [deny-pattern root warning](#deny-pattern-root-warning) can identify this
+  mismatch after successful preflight; it does not correct the pattern.
 - The reverse proxy must preserve the `Host` header and close idle upstream
   keep-alive connections in less than 5 s, the server's keep-alive timeout;
   otherwise reused sockets can produce intermittent 502 responses. With
@@ -718,3 +720,58 @@ of those combinations have been verified with this server.
   `{"event":"kdrive_upstream_refused","status":401}` (or `403`) means kDrive
   refused the token: replace the token file and restart.
   `kdrive_upstream_unavailable` means kDrive did not answer.
+
+### Deny-pattern root warning
+
+After complete successful preflight, both stdio and HTTP startup offer one
+stderr JSON line for each deny pattern proved outside all applicable roots:
+
+```json
+{
+  "event": "deny_pattern_root_warning",
+  "level": "warn",
+  "setting": "deny",
+  "pattern_index": 0,
+  "reason": "outside_configured_roots"
+}
+```
+
+These are exactly the event's fields. `pattern_index` is the zero-based index
+in the effective selected `deny` list (CLI > environment > explicitly selected
+YAML > defaults), preserving list order. Look up that entry in your own
+configuration: the event contains no pattern, path, identifier or credential.
+Warnings appear in ascending index order, at most 256 per startup, before
+audit-sink opening or transport activation. A later unrelated startup failure
+can follow them; they do not announce readiness. Failed preflight, local-only
+configuration loading, `--help` and `--version` do not emit them. Sessions,
+tool calls and shutdown do not repeat them. Stdio stdout remains reserved for
+MCP; these warnings are neither HTTP responses nor mutation audit records.
+Warning writes are best effort and do not refuse startup.
+
+For root `7:/Private/Documents`, `/Documents/Confidential/**` warns because
+its first component differs. Use the full API path
+`/Private/Documents/Confidential/**` if that is the intended exclusion. Startup
+eligibility and runtime filtering are unchanged; no pattern is rewritten.
+
+The diagnostic is conservative. Wildcard components can leave incompatible
+patterns silent, and any unknown root path suppresses all warnings. Paths are
+startup snapshots; later root moves or renames are not monitored. Silence
+does not prove that matching items exist. With `sharedWithMe=true`, the
+possible received namespace `/Shared` counts too: `/Shared/Project/**` is
+compatible even when the configured roots are elsewhere. `/Other/**` still
+warns if it diverges from every configured root and `/Shared`.
+
+Folder-sharing checks retain BR-040's raw character-prefix comparison before
+the first wildcard, without component boundaries. For `/Private/Documents`,
+`/`, `/*`, `/Private` and `/Private/Documents2/**` therefore remain silent,
+including the last pattern's character-prefix overlap. This exception applies
+to configured roots only, not synthetic `/Shared`: `/Shared2/**` can still
+warn when received shares are enabled. Ancestor-only `/Private` matches that
+folder exactly, while `/Private/**` also matches its descendants.
+
+Do not remove a warned pattern automatically. As described in the
+[README](../README.md), any non-empty deny list still refuses folder restores,
+even if every pattern is flagged. Any non-empty deny list also makes otherwise
+eligible folder rename, move, trash and restore operations walk descendants,
+and large trees may produce `TRAVERSAL_LIMIT`. The warning does not establish
+that the pattern has no effect.
