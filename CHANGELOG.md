@@ -6,7 +6,7 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
 
 ### Added
 
-- #110 / F-048 (accepted 2026-11-21): redacted stderr
+- #110 / F-048 (accepted 2026-11-21 on main `f4487a2`; [#110 acceptance](https://github.com/sstolz/kdrive-mcp-server/issues/110#issuecomment-7062590216)): redacted stderr
   startup warnings for deny patterns proved outside known applicable roots,
   with conservative wildcard and folder-sharing exceptions; startup eligibility
   and runtime filtering remain unchanged.
