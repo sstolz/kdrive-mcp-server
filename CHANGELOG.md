@@ -19,7 +19,7 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
   Upgrade: a secret-file value that intentionally starts or ends with SPACE, TAB,
   CR or LF loses it; use the inline environment value instead. Earlier versions remove only one trailing LF or CRLF from token and upstream-secret files, refuse other surrounding TAB, CR or LF and keep surrounding SPACE in the value, so a rollback needs files without padding.
 - #112 / F-046 (accepted 2026-11-19 on main `e8ae20d`; [#112 acceptance](https://github.com/sstolz/kdrive-mcp-server/issues/112#issuecomment-7014711154)): the Compose example accepts subjects, e-mails or both identity allowlists; deployment guidance explains the combined requirement and prefers subjects because an e-mail address can be reassigned.
-  Upgrade: Compose no longer refuses an unset `OAUTH_ALLOWED_EMAILS`; the
+  Upgrade: `examples/compose.yaml` no longer refuses an unset `OAUTH_ALLOWED_EMAILS`; the
   server refuses at startup when both identity allowlists are empty.
 - #91 / F-024 v4 (accepted 2026-11-18): npm and image read-back validate healthy
   candidates and stable defaults; the publishing guide specifies owner-only

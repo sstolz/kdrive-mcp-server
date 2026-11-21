@@ -216,6 +216,22 @@ Once VERSION is stable, default installation becomes
 installable with `@beta` or an exact version. While VERSION is beta, the
 existing README.md and SPEC.md beta install text stays; #6 owns those edits.
 
+### 1.0.1 publication (#118)
+
+**Record (2026-11-20).** After a successful dry run (release run
+44766718053), the owner dispatched release run 44802572838 with
+`dry_run=false`, version `1.0.1` and SHA
+`dde1e32c0401820e6330c2df493f42b9630eb9a3` (tag `v1.0.1`). Jobs `verify`,
+`publish-image`, `publish-npm` and `read-back` all succeeded; read-back
+reported `release-verify: 0 of 14 checks failed`.
+
+- npm `@sstolz/kdrive-mcp-server` dist-tags: `latest=1.0.1`,
+  `beta=0.6.0-beta.2`; `1.0.1` was published with provenance.
+- Public GHCR image `ghcr.io/sstolz/kdrive-mcp-server`: tags `1.0.1` and
+  `latest` both resolve to OCI index
+  `sha256:58a37c17549e8e161a112ea2b93d1d8cf7196bc926ed3e6d2032b310dac6b051`
+  (`linux/amd64`, `linux/arm64`). Tag `1.0.0` keeps its digest above.
+
 ## Stable release lifecycle (F-024 v4, #91)
 
 ### SemVer and npm preflight predicates

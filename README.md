@@ -44,15 +44,14 @@ official server has them.
 It speaks standard MCP, so any compatible client can use it; only claude.ai
 has been verified end to end so far.
 
-**Status:** `1.0.0` was published on 2026-11-17 through
+**Status:** `1.0.1` was published on 2026-11-20 through
 the gated release workflow: `@sstolz/kdrive-mcp-server` under npm `latest` and
-`ghcr.io/sstolz/kdrive-mcp-server` under tags `1.0.0` and `latest` for
+`ghcr.io/sstolz/kdrive-mcp-server` under tags `1.0.1` and `latest` for
 `linux/amd64` and `linux/arm64`. Pin the image by its OCI index digest:
-`sha256:6f14301d4e9b0c4cd7c2f39b45f15c9b1222e92879ee10ea1131d06dac806708`.
-See the record under "First stable publication" in
-[docs/publishing.md](docs/publishing.md).
-Version `1.0.1` is prepared ([VERSION](VERSION)); its install examples below
-apply after publication. Changes are listed in [CHANGELOG.md](CHANGELOG.md).
+`sha256:58a37c17549e8e161a112ea2b93d1d8cf7196bc926ed3e6d2032b310dac6b051`.
+See the record under "1.0.1 publication" in
+[docs/publishing.md](docs/publishing.md). `1.0.0` remains published and
+installable by its exact version. Changes are listed in [CHANGELOG.md](CHANGELOG.md).
 
 ## What it offers
 
@@ -105,10 +104,10 @@ need it ([Limits and risks](#limits-and-risks)).
 
 #### With Docker
 
-After publication, you can use the image `ghcr.io/sstolz/kdrive-mcp-server` instead.
+You can use the image `ghcr.io/sstolz/kdrive-mcp-server` instead.
 Docker must be running and accessible to the client.
 
-After publication, read the image's digest, then pull it by digest. Both the version
+Read the image's digest, then pull it by digest. Both the version
 tag and `latest` can be overwritten.
 
 ```sh
