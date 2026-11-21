@@ -10,6 +10,7 @@ import { loadConfiguration, preflightConfiguration } from "../src/config.js";
 import { createPolicy, type EvidenceRequest } from "../src/policy/index.js";
 import { Refusal } from "../src/policy/values.js";
 import { matches } from "../src/policy/glob.js";
+import { classifyDenyPatterns } from "../src/deny-root-warning.js";
 
 // F-048 characterization: BR-034 v1 matches complete paths without normalization.
 it("TestBR034_pre_warning_exact_matching_characterization", () => {
@@ -89,6 +90,29 @@ const read = (id = 13, driveId = 7) => ({
   target: ref(id, driveId),
 });
 const denied = { ok: false, code: "ACCESS_DENIED" };
+
+// F-048 AC-10 / BR-034 v1: warning classification never changes enforcement.
+it("TestBR034_warning_does_not_change_matching", async () => {
+  for (const [pattern, expected] of [
+    ["/Elsewhere/**", [true, true]],
+    ["/r/a", [false, true]],
+    ["/r/a/**", [false, false]],
+  ] as const) {
+    const f = await fixture({ KDRIVE_MCP_DENY: pattern });
+    const before = await Promise.all([f.policy.check(read(11)), f.policy.check(read(13))]);
+    const denyBefore = [...f.config.deny];
+    expect(classifyDenyPatterns(f.config.deny, [{ driveId: 7, folderId: 10, path: "/r" }], false)).toEqual(pattern === "/Elsewhere/**" ? [0] : []);
+    expect(f.config.deny).toEqual(denyBefore);
+    expect(await Promise.all([f.policy.check(read(11)), f.policy.check(read(13))])).toEqual(before);
+    expect(before.map((result) => result.allowed)).toEqual(expected);
+    for (const [index, id] of [11, 13].entries()) {
+      const result = await f.policy.dispatch(read(id));
+      expect(result.ok).toBe(expected[index]);
+      if (!expected[index]) expect(result).toEqual(denied);
+    }
+    expect(f.execute).toHaveBeenCalledTimes(expected.filter(Boolean).length);
+  }
+});
 const page = (entries: unknown[], next?: string) => ({
   status: "complete",
   entries,

@@ -34,6 +34,8 @@ export async function runMain(options: {
   onRequest?: (method: "GET" | "POST" | "DELETE", template: string) => void;
   /** F-016 test seam: synthetic mutators by operation kind. */
   mutators?: Record<string, unknown>;
+  /** Observe/throw only synthetic stderr writes (F-048 best-effort warnings). */
+  onStderrWrite?: (text: string) => void;
 }): Promise<MainRun> {
   const { main } = await import("../../src/main.js");
   let stdout = "",
@@ -59,6 +61,7 @@ export async function runMain(options: {
     stdout: { write: (text: string) => (stdout += text) },
     stderr: {
       write: (text: string, callback?: (error?: Error | null) => void) => {
+        options.onStderrWrite?.(text);
         stderr += text;
         callback?.();
         return true;

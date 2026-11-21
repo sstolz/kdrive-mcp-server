@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { kdriveFixture } from "../helpers/kdrive.js";
 import { httpClient, runMain, textOf, tokenFile } from "../helpers/main.js";
 import { listeningPort, P } from "../helpers/http.js";
+import { warningEnvironment, warningFixture, warningLine } from "../helpers/deny-root-warning.js";
 import {
   CLAUDE,
   UPSTREAM,
@@ -32,6 +33,50 @@ let fixture: Awaited<ReturnType<typeof kdriveFixture>> | undefined;
 afterEach(async () => {
   await fixture?.close();
   fixture = undefined;
+});
+
+// F-048 BR-435 v1: the real common main path precedes the HTTP listener.
+it.each([false, true])("TestBR435_http_startup_warning_lifecycle throwing=%s", async (throws) => {
+  const f = (fixture = await warningFixture());
+  f.drive.nodes = f.drive.nodes.map((node) =>
+    node.id === 42 ? { ...node, name: "SYNTHETIC_ROOT_CANARY" } : node,
+  );
+  const http = await import("../../src/http/index.js");
+  const activation = vi.spyOn(http, "startHttpServer");
+  const port = await listeningPort();
+  const offered: string[] = [];
+  let run: Awaited<ReturnType<typeof runMain>> | undefined;
+  try {
+    run = await runMain({ argv: ["--http", "--insecure-no-auth"], env: { ...warningEnvironment("/Mismatch/SYNTHETIC_PATTERN_CANARY/**,/Private/SYNTHETIC_ROOT_CANARY/**,/Elsewhere/**"), KDRIVE_MCP_ROOTS: "7:/Private/SYNTHETIC_ROOT_CANARY", MCP_HTTP_PORT: String(port) }, lookup: f.lookup, connect: f.connect, onStderrWrite: (line) => {
+      if (!line.includes("deny_pattern_root_warning")) return;
+      expect(activation).not.toHaveBeenCalled();
+      expect(f.apiRequests()).toHaveLength(3);
+      offered.push(line);
+      if (throws) throw new Error("SYNTHETIC_WRITER_CANARY");
+    } });
+    expect(offered).toEqual([warningLine(0), warningLine(2)]);
+    expect(run.stderr()).toBe(throws ? "" : warningLine(0) + warningLine(2));
+    expect(run.stdout()).toBe(""); expect(run.exits).toEqual([]);
+    expect(activation).toHaveBeenCalledTimes(1);
+    const configuration = activation.mock.calls.at(0)?.[0].configuration;
+    const { isResolvedConfiguration } = await import("../../src/config.js");
+    expect(isResolvedConfiguration(configuration)).toBe(true);
+    expect(configuration).not.toHaveProperty("diagnosticRootPaths");
+    expect(configuration?.resolvedRoots).toEqual([{ driveId: 7, folderId: 42 }]);
+    for (let session = 0; session < 2; session++) {
+      const client = await httpClient(port);
+      try {
+        await client.listTools();
+        const info = await client.callTool({ name: "kdrive_info", arguments: { drive_id: 7, file_id: 43 } });
+        expect(JSON.stringify(info)).not.toContain("deny_pattern_root_warning");
+      } finally { await client.close(); }
+    }
+    await (run.handle as { close(): Promise<void> }).close();
+    expect(offered).toEqual([warningLine(0), warningLine(2)]);
+    expect(run.stdout()).toBe("");
+    const warningLines = run.stderr().split("\n").filter((line) => line.includes("deny_pattern_root_warning"));
+    expect(warningLines).toEqual(throws ? [] : [warningLine(0).trimEnd(), warningLine(2).trimEnd()]);
+  } finally { await (run?.handle as { close(): Promise<void> } | undefined)?.close(); activation.mockRestore(); }
 });
 
 describe("BR-210 HTTP composition", () => {
