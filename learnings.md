@@ -88,3 +88,4 @@ development archive, not in this repository (PROJECT.md, History).
 - 2026-11-18 — zsh parses `$var:l` and other `:x` modifiers after a variable — Write `${var}:latest` to keep the tag suffix literal.
 - 2026-11-18 — The global Git `user.name` can leak a personal name; this repository sets local `user.name` and `user.email` — Before the first branch push, compare `git log --format='%an <%ae>'` with main.
 - 2026-11-18 — A GitHub advisory can be withdrawn after it breaks `npm audit` — Re-check `gh api /advisories/<GHSA>` and its `withdrawn_at` field before building an allowlist.
+- 2026-11-21 — On the macOS host, `codex exec -s workspace-write` cannot reach the Docker socket, so a brief that makes running tests a precondition stalls the author (#110) — Brief Codex to write tests and code without running them; the orchestrator runs every test and gate and returns failures.

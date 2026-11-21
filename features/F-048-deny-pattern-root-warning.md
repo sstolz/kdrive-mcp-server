@@ -2,11 +2,14 @@
 id: F-048
 title: Warn about deny patterns outside configured roots
 ticket: "#110"
-status: frozen
+status: done
 version: 1
 ---
 
 ## Context
+
+This version was accepted on main `f4487a2` on 2026-11-21
+([#110 acceptance](https://github.com/sstolz/kdrive-mcp-server/issues/110#issuecomment-7062590216)).
 
 Operators can configure root `7:/Private/Documents` and deny pattern
 `/Documents/Confidential/**`. Both inputs are valid, but the pattern excludes
