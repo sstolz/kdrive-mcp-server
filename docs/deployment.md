@@ -26,12 +26,14 @@ share tool yet (#20).
 
 There are two ways to get the runtime image:
 
-- **Stable release (publication pending).** `1.0.1` is prepared for GHCR as
+- **Stable release.** `1.0.1` is published on GHCR as
   `ghcr.io/sstolz/kdrive-mcp-server:1.0.1`, for `linux/amd64` and
   `linux/arm64`. Image tags, including `latest`, can be overwritten, so pin
   the image by the manifest digest printed by release read-back
   ([publishing](publishing.md#versions), and step 1 below). The 1.0.1 digest
-  is not available yet; use the examples after publication.
+  is
+  `sha256:58a37c17549e8e161a112ea2b93d1d8cf7196bc926ed3e6d2032b310dac6b051`.
+  `1.0.0` remains published and installable by its exact version.
 - **Build from source.** `make image` builds the image from a checkout of
   `main`, with every merged change ([Build](#build)). A local build loads the
   image into the local engine only; nothing is published to a registry by
@@ -344,7 +346,7 @@ You need:
 
 ### 1. Get the image
 
-After publication, pull the stable image, or build from source (see
+Pull the stable image, or build from source (see
 [Current status](#current-status) for the difference).
 
 **Stable image, pinned by digest.** Read the digest of the multi-platform
