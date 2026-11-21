@@ -47,12 +47,6 @@ override the current Docker-only development contract.
 
 ### Feature ledger
 
-Issue #110 reserves [F-048 v1](../features/F-048-deny-pattern-root-warning.md)
-(draft) and BR-434–BR-435 v1 for conservative deny/root diagnostics. It proposes
-BR-023 v5, BR-021 v3, BR-207 v3 and BR-027 v2; no BR record or accepted behavior
-is established by this draft. Next proposed free IDs: F-049, BR-436. Recheck
-actual main before freeze and PR.
-
 | ID    | Ticket    | Spec path                                             | Status                                                                                                                                                                                                                                                                                                                                                   |
 | ----- | --------- | ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | F-001 | #3, #28   | `features/F-001-typescript-foundation.md`             | Done v4; accepted 2026-11-01 on `f2d38b32dbbd78059da6754bb11d9b8e561fd645`                                                                                                                                                                                                                                                                               |
@@ -154,6 +148,13 @@ BR-014 and BR-015 to v2 in its [frozen quality-gate contract](../features/F-011-
 and versions BR-387 to v2, active after acceptance on actual main `f72a15b`
 on 2026-11-15 (#67 comment `6902168340`). No new BR or ADR. Next free IDs: **F-044, BR-431, ADR-013**
 (BR-376 and BR-377 remain withdrawn).
+
+Issue #110 reserves [F-048 v1](../features/F-048-deny-pattern-root-warning.md)
+(draft) and BR-434–BR-435 v1 for conservative deny/root diagnostics, including
+the enabled received-share namespace. It proposes BR-021 v3, BR-207 v3 and
+BR-027 v2; BR-023 v4 remains unchanged. No BR record or accepted behavior is
+established by this draft. Next proposed free IDs: F-049, BR-436. Recheck
+actual main before freeze and PR.
 
 #14 was frozen after independent review and autonomous freeze; these
 allocations were accepted on actual main `7b046a0`. ADR-001–003 were verified on both actual
