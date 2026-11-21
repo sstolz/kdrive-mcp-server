@@ -149,12 +149,12 @@ and versions BR-387 to v2, active after acceptance on actual main `f72a15b`
 on 2026-11-15 (#67 comment `6902168340`). No new BR or ADR. Next free IDs: **F-044, BR-431, ADR-013**
 (BR-376 and BR-377 remain withdrawn).
 
-Issue #110 reserves [F-048 v1](../features/F-048-deny-pattern-root-warning.md)
-(draft) and BR-434–BR-435 v1 for conservative deny/root diagnostics, including
-the enabled received-share namespace. It proposes BR-021 v3, BR-207 v3 and
-BR-027 v2; BR-023 v4 remains unchanged. No BR record or accepted behavior is
-established by this draft. Next proposed free IDs: F-049, BR-436. Recheck
-actual main before freeze and PR.
+Issue #110 allocates [F-048 v1](../features/F-048-deny-pattern-root-warning.md)
+and BR-434–BR-435 v1 for conservative deny/root diagnostics, including
+the enabled received-share namespace, and versions BR-021 and BR-207 to v3
+and BR-027 to v2. F-048 v1 is done, accepted on main `f4487a2` on 2026-11-21
+([#110 acceptance](https://github.com/sstolz/kdrive-mcp-server/issues/110#issuecomment-7062590216)); all five rule versions are active.
+BR-023 v4 remains unchanged. Next free IDs: F-049, BR-436.
 
 #14 was frozen after independent review and autonomous freeze; these
 allocations were accepted on actual main `7b046a0`. ADR-001–003 were verified on both actual
