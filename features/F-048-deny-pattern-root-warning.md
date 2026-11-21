@@ -2,7 +2,7 @@
 id: F-048
 title: Warn about deny patterns outside configured roots
 ticket: "#110"
-status: draft
+status: frozen
 version: 1
 ---
 
