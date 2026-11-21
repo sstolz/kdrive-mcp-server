@@ -9,6 +9,24 @@ import { describe, expect, it, vi } from "vitest";
 import { loadConfiguration, preflightConfiguration } from "../src/config.js";
 import { createPolicy, type EvidenceRequest } from "../src/policy/index.js";
 import { Refusal } from "../src/policy/values.js";
+import { matches } from "../src/policy/glob.js";
+
+// F-048 characterization: BR-034 v1 matches complete paths without normalization.
+it("TestBR034_pre_warning_exact_matching_characterization", () => {
+  expect(matches("/Private", "/Private")).toBe(true);
+  expect(matches("/Private", "/Private/Documents")).toBe(false);
+  expect(matches("/Private/**", "/Private")).toBe(true);
+  expect(matches("/Private/**", "/Private/Documents/report")).toBe(true);
+  expect(matches("/", "/")).toBe(true);
+  expect(matches("/", "/Private")).toBe(false);
+  expect(matches("/private/**", "/Private/Documents")).toBe(false);
+  expect(matches("/é/**", "/e\u0301/Documents")).toBe(false);
+  expect(matches("/Private/*", "/Private/Documents")).toBe(true);
+  expect(matches("/Private/*", "/Private/Documents/report")).toBe(false);
+  expect(
+    matches("**/Confidential/**", "/Shared/Project/Confidential/report"),
+  ).toBe(true);
+});
 
 type Ref = { driveId: number; id: number };
 type Location = "live" | "original-trash";

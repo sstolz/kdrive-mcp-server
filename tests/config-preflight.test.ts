@@ -1,6 +1,7 @@
 import { expect, it, vi } from "vitest";
 import {
   loadConfiguration,
+  isResolvedConfiguration,
   preflightConfiguration,
   type LocalConfiguration,
   type ResolvedConfiguration,
@@ -21,6 +22,56 @@ function typeBoundary(config: LocalConfiguration) {
   return resolved;
 }
 export { typeBoundary };
+// F-048 characterization: BR-029 v1 / BR-021 v2 existing output and branding.
+it("TestBR029_existing_preflight_return_contract_unchanged", async () => {
+  const c = await local();
+  const inspectDrive = vi.fn(
+    async (id: number) => await Promise.resolve({ id, role: "admin" }),
+  );
+  const resolveDirectory = vi.fn(
+    async (driveId: number) =>
+      await Promise.resolve({ driveId, id: 42, type: "dir" }),
+  );
+  const result: ResolvedConfiguration = await preflightConfiguration(c, {
+    inspectDrive,
+    resolveDirectory,
+  });
+  expect(isResolvedConfiguration(result)).toBe(true);
+  expect(isResolvedConfiguration(c)).toBe(false);
+  expect(isResolvedConfiguration({ ...result })).toBe(false);
+  expect(result.resolvedRoots).toEqual([
+    { driveId: 7, folderId: 42 },
+    { driveId: 8, folderId: 42 },
+  ]);
+  expect(Object.isFrozen(result)).toBe(true);
+  expect(Object.isFrozen(result.resolvedRoots)).toBe(true);
+  expect(result).not.toHaveProperty("diagnosticRootPaths");
+  expect(result).not.toHaveProperty("configuration");
+  expect(inspectDrive).toHaveBeenCalledTimes(2);
+  expect(resolveDirectory).toHaveBeenCalledTimes(3);
+});
+
+// BR-021 v2 / BR-027 v1: pin failures after a previously resolved root.
+it("TestBR021_pre_warning_failure_characterization", async () => {
+  for (const rejects of [false, true]) {
+    const resolveDirectory = vi.fn(async (driveId: number) => {
+      await Promise.resolve();
+      if (driveId === 7) return { driveId, id: 42, type: "dir" };
+      if (rejects) throw new Error("SYNTHETIC_PRIVATE_PATH_CANARY");
+      return null;
+    });
+    await expect(
+      preflightConfiguration(await local(), {
+        inspectDrive: async (id) => await Promise.resolve({ id, role: "admin" }),
+        resolveDirectory,
+      }),
+    ).rejects.toMatchObject({
+      code: rejects ? "PREFLIGHT_FAILED" : "ROOT_NOT_RESOLVED",
+      setting: rejects ? "preflight" : "roots",
+    });
+    expect(resolveDirectory).toHaveBeenCalledTimes(2);
+  }
+});
 it("BR-021 BR-028 inspects only configured drives before roots and collapses resolved aliases", async () => {
   const trace: string[] = [];
   const c = await local();
