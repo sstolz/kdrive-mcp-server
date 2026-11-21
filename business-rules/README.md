@@ -1,6 +1,6 @@
 # Business-rule index
 
-All **431 allocated rules** (BR-218–BR-233 belong to F-015, BR-234–BR-259 to F-016, BR-260–BR-278 to F-017, BR-279–BR-289 to F-018, BR-290 and BR-292–BR-314 to F-019, BR-315–BR-321 to F-020, BR-322–BR-327 to F-021, BR-328–BR-340 to F-022, BR-341–BR-352 to F-023, BR-353–BR-375, BR-378 and BR-379 to F-024, BR-380–BR-388 to F-026, BR-389–BR-392 to F-027, BR-291, BR-305–BR-311 and BR-393–BR-395 to F-028 (#3; reserved for this work by F-019 as archive #109), BR-396–BR-398 to F-029 (#25), BR-399–BR-403 to F-030 (#23), BR-404–BR-410 to F-031 (#31), BR-411 to F-032 (#33), BR-412–BR-420 to F-034 (#4), BR-421 and BR-422 to F-035 (#46), BR-423–BR-426 to F-040 (#47 lot D), BR-427 to F-041 (#47 lot E), BR-428–BR-430 to F-042 (#42); BR-431–BR-433 to F-024 v4 (#91); BR-376 and BR-377 were withdrawn in F-024 v2, were never accepted, have no record and are never reused) now have a canonical record with YAML metadata, Rule,
+All **433 allocated rules** (BR-218–BR-233 belong to F-015, BR-234–BR-259 to F-016, BR-260–BR-278 to F-017, BR-279–BR-289 to F-018, BR-290 and BR-292–BR-314 to F-019, BR-315–BR-321 to F-020, BR-322–BR-327 to F-021, BR-328–BR-340 to F-022, BR-341–BR-352 to F-023, BR-353–BR-375, BR-378 and BR-379 to F-024, BR-380–BR-388 to F-026, BR-389–BR-392 to F-027, BR-291, BR-305–BR-311 and BR-393–BR-395 to F-028 (#3; reserved for this work by F-019 as archive #109), BR-396–BR-398 to F-029 (#25), BR-399–BR-403 to F-030 (#23), BR-404–BR-410 to F-031 (#31), BR-411 to F-032 (#33), BR-412–BR-420 to F-034 (#4), BR-421 and BR-422 to F-035 (#46), BR-423–BR-426 to F-040 (#47 lot D), BR-427 to F-041 (#47 lot E), BR-428–BR-430 to F-042 (#42); BR-431–BR-433 to F-024 v4 (#91); BR-434–BR-435 to F-048 (#110); BR-376 and BR-377 were withdrawn in F-024 v2, were never accepted, have no record and are never reused) now have a canonical record with YAML metadata, Rule,
 Rationale, concrete Given / When / Then Examples, Verification and History. Every
 new record begins its initial BR version1; BR-042 is now version2 under F-003 v2; BR-024 and BR-100
 version 2 were accepted with F-010 (#21) on main `3fc14c3`. BR-010, BR-012 and BR-014 v2 and BR-015 v3
@@ -1104,3 +1104,18 @@ activates BR-026 v2. Accepted on actual main `c58e7bb`, 2026-11-19 ([#111 accept
 | ID                  | Version | Rule                                                                                                                                   | Source                                                              | Status |
 | ------------------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- | ------ |
 | [BR-026](BR-026.md) | v2      | Four-byte boundary trimming of selected secret files after raw bounds; empty-result refusal; unchanged interior and inline validation. | [F-047 v1](../features/F-047-secret-file-surrounding-whitespace.md) | Active |
+
+## Pending — Deny-pattern root warning (#110)
+
+[F-048 v1](../features/F-048-deny-pattern-root-warning.md) prepares the
+following rules. Implementation and acceptance are pending; the previously
+accepted versions remain active until acceptance. Evidence belongs in
+[#110](https://github.com/sstolz/kdrive-mcp-server/issues/110).
+
+| ID | Version | Rule | Status |
+| --- | --- | --- | --- |
+| [BR-021](BR-021.md) | v3 | Separate identity-bound diagnostic root paths | Pending acceptance; v2 remains active |
+| [BR-207](BR-207.md) | v3 | Path evidence from existing resolution responses | Pending acceptance; v2 remains active |
+| [BR-027](BR-027.md) | v2 | Redacted startup warning exception | Pending acceptance; v1 remains active |
+| [BR-434](BR-434.md) | v1 | Conservative outside-root pattern classification | Pending acceptance |
+| [BR-435](BR-435.md) | v1 | Exact redacted stderr startup warning | Pending acceptance |
