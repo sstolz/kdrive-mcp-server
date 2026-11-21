@@ -8,6 +8,10 @@ import type {
 } from "./kdrive/index.js";
 import { PACKAGE_VERSION } from "./version.js";
 import type { MutationGate, Mutator } from "./mutation-gate.js";
+import {
+  classifyDenyPatterns,
+  type DiagnosticRootPath,
+} from "./deny-root-warning.js";
 
 type Signal = "SIGINT" | "SIGTERM";
 /** BR-216: the in-process seam of the packaged CLI (D-18). */
@@ -81,6 +85,32 @@ export function createOperatorEvents(
   };
 }
 
+/** BR-435 / BR-027 v2: redacted, best-effort startup events in both transports. */
+function warnOutsideRoots(
+  stderr: MainDependencies["stderr"],
+  configuration: import("./config.js").ResolvedConfiguration,
+  paths: readonly DiagnosticRootPath[],
+): void {
+  for (const pattern_index of classifyDenyPatterns(
+    configuration.deny,
+    paths,
+    configuration.sharedWithMe,
+  ))
+    try {
+      stderr.write(
+        `${JSON.stringify({
+          event: "deny_pattern_root_warning",
+          level: "warn",
+          setting: "deny",
+          pattern_index,
+          reason: "outside_configured_roots",
+        })}\n`,
+      );
+    } catch {
+      // A diagnostic write must not change startup or skip later warnings.
+    }
+}
+
 /** F-014 composition (BR-016 v2, BR-071 v2, BR-208, BR-210, BR-216). */
 export async function main(
   deps: MainDependencies,
@@ -136,16 +166,21 @@ export async function main(
     },
   });
   const safe = config.withoutCredential(local);
-  let configuration: Awaited<ReturnType<typeof config.preflightConfiguration>>;
+  let preflight: Awaited<
+    ReturnType<typeof config.preflightConfigurationWithDiagnosticPaths>
+  >;
   try {
-    configuration = await config.preflightConfiguration(
+    preflight = await config.preflightConfigurationWithDiagnosticPaths(
       safe,
       adapter.preflight,
+      config.preflightConfiguration,
     );
   } catch (error) {
     refuse(error);
     return undefined;
   }
+  const { configuration, diagnosticRootPaths } = preflight;
+  warnOutsideRoots(deps.stderr, configuration, diagnosticRootPaths);
   // BR-238/BR-239: the audit sink opens at startup in write and share modes only.
   const audit = await import("./audit/sink.js");
   let sink: import("./audit/sink.js").AuditSink | undefined;

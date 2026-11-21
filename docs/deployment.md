@@ -727,7 +727,13 @@ After complete successful preflight, both stdio and HTTP startup offer one
 stderr JSON line for each deny pattern proved outside all applicable roots:
 
 ```json
-{"event":"deny_pattern_root_warning","level":"warn","setting":"deny","pattern_index":0,"reason":"outside_configured_roots"}
+{
+  "event": "deny_pattern_root_warning",
+  "level": "warn",
+  "setting": "deny",
+  "pattern_index": 0,
+  "reason": "outside_configured_roots"
+}
 ```
 
 These are exactly the event's fields. `pattern_index` is the zero-based index

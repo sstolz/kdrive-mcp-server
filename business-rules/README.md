@@ -1112,10 +1112,10 @@ following rules. Implementation and acceptance are pending; the previously
 accepted versions remain active until acceptance. Evidence belongs in
 [#110](https://github.com/sstolz/kdrive-mcp-server/issues/110).
 
-| ID | Version | Rule | Status |
-| --- | --- | --- | --- |
-| [BR-021](BR-021.md) | v3 | Separate identity-bound diagnostic root paths | Pending acceptance; v2 remains active |
-| [BR-207](BR-207.md) | v3 | Path evidence from existing resolution responses | Pending acceptance; v2 remains active |
-| [BR-027](BR-027.md) | v2 | Redacted startup warning exception | Pending acceptance; v1 remains active |
-| [BR-434](BR-434.md) | v1 | Conservative outside-root pattern classification | Pending acceptance |
-| [BR-435](BR-435.md) | v1 | Exact redacted stderr startup warning | Pending acceptance |
+| ID                  | Version | Rule                                             | Status                                |
+| ------------------- | ------- | ------------------------------------------------ | ------------------------------------- |
+| [BR-021](BR-021.md) | v3      | Separate identity-bound diagnostic root paths    | Pending acceptance; v2 remains active |
+| [BR-207](BR-207.md) | v3      | Path evidence from existing resolution responses | Pending acceptance; v2 remains active |
+| [BR-027](BR-027.md) | v2      | Redacted startup warning exception               | Pending acceptance; v1 remains active |
+| [BR-434](BR-434.md) | v1      | Conservative outside-root pattern classification | Pending acceptance                    |
+| [BR-435](BR-435.md) | v1      | Exact redacted stderr startup warning            | Pending acceptance                    |

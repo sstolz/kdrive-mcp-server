@@ -27,30 +27,64 @@ const docText = readFileSync("docs/deployment.md", "utf8");
 
 // F-048 AC-12 / BR-435 v1: operator guidance is part of the diagnostic contract.
 it("TestBR435_operator_warning_guidance", () => {
-  const section = docText.split("### Deny-pattern root warning\n")[1]?.split(/\n#{1,3} /u)[0];
+  const section = docText
+    .split("### Deny-pattern root warning\n")[1]
+    ?.split(/\n#{1,3} /u)[0];
   expect(section).toBeDefined();
   const text = section ?? "";
   const example = /```json\n([^`]+)```/u.exec(text)?.[1];
-  expect(JSON.parse(example ?? "null")).toEqual({ event: "deny_pattern_root_warning", level: "warn", setting: "deny", pattern_index: 0, reason: "outside_configured_roots" });
+  expect(JSON.parse(example ?? "null")).toEqual({
+    event: "deny_pattern_root_warning",
+    level: "warn",
+    setting: "deny",
+    pattern_index: 0,
+    reason: "outside_configured_roots",
+  });
   for (const phrase of [
-    "complete successful preflight", "stdio and HTTP", "stderr JSON line",
-    "zero-based index", "effective selected", "ascending index order", "256",
-    "audit-sink opening or transport activation", "/Documents/Confidential/**",
-    "/Private/Documents/Confidential/**", "filtering are unchanged",
-    "unknown root path suppresses all warnings", "Wildcard components",
-    "startup snapshots", "does not prove that matching items exist",
-    "sharedWithMe=true", "/Shared/Project/**", "BR-040", "character-prefix",
-    "without component boundaries", "`/`", "`/*`", "`/Private`",
-    "`/Private/Documents2/**`", "not synthetic `/Shared`", "/Shared2/**",
-    "Do not remove a warned pattern automatically", "non-empty deny list",
-    "refuses folder restores", "every pattern is flagged", "rename, move, trash and restore",
-    "walk descendants", "TRAVERSAL_LIMIT",
-  ]) expect(text.replace(/\s+/gu, " "), phrase).toContain(phrase);
-  expect(docText).toContain("[deny-pattern root warning](#deny-pattern-root-warning)");
+    "complete successful preflight",
+    "stdio and HTTP",
+    "stderr JSON line",
+    "zero-based index",
+    "effective selected",
+    "ascending index order",
+    "256",
+    "audit-sink opening or transport activation",
+    "/Documents/Confidential/**",
+    "/Private/Documents/Confidential/**",
+    "filtering are unchanged",
+    "unknown root path suppresses all warnings",
+    "Wildcard components",
+    "startup snapshots",
+    "does not prove that matching items exist",
+    "sharedWithMe=true",
+    "/Shared/Project/**",
+    "BR-040",
+    "character-prefix",
+    "without component boundaries",
+    "`/`",
+    "`/*`",
+    "`/Private`",
+    "`/Private/Documents2/**`",
+    "not synthetic `/Shared`",
+    "/Shared2/**",
+    "Do not remove a warned pattern automatically",
+    "non-empty deny list",
+    "refuses folder restores",
+    "every pattern is flagged",
+    "rename, move, trash and restore",
+    "walk descendants",
+    "TRAVERSAL_LIMIT",
+  ])
+    expect(text.replace(/\s+/gu, " "), phrase).toContain(phrase);
+  expect(docText).toContain(
+    "[deny-pattern root warning](#deny-pattern-root-warning)",
+  );
   expect(text).toContain("[README](../README.md)");
   const readme = readFileSync("README.md", "utf8");
   expect(readme).toMatch(/folder restore/iu);
-  expect(readme.replace(/\s+/gu, " ")).toContain("folder restore is refused while deny patterns are configured");
+  expect(readme.replace(/\s+/gu, " ")).toContain(
+    "folder restore is refused while deny patterns are configured",
+  );
 });
 
 interface Service {

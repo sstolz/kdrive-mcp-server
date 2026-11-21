@@ -99,11 +99,22 @@ it("TestBR034_warning_does_not_change_matching", async () => {
     ["/r/a/**", [false, false]],
   ] as const) {
     const f = await fixture({ KDRIVE_MCP_DENY: pattern });
-    const before = await Promise.all([f.policy.check(read(11)), f.policy.check(read(13))]);
+    const before = await Promise.all([
+      f.policy.check(read(11)),
+      f.policy.check(read(13)),
+    ]);
     const denyBefore = [...f.config.deny];
-    expect(classifyDenyPatterns(f.config.deny, [{ driveId: 7, folderId: 10, path: "/r" }], false)).toEqual(pattern === "/Elsewhere/**" ? [0] : []);
+    expect(
+      classifyDenyPatterns(
+        f.config.deny,
+        [{ driveId: 7, folderId: 10, path: "/r" }],
+        false,
+      ),
+    ).toEqual(pattern === "/Elsewhere/**" ? [0] : []);
     expect(f.config.deny).toEqual(denyBefore);
-    expect(await Promise.all([f.policy.check(read(11)), f.policy.check(read(13))])).toEqual(before);
+    expect(
+      await Promise.all([f.policy.check(read(11)), f.policy.check(read(13))]),
+    ).toEqual(before);
     expect(before.map((result) => result.allowed)).toEqual(expected);
     for (const [index, id] of [11, 13].entries()) {
       const result = await f.policy.dispatch(read(id));

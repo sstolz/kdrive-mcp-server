@@ -81,9 +81,9 @@ it("TestBR023_deny_validation_and_source_selection_unchanged", async () => {
   const yaml = 'deny: ["/Yaml/**", "/Other/**"]\n';
   const args = ["--config", "settings.yaml"];
   expect((await load({}, args, yaml)).deny).toEqual(["/Yaml/**", "/Other/**"]);
-  expect(
-    (await load({ KDRIVE_MCP_DENY: "/Env/**" }, args, yaml)).deny,
-  ).toEqual(["/Env/**"]);
+  expect((await load({ KDRIVE_MCP_DENY: "/Env/**" }, args, yaml)).deny).toEqual(
+    ["/Env/**"],
+  );
   expect(
     (
       await load(
