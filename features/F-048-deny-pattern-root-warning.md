@@ -13,6 +13,9 @@ Operators can configure root `7:/Private/Documents` and deny pattern
 nothing below that root. The API tree includes `/Private`, even when the web
 UI omits it. The owner decision of 2026-11-19 is to warn, without refusing
 startup or changing filtering.
+The diagnostic preserves patterns whose raw prefixes can refuse folder sharing
+under BR-040, even when they match no path below a configured root. Any
+non-empty deny list also retains traversal effects on folder mutations.
 
 Sources examined:
 
@@ -29,6 +32,16 @@ Sources examined:
   does not automatically match its descendants.
   `/Private` alone does not deny `/Private/Documents`; terminal `/**`
   includes the named folder and its descendants. `/` matches only `/`.
+- [BR-040 v1](../business-rules/BR-040.md), `src/policy/index.ts`
+  (folder-share refusal): the raw prefix before the first `*` or `?` and the
+  folder path are compared with `startsWith` in both directions, without
+  component boundaries. `/`, `/*`, `/Private` and `/Private/Documents2/**`
+  can therefore refuse folder sharing beneath `/Private/Documents`.
+  Received-folder sharing is refused earlier by `src/policy/received.ts`
+  (`gate`), so BR-040 does not apply to synthetic `/Shared`. Any non-empty
+  deny list also makes otherwise eligible folder rename/move/trash/restore
+  walk descendants, with `TRAVERSAL_LIMIT` on large trees; the existing
+  folder-restore refusal remains.
 - [F-044](F-044-root-path-resolution-errors.md), BR-021 v2 and BR-207 v2,
   `src/config.ts` and `src/kdrive/adapter.ts`: both ID and path selectors
   resolve during preflight, but the resolved configuration currently retains
@@ -47,21 +60,26 @@ Sources examined:
 Add a bounded, conservative startup diagnostic over the effective selected
 deny list and resolved configured roots, plus the possible `/Shared` namespace
 when `sharedWithMe=true`. Emit one warning per pattern proved incompatible
-with every applicable root, in both stdio and HTTP modes. Preserve local
+with every applicable root and without a BR-040 raw-prefix relation to any
+known configured root, in both stdio and HTTP modes. Preserve local
 validation, startup eligibility, root authorization by ID, and runtime policy.
 
 This is a full-path, non-security-sensitive diagnostic change: it grants no
 access, changes no filtering, and logs no path content. Privacy and unchanged
 authorization remain review criteria. This authoring task creates only this
-draft and its allocation entry; implementation follows review and freeze.
+draft; implementation follows review and freeze. Separate index upkeep is
+tracked in #124.
 
 Implementation also updates `docs/deployment.md`: add the new operator event
 beside the existing troubleshooting events and link it from the `/Private`
 guidance. Explain the index, unchanged startup/filtering, conservative limits
 (wildcards, unknown paths, startup snapshots and no proof of existing items),
-and `/Shared` compatibility when `sharedWithMe=true`. State that any non-empty
-deny list still refuses folder restores, as documented in `README.md`; a
-flagged pattern therefore is not entirely without effect.
+and `/Shared` compatibility when `sharedWithMe=true`. Explain BR-040's
+raw-prefix exception, including character-prefix overlaps. State that any
+non-empty deny list still refuses folder restores, as documented in `README.md`,
+and makes otherwise eligible folder rename/move/trash/restore walk descendants,
+with `TRAVERSAL_LIMIT` on large trees. A flagged pattern is therefore not
+entirely without effect; the warning is not advice to remove it automatically.
 
 IDs were checked in the worktree and the locally available `origin/main`
 at `55f2b8e3d1f1eb5dcf7d4c72cf3abe5aa8a69b70`: F-047 and BR-433 are the
@@ -87,8 +105,9 @@ prior definitions/history, records changed versions as pending acceptance with
 F-048 as source, adds dated History entries and updates BR-named tests.
 No BR file is written during drafting.
 
-- **BR-021 v3** — v2 holds, except that successful preflight also returns
-  diagnostic path evidence, when available, bound to each resolved
+- **BR-021 v3** — v2 holds, except that the new
+  `preflightConfigurationWithDiagnosticPaths` export also returns diagnostic
+  path evidence after successful preflight, when available, bound to each resolved
   `(driveId, folderId)`. An unavailable diagnostic path does not invalidate
   an otherwise successful root resolution. Existing root validation and
   failure mappings are unchanged. This versions the existing resolved-root
@@ -110,6 +129,8 @@ No BR file is written during drafting.
   satisfies the conservative compatibility criterion below, including the
   synthetic `/Shared` root when `sharedWithMe=true`. This is a new
   diagnostic classification purpose, separate from BR-034's enforcement.
+  BR-040's raw-prefix relation to any known configured root also suppresses
+  the warning, as specified below.
   Verified by: AC-01–AC-07, AC-10, AC-11.
 - **BR-435 v1** — Each startup offers exactly one stderr JSON warning of the
   specified shape for each BR-434 v1 classification, after complete successful
@@ -145,12 +166,18 @@ unknown path. An ordinary preflight failure retains F-044's existing error,
 exit status and single sanitized stderr line, with no deny warnings even if
 earlier roots resolved successfully. No partial diagnostic escapes.
 
-Return a preflight result with `configuration` (the existing branded
-`ResolvedConfiguration`) and `diagnosticRootPaths` (identity-bound entries
+Keep exported `preflightConfiguration(local, resolver)` and its
+`Promise<ResolvedConfiguration>` return type unchanged, including BR-029's
+branding contract and all existing callers. Add a separate exported function
+`preflightConfigurationWithDiagnosticPaths(local, resolver)` in `src/config.ts`,
+which `main` calls instead. It returns a preflight result with `configuration`
+(the existing branded `ResolvedConfiguration`) and `diagnosticRootPaths` (identity-bound entries
 containing `driveId`, `folderId` and a known path or an explicit unknown).
 Keep the `ResolvedConfiguration` type, branding and `resolvedRoots` entries
-unchanged: each root still contains only `driveId` and `folderId`. `main`
-consumes the separate path evidence for this diagnostic and passes only
+unchanged: each root still contains only `driveId` and `folderId`. Both exports
+share one resolution implementation; `main` calls only the new export, without
+a second preflight or additional requests. `main` consumes the separate path
+evidence for this diagnostic and passes only
 `configuration` to policy, navigation, pagination and the HTTP handler.
 These paths are startup snapshots used only for this diagnostic. They never
 authorize runtime access or rebind configured IDs after a rename.
@@ -180,7 +207,17 @@ about possible paths, without consulting current descendants.
    each pattern component containing `*` or `?` still matches exactly one path
    component, so such a pattern can match only paths of exactly `n` components.
    Apply both conditions to each root.
-4. Warn only if no configured or synthetic root is compatible. A pattern
+4. Independently apply BR-040's exact raw-prefix relation to every known
+   configured root path `r`: let `p` be the pattern substring before its first
+   `*` or `?`, or the entire pattern if neither occurs. If
+   `p.startsWith(r) || r.startsWith(p)`, suppress the warning. This includes
+   empty prefixes and uses exact case-sensitive characters without component
+   boundaries or Unicode normalization. Apply this exception regardless of
+   startup mode, because the deny retains its folder-sharing effect in share
+   mode. Do not apply it to synthetic `/Shared`: received-folder shares are
+   refused by `received.gate` before BR-040, independently of the deny list.
+5. Warn only if no configured or synthetic root is component-compatible and
+   no configured root satisfies the BR-040 exception. A pattern
    potentially useful on one drive or in the enabled received namespace
    suppresses the warning globally; there is no per-drive warning.
 
@@ -194,8 +231,10 @@ where explicitly stated:
 | `/private/**` | Yes | Case differs. |
 | `/Private/Documents/Confidential/**` | No | Root is a prefix of the literal sequence. |
 | `/Private/Documents` | No | Equal sequences. |
-| `/Private` | Yes | One component cannot match at or below a two-component root. |
-| `/` | Yes | Zero components cannot match at or below a two-component root. |
+| `/Private` | No | BR-040 raw prefix is a prefix of the root, despite insufficient component count. |
+| `/` | No | BR-040 raw prefix `/` is a prefix of the root. |
+| `/*` | No | BR-040 raw prefix `/` is a prefix of the root. |
+| `/Private/Documents2/**` | No | BR-040 raw prefix starts with the root, despite the component mismatch. |
 | `/Private/*` | No | Two components can match the root itself. |
 | `/Private/**` | No | Literal sequence is above the root. |
 | `/Priv*/Documents/**`, `/?/Other/**`, `/**/Other` | No | Leading wildcard makes the literal sequence empty. |
@@ -206,10 +245,17 @@ where explicitly stated:
 | `/Shared/Project/**` | Yes | Received namespace disabled; configured root diverges. |
 | `/Shared/Project/**` with `sharedWithMe=true` | No | Synthetic `/Shared` root is a prefix of the literal sequence. |
 | `/Other/**` with `sharedWithMe=true` | Yes | Neither configured root nor `/Shared` is compatible. |
+| `/Shared2/**` with `sharedWithMe=true` | Yes | Component mismatch; BR-040 does not apply to synthetic `/Shared`. |
 
 A pattern without `**` that is shorter than every applicable root receives
-a warning, including ancestor-only literals. Wildcard component contents are
-still not solved for intersection: some incompatible patterns remain unwarned.
+a warning only if the BR-040 exception does not apply. Ancestor-only literals
+`/Private` and `/` are deliberately silent. The previously warned examples
+`/Documents/Confidential/**`, `/Private2/**`, `/private/**`,
+`/Other/*/Documents/**`, `/Shared/Project/**` with received shares disabled,
+and `/Other/**` with received shares enabled still warn; only `/Private` and
+`/` move from warned to silent in the previous table. Wildcard component
+contents are still not solved for intersection: some incompatible patterns
+remain unwarned.
 The warning claims `outside_configured_roots`, not an exhaustive proof that
 unwarned patterns match descendants. A configured root `/` suppresses every
 such warning. The event reason also accounts for the enabled received namespace.
@@ -260,14 +306,18 @@ with injected transport dependencies; no real account is required.
   and `tests/cli.test.ts`, `TestBR435_stdio_warns_without_refusal`.
 - **AC-02** (BR-434 v1) — Given each pattern/root row in the compatibility
   table, When classification runs, Then its result equals the Warn column,
-  including warnings for `/Private` and `/`, and no warning for `/Private/*`
-  because it matches the root itself. Cover component counts below, equal to
+  including no warning for `/Private`, `/`, `/*` and
+  `/Private/Documents2/**` under BR-040's raw-prefix exception, and no warning
+  for `/Private/*` because it matches the root itself. Assert the exception
+  in read, write and share modes. Cover component counts below, equal to
   and above the root depth, with `*`/`?` and with or without `**`. Verified by:
-  `tests/deny-root-warning.test.ts`, `TestBR434_compatibility_table`.
+  `tests/deny-root-warning.test.ts`, `TestBR434_compatibility_table` and
+  `TestBR434_raw_share_prefix_suppresses_warning`.
 - **AC-03** (BR-434 v1) — Given wildcard components before or after a
-  diverging literal component, When classification runs, Then it stops before
-  the first wildcard component, never uses a partial component, and exempts
-  leading `**/`. Verified by: `tests/deny-root-warning.test.ts`,
+  diverging literal component, When classification runs, Then its component
+  criterion stops before the first wildcard component and never uses a partial
+  component; the separate BR-040 raw-prefix exception still applies, and
+  leading `**/` is exempt. Verified by: `tests/deny-root-warning.test.ts`,
   `TestBR434_wildcard_prefix_is_conservative` (all wildcard rows above).
 - **AC-04** (BR-434 v1) — Given roots `7:/Private/Documents` and
   `8:/Documents`, and deny `/Documents/Confidential/**`, When startup checks
@@ -279,14 +329,18 @@ with injected transport dependencies; no real account is required.
 - **AC-05** (BR-021 v3, BR-207 v3, BR-434 v1) — Given ID selector `7:42`
   with valid full metadata path `/Private/Documents` and, separately, a path
   selector resolving to that same folder, When preflight finishes, Then both
-  return identity-bound paths separately from `configuration`, produce the
+  return identity-bound paths separately from `configuration` through
+  `preflightConfigurationWithDiagnosticPaths`, produce the
   same diagnostic result, preserve ID authorization and existing request
   counts, and never diagnose the raw string `7:42` as a path. The branded
   `ResolvedConfiguration` and its `resolvedRoots` shape remain unchanged;
   policy, navigation, pagination and HTTP receive only that configuration,
-  without diagnostic paths.
+  without diagnostic paths. Existing `preflightConfiguration` callers still
+  receive `ResolvedConfiguration` directly and pass BR-029 branding checks,
+  without mechanical caller updates.
   Verified by: `tests/config-preflight.test.ts`,
-  `TestBR021v3_retains_identity_bound_diagnostic_paths`, and
+  `TestBR021v3_retains_identity_bound_diagnostic_paths`,
+  `TestBR029_existing_preflight_return_contract_unchanged`, and
   `tests/kdrive/adapter-preflight.test.ts`,
   `TestBR207v3_paths_from_existing_resolution_evidence` (including ID `1`).
 - **AC-06** (BR-021 v3, BR-207 v3, BR-434 v1) — Given valid ID/type
@@ -338,21 +392,30 @@ with injected transport dependencies; no real account is required.
 - **AC-11** (BR-434 v1) — Given root `7:/Private/Documents` and deny
   `/Shared/Project/**`, When startup runs with `sharedWithMe=true`, Then no
   warning is emitted; with `sharedWithMe=false`, exactly index `0` warns.
-  Given `/Other/**` instead, Then index `0` warns in both cases. Include
+  Given `/Other/**` instead, Then index `0` warns in both cases. Given
+  `/Shared2/**` with `sharedWithMe=true`, Then it still warns: BR-040's raw
+  exception does not extend to synthetic `/Shared`. Include
   `/Shared/Project/report` as a received path in AC-10's no-false-warning
   enumeration, independently of configured drives. Verified by:
   `tests/deny-root-warning.test.ts`,
-  `TestBR434_shared_with_me_namespace_suppresses_warning`, and
+  `TestBR434_shared_with_me_namespace_suppresses_warning`,
+  `TestBR434_received_namespace_has_no_raw_share_prefix_exception`, and
   `tests/cli.test.ts`, `TestBR434_received_namespace_startup`.
 - **AC-12** (BR-435 v1) — Given the operator guidance in
   `docs/deployment.md`, When the feature is documented, Then its operator-event
   guidance describes the exact event shape, zero-based selected-list index,
   both transports and successful-preflight timing, and its `/Private` guidance
-  explains the warning with a concrete corrected full-path example. It states
+  explains the warning for `/Documents/Confidential/**` with a concrete
+  corrected full-path example. It explains BR-040's raw-prefix exception
+  (including silent `/`, `/*`, `/Private` and `/Private/Documents2/**`) and
+  does not advise automatic removal of warned patterns. It states
   the conservative limits (unknown root paths suppress warnings, wildcard
   false negatives, startup snapshots, no existence proof), the enabled
   `/Shared` compatibility case, and the unchanged refusal of folder restores
-  for any non-empty deny list, even when every pattern is flagged. Verified by:
+  for any non-empty deny list, even when every pattern is flagged. It also
+  states that any non-empty deny list makes otherwise eligible folder rename,
+  move, trash and restore walk descendants and may cause `TRAVERSAL_LIMIT`
+  on large trees. Verified by:
   `tests/deployment-examples.test.ts`,
   `TestBR435_operator_warning_guidance`, and a documentation content/link check
   against this spec and README's existing restore guidance.
@@ -361,18 +424,23 @@ with injected transport dependencies; no real account is required.
 
 1. **Conservative literal-component prefixes plus component counts.** Choose
    the criterion above, requiring `n ≥ root component count` for patterns
-   without `**`. This catches ancestor-only `/Private` and `/` for root
-   `/Private/Documents`, while retaining `/Private/*`, which matches the root.
+   without `**`, plus BR-040's exact raw-prefix exception for configured roots.
+   `/Private`, `/`, `/*` and `/Private/Documents2/**` are deliberately silent
+   for root `/Private/Documents` because they retain folder-share effects;
+   `/Private/*` is also silent because it matches the root.
    This follows the existing exact-path matcher and the issue's need without
    requiring a full glob intersection solver.
-   Reject raw character-prefix comparison (component-boundary errors), exact
+   Reject raw character-prefix comparison as the sole matching criterion;
+   retain it only for the unchanged BR-040 effect. Reject exact
    literal-only comparison ignoring wildcard positions (false warnings), and
    a full glob-language intersection solver (unnecessary complexity).
 2. **Global usefulness across drives and received shares.** One compatible
    root anywhere suppresses the warning, matching global deny semantics. When
    `sharedWithMe=true`, treat `/Shared` as a synthetic compatible-root candidate
-   under the same criterion. This prevents false warnings on effective
-   received-share denies while still diagnosing patterns such as `/Other/**`.
+   under the component criterion, without the BR-040 raw-prefix exception:
+   received-folder shares are already refused by `received.gate`. This
+   prevents false warnings on effective received-share denies while still
+   diagnosing patterns such as `/Other/**`.
    Reject suppressing all warnings when received shares are enabled (needlessly
    loses useful diagnostics) and per-drive warnings (flag intentional patterns
    serving another configured drive or the received namespace).
@@ -382,8 +450,11 @@ with injected transport dependencies; no real account is required.
    (wrong for IDs), extra path-discovery requests (additional latency/failure
    surface), and rejecting otherwise valid ID roots for absent diagnostic
    evidence (contradicts warn-without-refusal). Return paths separately in the
-   preflight result; reject extending `ResolvedConfiguration`, because paths
-   are diagnostic evidence with no role in its runtime consumers. A sparse ID
+   result of `preflightConfigurationWithDiagnosticPaths`; keep the existing
+   `preflightConfiguration` return type and callers unchanged, using a shared
+   resolution implementation. Reject a second resolution pass and extending
+   `ResolvedConfiguration`, because paths are diagnostic evidence with no role
+   in its runtime consumers. A sparse ID
    response can therefore suppress the diagnostic; this is an explicit
    conservative limit.
 4. **One redacted structured event in both transports.** Select the exact
@@ -405,7 +476,7 @@ with injected transport dependencies; no real account is required.
    BR-027 v1→v2 in place for their same-purpose extensions; allocate BR-434
    and BR-435 v1 for the classifier and event. Keep BR-023 v4 unchanged:
    its accepted/rejected inputs do not change; BR-435 owns the warning.
-   BR-034, BR-048, BR-050, BR-071, BR-167 and
+   BR-029, BR-034, BR-040, BR-048, BR-050, BR-071, BR-167 and
    BR-217 remain unchanged for the reasons above. No ADR is needed for this
    reversible diagnostic. Implementation prepares pending BR/capability and
    changelog records; acceptance evidence and exposed token counters belong
@@ -438,3 +509,20 @@ with injected transport dependencies; no real account is required.
 - **110-spec-review-1-opus #6 — retained.** Move the #110 allocation paragraph
   after the ledger table beside the existing allocation notes, preserving the
   index's established structure and removing the withdrawn BR-023 version.
+- **110-spec-review-2-opus #1 — retained, option (a).** Suppress BR-434
+  warnings whenever BR-040's exact raw-prefix relation holds for a configured
+  root, preserving folder-share effects. `/Private` and `/` move consciously
+  to silent; the other previously warned table examples still warn. Add `/*`
+  and `/Private/Documents2/**`, AC-02 tests, and explicit traversal/large-tree
+  guidance in AC-12. Verified in `received.gate` that received-folder sharing
+  is refused before BR-040, so synthetic `/Shared` uses only the component
+  criterion; AC-11 tests that boundary. Context, Scope and Decisions reflect
+  these unchanged policy effects.
+- **110-spec-review-2-opus #2 — retained.** Keep `preflightConfiguration`
+  and its `Promise<ResolvedConfiguration>` return type unchanged. Name the
+  separate exported `preflightConfigurationWithDiagnosticPaths` that `main`
+  calls, sharing one resolution implementation, so existing callers and
+  BR-029 branding retain their contract without extra upstream requests.
+- **110-spec-review-2-opus #3 — deferred to #124.** The pre-existing spec-index
+  ledger gap is outside #110's scope. Leave `docs/spec-index.md` unchanged;
+  the separate issue tracks its repair without widening this draft.
