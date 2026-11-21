@@ -37,9 +37,12 @@ the day of the 1.0 publication.
 
 ## Versions
 
-`1.0.0` is the current stable release (#6), published on 2026-11-17 (see the
-record under [First stable publication](#first-stable-publication-f-024-v3-89)).
-The image index digest is
+`1.0.1` is the current stable release (#118), published on 2026-11-20 (see the
+record under [1.0.1 publication](#101-publication-118)). The image index digest
+is `sha256:58a37c17549e8e161a112ea2b93d1d8cf7196bc926ed3e6d2032b310dac6b051`.
+`1.0.0` (#6), published on 2026-11-17, stays installable by its exact version
+(see [First stable publication](#first-stable-publication-f-024-v3-89)); its
+image index digest is
 `sha256:6f14301d4e9b0c4cd7c2f39b45f15c9b1222e92879ee10ea1131d06dac806708`.
 
 - The public beta was first `0.6.0-beta.1`; the current published beta is
@@ -230,7 +233,9 @@ reported `release-verify: 0 of 14 checks failed`.
 - Public GHCR image `ghcr.io/sstolz/kdrive-mcp-server`: tags `1.0.1` and
   `latest` both resolve to OCI index
   `sha256:58a37c17549e8e161a112ea2b93d1d8cf7196bc926ed3e6d2032b310dac6b051`
-  (`linux/amd64`, `linux/arm64`). Tag `1.0.0` keeps its digest above.
+  (`linux/amd64`, `linux/arm64`). Tag `1.0.0` still resolves to
+  `sha256:6f14301d4e9b0c4cd7c2f39b45f15c9b1222e92879ee10ea1131d06dac806708`.
+- Evidence: [#118 comment `118-release-1-orchestrator`](https://github.com/sstolz/kdrive-mcp-server/issues/118#issuecomment-7059295738).
 
 ## Stable release lifecycle (F-024 v4, #91)
 

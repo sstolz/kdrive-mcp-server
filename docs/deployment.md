@@ -31,7 +31,9 @@ There are two ways to get the runtime image:
   `linux/arm64`. Image tags, including `latest`, can be overwritten, so pin
   the image by the manifest digest printed by release read-back
   ([publishing](publishing.md#versions), and step 1 below). The 1.0.1 digest
-  is `sha256:58a37c17549e8e161a112ea2b93d1d8cf7196bc926ed3e6d2032b310dac6b051`. `1.0.0` remains published and installable by its exact version.
+  is
+  `sha256:58a37c17549e8e161a112ea2b93d1d8cf7196bc926ed3e6d2032b310dac6b051`.
+  `1.0.0` remains published and installable by its exact version.
 - **Build from source.** `make image` builds the image from a checkout of
   `main`, with every merged change ([Build](#build)). A local build loads the
   image into the local engine only; nothing is published to a registry by
