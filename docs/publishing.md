@@ -92,6 +92,25 @@ and commit is required, and its run link recorded, before any `dry_run=false`
 dispatch. Agents never dispatch with `dry_run=false` and never approve a
 `release` deployment; the owner does both.
 
+### GitHub Release
+
+The release workflow publishes only to npm and GHCR; it creates no GitHub
+Release. Once a `dry_run=false` run has succeeded, read-back included, create
+the GitHub Release on the existing tag `v<version>`, titled `v<version>`, with
+that version's `CHANGELOG.md` section as notes. Never create it before
+read-back passes. The owner creates it, or an agent does on the owner's go for
+that version, and the release ticket records it.
+
+```sh
+# Notes: the CHANGELOG.md section of <version>, without its heading.
+gh release create v<version> --verify-tag --title v<version> --notes-file <notes> --latest
+# Beta instead: --prerelease --latest=false
+gh release list --limit 3
+```
+
+`gh release list` must show the stable release as `Latest`, or the beta as
+`Pre-release`.
+
 ### Owner preconditions
 
 In this order: P-0, P-1, P-4, P-2 and P-5 before the first non-dry-run
