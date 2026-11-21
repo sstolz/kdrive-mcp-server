@@ -47,6 +47,12 @@ override the current Docker-only development contract.
 
 ### Feature ledger
 
+Issue #110 reserves [F-048 v1](../features/F-048-deny-pattern-root-warning.md)
+(draft) and BR-434–BR-435 v1 for conservative deny/root diagnostics. It proposes
+BR-023 v5, BR-021 v3, BR-207 v3 and BR-027 v2; no BR record or accepted behavior
+is established by this draft. Next proposed free IDs: F-049, BR-436. Recheck
+actual main before freeze and PR.
+
 | ID    | Ticket    | Spec path                                             | Status                                                                                                                                                                                                                                                                                                                                                   |
 | ----- | --------- | ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | F-001 | #3, #28   | `features/F-001-typescript-foundation.md`             | Done v4; accepted 2026-11-01 on `f2d38b32dbbd78059da6754bb11d9b8e561fd645`                                                                                                                                                                                                                                                                               |
