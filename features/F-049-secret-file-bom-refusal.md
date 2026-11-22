@@ -251,6 +251,9 @@ repository. These names specify required tests, not executed results.
 For AC-01–AC-18, use `tests/config.test.ts`. Exact names are
 `BR-026 v3 F-049 AC-NN <label>`, except AC-11 and AC-18 use
 `BR-026 v3 BR-027 v3 F-049 AC-NN <label>`; rows also verify the other BRs listed.
+The two AC-15 rows that run key construction (`FF FE + P`, `FE FF + P`) go
+instead in `tests/auth/proxy-construction.test.ts`, named
+`BR-026 v3 BR-124 v2 F-049 AC-15 <label>`.
 
 | AC / BRs | Given | When | Then | Test label |
 | --- | --- | --- | --- | --- |
@@ -269,8 +272,8 @@ For AC-01–AC-18, use `tests/config.test.ts`. Exact names are
 | AC-13 / BR-026 v3 | Each text file: `EF`, `EF BB`, `FF FE 78 00`, `FF`, `78 00`, `78 09 79` | Configuration loads | `CREDENTIAL_INVALID/<logical setting>`; partial/other markers not misclassified as BOM | other invalid text unchanged |
 | AC-14 / BR-026 v3 | Each file: zero bytes, `W`; each text file also `W + X + W`, `58 20 59` | Configuration loads | Empty results give `CREDENTIAL_INVALID`; text results are SYNTHETIC and the three ASCII characters U+0058, SPACE, U+0059 respectively | empty and ASCII trim unchanged |
 | AC-15 / BR-026 v3 | Signing file `FF 00 0A`, also `EF BB` | Configuration loads without proxy construction | Opaque bytes `FF 00` and `EF BB` retained; no local UTF-8 or control check | opaque signing bytes unchanged |
-| AC-15 / BR-026 v3, BR-124 v2 | Signing file `FF FE + P` | Configuration loads, then key construction runs | Opaque bytes unchanged; no `CREDENTIAL_BOM`; existing BR-124 refusal at key construction | opaque signing bytes unchanged |
-| AC-15 / BR-026 v3, BR-124 v2 | Signing file `FE FF + P` | Configuration loads, then key construction runs | Opaque bytes unchanged; no `CREDENTIAL_BOM`; existing BR-124 refusal at key construction | opaque signing bytes unchanged |
+| AC-15 / BR-026 v3, BR-124 v2 | Signing file `FF FE + P` | Configuration loads, then key construction runs | Opaque bytes unchanged; no `CREDENTIAL_BOM`; existing BR-124 refusal at key construction | UTF-16LE marker stays opaque |
+| AC-15 / BR-026 v3, BR-124 v2 | Signing file `FE FF + P` | Configuration loads, then key construction runs | Opaque bytes unchanged; no `CREDENTIAL_BOM`; existing BR-124 refusal at key construction | UTF-16BE marker stays opaque |
 | AC-16 / BR-026 v3 | Invalid drive ID `0` with selected file `B + X`; separately conflicting inline/file selectors with that fixture | Configuration loads | Existing `INVALID_VALUE/driveId` or selector-conflict error wins; zero credential reads | configuration errors before reads |
 | AC-17 / BR-026 v3 | Valid higher-priority inline X and unselected lower-priority file fixture `B + X`; separately selected token `B + X` with valid lower-priority source | Configuration loads | First case retains X without reading the file; second refuses with `CREDENTIAL_BOM/token` without fallback | selection and no fallback unchanged |
 | AC-18 / BR-026 v3, BR-027 v3 | Each selected file with `B + X`, `W + B + X + W`, `B + B + X`; synthetic selector path and reader-error canaries | Configuration loads and error is serialized | Exactly `{code:"CREDENTIAL_BOM",setting:<canonical setting>}` and fixed message; no extra enumerable data/cause or console logging; content/path/length/trim/BOM position absent | fixed BOM diagnostics |
@@ -435,3 +438,4 @@ None.
 - **117-spec-review-2-opus — finding 3 — minor — retained.** Context cites the owner decision comment recorded on 2026-11-22 confirming the 2026-11-21 broadening.
 - **117-spec-review-2-opus — finding 4 — minor — retained.** AC-25 names the orchestrator evidence and exact content commands, records the absent Makefile link target and has no test name.
 - **117-spec-review-2-opus — finding 5 — minor — retained.** AC-15 preserves both UTF-16 marker prefixes as opaque bytes before the existing BR-124 key-construction refusal.
+- **117-spec-review-3-opus — residual — minor — retained.** The two UTF-16 AC-15 rows get distinct labels and live in `tests/auth/proxy-construction.test.ts`, since they run key construction.
