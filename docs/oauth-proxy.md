@@ -22,6 +22,10 @@ mounts them on HTTP routes (see "HTTP server" below).
   `oauthUpstreamClientSecret`, followed by four-byte-value ASCII boundary trim,
   fatal UTF-8 decoding and ASCII-control checks. Inline credentials remain
   unchanged, including U+FEFF, and are never trimmed.
+- The owner provisions the file; the server never generates a key.
+- The key's `kid` is its RFC 7638 thumbprint. Restarting with the same file
+  keeps issued access tokens valid until they expire (one hour). Replacing the
+  file invalidates them, and clients authorize again.
 
 The proxy uses the strictly necessary `__Host-kdrive-oauth` browser-binding
 cookie. See [cookie lifetime and attributes](../SECURITY.md#cookie).

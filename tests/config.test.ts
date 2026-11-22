@@ -1744,14 +1744,24 @@ for (const [index, kind] of secretFileCases.entries()) {
   const textCase = (
     offset: number,
     label: string,
-    rows: readonly (readonly [Uint8Array, string | undefined])[],
+    rows: readonly (readonly [
+      Uint8Array,
+      string | undefined,
+      "CREDENTIAL_BOM"?,
+    ])[],
   ) => {
     const ac = String(index * 7 + offset).padStart(2, "0");
-    it.each(rows)(
+    it.each(
+      rows.map(([content, expected, expectedError]) => ({
+        content,
+        expected,
+        expectedError,
+      })),
+    )(
       `BR-026 v3 AC-${ac} ${kind.name} ${label}`,
-      async (content, expected) => {
+      async ({ content, expected, expectedError }) => {
         const operation = loadSyntheticFile(kind, content);
-        if (Buffer.from(content).includes(Buffer.from([0xef, 0xbb, 0xbf])))
+        if (expectedError === "CREDENTIAL_BOM")
           await expect(operation).rejects.toMatchObject(
             error("CREDENTIAL_BOM", kind.setting),
           );
@@ -1793,10 +1803,9 @@ for (const [index, kind] of secretFileCases.entries()) {
     }),
   );
   textCase(6, "nontrimmed Unicode", [
-    ...["\u00a0", "\ufeff", "\u2003"].map((edge) => {
-      const content = edge + value + (edge === "\u2003" ? "" : edge);
-      return [bytes(content), content] as const;
-    }),
+    [bytes("\u00a0" + value + "\u00a0"), "\u00a0" + value + "\u00a0"],
+    [bytes("\ufeff" + value + "\ufeff"), undefined, "CREDENTIAL_BOM"],
+    [bytes("\u2003" + value), "\u2003" + value],
     [bytes(" \u00a0" + value + "\u00a0\n"), "\u00a0" + value + "\u00a0"],
   ]);
   textCase(7, "NUL and invalid encoding", [
