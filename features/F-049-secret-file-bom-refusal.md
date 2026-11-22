@@ -2,7 +2,7 @@
 id: F-049
 title: Secret file BOM refusal
 ticket: "#117"
-status: draft
+status: frozen
 version: 1
 ---
 
