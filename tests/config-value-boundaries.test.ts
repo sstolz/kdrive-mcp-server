@@ -334,7 +334,7 @@ boundary("P-BR025-002 BR-025 v2: rejects explicit insecure true with stdio", {
   env: { KDRIVE_MCP_INSECURE_NO_AUTH: "1" },
   error: { code: "CONFLICTING_SETTINGS", setting: "insecureNoAuth" },
 });
-boundary("P-BR026-001 BR-026 v2: accepts a one-byte environment token", {
+boundary("P-BR026-001 BR-026 v3: accepts a one-byte environment token", {
   context: "stdio",
   env: { KDRIVE_TOKEN: "x" },
   expected: { token: "x" },
@@ -344,18 +344,18 @@ const tokenFile = {
   omit: ["KDRIVE_TOKEN"],
   env: { KDRIVE_TOKEN_FILE: "/synthetic/token" },
 };
-boundary("P-BR026-002 BR-026 v2: accepts a one-byte token file", {
+boundary("P-BR026-002 BR-026 v3: accepts a one-byte token file", {
   ...tokenFile,
   bytes: Buffer.from("x"),
   expected: { token: "x" },
 });
-boundary("P-BR026-003 BR-026 v2: accepts a 16384-byte token file", {
+boundary("P-BR026-003 BR-026 v3: accepts a 16384-byte token file", {
   ...tokenFile,
   bytes: Buffer.from(x(16384)),
   expected: { token: x(16384) },
 });
 boundary(
-  "P-BR026-004 BR-026 v2: counts token LF in the 16384-byte file budget",
+  "P-BR026-004 BR-026 v3: counts token LF in the 16384-byte file budget",
   {
     ...tokenFile,
     bytes: Buffer.from(x(16383) + "\n"),
@@ -363,25 +363,25 @@ boundary(
   },
 );
 boundary(
-  "P-BR026-005 BR-026 v2: rejects token file overflow before LF stripping",
+  "P-BR026-005 BR-026 v3: rejects token file overflow before LF stripping",
   {
     ...tokenFile,
     bytes: Buffer.from(x(16384) + "\n"),
     error: limit("tokenFile"),
   },
 );
-boundary("P-BR026-006 BR-026 v2: accepts exactly 16384 UTF-8 token bytes", {
+boundary("P-BR026-006 BR-026 v3: accepts exactly 16384 UTF-8 token bytes", {
   context: "stdio",
   env: { KDRIVE_TOKEN: "é".repeat(8192) },
   expected: { token: "é".repeat(8192) },
 });
-boundary("P-BR026-007 BR-026 v2: rejects UTF-8 token byte overflow", {
+boundary("P-BR026-007 BR-026 v3: rejects UTF-8 token byte overflow", {
   context: "stdio",
   env: { KDRIVE_TOKEN: "é".repeat(8193) },
   error: limit("token"),
 });
 boundary(
-  "P-BR026-008 BR-026 v2: rejects an empty upstream environment secret",
+  "P-BR026-008 BR-026 v3: rejects an empty upstream environment secret",
   {
     context: "proxy",
     env: { OAUTH_UPSTREAM_CLIENT_SECRET: "" },
@@ -389,7 +389,7 @@ boundary(
   },
 );
 boundary(
-  "P-BR026-009 BR-026 v2: accepts a one-byte upstream environment secret",
+  "P-BR026-009 BR-026 v3: accepts a one-byte upstream environment secret",
   {
     context: "proxy",
     env: { OAUTH_UPSTREAM_CLIENT_SECRET: "x" },
@@ -397,14 +397,14 @@ boundary(
   },
 );
 boundary(
-  "P-BR026-010 BR-026 v2: accepts a 16384-byte upstream environment secret",
+  "P-BR026-010 BR-026 v3: accepts a 16384-byte upstream environment secret",
   {
     context: "proxy",
     env: { OAUTH_UPSTREAM_CLIENT_SECRET: x(16384) },
     expected: { oauthUpstreamClientSecret: x(16384) },
   },
 );
-boundary("P-BR026-011 BR-026 v2: rejects upstream environment byte overflow", {
+boundary("P-BR026-011 BR-026 v3: rejects upstream environment byte overflow", {
   context: "proxy",
   env: { OAUTH_UPSTREAM_CLIENT_SECRET: x(16385) },
   error: limit("oauthUpstreamClientSecret"),
@@ -414,45 +414,45 @@ const upstreamFile = {
   omit: ["OAUTH_UPSTREAM_CLIENT_SECRET"],
   env: { OAUTH_UPSTREAM_CLIENT_SECRET_FILE: "/synthetic/upstream" },
 };
-boundary("P-BR026-012 BR-026 v2: rejects an empty upstream secret file", {
+boundary("P-BR026-012 BR-026 v3: rejects an empty upstream secret file", {
   ...upstreamFile,
   bytes: Buffer.alloc(0),
   error: { code: "CREDENTIAL_INVALID", setting: "oauthUpstreamClientSecret" },
 });
-boundary("P-BR026-013 BR-026 v2: accepts a one-byte upstream secret file", {
+boundary("P-BR026-013 BR-026 v3: accepts a one-byte upstream secret file", {
   ...upstreamFile,
   bytes: Buffer.from("x"),
   expected: { oauthUpstreamClientSecret: "x" },
 });
-boundary("P-BR026-014 BR-026 v2: accepts a 16384-byte upstream secret file", {
+boundary("P-BR026-014 BR-026 v3: accepts a 16384-byte upstream secret file", {
   ...upstreamFile,
   bytes: Buffer.from(x(16384)),
   expected: { oauthUpstreamClientSecret: x(16384) },
 });
-boundary("P-BR026-015 BR-026 v2: rejects upstream secret file overflow", {
+boundary("P-BR026-015 BR-026 v3: rejects upstream secret file overflow", {
   ...upstreamFile,
   bytes: Buffer.from(x(16385)),
   error: limit("oauthUpstreamClientSecretFile"),
 });
-boundary("P-BR026-016 BR-026 v2: accepts one opaque signing byte", {
+boundary("P-BR026-016 BR-026 v3: accepts one opaque signing byte", {
   context: "proxy",
   bytes: Buffer.from([0]),
   expected: { oauthSigningKey: Buffer.from([0]) },
 });
-boundary("P-BR026-017 BR-026 v2: accepts a 4096-byte token selector", {
+boundary("P-BR026-017 BR-026 v3: accepts a 4096-byte token selector", {
   context: "stdio",
   omit: ["KDRIVE_TOKEN"],
   env: { KDRIVE_TOKEN_FILE: "/" + x(4095) },
   expected: { tokenFile: "/" + x(4095), token: "SYNTHETIC" },
 });
-boundary("P-BR026-018 BR-026 v2: rejects token selector overflow before read", {
+boundary("P-BR026-018 BR-026 v3: rejects token selector overflow before read", {
   context: "stdio",
   omit: ["KDRIVE_TOKEN"],
   env: { KDRIVE_TOKEN_FILE: "/" + x(4096) },
   error: limit("tokenFile"),
   noRead: true,
 });
-boundary("P-BR026-019 BR-026 v2: accepts a 4096-byte upstream selector", {
+boundary("P-BR026-019 BR-026 v3: accepts a 4096-byte upstream selector", {
   context: "proxy",
   omit: ["OAUTH_UPSTREAM_CLIENT_SECRET"],
   env: { OAUTH_UPSTREAM_CLIENT_SECRET_FILE: "/" + x(4095) },
@@ -462,7 +462,7 @@ boundary("P-BR026-019 BR-026 v2: accepts a 4096-byte upstream selector", {
   },
 });
 boundary(
-  "P-BR026-020 BR-026 v2: rejects upstream selector overflow before read",
+  "P-BR026-020 BR-026 v3: rejects upstream selector overflow before read",
   {
     context: "proxy",
     omit: ["OAUTH_UPSTREAM_CLIENT_SECRET"],
@@ -471,7 +471,7 @@ boundary(
     noRead: true,
   },
 );
-boundary("P-BR026-021 BR-026 v2: accepts a 4096-byte signing selector", {
+boundary("P-BR026-021 BR-026 v3: accepts a 4096-byte signing selector", {
   context: "proxy",
   env: { OAUTH_SIGNING_KEY_FILE: "/" + x(4095) },
   bytes: Buffer.from([0]),
@@ -481,7 +481,7 @@ boundary("P-BR026-021 BR-026 v2: accepts a 4096-byte signing selector", {
   },
 });
 boundary(
-  "P-BR026-022 BR-026 v2: rejects signing selector overflow before read",
+  "P-BR026-022 BR-026 v3: rejects signing selector overflow before read",
   {
     context: "proxy",
     env: { OAUTH_SIGNING_KEY_FILE: "/" + x(4096) },

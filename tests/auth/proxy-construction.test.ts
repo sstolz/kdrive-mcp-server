@@ -268,21 +268,18 @@ it.each(["LF", "CRLF", "space", "tab"] as const)(
     else expectSigningRefusal(loaded);
   },
 );
-it.each(["\u00a0", "\ufeff", "\u2003"])(
+it.each(["\u00a0", "\u2003"])(
   "BR-026 v2 BR-124 v2 AC-20 signing nontrimmed Unicode",
   async (edge) => {
     const pem = unpaddedSyntheticPem();
     const original = Buffer.from(edge + pem + (edge === "\u2003" ? "" : edge));
-    // The BOM-wrapped input is refused or accepted by direct construction
-    // depending on the runtime (observed: refused in the local dev container,
-    // accepted in CI), so no fixed outcome is pinned: the loaded bytes must
-    // equal the original and give the identical construction outcome.
+    // Non-BOM Unicode remains significant to the unchanged parser.
     const direct = signingOutcome(original);
     if ("error" in direct) expect(direct.error).toBe(SIGNING_KEY_ERROR);
     const loaded = signingBytes(await loadSyntheticSigning(original));
     expect(Buffer.from(loaded).equals(original)).toBe(true);
     expect(signingOutcome(loaded)).toEqual(direct);
-    if (edge !== "\ufeff") expectSigningRefusal(loaded);
+    expectSigningRefusal(loaded);
   },
 );
 it.each(["NUL", "invalid UTF-8"])(
@@ -313,7 +310,7 @@ it("BR-026 v2 BR-023 v4 AC-22 raw file budgets precede trimming", async () => {
   expectSigningConstruction(loaded, construct(pem).proxy.kid);
 });
 it.each(["P-384", "RSA", "Ed25519", "public", "two blocks", "corrupted"])(
-  "BR-026 v2 BR-124 v2 AC-25 padding cannot bypass key qualification",
+  "BR-026 v3 BR-124 v2 F-049 AC-22 key qualification unchanged",
   async (variant) => {
     let pem: string;
     switch (variant) {
@@ -344,3 +341,113 @@ it.each(["P-384", "RSA", "Ed25519", "public", "two blocks", "corrupted"])(
     expectSigningRefusal(loaded);
   },
 );
+
+const fileBom = Buffer.from([0xef, 0xbb, 0xbf]);
+const filePadding = Buffer.from([0x20, 0x09, 0x0d, 0x0a]);
+for (const ac of ["19", "20"] as const) {
+  const labels =
+    ac === "19"
+      ? ["prefix", "both edges", "padded prefix"]
+      : [
+          "suffix",
+          "interior",
+          "after padding",
+          "between padding",
+          "after newline",
+        ];
+  it.each(labels)(
+    `BR-026 v3 BR-124 v2 F-049 AC-${ac} ${ac === "19" ? "BOM refuses before construction" : "signing suffix and interior BOM refused"}`,
+    async (variant) => {
+      const pem = unpaddedSyntheticPem();
+      const core = Buffer.from(pem);
+      const fixtures: Record<string, Buffer> = {
+        prefix: Buffer.concat([fileBom, core]),
+        "both edges": Buffer.concat([fileBom, core, fileBom]),
+        "padded prefix": Buffer.concat([
+          filePadding,
+          fileBom,
+          core,
+          filePadding,
+        ]),
+        suffix: Buffer.concat([core, fileBom]),
+        interior: Buffer.from(
+          pem.replace(
+            /(-----BEGIN PRIVATE KEY-----\n[A-Za-z0-9+/=])/u,
+            "$1\ufeff",
+          ),
+        ),
+        "after padding": Buffer.concat([core, filePadding, fileBom]),
+        "between padding": Buffer.concat([
+          core,
+          filePadding,
+          fileBom,
+          filePadding,
+        ]),
+        "after newline": Buffer.concat([core, Buffer.from([10]), fileBom]),
+      };
+      const clock = vi.fn(() => new Date());
+      const random = vi.fn(counterRandom());
+      const fetchJson = vi.fn(() =>
+        Promise.reject(new Error("unexpected port")),
+      );
+      const postForm = vi.fn(() =>
+        Promise.reject(new Error("unexpected port")),
+      );
+      const continuation = vi.fn(
+        (config: Awaited<ReturnType<typeof loadConfiguration>>) => {
+          createOAuthProxy({
+            config: {
+              publicUrl: PUBLIC_URL,
+              oauthIssuer: UPSTREAM,
+              oauthAllowedSubjects: ["synthetic-subject"],
+              oauthAllowedEmails: [],
+              oauthUpstreamClientId: "synthetic-client",
+              oauthUpstreamClientSecret: "SYNTHETIC_CLIENT_SECRET",
+              oauthSigningKey: signingBytes(config),
+              oauthAllowedRedirectUris: [LOOPBACK],
+            },
+            clock,
+            randomBytes: random,
+            upstream: { fetchJson, postForm },
+          });
+          // Fail even if this runtime happens to accept BOM-wrapped keys.
+          throw new Error("unexpected key construction");
+        },
+      );
+      const content = fixtures[variant];
+      if (!content) throw new Error("missing synthetic fixture");
+      await expect(
+        loadSyntheticSigning(content).then(continuation),
+      ).rejects.toMatchObject({
+        code: "CREDENTIAL_BOM",
+        setting: "oauthSigningKeyFile",
+      });
+      for (const port of [continuation, clock, random, fetchJson, postForm])
+        expect(port).not.toHaveBeenCalled();
+    },
+  );
+}
+it("BR-026 v3 BR-124 v2 F-049 AC-21 valid signing padding unchanged", async () => {
+  const pem = unpaddedSyntheticPem();
+  const loaded = signingBytes(
+    await loadSyntheticSigning(
+      Buffer.concat([filePadding, Buffer.from(pem), filePadding]),
+    ),
+  );
+  expect(Buffer.from(loaded).equals(Buffer.from(pem))).toBe(true);
+  expectSigningConstruction(loaded, thumbprint(pem));
+});
+for (const [label, marker] of [
+  ["UTF-16LE marker stays opaque", [0xff, 0xfe]],
+  ["UTF-16BE marker stays opaque", [0xfe, 0xff]],
+] as const) {
+  it(`BR-026 v3 BR-124 v2 F-049 AC-15 ${label}`, async () => {
+    const original = Buffer.concat([
+      Buffer.from(marker),
+      Buffer.from(unpaddedSyntheticPem()),
+    ]);
+    const loaded = signingBytes(await loadSyntheticSigning(original));
+    expect(Buffer.from(loaded).equals(original)).toBe(true);
+    expectSigningRefusal(loaded);
+  });
+}

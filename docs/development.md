@@ -343,15 +343,19 @@ highest-priority source; both members at that source conflict. All effective
 configuration checks precede credential reads. Token/upstream-secret files are
 bounded to 16,384 bytes and signing material to 65,536 bytes. Final symlinks,
 nonregular files and identity changes fail; parent-directory symlinks are allowed.
-All three secret files remove maximal leading and trailing sequences of
-U+0020 SPACE, U+0009 TAB, U+000D CR and U+000A LF after the raw-byte limit
-check. Empty results are refused. No other bytes, including NBSP, BOM or NUL,
-are trimmed. Token/upstream-secret files still require fatal UTF-8 decoding
-and reject interior ASCII controls (U+0000–U+001F and U+007F); interior spaces
-remain valid. Environment credentials are never trimmed, including spaces-only
-values, and retain their existing validation. Signing bytes remain opaque
-locally: loading proves no algorithm or cryptographic readiness; the unchanged
-proxy parser still requires one PKCS#8 PEM EC P-256 private key.
+All three selected secret files complete guarded reads and raw-byte limit
+checks before refusing `EF BB BF` anywhere in raw bytes with `CREDENTIAL_BOM`
+at `token`, `oauthUpstreamClientSecret` or `oauthSigningKeyFile`, respectively.
+This precedes trimming, decoding and key parsing. Save the selected file as
+UTF-8 without a BOM, then restart. Files without BOM remove maximal leading
+and trailing runs of U+0020 SPACE, U+0009 TAB, U+000D CR and U+000A LF;
+empty results are refused. No other bytes, including NBSP or NUL, are trimmed.
+Token/upstream-secret files still require fatal UTF-8 decoding and reject
+interior ASCII controls (U+0000–U+001F and U+007F); interior spaces remain
+valid. Inline environment credentials remain unchanged, including U+FEFF and
+spaces-only values, and are never trimmed. Signing bytes otherwise remain
+opaque locally: loading proves no algorithm or cryptographic readiness; the
+unchanged proxy parser requires one PKCS#8 PEM EC P-256 private key.
 
 Configure `--drive-id` or `--drive-ids`; token visibility never adds drives. With
 only a list, its first drive is the default. Absent roots select folder ID 1 on

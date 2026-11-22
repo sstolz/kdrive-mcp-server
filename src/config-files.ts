@@ -78,3 +78,18 @@ export function decode(
     return fail(credential ? "CREDENTIAL_INVALID" : "CONFIG_SYNTAX", key);
   }
 }
+
+/** BR-026 v3: inspect only successfully read, bounded credential bytes. */
+export function refuseCredentialBom(
+  data: Uint8Array,
+  key: DiagnosticSetting,
+): void {
+  for (let index = 0; index + 2 < data.length; index += 1) {
+    if (
+      data[index] === 0xef &&
+      data[index + 1] === 0xbb &&
+      data[index + 2] === 0xbf
+    )
+      fail("CREDENTIAL_BOM", key);
+  }
+}

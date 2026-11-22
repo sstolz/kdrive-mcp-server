@@ -11,6 +11,16 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
   with conservative wildcard and folder-sharing exceptions; startup eligibility
   and runtime filtering remain unchanged.
 
+### Changed
+
+- #117 / F-049 / BR-026 v3 / BR-027 v3 (pending acceptance): selected token,
+  upstream-secret and signing-key files refuse `EF BB BF` anywhere in raw bytes
+  with `CREDENTIAL_BOM`, after guarded reads and raw limits and before trimming,
+  decoding or key parsing. Inline credentials remain unchanged.
+  Upgrade: a secret file containing a BOM, including a signing file that loads
+  today, now stops startup. Re-save it as UTF-8 without a BOM, then restart;
+  retain the same key and kid.
+
 ## [1.0.1] - 2026-11-20
 
 ### Added

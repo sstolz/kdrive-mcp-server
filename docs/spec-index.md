@@ -154,7 +154,7 @@ and BR-434–BR-435 v1 for conservative deny/root diagnostics, including
 the enabled received-share namespace, and versions BR-021 and BR-207 to v3
 and BR-027 to v2. F-048 v1 is done, accepted on main `f4487a2` on 2026-11-21
 ([#110 acceptance](https://github.com/sstolz/kdrive-mcp-server/issues/110#issuecomment-7062590216)); all five rule versions are active.
-BR-023 v4 remains unchanged. Next free IDs: F-049, BR-436.
+BR-023 v4 remains unchanged. Next free IDs after F-048 were F-049, BR-436.
 
 #14 was frozen after independent review and autonomous freeze; these
 allocations were accepted on actual main `7b046a0`. ADR-001–003 were verified on both actual
@@ -268,3 +268,9 @@ affected backlog tickets (archive `docs/github-backlog.md`). F-002 validates loc
 and an injected preflight boundary only; it does not qualify a real provider,
 resolve a real account or implement an MCP/HTTP server. Successful actual-main
 #4/#31/#33 acceptance establishes only that bounded local/synthetic scope.
+
+Issue #117 allocates [F-049 v1](../features/F-049-secret-file-bom-refusal.md)
+(frozen) and prepares [BR-026 v3](../business-rules/BR-026.md) and
+[BR-027 v3](../business-rules/BR-027.md) as pending acceptance. BR-026 v2
+remains accepted and BR-027 v2 stays active until acceptance on actual main.
+No new BR or ADR is allocated. Next free IDs: **F-050, BR-436, ADR-013**.
