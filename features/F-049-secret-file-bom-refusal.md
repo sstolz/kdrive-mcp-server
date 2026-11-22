@@ -8,7 +8,9 @@ version: 1
 
 ## Context
 
-The owner decision of 2026-11-20, broadened on 2026-11-21 (#117), refuses
+The owner decision of 2026-11-20, broadened on 2026-11-21 and confirmed in
+[#117's owner decision comment](https://github.com/sstolz/kdrive-mcp-server/issues/117#issuecomment-7077592488)
+(recorded 2026-11-22), refuses
 U+FEFF anywhere in a selected secret file at startup, with an explicit,
 redacted error. A BOM is U+FEFF, encoded as the three bytes `EF BB BF`; it
 is not credential padding to remove silently.
@@ -160,10 +162,13 @@ BR-436 remains unallocated by this feature.
    conflicting guidance; amend only relevant current guidance, without
    changing commands, sources or mounts. No new personal or deployment
    identifiers belong here.
-10. In the implementation PR, prepare BR-026 v3, dated history, boundary
-    examples and named-test mapping, its rule index, a provisional capability
-    entry and an Unreleased changelog entry as pending acceptance. BR-026 v2
-    remains accepted until successful acceptance on actual main. Synchronize
+10. In the implementation PR, prepare BR-026 v3 and BR-027 v3, dated history,
+    boundary examples and named-test mappings, their rule index, a provisional
+    capability entry and an Unreleased changelog entry as pending acceptance.
+    BR-026 v2 remains accepted and BR-027 v2 stays active until successful
+    acceptance on actual main. BR-027 v3 permits `CREDENTIAL_BOM` in the closed
+    diagnostic code set with unchanged redaction rules; follow BR-027's F-048
+    v2 history precedent for pending and accepted entries. Synchronize
     final active/done markers in the next reviewed PR, as required by
     AGENTS.md. This authoring phase writes only this draft spec. No release,
     VERSION change, unrelated acceptance synchronization or new ADR is needed.
@@ -175,7 +180,8 @@ BR-436 remains unallocated by this feature.
   trim rules, key formats or cryptographic qualification.
 - `scripts/kdrive-acceptance.ts`, which reads `KDRIVE_TOKEN_FILE` directly:
   follow-up issue #127, no milestone.
-- Token characters above U+00FF other than U+FEFF, in files and inline:
+- Token characters above U+00FF other than U+FEFF, in files and inline, and
+  inline (environment) values containing U+FEFF, which F-049 does not refuse:
   follow-up issue #128, owner decision needed, no milestone.
 - Changing file budgets, source selection, filesystem safeguards or nonsecret
   inputs; provisioning real credentials, live-provider acceptance or release.
@@ -187,7 +193,8 @@ BR-436 remains unallocated by this feature.
 
 ## Business rules
 
-Version the existing guarded-source rule rather than allocating a new ID.
+Version the existing guarded-source and diagnostic rules rather than allocating
+a new ID.
 
 - **BR-026 v3** — After a selected token, upstream-secret or signing-key file
   passes its unchanged guarded read and raw-byte budget, any raw `EF BB BF`
@@ -197,6 +204,13 @@ Version the existing guarded-source rule rather than allocating a new ID.
   trim maximal leading/trailing runs of the four byte values `20/09/0D/0A`
   and apply existing content checks, preserving remaining bytes and inline
   credential behavior. Verified by: AC-01–AC-25.
+- **BR-027 v3** — The closed configuration diagnostic code set additionally
+  permits `CREDENTIAL_BOM` with the fixed message and canonical settings in
+  Scope 8; all existing diagnostic shapes, startup warnings and redaction
+  rules remain unchanged. Verified by: AC-11, AC-18, AC-23, AC-24, AC-25.
+  Prepare the record as pending acceptance in the implementation PR; BR-027 v2
+  stays active until acceptance on actual main, following its F-048 history
+  precedent.
 
 The purpose remains explicit guarded credential loading. The pending v3 record
 must label v2's BOM-acceptance examples as historical and give the new outcomes.
@@ -208,10 +222,10 @@ Retain the former raw-budget, control, UTF-8 and no-fallback regressions. In `te
 citations and update only current-version descriptions and any genuinely
 superseded file-BOM assertion, preserving stable test identifiers.
 
-BR-023 v4 is unchanged: byte accounting and limits are identical. BR-027 v2
-is unchanged: the fixed diagnostic shape and redaction policy hold; this
-feature adds a permitted code through BR-026 v3 and this additive error
-catalogue. BR-124 v2 is unchanged: successful file loading still proves no
+BR-023 v4 is unchanged: byte accounting and limits are identical. BR-027 v3
+extends the closed code set with `CREDENTIAL_BOM`, retaining the fixed
+diagnostic shape and redaction policy from BR-027 v2 and the F-002 error
+contract. BR-124 v2 is unchanged: successful file loading still proves no
 key validity, and downstream key qualification is untouched.
 
 ## Acceptance criteria
@@ -235,7 +249,8 @@ their failures before production changes. Keep historical evidence outside the
 repository. These names specify required tests, not executed results.
 
 For AC-01–AC-18, use `tests/config.test.ts`. Exact names are
-`BR-026 v3 F-049 AC-NN <label>`; rows also verify the unchanged BRs listed.
+`BR-026 v3 F-049 AC-NN <label>`, except AC-11 and AC-18 use
+`BR-026 v3 BR-027 v3 F-049 AC-NN <label>`; rows also verify the other BRs listed.
 
 | AC / BRs | Given | When | Then | Test label |
 | --- | --- | --- | --- | --- |
@@ -249,14 +264,16 @@ For AC-01–AC-18, use `tests/config.test.ts`. Exact names are
 | AC-08 / BR-026 v3 | Each inline text source: `B + X`, `X + B + Y`, `X + B`, `20 + B + X + 20`, expressed as their Unicode environment strings | Configuration loads | Exact strings retained; no file BOM check, trim or file read for that source | inline BOM remains significant |
 | AC-09 / BR-026 v3, BR-023 v4 | Each file: `B + (78 repeated L-3)` (L bytes), then `B + (78 repeated L-2)` (L+1 bytes) | Reader returns bytes and configuration loads | Exact limit gives `CREDENTIAL_BOM/<logical setting>`; overflow gives `LIMIT_EXCEEDED/<file selector>` | raw limit before BOM |
 | AC-10 / BR-026 v3, BR-023 v4 | Each file: `W + B + (20 repeated L-6)` (L+1 raw bytes) | Configuration loads | `LIMIT_EXCEEDED/<file selector>` despite removable padding | padding and BOM count toward limit |
-| AC-11 / BR-026 v3, BR-027 v2 | Selected reader throws an ordinary error whose synthetic message contains `EF BB BF` decoded as U+FEFF | Configuration loads | `CREDENTIAL_READ_FAILED/<file selector>`; no content inspection or cause leak | read failure before BOM |
+| AC-11 / BR-026 v3, BR-027 v3 | Selected reader throws an ordinary error whose synthetic message contains `EF BB BF` decoded as U+FEFF | Configuration loads | `CREDENTIAL_READ_FAILED/<file selector>`; no content inspection or cause leak | read failure before BOM |
 | AC-12 / BR-026 v3 | Each text file: `B + FF`, `B + 00`, `W + B + FF 00 + W` | Configuration loads | `CREDENTIAL_BOM` wins over malformed UTF-8 or ASCII controls | BOM before text validation |
 | AC-13 / BR-026 v3 | Each text file: `EF`, `EF BB`, `FF FE 78 00`, `FF`, `78 00`, `78 09 79` | Configuration loads | `CREDENTIAL_INVALID/<logical setting>`; partial/other markers not misclassified as BOM | other invalid text unchanged |
 | AC-14 / BR-026 v3 | Each file: zero bytes, `W`; each text file also `W + X + W`, `58 20 59` | Configuration loads | Empty results give `CREDENTIAL_INVALID`; text results are SYNTHETIC and the three ASCII characters U+0058, SPACE, U+0059 respectively | empty and ASCII trim unchanged |
 | AC-15 / BR-026 v3 | Signing file `FF 00 0A`, also `EF BB` | Configuration loads without proxy construction | Opaque bytes `FF 00` and `EF BB` retained; no local UTF-8 or control check | opaque signing bytes unchanged |
+| AC-15 / BR-026 v3, BR-124 v2 | Signing file `FF FE + P` | Configuration loads, then key construction runs | Opaque bytes unchanged; no `CREDENTIAL_BOM`; existing BR-124 refusal at key construction | opaque signing bytes unchanged |
+| AC-15 / BR-026 v3, BR-124 v2 | Signing file `FE FF + P` | Configuration loads, then key construction runs | Opaque bytes unchanged; no `CREDENTIAL_BOM`; existing BR-124 refusal at key construction | opaque signing bytes unchanged |
 | AC-16 / BR-026 v3 | Invalid drive ID `0` with selected file `B + X`; separately conflicting inline/file selectors with that fixture | Configuration loads | Existing `INVALID_VALUE/driveId` or selector-conflict error wins; zero credential reads | configuration errors before reads |
 | AC-17 / BR-026 v3 | Valid higher-priority inline X and unselected lower-priority file fixture `B + X`; separately selected token `B + X` with valid lower-priority source | Configuration loads | First case retains X without reading the file; second refuses with `CREDENTIAL_BOM/token` without fallback | selection and no fallback unchanged |
-| AC-18 / BR-026 v3, BR-027 v2 | Each selected file with `B + X`, `W + B + X + W`, `B + B + X`; synthetic selector path and reader-error canaries | Configuration loads and error is serialized | Exactly `{code:"CREDENTIAL_BOM",setting:<canonical setting>}` and fixed message; no extra enumerable data/cause or console logging; content/path/length/trim/BOM position absent | fixed BOM diagnostics |
+| AC-18 / BR-026 v3, BR-027 v3 | Each selected file with `B + X`, `W + B + X + W`, `B + B + X`; synthetic selector path and reader-error canaries | Configuration loads and error is serialized | Exactly `{code:"CREDENTIAL_BOM",setting:<canonical setting>}` and fixed message; no extra enumerable data/cause or console logging; content/path/length/trim/BOM position absent | fixed BOM diagnostics |
 
 For AC-19–AC-22, use `tests/auth/proxy-construction.test.ts`, exact names
 `BR-026 v3 BR-124 v2 F-049 AC-NN <label>`. Drive actual configuration file
@@ -279,14 +296,14 @@ loading. Running fixed assertions locally and in CI supplies runtime evidence;
 refusal before decoding or crypto explains runtime independence. Direct
 construction of BOM bytes remains outside this rule.
 
-- **AC-23 (BR-026 v3, BR-027 v2)** — Given a temporary token file containing
+- **AC-23 (BR-026 v3, BR-027 v3)** — Given a temporary token file containing
   `W + B + X + W` and otherwise valid synthetic startup configuration, When
   the configuration diagnostic executable runs through the existing CLI
   harness, Then it exits with the existing configuration failure status and
   emits exactly `Configuration error [CREDENTIAL_BOM] (token).` plus LF,
   with no stack, content or path. Verify in `tests/cli.test.ts`,
-  `BR-026 v3 BR-027 v2 F-049 AC-23 CLI BOM refusal is redacted`.
-- **AC-24 (BR-026 v3, BR-023 v4, BR-027 v2)** — Given actual synthetic files
+  `BR-026 v3 BR-027 v3 F-049 AC-23 CLI BOM refusal is redacted`.
+- **AC-24 (BR-026 v3, BR-023 v4, BR-027 v3)** — Given actual synthetic files
   containing `B + X` for each secret kind, When the existing missing-file,
   nonregular-file, final-symlink, identity-change and streaming-overflow
   harness cases execute, Then existing guarded-read identities remain
@@ -295,13 +312,13 @@ construction of BOM bytes remains outside this rule.
   read for BOM. Parent symlinks remain allowed, so a stable regular target
   containing `B + X` instead reaches `CREDENTIAL_BOM/<logical setting>`.
   Adapt and retain `tests/config.test.ts` coverage under
-  `BR-026 v3 F-049 AC-24 guarded reads precede BOM inspection`; do not remove
+  `BR-026 v3 BR-027 v3 F-049 AC-24 guarded reads precede BOM inspection`; do not remove
   a security assertion to make the new BOM cases pass.
-- **AC-25 (BR-026 v3, BR-027 v2; documentation)** — Given Scope 9's guidance
+- **AC-25 (BR-026 v3, BR-027 v3; documentation)** — Given Scope 9's guidance
   and fixtures `B + X`, `X + B`, `X + B + Y`, `X + W + B + W`,
-  `P + 0A + B` and inline U+FEFF followed by X, When the named documentation
-  verification test `BR-026 v3 F-049 AC-25 credential BOM guidance` performs
-  scoped content/link checks, Then the deployment Troubleshooting startup
+  `P + 0A + B` and inline U+FEFF followed by X, When the
+  orchestrator runs the scoped documentation check recorded as
+  `117-docs-1-orchestrator`, Then the deployment Troubleshooting startup
   summary (around line 668) names `[CREDENTIAL_BOM]`, and a new bullet beside
   `[CREDENTIAL_INVALID]` (around line 678) gives the exact fixed message,
   all three canonical settings, raw-byte anywhere refusal and UTF-8-without-BOM
@@ -311,8 +328,20 @@ construction of BOM bytes remains outside this rule.
   guidance agrees, signing notes do not delegate BOM admission to parsing,
   and completed F-002/F-047 remain unchanged. The deployment summary cites
   this extension without claiming the historical F-002 catalogue includes it.
-  The orchestrator records this named scoped verification and formatting
-  checks as `117-docs-1-orchestrator`; no prose unit test is required.
+  The orchestrator runs and records these exact scoped content commands,
+  then checks the matched guidance against the requirements above:
+
+  ```sh
+  git grep -n -F CREDENTIAL_BOM -- README.md docs/development.md docs/deployment.md docs/oauth-proxy.md
+  git grep -n -F CREDENTIAL_BOM -- SPEC.md
+  ```
+
+  A missing match in `SPEC.md` is permitted when no directly conflicting
+  guidance required an amendment. The Makefile has no link-check target;
+  record that limitation and inspect links in the scoped guidance manually.
+  Record scoped content, link inspection and formatting checks under
+  `117-docs-1-orchestrator`; this is an orchestrator-run documentation check
+  with no test name or prose unit test.
 
 The orchestrator runs the Docker-only full gate, mandatory PR CI and fresh
 independent reviews; no tests, package commands or Docker commands run in this
@@ -347,7 +376,8 @@ then closes only on success. No real credential or provider call is needed.
 - **Preserve inline U+FEFF.** Inline values have no file encoding preamble and
   remain outside this file-admission decision. Their byte budgets and
   validation remain unchanged; inline token transport compatibility is not
-  claimed. Broader token character policy is tracked separately in #128.
+  claimed. Broader token character policy, including inline U+FEFF, is tracked
+  separately in #128.
 - **Check signing bytes before parsing.** No file BOM reaches the decoder or
   `createPrivateKey`; valid PEM headers, footers and base64 bodies are ASCII.
   This fixes the configuration outcome without changing direct parser callers
@@ -364,10 +394,12 @@ then closes only on success. No real credential or provider call is needed.
   class and canonical setting; no content, offset, count or source path is
   logged. Inline behavior is an explicit scope boundary,
   not evidence of transport compatibility.
-- **BR-026 v3, no new BR or ADR.** The guarded-source purpose is unchanged;
-  admission tightens file BOM handling and adds its error identity. Keep the
-  existing budgets, diagnostic shape and downstream key rules under their
-  current versions. Reject allocating BR-436 for the same purpose.
+- **BR-026 v3 and BR-027 v3, no new BR or ADR.** The guarded-source and
+  diagnostic purposes are unchanged; admission tightens file BOM handling and
+  BR-027 v3 permits its new error identity in the closed code set with unchanged
+  redaction rules. Keep the existing budgets and downstream key rules under
+  their current versions; BR-027 v2 stays active until acceptance. Reject
+  allocating BR-436 for the same purpose.
 
 ## Open questions
 
@@ -398,3 +430,8 @@ None.
   above U+00FF other than U+FEFF, in files and inline, remain out of scope
   under #128, with owner decision needed and no milestone. This does not
   weaken the anywhere-file-U+FEFF refusal selected for #117.
+- **117-spec-review-2-opus — finding 1 — major — retained.** BR-027 v3 permits the new closed-set code with unchanged redaction; its pending record belongs in the implementation PR and v2 stays active until acceptance.
+- **117-spec-review-2-opus — finding 2 — minor — retained.** Inline U+FEFF remains unrefused by F-049 and is explicitly tracked in #128.
+- **117-spec-review-2-opus — finding 3 — minor — retained.** Context cites the owner decision comment recorded on 2026-11-22 confirming the 2026-11-21 broadening.
+- **117-spec-review-2-opus — finding 4 — minor — retained.** AC-25 names the orchestrator evidence and exact content commands, records the absent Makefile link target and has no test name.
+- **117-spec-review-2-opus — finding 5 — minor — retained.** AC-15 preserves both UTF-16 marker prefixes as opaque bytes before the existing BR-124 key-construction refusal.
