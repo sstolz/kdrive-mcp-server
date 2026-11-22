@@ -2,11 +2,14 @@
 id: F-049
 title: Secret file BOM refusal
 ticket: "#117"
-status: frozen
+status: done
 version: 1
 ---
 
 ## Context
+
+This version was accepted on main `e3c63b8` on 2026-11-22
+([#117 acceptance](https://github.com/sstolz/kdrive-mcp-server/issues/117#issuecomment-7087203460)).
 
 The owner decision of 2026-11-20, broadened on 2026-11-21 and confirmed in
 [#117's owner decision comment](https://github.com/sstolz/kdrive-mcp-server/issues/117#issuecomment-7077592488)

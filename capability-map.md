@@ -1,14 +1,15 @@
 # Capability map
 
-## Provisional — Secret-file BOM refusal
+## Accepted — Secret-file BOM refusal
 
 [F-049 v1](features/F-049-secret-file-bom-refusal.md) (#117),
 [BR-026 v3](business-rules/BR-026.md) and [BR-027 v3](business-rules/BR-027.md)
-are pending acceptance: selected token, upstream-secret and signing-key files
+are active: selected token, upstream-secret and signing-key files
 refuse raw `EF BB BF` anywhere after guarded reads and raw limits, before
 trim, decoding or key parsing, with fixed redacted `CREDENTIAL_BOM` diagnostics.
-Inline behavior and non-BOM key qualification are unchanged. This is provisional,
-not an accepted capability; BR-026 v2 remains accepted and BR-027 v2 stays active.
+Inline behavior and non-BOM key qualification are unchanged.
+Accepted on actual main `e3c63b8` on 2026-11-22
+([#117 acceptance](https://github.com/sstolz/kdrive-mcp-server/issues/117#issuecomment-7087203460)). F-049 v1 is done.
 
 ## Accepted — Deny-pattern root warning
 
