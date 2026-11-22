@@ -270,7 +270,8 @@ resolve a real account or implement an MCP/HTTP server. Successful actual-main
 #4/#31/#33 acceptance establishes only that bounded local/synthetic scope.
 
 Issue #117 allocates [F-049 v1](../features/F-049-secret-file-bom-refusal.md)
-(frozen) and prepares [BR-026 v3](../business-rules/BR-026.md) and
-[BR-027 v3](../business-rules/BR-027.md) as pending acceptance. BR-026 v2
-remains accepted and BR-027 v2 stays active until acceptance on actual main.
+and versions [BR-026](../business-rules/BR-026.md) and
+[BR-027](../business-rules/BR-027.md) to v3. F-049 v1 is done, accepted
+on main `e3c63b8` on 2026-11-22
+([#117 acceptance](https://github.com/sstolz/kdrive-mcp-server/issues/117#issuecomment-7087203460)); both rule versions are active.
 No new BR or ADR is allocated. Next free IDs: **F-050, BR-436, ADR-013**.
