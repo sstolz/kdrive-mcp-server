@@ -168,7 +168,13 @@ BR-436 remains unallocated by this feature.
     BR-026 v2 remains accepted and BR-027 v2 stays active until successful
     acceptance on actual main. BR-027 v3 permits `CREDENTIAL_BOM` in the closed
     diagnostic code set with unchanged redaction rules; follow BR-027's F-048
-    v2 history precedent for pending and accepted entries. Synchronize
+    v2 history precedent for pending and accepted entries. Update
+    `docs/spec-index.md`: allocate F-049, set the next free feature ID to
+    F-050, keep BR-436 as the next free BR, and mark BR-026 and BR-027 v3 as
+    pending. The Unreleased entry goes under "Changed" with an upgrade note:
+    a secret file containing a BOM, including a signing file that loads
+    today, now stops startup; re-save it without the BOM (same key and kid).
+    The SemVer class is left to the release go. Synchronize
     final active/done markers in the next reviewed PR, as required by
     AGENTS.md. This authoring phase writes only this draft spec. No release,
     VERSION change, unrelated acceptance synchronization or new ADR is needed.
@@ -190,6 +196,11 @@ BR-436 remains unallocated by this feature.
   local HTTP API failures; this feature prevents that path for file
   BOMs at any position and makes no tool-error assertion. Such a
   characterization is not a dependency of this bounded startup change.
+- Signing files with trailing Unicode whitespace other than U+FEFF (for
+  example `P + NBSP`), which the PEM pattern's `\s` accepts and key
+  construction then decides; a possible runtime dependence, unmeasured,
+  tracked as residual risk in #129, no milestone. Scope 9 guidance stays
+  limited to BOMs.
 
 ## Business rules
 
@@ -203,7 +214,7 @@ a new ID.
   trimming, decoding, empty/control checks or key construction; otherwise
   trim maximal leading/trailing runs of the four byte values `20/09/0D/0A`
   and apply existing content checks, preserving remaining bytes and inline
-  credential behavior. Verified by: AC-01–AC-25.
+  credential behavior. Verified by: AC-01–AC-26.
 - **BR-027 v3** — The closed configuration diagnostic code set additionally
   permits `CREDENTIAL_BOM` with the fixed message and canonical settings in
   Scope 8; all existing diagnostic shapes, startup warnings and redaction
@@ -248,7 +259,7 @@ comparison in ticket evidence, then add the fixed v3 assertions and observe
 their failures before production changes. Keep historical evidence outside the
 repository. These names specify required tests, not executed results.
 
-For AC-01–AC-18, use `tests/config.test.ts`. Exact names are
+For AC-01–AC-18 and AC-26, use `tests/config.test.ts`. Exact names are
 `BR-026 v3 F-049 AC-NN <label>`, except AC-11 and AC-18 use
 `BR-026 v3 BR-027 v3 F-049 AC-NN <label>`; rows also verify the other BRs listed.
 The two AC-15 rows that run key construction (`FF FE + P`, `FE FF + P`) go
@@ -277,6 +288,7 @@ instead in `tests/auth/proxy-construction.test.ts`, named
 | AC-16 / BR-026 v3 | Invalid drive ID `0` with selected file `B + X`; separately conflicting inline/file selectors with that fixture | Configuration loads | Existing `INVALID_VALUE/driveId` or selector-conflict error wins; zero credential reads | configuration errors before reads |
 | AC-17 / BR-026 v3 | Valid higher-priority inline X and unselected lower-priority file fixture `B + X`; separately selected token `B + X` with valid lower-priority source | Configuration loads | First case retains X without reading the file; second refuses with `CREDENTIAL_BOM/token` without fallback | selection and no fallback unchanged |
 | AC-18 / BR-026 v3, BR-027 v3 | Each selected file with `B + X`, `W + B + X + W`, `B + B + X`; synthetic selector path and reader-error canaries | Configuration loads and error is serialized | Exactly `{code:"CREDENTIAL_BOM",setting:<canonical setting>}` and fixed message; no extra enumerable data/cause or console logging; content/path/length/trim/BOM position absent | fixed BOM diagnostics |
+| AC-26 / BR-026 v3 | YAML configuration file starting with `EF BB BF`, otherwise valid, with no secret file selected | Configuration loads | Same outcome (loaded values, or error code and setting) as on main 4032440; never `CREDENTIAL_BOM`. Characterization test written and run on the base before the change | YAML config BOM unchanged |
 
 For AC-19–AC-22, use `tests/auth/proxy-construction.test.ts`, exact names
 `BR-026 v3 BR-124 v2 F-049 AC-NN <label>`. Drive actual configuration file
@@ -397,6 +409,10 @@ then closes only on success. No real credential or provider call is needed.
   class and canonical setting; no content, offset, count or source path is
   logged. Inline behavior is an explicit scope boundary,
   not evidence of transport compatibility.
+- **Accept the compatibility break.** A signing file `B + P` constructs
+  successfully today and stops startup after the upgrade. This is the
+  intended outcome of the owner decision: one result in every runtime. The
+  changelog states it under "Changed" with the re-save upgrade note.
 - **BR-026 v3 and BR-027 v3, no new BR or ADR.** The guarded-source and
   diagnostic purposes are unchanged; admission tightens file BOM handling and
   BR-027 v3 permits its new error identity in the closed code set with unchanged
@@ -439,3 +455,7 @@ None.
 - **117-spec-review-2-opus — finding 4 — minor — retained.** AC-25 names the orchestrator evidence and exact content commands, records the absent Makefile link target and has no test name.
 - **117-spec-review-2-opus — finding 5 — minor — retained.** AC-15 preserves both UTF-16 marker prefixes as opaque bytes before the existing BR-124 key-construction refusal.
 - **117-spec-review-3-opus — residual — minor — retained.** The two UTF-16 AC-15 rows get distinct labels and live in `tests/auth/proxy-construction.test.ts`, since they run key construction.
+- **117-spec-decision-1-fable — finding 1 — minor — retained.** Scope 10 now updates `docs/spec-index.md` (F-049 allocated, next free F-050, BR-436 free, BR-026/BR-027 v3 pending).
+- **117-spec-decision-1-fable — finding 2 — minor — retained.** Decisions state the `B + P` signing-file compatibility break; the changelog entry goes under "Changed" with a re-save upgrade note; SemVer left to the release go.
+- **117-spec-decision-1-fable — finding 3 — minor — retained.** Trailing non-BOM Unicode whitespace in signing files is an explicit out-of-scope residual risk, tracked in #129; Scope 9 stays BOM-only.
+- **117-spec-decision-1-fable — finding 4 — minor — retained.** AC-26 pins by characterization that a YAML configuration file starting with `EF BB BF` behaves as on main 4032440.
