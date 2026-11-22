@@ -1,10 +1,22 @@
-import { mkdtemp, writeFile, symlink, mkdir, chmod } from "node:fs/promises";
+import {
+  mkdtemp,
+  writeFile,
+  symlink,
+  mkdir,
+  chmod,
+  rm,
+} from "node:fs/promises";
 import fs from "node:fs/promises";
+import { syntheticPem } from "./helpers/proxy.js";
 import { readBoundedFile } from "../src/config-files.js";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { loadConfiguration, ConfigurationError } from "../src/config.js";
+import {
+  loadConfiguration,
+  ConfigurationError,
+  type FileReader,
+} from "../src/config.js";
 
 const base = { KDRIVE_ID: "7", KDRIVE_TOKEN: "SYNTHETIC_TOKEN" };
 const http = {
@@ -1732,14 +1744,28 @@ for (const [index, kind] of secretFileCases.entries()) {
   const textCase = (
     offset: number,
     label: string,
-    rows: readonly (readonly [Uint8Array, string | undefined])[],
+    rows: readonly (readonly [
+      Uint8Array,
+      string | undefined,
+      "CREDENTIAL_BOM"?,
+    ])[],
   ) => {
     const ac = String(index * 7 + offset).padStart(2, "0");
-    it.each(rows)(
-      `BR-026 v2 AC-${ac} ${kind.name} ${label}`,
-      async (content, expected) => {
+    it.each(
+      rows.map(([content, expected, expectedError]) => ({
+        content,
+        expected,
+        expectedError,
+      })),
+    )(
+      `BR-026 v3 AC-${ac} ${kind.name} ${label}`,
+      async ({ content, expected, expectedError }) => {
         const operation = loadSyntheticFile(kind, content);
-        if (expected === undefined)
+        if (expectedError === "CREDENTIAL_BOM")
+          await expect(operation).rejects.toMatchObject(
+            error("CREDENTIAL_BOM", kind.setting),
+          );
+        else if (expected === undefined)
           await expect(operation).rejects.toMatchObject(
             error("CREDENTIAL_INVALID", kind.setting),
           );
@@ -1777,10 +1803,9 @@ for (const [index, kind] of secretFileCases.entries()) {
     }),
   );
   textCase(6, "nontrimmed Unicode", [
-    ...["\u00a0", "\ufeff", "\u2003"].map((edge) => {
-      const content = edge + value + (edge === "\u2003" ? "" : edge);
-      return [bytes(content), content] as const;
-    }),
+    [bytes("\u00a0" + value + "\u00a0"), "\u00a0" + value + "\u00a0"],
+    [bytes("\ufeff" + value + "\ufeff"), undefined, "CREDENTIAL_BOM"],
+    [bytes("\u2003" + value), "\u2003" + value],
     [bytes(" \u00a0" + value + "\u00a0\n"), "\u00a0" + value + "\u00a0"],
   ]);
   textCase(7, "NUL and invalid encoding", [
@@ -1921,3 +1946,414 @@ it.each(diagnosticCases)(
 it("BR-026 v2 inline spaces remain significant", async () => {
   expect((await load({ KDRIVE_TOKEN: " " })).token).toBe(" ");
 });
+
+// F-049: raw byte fixtures, with fixed titles that never interpolate content.
+const bom = Buffer.from([0xef, 0xbb, 0xbf]);
+const padding = Buffer.from([0x20, 0x09, 0x0d, 0x0a]);
+const synthetic = bytes("SYNTHETIC");
+const raw = (...parts: Uint8Array[]) => Buffer.concat(parts);
+function bomRows(
+  ac: string,
+  label: string,
+  contents: readonly Uint8Array[],
+  kinds: readonly SecretFileCase[] = secretFileCases,
+) {
+  it.each(
+    kinds.flatMap((kind) => contents.map((content) => ({ kind, content }))),
+  )(`BR-026 v3 F-049 AC-${ac} ${label}`, async ({ kind, content }) => {
+    await expect(loadSyntheticFile(kind, content)).rejects.toMatchObject(
+      error("CREDENTIAL_BOM", kind.setting),
+    );
+  });
+}
+bomRows("01", "token leading BOM", [raw(bom, synthetic)], [secretFileCases[0]]);
+it("BR-026 v3 F-049 AC-02 upstream leading BOM", async () => {
+  const kind = secretFileCases[1];
+  const reader = vi.fn<FileReader>(() => Promise.resolve(raw(bom, synthetic)));
+  await expect(
+    loadConfiguration({
+      argv: [],
+      env: secretFileEnvironment(kind),
+      readFile: reader,
+    }),
+  ).rejects.toMatchObject(error("CREDENTIAL_BOM", kind.setting));
+  expect(reader).toHaveBeenCalledTimes(1);
+  expect(reader).toHaveBeenCalledWith("/synthetic/selected", 16384, true);
+});
+bomRows(
+  "03",
+  "signing leading BOM",
+  [
+    raw(bom, bytes(syntheticPem().replace(/\n$/u, ""))),
+    raw(bom, Buffer.from([0xff, 0])),
+  ],
+  [secretFileCases[2]],
+);
+bomRows("04", "raw BOM before trim", [
+  raw(bytes("  "), bom, synthetic),
+  raw(bom, bytes("  "), synthetic),
+  raw(padding, bom, synthetic, padding),
+]);
+bomRows("05", "BOM only and repeated occurrences", [
+  bom,
+  raw(padding, bom, padding),
+  raw(bom, bom, synthetic),
+]);
+bomRows("06", "all file BOM positions refused", [
+  raw(synthetic, bom),
+  raw(synthetic, bom, bytes("Y")),
+  raw(synthetic, padding, bom),
+  raw(synthetic, padding, bom, padding),
+  raw(padding, synthetic, bom, padding),
+]);
+bomRows("07", "nontrim prefix cannot hide BOM", [
+  raw(Buffer.from([0xc2, 0xa0]), bom, synthetic),
+  raw(Buffer.from([0xe2, 0x80, 0x83]), bom, synthetic),
+]);
+it.each(
+  secretFileCases
+    .slice(0, 2)
+    .flatMap((kind) =>
+      [
+        "\ufeffSYNTHETIC",
+        "SYNTHETIC\ufeffY",
+        "SYNTHETIC\ufeff",
+        " \ufeffSYNTHETIC ",
+      ].map((value) => ({ kind, value })),
+    ),
+)(
+  "BR-026 v3 F-049 AC-08 inline BOM remains significant",
+  async ({ kind, value }) => {
+    if (!kind.inline) throw new Error("expected inline selector");
+    const reader = vi.fn(() => Promise.resolve(bytes("SYNTHETIC_KEY")));
+    const config = await loadConfiguration({
+      argv: [],
+      env: { ...base, ...whitespaceProxy, [kind.inline]: value },
+      readFile: reader,
+    });
+    expect(loadedSecret(config, kind)).toBe(value);
+    expect(reader).toHaveBeenCalledTimes(1);
+    expect(reader).toHaveBeenCalledWith("/synthetic/key", 65536, true);
+  },
+);
+it.each(
+  secretFileCases.flatMap((kind) =>
+    [false, true].map((overflow) => ({ kind, overflow })),
+  ),
+)("BR-026 v3 F-049 AC-09 raw limit before BOM", async ({ kind, overflow }) => {
+  // BR-023 v4: a returned oversize buffer still loses before content checks.
+  await expect(
+    loadSyntheticFile(
+      kind,
+      raw(bom, Buffer.alloc(kind.limit - 3 + Number(overflow), 0x78)),
+    ),
+  ).rejects.toMatchObject(
+    error(
+      overflow ? "LIMIT_EXCEEDED" : "CREDENTIAL_BOM",
+      overflow ? kind.selector : kind.setting,
+    ),
+  );
+});
+it.each(secretFileCases)(
+  "BR-026 v3 F-049 AC-10 padding and BOM count toward limit",
+  async (kind) => {
+    await expect(
+      loadSyntheticFile(
+        kind,
+        raw(padding, bom, Buffer.alloc(kind.limit - 6, 0x20)),
+      ),
+    ).rejects.toMatchObject(error("LIMIT_EXCEEDED", kind.selector));
+  },
+);
+it.each(secretFileCases)(
+  "BR-026 v3 BR-027 v3 F-049 AC-11 read failure before BOM",
+  async (kind) => {
+    const operation = loadConfiguration({
+      argv: [],
+      env: secretFileEnvironment(kind),
+      readFile: () => Promise.reject(new Error("SYNTHETIC_READ_CANARY\ufeff")),
+    });
+    await expect(operation).rejects.toMatchObject(
+      error("CREDENTIAL_READ_FAILED", kind.selector),
+    );
+    await expect(operation).rejects.not.toHaveProperty("cause");
+    await expect(operation).rejects.toHaveProperty(
+      "message",
+      `Configuration error [CREDENTIAL_READ_FAILED] (${kind.selector}).`,
+    );
+  },
+);
+bomRows(
+  "12",
+  "BOM before text validation",
+  [
+    raw(bom, Buffer.from([0xff])),
+    raw(bom, Buffer.from([0])),
+    raw(padding, bom, Buffer.from([0xff, 0]), padding),
+  ],
+  secretFileCases.slice(0, 2),
+);
+it.each(
+  secretFileCases
+    .slice(0, 2)
+    .flatMap((kind) =>
+      [
+        [0xef],
+        [0xef, 0xbb],
+        [0xff, 0xfe, 0x78, 0],
+        [0xff],
+        [0x78, 0],
+        [0x78, 9, 0x79],
+      ].map((content) => ({ kind, content })),
+    ),
+)(
+  "BR-026 v3 F-049 AC-13 other invalid text unchanged",
+  async ({ kind, content }) => {
+    await expect(
+      loadSyntheticFile(kind, Buffer.from(content)),
+    ).rejects.toMatchObject(error("CREDENTIAL_INVALID", kind.setting));
+  },
+);
+it.each(
+  secretFileCases.flatMap((kind) =>
+    [Buffer.alloc(0), padding].map((content) => ({ kind, content })),
+  ),
+)(
+  "BR-026 v3 F-049 AC-14 empty and ASCII trim unchanged",
+  async ({ kind, content }) => {
+    await expect(loadSyntheticFile(kind, content)).rejects.toMatchObject(
+      error("CREDENTIAL_INVALID", kind.setting),
+    );
+  },
+);
+it.each(
+  secretFileCases.slice(0, 2).flatMap((kind) =>
+    [
+      { content: raw(padding, synthetic, padding), expected: "SYNTHETIC" },
+      { content: bytes("X Y"), expected: "X Y" },
+    ].map((row) => ({ kind, ...row })),
+  ),
+)(
+  "BR-026 v3 F-049 AC-14 empty and ASCII trim unchanged",
+  async ({ kind, content, expected }) => {
+    expect(loadedSecret(await loadSyntheticFile(kind, content), kind)).toBe(
+      expected,
+    );
+  },
+);
+it.each([
+  { content: Buffer.from([0xff, 0, 10]), expected: Buffer.from([0xff, 0]) },
+  { content: Buffer.from([0xef, 0xbb]), expected: Buffer.from([0xef, 0xbb]) },
+])(
+  "BR-026 v3 F-049 AC-15 opaque signing bytes unchanged",
+  async ({ content, expected }) => {
+    expect(
+      loadedSecret(
+        await loadSyntheticFile(secretFileCases[2], content),
+        secretFileCases[2],
+      ),
+    ).toEqual(expected);
+  },
+);
+it.each(
+  secretFileCases.flatMap((kind) =>
+    (kind.inline ? [false, true] : [false]).map((conflict) => ({
+      kind,
+      conflict,
+    })),
+  ),
+)(
+  "BR-026 v3 F-049 AC-16 configuration errors before reads",
+  async ({ kind, conflict }) => {
+    const env = secretFileEnvironment(kind);
+    if (conflict && kind.inline) env[kind.inline] = "SYNTHETIC";
+    else env.KDRIVE_ID = "0";
+    const reader = vi.fn<FileReader>(() =>
+      Promise.resolve(raw(bom, synthetic)),
+    );
+    await expect(
+      loadConfiguration({ argv: [], env, readFile: reader }),
+    ).rejects.toMatchObject(
+      error(
+        conflict ? "CONFLICTING_SETTINGS" : "INVALID_VALUE",
+        conflict ? kind.setting : "driveId",
+      ),
+    );
+    expect(reader).not.toHaveBeenCalled();
+  },
+);
+it.each(secretFileCases.slice(0, 2))(
+  "BR-026 v3 F-049 AC-17 selection and no fallback unchanged",
+  async (kind) => {
+    if (!kind.inline) throw new Error("expected inline selector");
+    const reader = vi.fn<FileReader>(() =>
+      Promise.resolve(raw(bom, synthetic)),
+    );
+    const env = { ...base, ...whitespaceProxy, [kind.inline]: "SYNTHETIC" };
+    const selectedInline = await loadConfiguration({
+      argv: ["--config", "settings.yaml"],
+      env,
+      cwd: "/work",
+      readFile: (path, ...args) => {
+        if (path === "/work/settings.yaml")
+          return Promise.resolve(
+            bytes(`${kind.selector}: /synthetic/selected\n`),
+          );
+        if (path === "/synthetic/selected") return reader(path, ...args);
+        return Promise.resolve(bytes("SYNTHETIC_KEY"));
+      },
+    });
+    expect(loadedSecret(selectedInline, kind)).toBe("SYNTHETIC");
+    expect(reader).not.toHaveBeenCalled();
+    const option =
+      kind.name === "token"
+        ? "--token-file"
+        : "--oauth-upstream-client-secret-file";
+    await expect(
+      loadConfiguration({
+        argv: [option, "/synthetic/selected"],
+        env,
+        readFile: reader,
+      }),
+    ).rejects.toMatchObject(error("CREDENTIAL_BOM", kind.setting));
+    expect(reader).toHaveBeenCalledTimes(1);
+  },
+);
+it.each(
+  secretFileCases.flatMap((kind) =>
+    [
+      raw(bom, synthetic),
+      raw(padding, bom, synthetic, padding),
+      raw(bom, bom, synthetic),
+    ].map((content) => ({ kind, content })),
+  ),
+)(
+  "BR-026 v3 BR-027 v3 F-049 AC-18 fixed BOM diagnostics",
+  async ({ kind, content }) => {
+    const logs = [
+      vi.spyOn(console, "log"),
+      vi.spyOn(console, "warn"),
+      vi.spyOn(console, "error"),
+    ];
+    const operation = loadSyntheticFile(kind, content);
+    try {
+      await operation;
+      expect.fail("expected BOM refusal");
+    } catch (caught) {
+      expect(caught).toBeInstanceOf(ConfigurationError);
+      // Keep the existing Error name, with no extra enumerable payload.
+      expect(Object.keys(caught as ConfigurationError).sort()).toEqual([
+        "code",
+        "name",
+        "setting",
+      ]);
+      expect(JSON.stringify(caught)).toBe(
+        JSON.stringify(error("CREDENTIAL_BOM", kind.setting)),
+      );
+      expect(caught).not.toHaveProperty("cause");
+      expect((caught as Error).message).toBe(
+        `Configuration error [CREDENTIAL_BOM] (${kind.setting}).`,
+      );
+    }
+    for (const log of logs) expect(log).not.toHaveBeenCalled();
+  },
+);
+it("BR-026 v3 F-049 AC-26 YAML config BOM unchanged", async () => {
+  const operation = load(
+    {},
+    ["--config", "settings.yaml"],
+    "\ufeffmode: read\n",
+  );
+  await expect(operation).resolves.toHaveProperty("mode", "read");
+  await expect(operation).resolves.not.toHaveProperty("code", "CREDENTIAL_BOM");
+});
+
+it.each(
+  secretFileCases.flatMap((kind) =>
+    [
+      "missing",
+      "nonregular",
+      "final symlink",
+      "parent symlink",
+      "open identity",
+      "final identity",
+      "replacement symlink",
+      "streaming overflow",
+    ].map((scenario) => ({ kind, scenario })),
+  ),
+)(
+  "BR-026 v3 BR-027 v3 F-049 AC-24 guarded reads precede BOM inspection",
+  async ({ kind, scenario }) => {
+    const directory = await mkdtemp(join(tmpdir(), "config-bom-guard-"));
+    const file = join(directory, "selected");
+    const target = join(directory, "other");
+    const content = raw(bom, synthetic);
+    const originalOpen = fs.open;
+    try {
+      await writeFile(file, content);
+      await writeFile(target, content);
+      let selected = file;
+      if (scenario === "missing") selected = join(directory, "missing");
+      if (scenario === "nonregular") selected = directory;
+      if (scenario === "final symlink") {
+        selected = join(directory, "link");
+        await symlink(file, selected);
+      }
+      if (scenario === "parent symlink") {
+        await symlink(directory, join(directory, "parent"));
+        selected = join(directory, "parent", "selected");
+      }
+      if (scenario === "open identity")
+        vi.spyOn(fs, "open").mockImplementation(() =>
+          originalOpen(target, "r"),
+        );
+      if (scenario === "final identity") {
+        const originalLstat = fs.lstat;
+        let count = 0;
+        vi.spyOn(fs, "lstat").mockImplementation(
+          async (...args: Parameters<typeof fs.lstat>) => {
+            if (++count === 2) {
+              await fs.rename(file, join(directory, "old"));
+              await writeFile(file, content);
+            }
+            return originalLstat(...args);
+          },
+        );
+      }
+      if (scenario === "replacement symlink")
+        vi.spyOn(fs, "open").mockImplementation(async (path, flags) => {
+          await fs.rename(file, join(directory, "old"));
+          await symlink(target, file);
+          return originalOpen(path, flags);
+        });
+      if (scenario === "streaming overflow")
+        vi.spyOn(fs, "open").mockImplementation(async (path, flags) => {
+          const handle = await originalOpen(path, flags);
+          const stat = await handle.stat();
+          vi.spyOn(handle, "stat").mockImplementationOnce(async () => {
+            await writeFile(file, raw(bom, Buffer.alloc(kind.limit - 2, 0x78)));
+            return stat;
+          });
+          return handle;
+        });
+      const env = secretFileEnvironment(kind);
+      env[kind.file] = selected;
+      const operation = loadConfiguration({ argv: [], env });
+      const code =
+        scenario === "parent symlink"
+          ? "CREDENTIAL_BOM"
+          : scenario === "streaming overflow"
+            ? "LIMIT_EXCEEDED"
+            : "CREDENTIAL_READ_FAILED";
+      await expect(operation).rejects.toMatchObject(
+        error(
+          code,
+          scenario === "parent symlink" ? kind.setting : kind.selector,
+        ),
+      );
+    } finally {
+      vi.restoreAllMocks();
+      await rm(directory, { recursive: true, force: true });
+    }
+  },
+);

@@ -675,3 +675,30 @@ describe("F-039 production exit flush", () => {
     },
   );
 });
+
+it("BR-026 v3 BR-027 v3 F-049 AC-23 CLI BOM refusal is redacted", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "cli-bom-"));
+  const file = join(directory, "selected");
+  try {
+    await writeFile(
+      file,
+      Buffer.concat([
+        Buffer.from([0x20, 0x09, 0x0d, 0x0a, 0xef, 0xbb, 0xbf]),
+        Buffer.from("SYNTHETIC"),
+        Buffer.from([0x20, 0x09, 0x0d, 0x0a]),
+      ]),
+    );
+    const result = runDiagnostic(resolve("dist/cli.js"), [], {
+      KDRIVE_ID: "7",
+      KDRIVE_TOKEN_FILE: file,
+    });
+    expect(result.error).toBeUndefined();
+    expect(result.status).toBe(1);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toBe(
+      "Configuration error [CREDENTIAL_BOM] (token).\n",
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});

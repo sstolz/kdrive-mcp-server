@@ -122,14 +122,18 @@ UID 1000, the runtime user. Secrets are never passed as environment values or
 build arguments, and never enter the image: `.dockerignore` excludes secret
 files, environment files and keys from the build context.
 
-For all three secret files, maximal leading and trailing sequences of U+0020
-SPACE, U+0009 TAB, U+000D CR and U+000A LF are removed after checking the raw
-file limit (16,384 bytes for token/upstream secret; 65,536 for signing key).
-Empty results are refused. Other bytes, including NBSP, BOM and NUL, are not
+All three selected secret files complete guarded reads and raw-byte limits
+(16,384 bytes for token/upstream secret; 65,536 for signing key) before
+refusing `EF BB BF` anywhere in raw bytes with `CREDENTIAL_BOM` at `token`,
+`oauthUpstreamClientSecret` or `oauthSigningKeyFile`, respectively. This occurs
+before trimming, decoding or key parsing. Save the selected file as UTF-8
+without a BOM, then restart. Files without BOM remove maximal leading and
+trailing runs of U+0020 SPACE, U+0009 TAB, U+000D CR and U+000A LF.
+Empty results are refused. Other bytes, including NBSP and NUL, are not
 trimmed. Interior spaces remain valid in token/upstream secrets; interior ASCII
-controls remain invalid, and fatal UTF-8 decoding still applies. Signing-key
-interior bytes and PKCS#8/P-256 validation are unchanged. Direct environment
-credentials are never trimmed and retain their existing validation.
+controls remain invalid, and fatal UTF-8 decoding still applies. Signing bytes
+otherwise remain opaque until unchanged PKCS#8/P-256 validation. Inline
+credentials remain unchanged, including U+FEFF, and are never trimmed.
 
 ## Shutdown
 
@@ -438,7 +442,10 @@ time of writing.
 ### 3. Provision the three secret files
 
 Put them in a `secrets` directory readable by UID 1000 (the runtime user) and
-by nobody else. Each file is read once at startup. Leading and trailing
+by nobody else. Each file is read once at startup. Save it as UTF-8 without
+a BOM. After guarded reads and raw-byte limit checks, `EF BB BF` anywhere
+refuses startup with `CREDENTIAL_BOM` before trimming, decoding or key parsing;
+re-save without the BOM, then restart. Maximal leading and trailing runs of
 U+0020 SPACE, U+0009 TAB, U+000D CR and U+000A LF are removed, including
 repeated or mixed padding; an empty result is refused. Interior token/secret
 spaces remain valid and interior controls remain invalid. Environment
@@ -665,11 +672,14 @@ of those combinations have been verified with this server.
   `Configuration error [<code>] (<setting>).` names the code and the setting
   without its value, for example `[MISSING_REQUIRED]` for an unset setting,
   `[CREDENTIAL_READ_FAILED]` for a secret file that is missing or not readable
-  by UID 1000, `[CREDENTIAL_INVALID]` for an empty or non-UTF-8 secret file, `[DRIVE_NOT_ALLOWED]` when the token's account is not admin of a
+  by UID 1000, `[CREDENTIAL_INVALID]` for an empty or non-UTF-8 secret file,
+  `[CREDENTIAL_BOM]` for `EF BB BF` anywhere in a selected secret file,
+  `[DRIVE_NOT_ALLOWED]` when the token's account is not admin of a
   drive or a root names a drive that is not configured, `[ROOT_NOT_RESOLVED]` for a root path that is missing, ambiguous or not a folder, and
   `[PREFLIGHT_FAILED]` when kDrive refused or did not answer the startup
-  checks. The [configuration reference](../features/F-002-configuration.md)
-  lists every code. HTTP startup refusals print a fixed sentence instead, for
+  checks. The historical [configuration reference](../features/F-002-configuration.md)
+  lists the original codes; [F-049](../features/F-049-secret-file-bom-refusal.md)
+  adds `CREDENTIAL_BOM`. HTTP startup refusals print a fixed sentence instead, for
   example "The public URL of an authenticated server requires a path."; a
   signing key that is not one PKCS#8 PEM EC P-256 key, or a port that cannot
   be bound, prints "The HTTP listener could not be started.". An audit log that cannot be opened prints "The audit log could not be opened or
@@ -679,8 +689,17 @@ of those combinations have been verified with this server.
   trailing U+0020 SPACE, U+0009 TAB, U+000D CR and U+000A LF causes this error.
   Token/upstream-secret files also reject invalid UTF-8 and interior ASCII
   controls, including tabs, CR and LF; interior spaces remain valid. Other
-  Unicode whitespace, BOM and NUL are not trimmed. Environment credentials
-  are never trimmed. Correct the selected file, then restart.
+  Unicode whitespace and NUL are not trimmed. Environment credentials
+  remain unchanged, including U+FEFF, and are never trimmed. Correct the
+  selected file, then restart.
+- **`[CREDENTIAL_BOM]`.** The exact message is
+  `Configuration error [CREDENTIAL_BOM] (<setting>).`, where `<setting>` is
+  `token`, `oauthUpstreamClientSecret` or `oauthSigningKeyFile`. After guarded
+  reads and raw-byte limits, any raw `EF BB BF` sequence in the selected file
+  refuses startup before trimming, decoding or key parsing, regardless of
+  position (including inside or after a PEM). Save the selected file as UTF-8
+  without a BOM, then restart. Inline values remain unchanged, including
+  U+FEFF. The error contains no content, path or BOM position.
 - **`[PREFLIGHT_FAILED]` with `403 all_scopes`.** The kDrive API token lacks the
   `drive` scope. Create a token in **Tokens API → Créer un token** with
   **Application par défaut** and **drive — Produits Drive** (step 2), replace

@@ -13,7 +13,12 @@ import {
   type FileReader,
   type RootSelector,
 } from "./config-schema.js";
-import { decode, readBoundedFile, readSelected } from "./config-files.js";
+import {
+  decode,
+  readBoundedFile,
+  readSelected,
+  refuseCredentialBom,
+} from "./config-files.js";
 import {
   cliSource,
   environmentSource,
@@ -93,7 +98,7 @@ async function loadYaml(
     return fail("CONFIG_SYNTAX", "configFile");
   }
 }
-/** BR-026 v2: trim only four ASCII boundary bytes after the raw read limit. */
+/** BR-026 v3: trim four ASCII boundary byte values after read/limit/BOM checks. */
 function trimSecretFile(data: Uint8Array): Uint8Array {
   const padding = (byte: number | undefined) =>
     byte === 0x20 || byte === 0x09 || byte === 0x0d || byte === 0x0a;
@@ -120,6 +125,7 @@ async function loadSecret(
       true,
       file,
     );
+    refuseCredentialBom(data, inline);
     value = decode(trimSecretFile(data), inline, true);
   }
   if (!value || controls.test(value)) fail("CREDENTIAL_INVALID", inline);
@@ -144,6 +150,7 @@ async function loadSigning(
     true,
     "oauthSigningKeyFile",
   );
+  refuseCredentialBom(data, "oauthSigningKeyFile");
   const signing = trimSecretFile(data);
   if (!signing.length) fail("CREDENTIAL_INVALID", "oauthSigningKeyFile");
   return signing;

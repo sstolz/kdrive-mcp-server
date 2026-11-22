@@ -79,9 +79,13 @@ Pin an exact version as below for predictable updates: with a dist-tag,
 `npx` fetches whatever the tag points to at each start.
 
 Store your token in `/home/you/.config/kdrive/token`, a regular UTF-8 file
-containing the token. Leading and trailing U+0020 SPACE, U+0009 TAB,
-U+000D CR and U+000A LF are removed; an empty result is refused. Interior
-spaces remain valid; interior controls remain invalid. Environment credentials
+containing the token, saved as UTF-8 without a BOM. After guarded reads and
+raw-byte limits, `EF BB BF` anywhere in the raw file refuses startup with
+`CREDENTIAL_BOM` (`token`), before trimming or decoding. Re-save without a
+BOM, then restart. Maximal leading and trailing runs of U+0020 SPACE,
+U+0009 TAB, U+000D CR and U+000A LF are removed; an empty result is refused.
+Interior spaces remain valid; interior controls remain invalid. Other Unicode
+whitespace is not trimmed. Environment credentials
 are unchanged and are never trimmed. The token path is
 on the host, with no container mount; keep it private and readable only by
 the user running the client. The file must exist before launch; do not use
@@ -120,9 +124,13 @@ release read-back or confirmed by inspection. Paths, IDs and domains
 are fake; substitute your own values.
 
 Store your token in `/home/you/.config/kdrive/token`, a regular UTF-8 file
-containing the token. Leading and trailing U+0020 SPACE, U+0009 TAB,
-U+000D CR and U+000A LF are removed; an empty result is refused. Interior
-spaces remain valid; interior controls remain invalid. Environment credentials
+containing the token, saved as UTF-8 without a BOM. After guarded reads and
+raw-byte limits, `EF BB BF` anywhere in the raw file refuses startup with
+`CREDENTIAL_BOM` (`token`), before trimming or decoding. Re-save without a
+BOM, then restart. Maximal leading and trailing runs of U+0020 SPACE,
+U+0009 TAB, U+000D CR and U+000A LF are removed; an empty result is refused.
+Interior spaces remain valid; interior controls remain invalid. Other Unicode
+whitespace is not trimmed. Environment credentials
 are unchanged and are never trimmed. Mount it read-only at
 `/run/secrets/kdrive-token`; `KDRIVE_TOKEN_FILE` is the path **inside** the
 container. The image runs as UID/GID `1000:1000`, so that user must be able to

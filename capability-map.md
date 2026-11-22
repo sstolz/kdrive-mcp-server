@@ -1,5 +1,15 @@
 # Capability map
 
+## Provisional — Secret-file BOM refusal
+
+[F-049 v1](features/F-049-secret-file-bom-refusal.md) (#117),
+[BR-026 v3](business-rules/BR-026.md) and [BR-027 v3](business-rules/BR-027.md)
+are pending acceptance: selected token, upstream-secret and signing-key files
+refuse raw `EF BB BF` anywhere after guarded reads and raw limits, before
+trim, decoding or key parsing, with fixed redacted `CREDENTIAL_BOM` diagnostics.
+Inline behavior and non-BOM key qualification are unchanged. This is provisional,
+not an accepted capability; BR-026 v2 remains accepted and BR-027 v2 stays active.
+
 ## Accepted — Deny-pattern root warning
 
 [F-048 v1](features/F-048-deny-pattern-root-warning.md) (#110),
