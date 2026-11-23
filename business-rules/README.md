@@ -1141,9 +1141,9 @@ and BR-428 v1 definitions remain active until actual-main acceptance.
 Only info gains the two scalars; all other navigation projections stay unchanged.
 The new rule records are prepared; owner-run qualification is still pending.
 
-| ID | Version | Rule | Source | Status |
-| --- | --- | --- | --- | --- |
-| [BR-063](BR-063.md) | v2 | Seven-field info; five-field other navigation outputs. | [F-050 v1](../features/F-050-info-size-and-modification-time.md) | Pending acceptance; v1 remains active |
-| [BR-428](BR-428.md) | v2 | Replace only info purpose P. | [F-050 v1](../features/F-050-info-size-and-modification-time.md) | Pending acceptance; v1 remains active |
-| [BR-436](BR-436.md) | v1 | Validated file byte size, otherwise null. | [F-050 v1](../features/F-050-info-size-and-modification-time.md) | Pending acceptance |
-| [BR-437](BR-437.md) | v1 | Validated whole Unix seconds to UTC, otherwise null. | [F-050 v1](../features/F-050-info-size-and-modification-time.md) | Pending acceptance |
+| ID                  | Version | Rule                                                   | Source                                                           | Status                                |
+| ------------------- | ------- | ------------------------------------------------------ | ---------------------------------------------------------------- | ------------------------------------- |
+| [BR-063](BR-063.md) | v2      | Seven-field info; five-field other navigation outputs. | [F-050 v1](../features/F-050-info-size-and-modification-time.md) | Pending acceptance; v1 remains active |
+| [BR-428](BR-428.md) | v2      | Replace only info purpose P.                           | [F-050 v1](../features/F-050-info-size-and-modification-time.md) | Pending acceptance; v1 remains active |
+| [BR-436](BR-436.md) | v1      | Validated file byte size, otherwise null.              | [F-050 v1](../features/F-050-info-size-and-modification-time.md) | Pending acceptance                    |
+| [BR-437](BR-437.md) | v1      | Validated whole Unix seconds to UTC, otherwise null.   | [F-050 v1](../features/F-050-info-size-and-modification-time.md) | Pending acceptance                    |

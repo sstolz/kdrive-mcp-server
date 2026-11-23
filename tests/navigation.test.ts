@@ -58,7 +58,15 @@ describe("F-005 guarded navigation", () => {
     expect(
       payload(await c.invoke("kdrive_info", { file_id: 3, drive_id: 9 })),
     ).toEqual({
-      item: { drive_id: 9, id: 3, name: "other", type: "file", path: "/other", size_bytes: null, modified_at: null },
+      item: {
+        drive_id: 9,
+        id: 3,
+        name: "other",
+        type: "file",
+        path: "/other",
+        size_bytes: null,
+        modified_at: null,
+      },
     });
     const before = f.inspect.mock.calls.length;
     for (const drive_id of [null, "7", 0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1])
@@ -245,16 +253,31 @@ describe("F-005 guarded navigation", () => {
 // BR-063 v2, BR-436 v1, BR-437 v1
 it("TestBR063_v2_info_seven_fields", async () => {
   const f = await navigationFixture();
-  Object.assign(f.file, { size_bytes: 16, modified_at: "1970-01-01T00:00:00Z", extra: "CANARY" });
+  Object.assign(f.file, {
+    size_bytes: 16,
+    modified_at: "1970-01-01T00:00:00Z",
+    extra: "CANARY",
+  });
   const c = createNavigationController(f.config, f.dependencies);
   try {
     expect(await c.invoke("kdrive_info", { file_id: 3 })).toEqual({
-      content: [{ type: "text", text: JSON.stringify({ item: {
-        ...projection(f.file), size_bytes: 16, modified_at: "1970-01-01T00:00:00Z",
-      } }) }],
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify({
+            item: {
+              ...projection(f.file),
+              size_bytes: 16,
+              modified_at: "1970-01-01T00:00:00Z",
+            },
+          }),
+        },
+      ],
     });
     expect(f.execute).not.toHaveBeenCalled();
-  } finally { c.close(); }
+  } finally {
+    c.close();
+  }
 });
 
 it("TestBR436_v1_info_size_nullability", async () => {
@@ -263,14 +286,24 @@ it("TestBR436_v1_info_size_nullability", async () => {
   try {
     for (const n of [f.file, f.dir, f.root]) {
       for (const { raw, expected } of sizeCases) {
-        Object.assign(n, { size_bytes: raw, modified_at: "1970-01-01T00:00:01Z" });
-        expect(payload(await c.invoke("kdrive_info", { file_id: n.id }))).toEqual({
-          item: { ...projection(n), size_bytes: n.type === "file" ? expected : null,
-            modified_at: "1970-01-01T00:00:01Z" },
+        Object.assign(n, {
+          size_bytes: raw,
+          modified_at: "1970-01-01T00:00:01Z",
+        });
+        expect(
+          payload(await c.invoke("kdrive_info", { file_id: n.id })),
+        ).toEqual({
+          item: {
+            ...projection(n),
+            size_bytes: n.type === "file" ? expected : null,
+            modified_at: "1970-01-01T00:00:01Z",
+          },
         });
       }
     }
-  } finally { c.close(); }
+  } finally {
+    c.close();
+  }
 });
 
 it("TestBR437_v1_info_dates_and_no_fallback", async () => {
@@ -278,36 +311,86 @@ it("TestBR437_v1_info_dates_and_no_fallback", async () => {
   const c = createNavigationController(f.config, f.dependencies);
   try {
     for (const n of [f.file, f.dir, f.root]) {
-      for (const modified_at of [undefined, null, "0", 0, {}, [], true, "2026-01-01T00:00:00.000Z", "2026-01-01T00:00:00+00:00", "1970-01-01T00:00:00Z", "9999-12-31T23:59:59Z"]) {
-        Object.assign(n, { size_bytes: 16, modified_at, updated_at: "1970-01-01T00:00:01Z", created_at: 1, revised_at: 1 });
-        expect(payload(await c.invoke("kdrive_info", { file_id: n.id }))).toEqual({
-          item: { ...projection(n), size_bytes: n.type === "file" ? 16 : null,
-            modified_at: typeof modified_at === "string" && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/u.test(modified_at) ? modified_at : null },
+      for (const modified_at of [
+        undefined,
+        null,
+        "0",
+        0,
+        {},
+        [],
+        true,
+        "2026-01-01T00:00:00.000Z",
+        "2026-01-01T00:00:00+00:00",
+        "1970-01-01T00:00:00Z",
+        "9999-12-31T23:59:59Z",
+      ]) {
+        Object.assign(n, {
+          size_bytes: 16,
+          modified_at,
+          updated_at: "1970-01-01T00:00:01Z",
+          created_at: 1,
+          revised_at: 1,
+        });
+        expect(
+          payload(await c.invoke("kdrive_info", { file_id: n.id })),
+        ).toEqual({
+          item: {
+            ...projection(n),
+            size_bytes: n.type === "file" ? 16 : null,
+            modified_at:
+              typeof modified_at === "string" &&
+              /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/u.test(modified_at)
+                ? modified_at
+                : null,
+          },
         });
       }
     }
-  } finally { c.close(); }
+  } finally {
+    c.close();
+  }
 });
 
 it("TestBR063_v2_non_info_projection_unchanged", async () => {
   const f = await navigationFixture();
-  for (const n of f.nodes.values()) Object.assign(n, { size_bytes: 16, modified_at: "1970-01-01T00:00:00Z" });
+  for (const n of f.nodes.values())
+    Object.assign(n, { size_bytes: 16, modified_at: "1970-01-01T00:00:00Z" });
   const c = createNavigationController(f.config, f.dependencies);
   try {
     for (const [tool, args] of [
-      ["kdrive_list", { folder_id: 2 }], ["kdrive_search", { folder_id: 2, query: "a" }],
-      ["kdrive_recents", { folder_id: 2 }], ["kdrive_my_shared", { folder_id: 2 }],
-    ] as const) expect(payload(await c.invoke(tool, args))).toEqual({ items: [projection(f.file)], has_more: false });
-    expect(payload(await c.invoke("kdrive_resolve_path", { path: "/docs/a" }))).toEqual({ item: projection(f.file) });
-    expect(payload(await c.invoke("kdrive_list_drives", { drive_id: 7 }))).toEqual({ drives: [{ drive_id: 7, name: "Drive 7", roots: [projection(f.root)] }] });
-    expect(await navigatePolicy(createPolicy(f.config, f.dependencies), { kind: "read", target: { driveId: 7, id: 3 } })).toEqual({ ok: true, item: projection(f.file) });
-  } finally { c.close(); }
+      ["kdrive_list", { folder_id: 2 }],
+      ["kdrive_search", { folder_id: 2, query: "a" }],
+      ["kdrive_recents", { folder_id: 2 }],
+      ["kdrive_my_shared", { folder_id: 2 }],
+    ] as const)
+      expect(payload(await c.invoke(tool, args))).toEqual({
+        items: [projection(f.file)],
+        has_more: false,
+      });
+    expect(
+      payload(await c.invoke("kdrive_resolve_path", { path: "/docs/a" })),
+    ).toEqual({ item: projection(f.file) });
+    expect(
+      payload(await c.invoke("kdrive_list_drives", { drive_id: 7 })),
+    ).toEqual({
+      drives: [{ drive_id: 7, name: "Drive 7", roots: [projection(f.root)] }],
+    });
+    expect(
+      await navigatePolicy(createPolicy(f.config, f.dependencies), {
+        kind: "read",
+        target: { driveId: 7, id: 3 },
+      }),
+    ).toEqual({ ok: true, item: projection(f.file) });
+  } finally {
+    c.close();
+  }
 });
 
 // BR-063 v2: received discovery retains its exact five-field envelope too.
 it("TestBR063_v2_non_info_projection_unchanged received discovery", async () => {
   const f = await sharedFixture();
-  for (const n of f.items.values()) Object.assign(n, { size_bytes: 16, modified_at: "1970-01-01T00:00:00Z" });
+  for (const n of f.items.values())
+    Object.assign(n, { size_bytes: 16, modified_at: "1970-01-01T00:00:00Z" });
   // Resolve walks each directory through collection(scope); the generic shared
   // fixture always returns its file and is not a directory-listing fixture.
   f.received.collection.mockImplementation(async (request) => {
@@ -324,9 +407,25 @@ it("TestBR063_v2_non_info_projection_unchanged received discovery", async () => 
       ),
     };
   });
-  const c = createNavigationController(f.config, { ...f.configured, received: f.received, execute: f.execute });
+  const c = createNavigationController(f.config, {
+    ...f.configured,
+    received: f.received,
+    execute: f.execute,
+  });
   try {
-    expect(payload(await c.invoke("kdrive_shared_with_me", {}))).toEqual({ items: [projection(f.anchor)], has_more: false });
-    expect(payload(await c.invoke("kdrive_resolve_path", { drive_id: 8, path: f.file.path }))).toEqual({ item: projection(f.file) });
-  } finally { c.close(); }
+    expect(payload(await c.invoke("kdrive_shared_with_me", {}))).toEqual({
+      items: [projection(f.anchor)],
+      has_more: false,
+    });
+    expect(
+      payload(
+        await c.invoke("kdrive_resolve_path", {
+          drive_id: 8,
+          path: f.file.path,
+        }),
+      ),
+    ).toEqual({ item: projection(f.file) });
+  } finally {
+    c.close();
+  }
 });

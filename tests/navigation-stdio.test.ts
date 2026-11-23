@@ -488,17 +488,42 @@ it("TestBR428_AC03_stdio_invalid_mutation_arguments", async () => {
 // BR-063 v2, BR-436 v1, BR-437 v1
 it("TestBR063_v2_info_sdk_wire_projection", async () => {
   const w = await wire();
-  Object.assign(w.file, { size_bytes: 16, modified_at: "1970-01-01T00:00:00Z", extra: "CANARY_EXTRA" });
+  Object.assign(w.file, {
+    size_bytes: 16,
+    modified_at: "1970-01-01T00:00:00Z",
+    extra: "CANARY_EXTRA",
+  });
   try {
     w.send(initialize);
     await w.read(1);
     w.send({ jsonrpc: "2.0", method: "notifications/initialized" });
-    w.send({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "kdrive_info", arguments: { file_id: 3 } } });
-    expect((await w.read(2)).result).toEqual({ content: [{ type: "text", text: JSON.stringify({ item: {
-      drive_id: 7, id: 3, name: "a", type: "file", path: "/docs/a",
-      size_bytes: 16, modified_at: "1970-01-01T00:00:00Z",
-    } }) }] });
+    w.send({
+      jsonrpc: "2.0",
+      id: 2,
+      method: "tools/call",
+      params: { name: "kdrive_info", arguments: { file_id: 3 } },
+    });
+    expect((await w.read(2)).result).toEqual({
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify({
+            item: {
+              drive_id: 7,
+              id: 3,
+              name: "a",
+              type: "file",
+              path: "/docs/a",
+              size_bytes: 16,
+              modified_at: "1970-01-01T00:00:00Z",
+            },
+          }),
+        },
+      ],
+    });
     expect(w.stdout() + w.stderr()).not.toContain("CANARY");
     expect(w.execute).not.toHaveBeenCalled();
-  } finally { await w.session.close(); }
+  } finally {
+    await w.session.close();
+  }
 });

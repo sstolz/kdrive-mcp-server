@@ -591,9 +591,7 @@ it.each([502, 501])(
                 name: id === 502 ? "g.txt" : "sub",
                 type: id === 502 ? "file" : "dir",
                 path:
-                  id === 502
-                    ? "/Shared/team/sub/g.txt"
-                    : "/Shared/team/sub",
+                  id === 502 ? "/Shared/team/sub/g.txt" : "/Shared/team/sub",
                 size_bytes: id === 502 ? row.size : null,
                 modified_at: row.date,
               },
@@ -625,14 +623,38 @@ it.each([502, 501])(
 it("TestBR063_v2_non_inspect_metadata_absent", async () => {
   const metadata = { size: 16, last_modified_at: 1 };
   const { a } = await setup(undefined, (r) => {
-    if (r.path === "/3/drive/files/shared_with_me") return success([{ ...root, ...metadata }, { ...fileRoot, ...metadata }], { has_more: false, cursor: null });
-    if (r.path === "/3/drive/202/files/501/files" || r.path === "/3/drive/202/files/search") return success([{ ...grandchild, ...metadata }], { has_more: false, cursor: null });
+    if (r.path === "/3/drive/files/shared_with_me")
+      return success(
+        [
+          { ...root, ...metadata },
+          { ...fileRoot, ...metadata },
+        ],
+        { has_more: false, cursor: null },
+      );
+    if (
+      r.path === "/3/drive/202/files/501/files" ||
+      r.path === "/3/drive/202/files/search"
+    )
+      return success([{ ...grandchild, ...metadata }], {
+        has_more: false,
+        cursor: null,
+      });
     return undefined;
   });
   for (const page of [
     await a.dependencies.received.list(invocation()),
-    await a.dependencies.received.children({ ...invocation(), driveId: OWNER, id: 501, location: "live" }),
-    await a.dependencies.received.collection({ ...invocation(), kind: "search", scope: { driveId: OWNER, id: 500 }, query: "g" }),
+    await a.dependencies.received.children({
+      ...invocation(),
+      driveId: OWNER,
+      id: 501,
+      location: "live",
+    }),
+    await a.dependencies.received.collection({
+      ...invocation(),
+      kind: "search",
+      scope: { driveId: OWNER, id: 500 },
+      query: "g",
+    }),
   ]) {
     expect(page).toMatchObject({ status: "complete" });
     for (const entry of (page as P).entries as P[]) {

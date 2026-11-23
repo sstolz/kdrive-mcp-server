@@ -118,7 +118,8 @@ export interface InfoItem extends NavigationItem {
   readonly size_bytes: number | null;
   readonly modified_at: string | null;
 }
-type InfoResult = { readonly ok: true; readonly item: InfoItem } | typeof denied;
+type InfoResult =
+  { readonly ok: true; readonly item: InfoItem } | typeof denied;
 const infoFacades = new WeakMap<object, (ref: Ref) => Promise<InfoResult>>();
 /** BR-063 v2: only exact constructed policies expose the info consumer port. */
 export function infoPolicy(policy: object, ref: Ref): Promise<InfoResult> {

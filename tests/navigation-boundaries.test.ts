@@ -16,7 +16,11 @@ import { runDiagnostic } from "./helpers/diagnostic.js";
 import { resolve } from "node:path";
 import { PassThrough } from "node:stream";
 import { startStdioNavigation } from "../src/stdio.js";
-import { createPolicy, infoPolicy, navigatePolicy } from "../src/policy/index.js";
+import {
+  createPolicy,
+  infoPolicy,
+  navigatePolicy,
+} from "../src/policy/index.js";
 import { item } from "../src/policy/values.js";
 afterEach(() => vi.useRealTimers());
 const error = (text: string) => ({
@@ -452,7 +456,13 @@ it("TestBR070_v4_AC05_operation_512_succeeds_and_513_never_starts", async () => 
 // BR-063 v2: size the seven-field info envelope before checking the ceiling.
 it("BR-070 serialized payload character ceiling allows equality and refuses one character below", async () => {
   const initial = await navigationFixture(),
-    text = JSON.stringify({ item: { ...projection(initial.file), size_bytes: null, modified_at: null } });
+    text = JSON.stringify({
+      item: {
+        ...projection(initial.file),
+        size_bytes: null,
+        modified_at: null,
+      },
+    });
   for (const delta of [0, -1]) {
     const f = await navigationFixture({
         KDRIVE_MCP_MAX_OUTPUT_CHARS: String(text.length + delta),
@@ -460,7 +470,9 @@ it("BR-070 serialized payload character ceiling allows equality and refuses one 
       c = createNavigationController(f.config, f.dependencies);
     const result = await c.invoke("kdrive_info", { file_id: 3 });
     if (delta === 0)
-      expect(payload(result)).toEqual({ item: { ...projection(f.file), size_bytes: null, modified_at: null } });
+      expect(payload(result)).toEqual({
+        item: { ...projection(f.file), size_bytes: null, modified_at: null },
+      });
     else expect(result).toEqual(error("LIMIT_EXCEEDED"));
     c.close();
   }
@@ -487,22 +499,47 @@ it("BR-071 v2 packed production bin keeps request-free diagnostics; help names t
 // BR-063 v2, BR-436 v1, BR-437 v1: optional evidence grants no authority.
 it("TestBR063_v2_info_authority_and_hostile_fields", async () => {
   const target = { driveId: 7, id: 3 };
-  expect(await infoPolicy({}, target)).toEqual({ ok: false, code: "ACCESS_DENIED" });
+  expect(await infoPolicy({}, target)).toEqual({
+    ok: false,
+    code: "ACCESS_DENIED",
+  });
   for (const mode of ["read", "write", "share"]) {
     const f = await navigationFixture({ KDRIVE_MCP_MODE: mode });
     const policy = createPolicy(f.config, f.dependencies);
-    expect(await infoPolicy({ ...policy }, target)).toEqual({ ok: false, code: "ACCESS_DENIED" });
-    Object.assign(f.file, { size_bytes: 16, modified_at: "1970-01-01T00:00:00Z", extra: "CANARY_EXTRA" });
-    expect(await infoPolicy(policy, target)).toEqual({ ok: true, item: {
-      ...projection(f.file), size_bytes: 16, modified_at: "1970-01-01T00:00:00Z",
-    } });
-    expect(await navigatePolicy(policy, { kind: "read", target })).toEqual({ ok: true, item: projection(f.file) });
+    expect(await infoPolicy({ ...policy }, target)).toEqual({
+      ok: false,
+      code: "ACCESS_DENIED",
+    });
+    Object.assign(f.file, {
+      size_bytes: 16,
+      modified_at: "1970-01-01T00:00:00Z",
+      extra: "CANARY_EXTRA",
+    });
+    expect(await infoPolicy(policy, target)).toEqual({
+      ok: true,
+      item: {
+        ...projection(f.file),
+        size_bytes: 16,
+        modified_at: "1970-01-01T00:00:00Z",
+      },
+    });
+    expect(await navigatePolicy(policy, { kind: "read", target })).toEqual({
+      ok: true,
+      item: projection(f.file),
+    });
     for (const operation of [
-      { kind: "info", target }, { kind: "read", target, projection: "info" },
+      { kind: "info", target },
+      { kind: "read", target, projection: "info" },
       { kind: "read", target, info: true },
     ]) {
-      expect(await policy.check(operation)).toEqual({ allowed: false, code: "INVALID_OPERATION" });
-      expect(await policy.dispatch(operation)).toEqual({ ok: false, code: "ACCESS_DENIED" });
+      expect(await policy.check(operation)).toEqual({
+        allowed: false,
+        code: "INVALID_OPERATION",
+      });
+      expect(await policy.dispatch(operation)).toEqual({
+        ok: false,
+        code: "ACCESS_DENIED",
+      });
     }
     expect(f.execute).not.toHaveBeenCalled();
   }
@@ -513,53 +550,121 @@ it("TestBR063_v2_info_hostile_configured_fields", async () => {
   const f = await navigationFixture();
   const c = createNavigationController(f.config, f.dependencies);
   let calls = 0;
-  const canary = { toJSON(this: void) { calls++; return "CANARY"; } };
+  const canary = {
+    toJSON: () => {
+      calls++;
+      return "CANARY";
+    },
+  };
   try {
     for (const [size_bytes, modified_at] of [
-      [canary, "1970-01-01T00:00:00Z"], [16, canary], ["CANARY", "CANARY"],
-      [true, 0], [[], []], [-1, false], [0.5, undefined], [Infinity, null],
+      [canary, "1970-01-01T00:00:00Z"],
+      [16, canary],
+      ["CANARY", "CANARY"],
+      [true, 0],
+      [[], []],
+      [-1, false],
+      [0.5, undefined],
+      [Infinity, null],
     ]) {
-      const evidence = { ...f.file, size_bytes, modified_at, extra: canary, toJSON: canary.toJSON };
+      const evidence = {
+        ...f.file,
+        size_bytes,
+        modified_at,
+        extra: canary,
+        toJSON: canary.toJSON,
+      };
       f.inspect.mockResolvedValue(evidence);
-      const normalized = item(evidence, target, "live") as unknown as Record<string, unknown>;
-      const expectedSize = typeof size_bytes === "number" && Number.isSafeInteger(size_bytes) && size_bytes >= 0 ? size_bytes : null;
-      const expectedDate = modified_at === "1970-01-01T00:00:00Z" ? modified_at : null;
+      const normalized = item(evidence, target, "live") as unknown as Record<
+        string,
+        unknown
+      >;
+      const expectedSize =
+        typeof size_bytes === "number" &&
+        Number.isSafeInteger(size_bytes) &&
+        size_bytes >= 0
+          ? size_bytes
+          : null;
+      const expectedDate =
+        modified_at === "1970-01-01T00:00:00Z" ? modified_at : null;
       expect(normalized.size_bytes).toBe(expectedSize);
       expect(normalized.modified_at).toBe(expectedDate);
-      expect(payload(await c.invoke("kdrive_info", { file_id: 3 }))).toEqual({ item: {
-        ...projection(f.file), size_bytes: expectedSize, modified_at: expectedDate,
-      } });
+      expect(payload(await c.invoke("kdrive_info", { file_id: 3 }))).toEqual({
+        item: {
+          ...projection(f.file),
+          size_bytes: expectedSize,
+          modified_at: expectedDate,
+        },
+      });
       expect(calls).toBe(0);
     }
-    for (const evidence of [undefined, { status: "missing" }, { ...f.file, id: 4 }, { ...f.file, parents: [] }, { ...f.file, status: "incomplete" }]) {
+    for (const evidence of [
+      undefined,
+      { status: "missing" },
+      { ...f.file, id: 4 },
+      { ...f.file, parents: [] },
+      { ...f.file, status: "incomplete" },
+    ]) {
       f.inspect.mockResolvedValue(evidence);
-      expect(await c.invoke("kdrive_info", { file_id: 3 })).toEqual(error("ACCESS_DENIED"));
+      expect(await c.invoke("kdrive_info", { file_id: 3 })).toEqual(
+        error("ACCESS_DENIED"),
+      );
     }
     for (const field of ["size_bytes", "modified_at", "extra"]) {
       const evidence = { ...f.file };
-      Object.defineProperty(evidence, field, { enumerable: true, get() { calls++; throw Error("CANARY"); } });
+      Object.defineProperty(evidence, field, {
+        enumerable: true,
+        get() {
+          calls++;
+          throw Error("CANARY");
+        },
+      });
       f.inspect.mockResolvedValue(evidence);
-      expect(await c.invoke("kdrive_info", { file_id: 3 })).toEqual(error("ACCESS_DENIED"));
+      expect(await c.invoke("kdrive_info", { file_id: 3 })).toEqual(
+        error("ACCESS_DENIED"),
+      );
     }
     expect(calls).toBe(0);
     expect(f.execute).not.toHaveBeenCalled();
-  } finally { c.close(); }
+  } finally {
+    c.close();
+  }
   const denied = await navigationFixture({ KDRIVE_MCP_DENY: "/docs/**" });
-  Object.assign(denied.file, { size_bytes: 16, modified_at: "1970-01-01T00:00:00Z" });
+  Object.assign(denied.file, {
+    size_bytes: 16,
+    modified_at: "1970-01-01T00:00:00Z",
+  });
   const d = createNavigationController(denied.config, denied.dependencies);
-  try { expect(await d.invoke("kdrive_info", { file_id: 3 })).toEqual(error("ACCESS_DENIED")); }
-  finally { d.close(); }
-
+  try {
+    expect(await d.invoke("kdrive_info", { file_id: 3 })).toEqual(
+      error("ACCESS_DENIED"),
+    );
+  } finally {
+    d.close();
+  }
 });
 
 it("TestBR063_v2_info_received_authority_and_hostile_fields", async () => {
   let calls = 0;
-  const canary = { toJSON(this: void) { calls++; return "CANARY"; } };
+  const canary = {
+    toJSON: () => {
+      calls++;
+      return "CANARY";
+    },
+  };
   const shared = await receivedFixture({ KDRIVE_MCP_MODE: "read" });
-  const dependencies = { ...shared.configured, received: shared.received, execute: shared.execute };
+  const dependencies = {
+    ...shared.configured,
+    received: shared.received,
+    execute: shared.execute,
+  };
   shared.received.inspect.mockImplementation(async (ref, location) => {
     await Promise.resolve();
-    return shared.items.get(`${location}:${ref.driveId}:${ref.id}`) ?? { status: "missing" };
+    return (
+      shared.items.get(`${location}:${ref.driveId}:${ref.id}`) ?? {
+        status: "missing",
+      }
+    );
   });
   const policy = createPolicy(shared.config, dependencies);
   const sharedTarget = { driveId: 8, id: 24 };
@@ -570,21 +675,41 @@ it("TestBR063_v2_info_received_authority_and_hostile_fields", async () => {
     { size_bytes: [], modified_at: "CANARY" },
   ]) {
     Object.assign(shared.file, scalars);
-    expect(await infoPolicy(policy, sharedTarget)).toEqual({ ok: true, item: {
-      ...projection(shared.file), size_bytes: scalars.size_bytes === 16 ? 16 : null,
-      modified_at: scalars.modified_at === "1970-01-01T00:00:00Z" ? scalars.modified_at : null,
-    } });
-    expect(await navigatePolicy(policy, { kind: "read", target: sharedTarget })).toEqual({ ok: true, item: projection(shared.file) });
+    expect(await infoPolicy(policy, sharedTarget)).toEqual({
+      ok: true,
+      item: {
+        ...projection(shared.file),
+        size_bytes: scalars.size_bytes === 16 ? 16 : null,
+        modified_at:
+          scalars.modified_at === "1970-01-01T00:00:00Z"
+            ? scalars.modified_at
+            : null,
+      },
+    });
+    expect(
+      await navigatePolicy(policy, { kind: "read", target: sharedTarget }),
+    ).toEqual({ ok: true, item: projection(shared.file) });
   }
   // Read authorization uses the target's current capabilities; an ancestor's
   // read bit does not override an authorized descendant's read capability.
   shared.file.capabilities.read = false;
   expect((await infoPolicy(policy, sharedTarget)).ok).toBe(false);
-  expect((await navigatePolicy(policy, { kind: "read", target: sharedTarget })).ok).toBe(false);
+  expect(
+    (await navigatePolicy(policy, { kind: "read", target: sharedTarget })).ok,
+  ).toBe(false);
   shared.file.capabilities.read = true;
   shared.clock.value = 60000;
-  shared.received.list.mockImplementation(async (request) => ({ ...await Promise.resolve(request), status: "complete", entries: [], terminal: true, discover: true }));
-  expect(await infoPolicy(policy, sharedTarget)).toEqual({ ok: false, code: "ACCESS_DENIED" });
+  shared.received.list.mockImplementation(async (request) => ({
+    ...(await Promise.resolve(request)),
+    status: "complete",
+    entries: [],
+    terminal: true,
+    discover: true,
+  }));
+  expect(await infoPolicy(policy, sharedTarget)).toEqual({
+    ok: false,
+    code: "ACCESS_DENIED",
+  });
   expect(shared.execute).not.toHaveBeenCalled();
   expect(calls).toBe(0);
 });

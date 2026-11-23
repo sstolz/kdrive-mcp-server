@@ -24,18 +24,23 @@ interface Manifest {
 }
 interface Client {
   connect(transport: unknown): Promise<void>;
-  callTool(params: { name: string; arguments: Record<string, unknown> }): Promise<{
+  callTool(params: {
+    name: string;
+    arguments: Record<string, unknown>;
+  }): Promise<{
     content?: unknown;
     isError?: unknown;
   }>;
   close(): Promise<void>;
 }
 function validSize(value: unknown): value is number {
-  return (
-    typeof value === "number" && Number.isSafeInteger(value) && value >= 0
-  );
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 }
-function designated(value: unknown, known: boolean, folder = false): Designated {
+function designated(
+  value: unknown,
+  known: boolean,
+  folder = false,
+): Designated {
   if (!value || typeof value !== "object") throw new Error("manifest");
   const r = value as Designated;
   if (![r.driveId, r.id].every((n) => Number.isSafeInteger(n) && n > 0))
@@ -127,7 +132,10 @@ async function runtime(m: Manifest) {
     onRequest: observe,
   });
   if (!handle) throw new Error("start");
-  const client = new sdk.Client({ name: "kdrive-info-acceptance", version: "1" });
+  const client = new sdk.Client({
+    name: "kdrive-info-acceptance",
+    version: "1",
+  });
   try {
     await client.connect(new LineTransport(input, output));
   } catch {
@@ -144,10 +152,14 @@ async function runtime(m: Manifest) {
         arguments: { drive_id: ref.driveId, file_id: ref.id },
       });
       if (result.isError) throw new Error("info");
-      const text = (result.content as { text?: string }[] | undefined)?.[0]?.text;
+      const text = (result.content as { text?: string }[] | undefined)?.[0]
+        ?.text;
       if (!text) throw new Error("info");
       const parsed = JSON.parse(text) as { item: Record<string, unknown> };
-      return { raw: raw.value.data as Record<string, unknown>, item: parsed.item };
+      return {
+        raw: raw.value.data as Record<string, unknown>,
+        item: parsed.item,
+      };
     },
     async close() {
       try {
@@ -166,8 +178,14 @@ function timestamp(value: unknown): string | null {
     ? new Date(value * 1000).toISOString().replace(".000Z", "Z")
     : null;
 }
-function knownMismatch(ref: Designated, bytes: number | null, date: string | null) {
-  return bytes !== ref.size_bytes || (date !== null && date !== ref.modified_at);
+function knownMismatch(
+  ref: Designated,
+  bytes: number | null,
+  date: string | null,
+) {
+  return (
+    bytes !== ref.size_bytes || (date !== null && date !== ref.modified_at)
+  );
 }
 function compare(
   ref: Designated,
