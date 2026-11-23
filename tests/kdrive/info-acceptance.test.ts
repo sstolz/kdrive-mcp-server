@@ -302,6 +302,12 @@ it("TestBR436_v1_owner_procedure_bounds_and_redaction", async () => {
       ).toBe(true);
       const output = run.stdout + run.stderr;
       expect(Buffer.byteLength(output)).toBeLessThanOrEqual(4096);
+      // BR-436 v1: the report states the read-only and request-bound guards.
+      expect(JSON.parse(run.stdout.trim())).toMatchObject({
+        qualified: true,
+        non_get: false,
+        requests_within_bound: true,
+      });
       for (const value of [
         CANARY,
         "a.bin",

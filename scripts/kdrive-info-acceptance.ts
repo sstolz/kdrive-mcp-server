@@ -77,9 +77,12 @@ function manifest(): Manifest {
 }
 const started = performance.now();
 let requests = 0;
+let nonGet = false;
+// The transport swallows observer exceptions (BR-216), so a non-GET request
+// is recorded as a flag that fails qualification instead of being thrown.
 function observe(method: string) {
   requests++;
-  if (method !== "GET") throw new Error("method");
+  if (method !== "GET") nonGet = true;
 }
 async function runtime(m: Manifest) {
   const { main } = (await import(
@@ -230,7 +233,10 @@ async function run() {
     await session.close();
   }
   return {
-    qualified: checks.every((c) => c.outcome === "passed"),
+    qualified:
+      checks.every((c) => c.outcome === "passed") &&
+      !nonGet &&
+      requests <= MAX_REQUESTS,
     checks,
     received: m.received
       ? "compared"
@@ -259,6 +265,8 @@ async function main() {
       ...report,
       sha: /^[0-9a-f]{40}$/u.test(sha ?? "") ? sha : "unknown",
       requests,
+      non_get: nonGet,
+      requests_within_bound: requests <= MAX_REQUESTS,
     })}\n`,
   );
 }
