@@ -25,8 +25,8 @@ also reconstructs items, so adding fields at the handler alone cannot work.
 as a non-negative safe integer, but uses a content-specific zero fallback
 and may download a range. That content contract is not the info contract.
 
-The supplied brief reports no repository observation of the modification
-field. A targeted read found that the historical
+The repository has no verified observation of the modification field's shape
+or unit. The historical
 [API notes](../docs/api-notes.md#modèle-de-fichier) list `last_modified_at`,
 but give neither a value shape nor a unit. The curated
 [observations](../docs/observations/kdrive-api.md) and
@@ -47,8 +47,9 @@ This is full-path public-contract work. It is not classified as
 security-sensitive: it adds two validated scalars to an already authorized
 read and changes no authority, credential admission or trust boundary.
 Projection and refusal regressions still require independent review.
-This draft does not freeze or authorize implementation. IDs supplied as free
-on main are F-050, BR-436 and ADR-013; recheck before freeze and PR creation.
+This draft does not freeze or authorize implementation. The allocation ledger
+reserves F-050 and BR-436–BR-437 for this ticket; ADR-013 remains free.
+Recheck the ledger on main before freeze and PR creation.
 
 ## Scope
 
@@ -56,8 +57,13 @@ on main are F-050, BR-436 and ADR-013; recheck before freeze and PR creation.
    fields, always present: `drive_id`, `id`, `name`, `type`, `path`,
    `size_bytes`, `modified_at`. Preserve `{item}` in the existing single JSON
    text result, input schema, annotations, error codes and transport behavior.
-2. Carry only the two validated optional scalars through configured-tree and
-   received-item normalization and policy inspection. Publish them from the
+2. Carry only the two validated optional scalars from the configured-tree live
+   `inspect()` and received live `inspect()` paths in `src/kdrive/adapter.ts`,
+   through normalization and policy inspection. Keep shared `treeItem()` and
+   `receivedItem()` normalization metadata-free for their other callers:
+   list/collection, children, trash, resolve and received-list items acquire
+   neither scalar. Attach the validated scalars only in those live inspection
+   paths, preserving them through policy value normalization. Publish them from the
    exact normalized live item authorized in that invocation, after existing
    terminal received-cache checks. Do not fetch separate unchecked metadata,
    call content `describe()`/download, use `execute` payloads, cache a grant,
@@ -65,8 +71,15 @@ on main are F-050, BR-436 and ADR-013; recheck before freeze and PR creation.
    Missing or invalid optional scalars do not invalidate otherwise complete
    identity/ancestry/capability evidence; invalid required evidence still refuses.
 3. Keep the existing five-field `NavigationItem` projection for every other
-   public output. Introduce a distinct info projection at the immediate guarded
-   policy boundary, rather than broadening shared `project()` globally.
+   public output. Introduce a separate private info consumer port, exposed by
+   `infoPolicy(policy, ref)` for exact constructed policy instances through a
+   WeakMap, alongside the existing navigation port. It constructs the existing
+   `{kind:"read", target:ref}` operation, runs `evaluate()`, then the existing
+   terminal received check, and immediately projects the invocation's authorized
+   live item to seven fields without an intervening application await. Only
+   the `kdrive_info` handler uses this port. Keep `navigatePolicy()` and shared
+   `project()` five-field, and leave `operation()`, `readKinds`, the read-mode
+   gate, received capability mapping, `check()` and `dispatch()` unchanged.
    `kdrive_list`, `kdrive_search`, `kdrive_recents`, `kdrive_my_shared`,
    `kdrive_shared_with_me`, `kdrive_list_drives` roots and
    `kdrive_resolve_path` items retain their exact shapes, including resumed pages.
@@ -76,7 +89,7 @@ on main are F-050, BR-436 and ADR-013; recheck before freeze and PR creation.
    including drive root ID 1, even if upstream supplies a numeric size.
    Do not sum descendants or replace unknown size with zero.
 5. Read only raw `last_modified_at` for files and directories, including root
-   ID 1 when supplied. Accept a numeric safe integer in
+   ID 1 when present. Accept a numeric safe integer in
    `0..253402300799` inclusive (epoch through `9999-12-31T23:59:59Z`).
    Convert seconds to UTC and emit exactly `YYYY-MM-DDTHH:mm:ssZ`, with no
    fractional seconds or offset. Zero is `1970-01-01T00:00:00Z`; negative
@@ -93,9 +106,8 @@ on main are F-050, BR-436 and ADR-013; recheck before freeze and PR creation.
    `Gets authorized metadata for a file or folder. Returns JSON item with drive_id, id, name, type, path, size_bytes (bytes; null for folders or unknown size) and modified_at (UTC ISO 8601 to whole seconds; null when unknown). Use kdrive_read or kdrive_download for file content. No cursor.`
    Keep the existing name prefix, notice N and all other catalog text and
    budgets. Update the independent catalog expectation. No output schema is
-   currently registered by `src/navigation.ts`; do not add a new schema contract.
-   If implementation finds a current info output schema elsewhere, amend only
-   its field list/nullability to this contract. Correct README's blanket
+   present anywhere in `src/` (checked on `7ec6709`); do not add a new schema
+   contract. Correct README's blanket
    five-field statement to distinguish info from all other item outputs and
    document source units, range, null semantics and real-account uncertainty.
    Historical F-005/F-042 specs and past evidence remain unchanged; this
@@ -108,7 +120,9 @@ on main are F-050, BR-436 and ADR-013; recheck before freeze and PR creation.
 9. Prepare a bounded read-only acceptance operator and its documented owner
    command, using the existing acceptance launcher/transport conventions.
    Inputs identify one owner-designated authorized file of independently known
-   size and modification time and one authorized folder. Run the same entry
+   size and modification time and one authorized folder, plus an optional
+   owner-designated authorized received-share item. Apply the same comparisons
+   and per-item bounds to that item when present. Run the same entry
    path end to end against the synthetic kDrive first; no fixture creation or
    mutation on a real account. Compare the upstream scalars with tool output,
    with at most one explicit direct metadata read and one info call per item
@@ -118,6 +132,9 @@ on main are F-050, BR-436 and ADR-013; recheck before freeze and PR creation.
    seconds unit, conversion outcome and evidence link in
    `docs/observations/kdrive-api.md`. A missing field records an inconclusive
    observation and does not count as successful non-null date qualification.
+   If no received-share item is available, record unverified real-account
+   received-share metadata as a residual risk in that observation entry;
+   synthetic received-share coverage remains mandatory.
 
 ### Out of scope
 
@@ -133,8 +150,9 @@ on main are F-050, BR-436 and ADR-013; recheck before freeze and PR creation.
 
 ## Business rules
 
-- **BR-063 v2** — Successful info output contains exactly the seven scoped
-  scalar fields from the exact authorized normalized live item; all other
+- **BR-063 v2** — Successful info output contains exactly `drive_id`, `id`,
+  `name`, `type`, `path`, `size_bytes`, `modified_at` from the exact authorized
+  normalized live item; all other
   navigation item outputs retain the five-field projection and existing
   authority/refusal safeguards. Verified by: AC-01, AC-04–AC-06.
 - **BR-436 v1** — Info `size_bytes` equals raw `size` only for files with a
@@ -185,7 +203,12 @@ before implementation; it runs `make check` and CI after implementation.
 - **AC-04 (BR-063 v2)** — Given the same authorized items with valid optional
   metadata, when all collection tools, resumed pages, path resolution and
   drive-root enumeration run, then their item keys and envelopes equal the
-  pre-change five-field baselines. Verified by characterization tests
+  pre-change five-field baselines. At the adapter boundary, list/collection,
+  children, trash, resolve and received-list items carry neither new scalar,
+  even when their upstream metadata contains valid values. Verified by
+  `TestBR063_v2_non_inspect_metadata_absent` in
+  `tests/kdrive/adapter-normalize.test.ts` and
+  `tests/kdrive/adapter-received.test.ts`, and by characterization tests
   `TestBR063_v2_non_info_projection_unchanged` in
   `tests/navigation.test.ts` and `tests/pagination.test.ts`; run these on the
   unchanged base before adding the info-specific failing tests.
@@ -203,7 +226,11 @@ before implementation; it runs `make check` and CI after implementation.
   proof or incomplete required evidence, when info runs, then it returns the
   existing refusal without size/date. Given hostile extras, accessors, toJSON
   or execute canaries, none is executed or serialized; successful output has
-  no eighth key. Verified by `tests/navigation-boundaries.test.ts`,
+  no eighth key. The info port refuses an unconstructed policy instance;
+  ordinary navigation reads still have exactly five fields. Info operation
+  kinds or projection flags sent to `check()`/`dispatch()` retain their existing
+  rejection, and read-mode and received-share capability decisions match the
+  unchanged read baselines. Verified by `tests/navigation-boundaries.test.ts`,
   `TestBR063_v2_info_authority_and_hostile_fields`, retaining the existing
   `BR-063 getters and toJSON are never executed and raw provider errors never escape`
   regression with its new info expectation. Existing cancellation/deadline
@@ -218,7 +245,8 @@ before implementation; it runs `make check` and CI after implementation.
   `TestBR428_AC01_all_registered_tool_descriptions` with updated expected P,
   and the existing F-042 budget/notice assertions.
 - **AC-08 (BR-436 v1, BR-437 v1)** — Given a synthetic file of known size and
-  timestamp and a folder, when the documented owner command runs through its
+  timestamp, a folder and optional received-share item (both present and absent
+  cases), when the documented owner command runs through its
   real launcher and injected test-double transport, then it compares raw
   metadata and info end to end within Scope 9's bounds. Missing/wrong-shaped
   date produces an inconclusive qualification, mismatched conversion fails,
@@ -231,7 +259,11 @@ before implementation; it runs `make check` and CI after implementation.
   real-account items, when the owner runs that same command on the actual
   merged main SHA, then known file size and whole-second modification time
   match the upstream values and info conversion, folder size is null, and
-  Scope 9's sanitized observation is recorded. Verified by the documented
+  Scope 9's sanitized observation is recorded. If a designated received-share
+  item is available, compare its raw scalars and info output under the same
+  rules and bounds; otherwise the observation explicitly records the residual
+  risk of unverified real-account received-share metadata. Its absence alone
+  does not block acceptance. Verified by the documented
   owner command rehearsed in AC-08 and a ticket acceptance comment with SHA,
   command, results and evidence identifier; the observation links that comment.
   This remains unverified until that run. An unsupported real shape is recorded
@@ -250,12 +282,24 @@ before implementation; it runs `make check` and CI after implementation.
   retain a fixed four-digit year; reject fractional seconds rather than round.
 - Choose `last_modified_at` in numeric Unix seconds, supported by the official
   client source. Reject alternate names, coercion and unit guessing. Historical
-  notes mention the field, contrary to the brief's absence claim, but neither
-  they nor the unreadable API page verify its shape/unit on a real account.
+  notes mention the field, but neither they nor the unreadable API page verify
+  its shape/unit on a real account.
   Rehearsal proves implementation only; AC-09 separately qualifies reality.
-- Keep changes confined to info despite shared internal projections. Add a
-  dedicated guarded projection instead of broadening all tool results or
-  fetching metadata after authorization. Leave content `describe()` untouched.
+- Choose a separate WeakMap-backed `infoPolicy(policy, ref)` consumer port as
+  specified in Scope 3. Reuse the existing read evaluation and terminal checks
+  so the authority surface stays unchanged. Reject making every navigation
+  `read` seven-field: configured roots and resolve anchors also use that path.
+  Reject a new operation kind: it would change the operation registry, read-mode
+  gate and received capability mapping. Reject caller-selected projection flags
+  on operation objects: they would widen the strict operation contract. Reject
+  post-authorization metadata fetching: it would bypass the exact authorized
+  live evidence and add requests. Leave content `describe()` untouched.
+- Attach optional metadata only in the two live adapter `inspect()` paths.
+  Reject adding it to shared `treeItem()`/`receivedItem()` results because those
+  helpers also serve collections, children, trash, resolve and received lists.
+- Include an optional received-share item in the rehearsed owner procedure.
+  Its absence records a residual risk rather than blocking acceptance because
+  real-account share availability is optional; synthetic coverage is required.
 - Also version BR-428 to v2 because its existing rule pins F-042's exact
   catalog text; silently changing that text would violate an active contract.
   Only info P is replaced. No new ADR: this is a narrow extension of the
@@ -264,3 +308,24 @@ before implementation; it runs `make check` and CI after implementation.
 ## Open questions
 
 ## Stress-test
+
+- 75-spec-review-1-opus finding 1 (major) — retained — Chose a separate
+  WeakMap-backed info consumer port using existing read evaluation and terminal
+  checks. Scope 3, Decisions and AC-06 preserve five-field navigation reads and
+  the operation, mode and capability contracts; rejected alternatives and their
+  reasons are explicit.
+- 75-spec-review-1-opus finding 2 (minor) — retained — Scope 2 limits scalar
+  attachment to the two live adapter inspect paths; shared normalizers stay
+  metadata-free for other callers. AC-04 asserts no new scalars on collection,
+  children, trash, resolve or received-list items, including adapter evidence.
+- 75-spec-review-1-opus finding 3 (minor) — retained — BR-063 v2 explicitly
+  names all seven output fields.
+- 75-spec-review-1-opus finding 4 (minor) — retained — Scope 7 records that no
+  output schema exists in src/ as checked on 7ec6709 and removes the conditional
+  schema amendment.
+- 75-spec-review-1-opus finding 5 (minor) — retained — Scope 9 and AC-09 add an
+  optional received-share observation and require an explicit residual risk
+  when absent; AC-08 rehearses both availability cases.
+- 75-spec-review-1-opus finding 6 (minor) — retained — Context and Decisions
+  state repository evidence and allocation status directly, removing references
+  to task provenance. The index entry contains no such references.
