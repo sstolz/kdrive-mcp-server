@@ -506,10 +506,14 @@ it("TestBR063_v2_info_authority_and_hostile_fields", async () => {
     }
     expect(f.execute).not.toHaveBeenCalled();
   }
+});
+
+it("TestBR063_v2_info_hostile_configured_fields", async () => {
+  const target = { driveId: 7, id: 3 };
   const f = await navigationFixture();
   const c = createNavigationController(f.config, f.dependencies);
   let calls = 0;
-  const canary = { toJSON() { calls++; return "CANARY"; } };
+  const canary = { toJSON(this: void) { calls++; return "CANARY"; } };
   try {
     for (const [size_bytes, modified_at] of [
       [canary, "1970-01-01T00:00:00Z"], [16, canary], ["CANARY", "CANARY"],
@@ -546,6 +550,11 @@ it("TestBR063_v2_info_authority_and_hostile_fields", async () => {
   try { expect(await d.invoke("kdrive_info", { file_id: 3 })).toEqual(error("ACCESS_DENIED")); }
   finally { d.close(); }
 
+});
+
+it("TestBR063_v2_info_received_authority_and_hostile_fields", async () => {
+  let calls = 0;
+  const canary = { toJSON(this: void) { calls++; return "CANARY"; } };
   const shared = await receivedFixture({ KDRIVE_MCP_MODE: "read" });
   const dependencies = { ...shared.configured, received: shared.received, execute: shared.execute };
   shared.received.inspect.mockImplementation(async (ref, location) => {
@@ -567,10 +576,12 @@ it("TestBR063_v2_info_authority_and_hostile_fields", async () => {
     } });
     expect(await navigatePolicy(policy, { kind: "read", target: sharedTarget })).toEqual({ ok: true, item: projection(shared.file) });
   }
-  shared.anchor.capabilities.read = false;
+  // Read authorization uses the target's current capabilities; an ancestor's
+  // read bit does not override an authorized descendant's read capability.
+  shared.file.capabilities.read = false;
   expect((await infoPolicy(policy, sharedTarget)).ok).toBe(false);
   expect((await navigatePolicy(policy, { kind: "read", target: sharedTarget })).ok).toBe(false);
-  shared.anchor.capabilities.read = true;
+  shared.file.capabilities.read = true;
   shared.clock.value = 60000;
   shared.received.list.mockImplementation(async (request) => ({ ...await Promise.resolve(request), status: "complete", entries: [], terminal: true, discover: true }));
   expect(await infoPolicy(policy, sharedTarget)).toEqual({ ok: false, code: "ACCESS_DENIED" });

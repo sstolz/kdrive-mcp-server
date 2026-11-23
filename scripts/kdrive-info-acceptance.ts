@@ -2,9 +2,9 @@
 // One direct metadata read and one SDK info call per designated item. No raw
 // values, identifiers, provider diagnostics or credentials enter the report.
 import { EventEmitter } from "node:events";
-import { readFileSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import { PassThrough } from "node:stream";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 import { LineTransport } from "./kdrive-acceptance.ts";
 
 const BASE = "/run/kdrive-acceptance";
@@ -246,6 +246,6 @@ async function main() {
 }
 if (
   process.argv[1] !== undefined &&
-  import.meta.url === pathToFileURL(process.argv[1]).href
+  realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))
 )
   await main();

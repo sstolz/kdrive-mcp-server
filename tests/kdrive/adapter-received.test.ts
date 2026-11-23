@@ -535,44 +535,92 @@ describe("BR-204 received capabilities and discovery", () => {
 });
 
 // BR-063 v2, BR-436 v1, BR-437 v1
-it("TestBR063_v2_received_info_metadata_end_to_end", async () => {
-  let metadata: P = {};
-  const { f, a } = await setup(undefined, (r) => {
-    if (r.path === "/3/drive/202/files/502") return success({ ...grandchild, ...metadata });
-    if (r.path === "/3/drive/202/files/501") return success({ ...child, ...metadata });
-    return undefined;
-  });
-  const execute = vi.fn();
-  const client = await navigationClient({ ...a.dependencies, execute }, { KDRIVE_MCP_SHARED_WITH_ME: "1" });
-  try {
-    for (const id of [502, 501]) {
+it.each([502, 501])(
+  "TestBR063_v2_received_info_metadata_end_to_end id %s",
+  async (id) => {
+    let metadata: P = {};
+    const { f, a } = await setup(undefined, (r) => {
+      if (r.path === "/3/drive/202/files/502")
+        return success({ ...grandchild, ...metadata });
+      if (r.path === "/3/drive/202/files/501")
+        return success({ ...child, ...metadata });
+      return undefined;
+    });
+    const execute = vi.fn();
+    const client = await navigationClient(
+      { ...a.dependencies, execute },
+      { KDRIVE_MCP_SHARED_WITH_ME: "1" },
+    );
+    try {
       let baseline: string[] | undefined;
       for (const row of [
-        { raw: { size: 16, last_modified_at: 0 }, size: 16, date: "1970-01-01T00:00:00Z" },
-        { raw: { size: {}, last_modified_at: 1 }, size: null, date: "1970-01-01T00:00:01Z" },
-        { raw: { size: 16, last_modified_at: "CANARY" }, size: 16, date: null },
-        { raw: { size: undefined, last_modified_at: undefined }, size: null, date: null },
+        {
+          raw: { size: 16, last_modified_at: 0 },
+          size: 16,
+          date: "1970-01-01T00:00:00Z",
+        },
+        {
+          raw: { size: {}, last_modified_at: 1 },
+          size: null,
+          date: "1970-01-01T00:00:01Z",
+        },
+        {
+          raw: { size: 16, last_modified_at: "CANARY" },
+          size: 16,
+          date: null,
+        },
+        {
+          raw: { size: undefined, last_modified_at: undefined },
+          size: null,
+          date: null,
+        },
       ]) {
         metadata = row.raw;
         // A fresh controller makes discovery cost comparable on every invocation.
-        const c = await navigationClient({ ...a.dependencies, execute }, { KDRIVE_MCP_SHARED_WITH_ME: "1" });
+        const c = await navigationClient(
+          { ...a.dependencies, execute },
+          { KDRIVE_MCP_SHARED_WITH_ME: "1" },
+        );
         try {
           const before = f.apiRequests().length;
-          expect(await c.info(id, OWNER)).toEqual({ ok: { item: {
-            drive_id: OWNER, id, name: id === 502 ? "g.txt" : "sub", type: id === 502 ? "file" : "dir",
-            path: id === 502 ? "/Shared/team/sub/g.txt" : "/Shared/team/sub",
-            size_bytes: id === 502 ? row.size : null, modified_at: row.date,
-          } } });
-          const requests = f.apiRequests().slice(before).filter((r) => r.path !== "/2/drive/init").map((r) => `${r.method} ${r.path}`);
+          expect(await c.info(id, OWNER)).toEqual({
+            ok: {
+              item: {
+                drive_id: OWNER,
+                id,
+                name: id === 502 ? "g.txt" : "sub",
+                type: id === 502 ? "file" : "dir",
+                path:
+                  id === 502
+                    ? "/Shared/team/sub/g.txt"
+                    : "/Shared/team/sub",
+                size_bytes: id === 502 ? row.size : null,
+                modified_at: row.date,
+              },
+            },
+          });
+          const requests = f
+            .apiRequests()
+            .slice(before)
+            .filter((r) => r.path !== "/2/drive/init")
+            .map((r) => `${r.method} ${r.path}`);
           if (baseline) expect(requests).toEqual(baseline);
           else baseline = requests;
-        } finally { await c.close(); }
+        } finally {
+          await c.close();
+        }
       }
+      expect(execute).not.toHaveBeenCalled();
+      expect(
+        f.upstream.seen.every(
+          (r) => r.method === "GET" && !r.path.includes("download"),
+        ),
+      ).toBe(true);
+    } finally {
+      await client.close();
     }
-    expect(execute).not.toHaveBeenCalled();
-    expect(f.upstream.seen.every((r) => r.method === "GET" && !r.path.includes("download"))).toBe(true);
-  } finally { await client.close(); }
-});
+  },
+);
 
 it("TestBR063_v2_non_inspect_metadata_absent", async () => {
   const metadata = { size: 16, last_modified_at: 1 };

@@ -266,29 +266,53 @@ it("TestBR436_v1_size_boundaries", async () => {
   } finally { await client.close(); }
 });
 
-it("TestBR437_v1_timestamp_boundaries", async () => {
+it.each([
+  { id: 12, name: "a.bin", type: "file", path: "/Private/docs/a.bin", size: 16 },
+  { id: 11, name: "docs", type: "dir", path: "/Private/docs", size: null },
+  { id: 1, name: "", type: "dir", path: "/", size: null },
+])("TestBR437_v1_timestamp_boundaries id $id", async ({ id, name, type, path, size }) => {
   const f = (fixture = await kdriveFixture());
   let metadata: Provider = {};
   f.drive.overrides.push((r) => {
     const match = /^\/3\/drive\/101\/files\/(1|11|12)$/u.exec(r.path);
-    return match ? success({ ...providerItem(tree, Number(match[1])), ...metadata }) : undefined;
+    return match
+      ? success({ ...providerItem(tree, Number(match[1])), ...metadata })
+      : undefined;
   });
   const a = await adapterFor(f);
   const client = await navigationClient(a.dependencies);
   try {
-    for (const id of [12, 11, 1]) for (const { raw, expected } of dateCases) {
-      metadata = { size: 16, last_modified_at: raw, updated_at: 1, created_at: 1, revised_at: 1 };
+    for (const { raw, expected } of dateCases) {
+      metadata = {
+        size: 16,
+        last_modified_at: raw,
+        updated_at: 1,
+        created_at: 1,
+        revised_at: 1,
+      };
       const result = await a.dependencies.inspect({ driveId: DRIVE, id }, "live");
-      expect(result).toMatchObject({ status: "complete", size_bytes: id === 12 ? 16 : null, modified_at: expected });
-      expect(await client.info(id)).toEqual({ ok: { item: {
-        drive_id: DRIVE, id,
-        name: id === 1 ? "" : id === 11 ? "docs" : "a.bin",
-        type: id === 12 ? "file" : "dir",
-        path: id === 1 ? "/" : id === 11 ? "/Private/docs" : "/Private/docs/a.bin",
-        size_bytes: id === 12 ? 16 : null, modified_at: expected,
-      } } });
+      expect(result).toMatchObject({
+        status: "complete",
+        size_bytes: size,
+        modified_at: expected,
+      });
+      expect(await client.info(id)).toEqual({
+        ok: {
+          item: {
+            drive_id: DRIVE,
+            id,
+            name,
+            type,
+            path,
+            size_bytes: size,
+            modified_at: expected,
+          },
+        },
+      });
     }
-  } finally { await client.close(); }
+  } finally {
+    await client.close();
+  }
 });
 
 it("TestBR063_v2_non_inspect_metadata_absent", async () => {

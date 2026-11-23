@@ -308,6 +308,22 @@ it("TestBR063_v2_non_info_projection_unchanged", async () => {
 it("TestBR063_v2_non_info_projection_unchanged received discovery", async () => {
   const f = await sharedFixture();
   for (const n of f.items.values()) Object.assign(n, { size_bytes: 16, modified_at: "1970-01-01T00:00:00Z" });
+  // Resolve walks each directory through collection(scope); the generic shared
+  // fixture always returns its file and is not a directory-listing fixture.
+  f.received.collection.mockImplementation(async (request) => {
+    await Promise.resolve();
+    return {
+      ...request,
+      status: "complete",
+      terminal: true,
+      entries: [...f.items.values()].filter(
+        (entry) =>
+          entry.location === "live" &&
+          entry.driveId === request.scope.driveId &&
+          entry.parents.at(-1)?.id === request.scope.id,
+      ),
+    };
+  });
   const c = createNavigationController(f.config, { ...f.configured, received: f.received, execute: f.execute });
   try {
     expect(payload(await c.invoke("kdrive_shared_with_me", {}))).toEqual({ items: [projection(f.anchor)], has_more: false });

@@ -89,7 +89,9 @@ it.each(
           payload(
             await c.invoke("kdrive_info", { drive_id: 8, file_id: queued.id }),
           ),
-        ).toEqual({ item: projection(child) });
+        ).toEqual({
+          item: { ...projection(child), size_bytes: null, modified_at: null },
+        });
     } finally {
       c.close();
     }
