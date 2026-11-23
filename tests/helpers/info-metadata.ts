@@ -1,0 +1,19 @@
+// F-050 v1: independent raw-value oracles for BR-436 v1 and BR-437 v1.
+export const sizeCases: { raw: unknown; expected: number | null }[] = [
+  { raw: 0, expected: 0 },
+  { raw: -0, expected: 0 },
+  { raw: 1, expected: 1 },
+  { raw: Number.MAX_SAFE_INTEGER, expected: Number.MAX_SAFE_INTEGER },
+  ...[Number.MAX_SAFE_INTEGER + 1, -1, 0.5, NaN, Infinity, -Infinity,
+    undefined, null, "16", "", true, false, [], {}].map((raw) => ({ raw, expected: null })),
+];
+export const dateCases: { raw: unknown; expected: string | null }[] = [
+  { raw: 0, expected: "1970-01-01T00:00:00Z" },
+  { raw: -0, expected: "1970-01-01T00:00:00Z" },
+  { raw: 1, expected: "1970-01-01T00:00:01Z" },
+  { raw: 253402300799, expected: "9999-12-31T23:59:59Z" },
+  ...[-1, 0.5, 253402300800, Number.MAX_SAFE_INTEGER,
+    Number.MAX_SAFE_INTEGER + 1, NaN, Infinity, -Infinity, undefined, null,
+    "0", "1970-01-01T00:00:00Z", true, false, [], {}, 1700000000000]
+    .map((raw) => ({ raw, expected: null })),
+];

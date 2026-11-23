@@ -62,7 +62,8 @@ it("BR-059 v2 BR-060 BR-063 BR-069 real SDK stdio client initializes and reads o
       );
     const result = lines.find((line) => line.id === 2)?.result;
     expect(JSON.parse(result?.content?.[0]?.text ?? "null")).toEqual({
-      item: { drive_id: 7, id: 2, name: "hello", type: "file", path: "/hello" },
+      // BR-063 v2: absent metadata retains explicit nulls.
+      item: { drive_id: 7, id: 2, name: "hello", type: "file", path: "/hello", size_bytes: null, modified_at: null },
     });
     expect(stderr).toBe("");
   } finally {
