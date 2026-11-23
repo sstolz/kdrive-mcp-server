@@ -106,7 +106,8 @@ it("BR-068 actual metadata response keeps instruction-like names only as JSON da
       content: Array<{ text: string }>;
     };
     expect(JSON.parse(result.content[0]!.text)).toEqual({
-      item: projection(item),
+      // BR-063 v2: the info wire envelope includes independent null scalars.
+      item: { ...projection(item), size_bytes: null, modified_at: null },
     });
     expect(
       w.responses().every((response) => !Object.hasOwn(response, "method")),

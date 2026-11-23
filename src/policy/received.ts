@@ -3,6 +3,7 @@ import type { CollectionRequest, EvidenceRequest } from "./index.js";
 import type { Operation } from "./operation.js";
 import {
   array,
+  infoScalars,
   id,
   join,
   key,
@@ -223,6 +224,7 @@ function parse(
     lifecycle: location === "live" ? "live" : "trashed",
     anchorId,
     capabilities: caps,
+    ...(location === "live" ? infoScalars(r, r.type) : {}),
     ...(treeRootId === undefined ? {} : { treeRootId }),
   });
 }

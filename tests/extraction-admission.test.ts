@@ -570,7 +570,15 @@ it.each(["text", "continuation", "empty", "pdf", "image"] as const)(
     const other = await h.caller("non-extraction");
     expect(await other.c.invoke("kdrive_info", { file_id: 3 })).toEqual(
       contentResult({
-        item: { drive_id: 7, id: 3, name: "a", type: "file", path: "/docs/a" },
+        item: {
+          drive_id: 7,
+          id: 3,
+          name: "a",
+          type: "file",
+          path: "/docs/a",
+          size_bytes: null,
+          modified_at: null,
+        },
       }),
     );
     expect(await other.c.invoke("kdrive_download", { file_id: 3 })).toEqual(
@@ -789,7 +797,15 @@ it("TestBR084_F040_uncontended_metadata_raw_and_resource_projections", async () 
   const c = await h.caller("control");
   expect(await c.c.invoke("kdrive_info", { file_id: 3 })).toEqual(
     contentResult({
-      item: { drive_id: 7, id: 3, name: "a", type: "file", path: "/docs/a" },
+      item: {
+        drive_id: 7,
+        id: 3,
+        name: "a",
+        type: "file",
+        path: "/docs/a",
+        size_bytes: null,
+        modified_at: null,
+      },
     }),
   );
   expect(await c.c.invoke("kdrive_download", { file_id: 3 })).toEqual(

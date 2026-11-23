@@ -7,6 +7,11 @@ import {
   projection,
 } from "./helpers/navigation.js";
 
+import {
+  fixture as sharedFixture,
+  node as sharedNode,
+} from "./helpers/received.js";
+
 afterEach(() => vi.useRealTimers());
 const result = (
   value: Awaited<
@@ -321,3 +326,85 @@ it.each(["kdrive_search", "kdrive_recents", "kdrive_my_shared"])(
     c.close();
   },
 );
+
+// BR-063 v2: valid info scalars cannot change initial or resumed collections.
+it("TestBR063_v2_non_info_projection_unchanged", async () => {
+  for (const tool of tools) {
+    const f = await navigationFixture();
+    const entries = Array.from({ length: 3 }, (_, i) => ({
+      ...plainItem(100 + i, `/q${i}`, "file", [f.root]),
+      size_bytes: 16,
+      modified_at: "1970-01-01T00:00:00Z",
+    }));
+    for (const n of entries) f.nodes.set(`7:${n.id}`, n);
+    f.collection.mockImplementation(async (request) => ({
+      ...(await Promise.resolve(request)),
+      status: "complete",
+      entries:
+        request.cursor === undefined ? entries.slice(0, 2) : entries.slice(2),
+      ...(request.cursor === undefined
+        ? { next: "second" }
+        : { terminal: true }),
+    }));
+    const c = createNavigationController(f.config, f.dependencies);
+    try {
+      const first = result(await c.invoke(tool, args(tool)));
+      expect(first.items).toEqual(entries.slice(0, 2).map(projection));
+      expect(first.has_more).toBe(true);
+      expect(first.next_cursor).toEqual(expect.any(String));
+      expect(Object.keys(first).sort()).toEqual([
+        "has_more",
+        "items",
+        "next_cursor",
+      ]);
+      expect(
+        result(
+          await c.invoke(tool, { ...args(tool), cursor: first.next_cursor }),
+        ),
+      ).toEqual({ items: entries.slice(2).map(projection), has_more: false });
+    } finally {
+      c.close();
+    }
+  }
+});
+
+// BR-063 v2: discovery pages and their continuation retain five-field items.
+it("TestBR063_v2_non_info_projection_unchanged received continuation", async () => {
+  const f = await sharedFixture();
+  const roots = Array.from({ length: 257 }, (_, i) => ({
+    ...sharedNode(100 + i, `r${i}`, "dir"),
+    anchorId: 100 + i,
+    size_bytes: 16,
+    modified_at: "1970-01-01T00:00:00Z",
+  }));
+  f.items.clear();
+  for (const root of roots) f.items.set(`live:8:${root.id}`, root);
+  f.received.list.mockImplementation(async (request) => {
+    const offset = Number((request as { cursor?: string }).cursor ?? 0);
+    return {
+      ...(await Promise.resolve(request)),
+      status: "complete",
+      discover: true,
+      entries: roots.slice(offset, offset + 256),
+      ...(offset === 0 ? { next: "256" } : { terminal: true }),
+    };
+  });
+  const c = createNavigationController(f.config, {
+    ...f.configured,
+    received: f.received,
+    execute: f.execute,
+  });
+  try {
+    const first = result(await c.invoke("kdrive_shared_with_me", {}));
+    expect(first.items).toEqual(roots.slice(0, 256).map(projection));
+    expect(first.has_more).toBe(true);
+    expect(first.next_cursor).toEqual(expect.any(String));
+    expect(
+      result(
+        await c.invoke("kdrive_shared_with_me", { cursor: first.next_cursor }),
+      ),
+    ).toEqual({ items: roots.slice(256).map(projection), has_more: false });
+  } finally {
+    c.close();
+  }
+});

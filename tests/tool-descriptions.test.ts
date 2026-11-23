@@ -351,7 +351,13 @@ it.each(["read", "write", "share"])(
       content: [
         {
           type: "text",
-          text: JSON.stringify({ item: projection(fixture.file) }),
+          text: JSON.stringify({
+            item: {
+              ...projection(fixture.file),
+              size_bytes: null,
+              modified_at: null,
+            },
+          }),
         },
       ],
     });
@@ -374,7 +380,11 @@ it.each(["read", "write", "share"])(
     );
     noProviderCalls(fixture);
     expect(payload(await c.invoke("kdrive_info", { file_id: 3 }))).toEqual({
-      item: projection(fixture.file),
+      item: {
+        ...projection(fixture.file),
+        size_bytes: null,
+        modified_at: null,
+      },
     });
     expect(fixture.inspect.mock.calls.map(([ref]) => ref)).toEqual([
       { driveId: 7, id: 3 },
@@ -476,4 +486,45 @@ it("TestBR430_AC08_descriptions_are_static_and_compact", async () => {
       withinBytes(text + "x", limit);
     }).toThrow();
   }
+});
+
+// BR-428 v2: only the independent info purpose changes; all existing catalog
+// comparisons, schema/annotation baselines, notice and four budgets stay in force.
+it("TestBR428_v2_info_metadata_description_and_docs", async () => {
+  const purpose =
+    "Gets authorized metadata for a file or folder. Returns JSON item with drive_id, id, name, type, path, size_bytes (bytes; null for folders or unknown size) and modified_at (UTC ISO 8601 to whole seconds; null when unknown). Use kdrive_read or kdrive_download for file content. No cursor.";
+  expect(purposes.kdrive_info).toBe(purpose);
+  for (const mode of ["read", "write", "share"]) {
+    const { result } = await listing(mode);
+    for (const tool of result.tools) {
+      assertToolText(tool);
+      assertParameters(tool);
+    }
+    expect(
+      result.tools.find((tool) => tool.name === "kdrive_info")?.description,
+    ).toBe(`kdrive_info. ${purpose} ${notice}`);
+    assertBudgets(result);
+  }
+  const readme = readFileSync("README.md", "utf8").replace(/\s+/gu, " ");
+  for (const field of [
+    "drive_id",
+    "id",
+    "name",
+    "type",
+    "path",
+    "size_bytes",
+    "modified_at",
+    "last_modified_at",
+  ])
+    expect(readme).toContain(`\`${field}\``);
+  expect(readme).toMatch(/size_bytes[^\n]*(?:bytes|byte)/iu);
+  expect(readme).toMatch(/(?:folder|director)[^\n]*null/iu);
+  expect(readme).toMatch(/(?:independent[^\n]*null|null[^\n]*independent)/iu);
+  expect(readme).toMatch(/(?:Unix|epoch)[^\n]*seconds/iu);
+  expect(readme).toContain("253402300799");
+  expect(readme).toMatch(/(?:UTC|ISO 8601)/u);
+  expect(readme).toMatch(/(?:other|collection)[^\n]*(?:five|5)[- ]field/iu);
+  expect(readme).toMatch(
+    /(?:real.account|owner.run|real.environment)[\s\S]{0,300}(?:unverified|qualif|uncertain|observ)/iu,
+  );
 });

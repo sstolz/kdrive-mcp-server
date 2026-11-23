@@ -146,7 +146,29 @@ export interface Item extends Ref {
   readonly anchorId?: number;
   readonly capabilities?: Readonly<Record<string, unknown>>;
   readonly treeRootId?: number;
+  readonly size_bytes?: number | null;
+  readonly modified_at?: string | null;
 }
+/** BR-436/437: optional scalars never confer authority or invalidate evidence. */
+export function infoScalars(r: Record<string, unknown>, type: unknown) {
+  const size = r.size_bytes;
+  const modified = r.modified_at;
+  return {
+    size_bytes:
+      type === "file" &&
+      typeof size === "number" &&
+      Number.isSafeInteger(size) &&
+      size >= 0
+        ? size + 0
+        : null,
+    modified_at:
+      typeof modified === "string" &&
+      /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/u.test(modified)
+        ? modified
+        : null,
+  };
+}
+
 /** BR-033/039: validate exact identity, lifecycle and every adjacent path relationship. */
 // eslint-disable-next-line sonarjs/cognitive-complexity -- F-011: pre-existing complex function; splitting it is deferred to keep reviewed control flow unchanged in this ticket (#79)
 export function item(
@@ -223,6 +245,10 @@ export function item(
     location,
     lifecycle: location === "live" ? "live" : "trashed",
     rootId: 1,
+    ...(location === "live" &&
+    (Object.hasOwn(r, "size_bytes") || Object.hasOwn(r, "modified_at"))
+      ? infoScalars(r, r.type)
+      : {}),
     ...(treeRootId === undefined ? {} : { treeRootId }),
   });
 }

@@ -5,7 +5,7 @@ COMPOSE = "$(DOCKER)" compose
 # Serialize initialization and consumers, including with make -j.
 .NOTPARALLEL:
 .PHONY: help lockfile setup lint format-check format typecheck build test pack check shell \
-	coverage sonar sonar-pr quality oidc-qualify http-acceptance kdrive-record kdrive-acceptance \
+	coverage sonar sonar-pr quality oidc-qualify http-acceptance kdrive-record kdrive-acceptance kdrive-info-acceptance \
 	kdrive-write-acceptance kdrive-upload-acceptance \
 	image-binfmt image image-smoke \
 	audit install-check ci-changes privacy-scan runner-probe runner-reset-mark runner-reset-check \
@@ -35,6 +35,7 @@ help:
 		'  make oidc-qualify  Interactive OIDC provider qualification (ARGS="...")' \
 		'  make http-acceptance  Owner-run HTTP acceptance composition (synthetic drive, HTTP_ACCEPTANCE_SECRETS_DIR, optional HTTP_ACCEPTANCE_STATE_DIR)' \
 		'  make kdrive-record  Owner-run sanitized kDrive recordings (KDRIVE_ACCEPTANCE_DIR)' \
+		'  make kdrive-info-acceptance  Owner-run info qualification (KDRIVE_ACCEPTANCE_DIR)' \
 		'  make kdrive-acceptance  Owner-run kDrive acceptance on actual main (KDRIVE_ACCEPTANCE_DIR)' \
 		'  make kdrive-write-acceptance  Owner-run kDrive write acceptance on actual main (KDRIVE_WRITE_FOLDER, KDRIVE_ACCEPTANCE_DIR)' \
 		'  make kdrive-upload-acceptance Owner-run kDrive upload acceptance on actual main (KDRIVE_WRITE_FOLDER, KDRIVE_ACCEPTANCE_DIR)' \
@@ -145,6 +146,9 @@ http-acceptance:
 # Docker command or prerequisite, then mounts it read-only.
 kdrive-record:
 	@/bin/sh scripts/kdrive-entry.sh record "$(DOCKER)" "$(MAKE)" "$(firstword $(MAKEFILE_LIST))"
+
+kdrive-info-acceptance:
+	@/bin/sh scripts/kdrive-entry.sh info-acceptance "$(DOCKER)" "$(MAKE)" "$(firstword $(MAKEFILE_LIST))"
 
 kdrive-acceptance:
 	@/bin/sh scripts/kdrive-entry.sh acceptance "$(DOCKER)" "$(MAKE)" "$(firstword $(MAKEFILE_LIST))"

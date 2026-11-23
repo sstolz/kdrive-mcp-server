@@ -5,7 +5,7 @@
 # one fixed line. F-017 BR-276 adds write-acceptance, which first requires
 # KDRIVE_WRITE_FOLDER (a positive decimal folder ID); F-018 BR-287 adds
 # upload-acceptance under the same conditions.
-# Usage: kdrive-entry.sh <record|acceptance|write-acceptance|upload-acceptance> DOCKER MAKE MAKEFILE
+# Usage: kdrive-entry.sh <record|acceptance|info-acceptance|write-acceptance|upload-acceptance> DOCKER MAKE MAKEFILE
 set -eu
 fail() { printf '%s\n' "$1" >&2; exit 1; }
 checkout=$(pwd -P)
@@ -15,7 +15,7 @@ make_command=${3-}
 makefile=${4-}
 newline='
 '
-case "$target" in record|acceptance|write-acceptance|upload-acceptance) ;; *) fail 'Unknown kDrive owner target.' ;; esac
+case "$target" in record|acceptance|info-acceptance|write-acceptance|upload-acceptance) ;; *) fail 'Unknown kDrive owner target.' ;; esac
 if test "$target" = write-acceptance || test "$target" = upload-acceptance; then
   folder=${KDRIVE_WRITE_FOLDER-}
   invalid_folder='Set KDRIVE_WRITE_FOLDER to a positive decimal folder ID.'
@@ -79,6 +79,13 @@ if test "$target" = record; then
     --volume "$physical:/run/kdrive-acceptance:ro" \
     -e KDRIVE_TOKEN_FILE=/run/kdrive-acceptance/kdrive-token \
     dev node scripts/kdrive-record.ts
+fi
+if test "$target" = info-acceptance; then
+  exec "$docker" compose -f compose.yaml run --rm -T \
+    --volume "$physical:/run/kdrive-acceptance:ro" \
+    -e KDRIVE_TOKEN_FILE=/run/kdrive-acceptance/kdrive-token \
+    -e "KDRIVE_ACCEPTANCE_SHA=$head" \
+    dev node scripts/kdrive-info-acceptance.ts
 fi
 if test "$target" = write-acceptance; then
   exec "$docker" compose -f compose.yaml run --rm -T \

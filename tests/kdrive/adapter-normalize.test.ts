@@ -1,6 +1,6 @@
 // F-014 AC-08 (BR-197) is in adapter-freshness.test.ts; this file covers
 // AC-09 (BR-198, BR-199) and AC-10 (BR-200).
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { item } from "../../src/policy/values.js";
 import { brandedRead } from "../../src/read-retry.js";
 import {
@@ -11,6 +11,8 @@ import {
   providerItem,
   success,
   tree,
+  configuration,
+  navigationClient,
 } from "../helpers/kdrive.js";
 
 let fixture: Awaited<ReturnType<typeof kdriveFixture>> | undefined;
@@ -18,6 +20,10 @@ afterEach(async () => {
   await fixture?.close();
   fixture = undefined;
 });
+import { sizeCases, dateCases } from "../helpers/info-metadata.js";
+import { createNavigationController } from "../../src/navigation.js";
+import { payload } from "../helpers/navigation.js";
+
 type Provider = Record<string, unknown>;
 async function inspectWith(
   data: Provider | ((p: Provider) => Provider),
@@ -47,6 +53,8 @@ describe("BR-198 BR-199 configured-tree normalization", () => {
       location: "live",
       lifecycle: "live",
       rootId: 1,
+      size_bytes: null,
+      modified_at: null,
     });
     expect(item(result, { driveId: DRIVE, id: 1 }, "live")).toEqual(result);
   });
@@ -235,4 +243,230 @@ describe("BR-200 no trash evidence and no execution", () => {
     expect(f.upstream.seen).toHaveLength(0);
     expect(f.connects).toHaveLength(0);
   });
+});
+
+// BR-063 v2, BR-436 v1, BR-437 v1: real adapter boundary, including root ID 1.
+it("TestBR436_v1_size_boundaries", async () => {
+  const f = (fixture = await kdriveFixture());
+  let metadata: Provider = {};
+  f.drive.overrides.push((r) => {
+    const match = /^\/3\/drive\/101\/files\/(1|11|12)$/u.exec(r.path);
+    return match
+      ? success({ ...providerItem(tree, Number(match[1])), ...metadata })
+      : undefined;
+  });
+  const a = await adapterFor(f);
+  const client = await navigationClient(a.dependencies);
+  try {
+    for (const id of [12, 11, 1])
+      for (const { raw, expected } of sizeCases) {
+        metadata = { size: raw, last_modified_at: 1 };
+        const result = await a.dependencies.inspect(
+          { driveId: DRIVE, id },
+          "live",
+        );
+        expect(result).toMatchObject({
+          status: "complete",
+          size_bytes: id === 12 ? expected : null,
+          modified_at: "1970-01-01T00:00:01Z",
+        });
+        if (id === 12 && expected === 0)
+          expect(Object.is((result as Provider).size_bytes, -0)).toBe(false);
+        expect(await client.info(id)).toMatchObject({
+          ok: {
+            item: {
+              size_bytes: id === 12 ? expected : null,
+              modified_at: "1970-01-01T00:00:01Z",
+            },
+          },
+        });
+      }
+  } finally {
+    await client.close();
+  }
+});
+
+it.each([
+  {
+    id: 12,
+    name: "a.bin",
+    type: "file",
+    path: "/Private/docs/a.bin",
+    size: 16,
+  },
+  { id: 11, name: "docs", type: "dir", path: "/Private/docs", size: null },
+  { id: 1, name: "", type: "dir", path: "/", size: null },
+])(
+  "TestBR437_v1_timestamp_boundaries id $id",
+  async ({ id, name, type, path, size }) => {
+    const f = (fixture = await kdriveFixture());
+    let metadata: Provider = {};
+    f.drive.overrides.push((r) => {
+      const match = /^\/3\/drive\/101\/files\/(1|11|12)$/u.exec(r.path);
+      return match
+        ? success({ ...providerItem(tree, Number(match[1])), ...metadata })
+        : undefined;
+    });
+    const a = await adapterFor(f);
+    const client = await navigationClient(a.dependencies);
+    try {
+      for (const { raw, expected } of dateCases) {
+        metadata = {
+          size: 16,
+          last_modified_at: raw,
+          updated_at: 1,
+          created_at: 1,
+          revised_at: 1,
+        };
+        const result = await a.dependencies.inspect(
+          { driveId: DRIVE, id },
+          "live",
+        );
+        expect(result).toMatchObject({
+          status: "complete",
+          size_bytes: size,
+          modified_at: expected,
+        });
+        expect(await client.info(id)).toEqual({
+          ok: {
+            item: {
+              drive_id: DRIVE,
+              id,
+              name,
+              type,
+              path,
+              size_bytes: size,
+              modified_at: expected,
+            },
+          },
+        });
+      }
+    } finally {
+      await client.close();
+    }
+  },
+);
+
+it("TestBR063_v2_non_inspect_metadata_absent", async () => {
+  const f = (fixture = await kdriveFixture());
+  const decorated = (id: number) => ({
+    ...providerItem(tree, id),
+    size: 16,
+    last_modified_at: 1,
+  });
+  f.drive.overrides.push((r) => {
+    if (r.path === "/3/drive/101/files/11") return success(decorated(11));
+    if (r.path.endsWith("/11/files"))
+      return success([decorated(12)], { has_more: false, cursor: null });
+    if (/\/(search|recents|my_shared)$/u.test(r.path))
+      return success([decorated(12)], { has_more: false, cursor: null });
+    if (r.path === "/3/drive/101/trash/12")
+      return success({
+        ...decorated(12),
+        status: "trashed",
+        deleted_at: 1,
+        deleted_by: 9,
+      });
+    return undefined;
+  });
+  const a = await adapterFor(f);
+  const absent = (value: unknown) => {
+    expect(value).toMatchObject({ status: "complete" });
+    expect(value).not.toHaveProperty("size_bytes");
+    expect(value).not.toHaveProperty("modified_at");
+  };
+  const children = (await a.dependencies.children({
+    ...invocation(),
+    driveId: DRIVE,
+    id: 11,
+    location: "live",
+  })) as Provider;
+  for (const entry of children.entries as unknown[]) absent(entry);
+  for (const kind of ["search", "recents", "my-shared"]) {
+    const page = (await a.dependencies.collection({
+      ...invocation(),
+      kind,
+      scope: { driveId: DRIVE, id: 11 },
+      query: "a",
+    })) as Provider;
+    expect(page).toMatchObject({ status: "complete" });
+    for (const entry of page.entries as unknown[]) absent(entry);
+  }
+  absent(
+    await a.dependencies.inspect({ driveId: DRIVE, id: 12 }, "original-trash"),
+  );
+  const resolved = await a.preflight.resolveDirectory(DRIVE, {
+    driveId: DRIVE,
+    kind: "id",
+    value: 11,
+  });
+  expect(resolved).toMatchObject({ driveId: DRIVE, id: 11, type: "dir" });
+  expect(resolved).not.toHaveProperty("size_bytes");
+  expect(resolved).not.toHaveProperty("modified_at");
+});
+
+it("TestBR436_v1_optional_metadata_preserves_required_evidence", async () => {
+  const f = (fixture = await kdriveFixture());
+  let metadata: Provider = {};
+  f.drive.overrides.push((r) =>
+    r.path === "/3/drive/101/files/12"
+      ? success({ ...providerItem(tree, 12), ...metadata })
+      : undefined,
+  );
+  const a = await adapterFor(f);
+  const execute = vi.fn();
+  const c = createNavigationController(await configuration(), {
+    ...a.dependencies,
+    execute,
+  });
+  const cases = [
+    {
+      raw: { size: 16, last_modified_at: 0 },
+      size: 16,
+      date: "1970-01-01T00:00:00Z",
+    },
+    {
+      raw: { size: "CANARY", last_modified_at: 1 },
+      size: null,
+      date: "1970-01-01T00:00:01Z",
+    },
+    { raw: { size: 16, last_modified_at: "CANARY" }, size: 16, date: null },
+    {
+      raw: { size: undefined, last_modified_at: undefined },
+      size: null,
+      date: null,
+    },
+  ];
+  let baseline: string[] | undefined;
+  try {
+    for (const row of cases) {
+      metadata = row.raw;
+      const before = f.apiRequests().length;
+      expect(payload(await c.invoke("kdrive_info", { file_id: 12 }))).toEqual({
+        item: {
+          drive_id: DRIVE,
+          id: 12,
+          name: "a.bin",
+          path: "/Private/docs/a.bin",
+          type: "file",
+          size_bytes: row.size,
+          modified_at: row.date,
+        },
+      });
+      const requests = f
+        .apiRequests()
+        .slice(before)
+        .map((r) => `${r.method} ${r.path}`);
+      if (baseline) expect(requests).toEqual(baseline);
+      else baseline = requests;
+    }
+    expect(execute).not.toHaveBeenCalled();
+    expect(
+      f.upstream.seen.every(
+        (r) => r.method === "GET" && !r.path.includes("download"),
+      ),
+    ).toBe(true);
+  } finally {
+    c.close();
+  }
 });

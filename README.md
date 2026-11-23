@@ -489,7 +489,43 @@ provides the `kdrive-mcp-server` command. `kdrive-mcp-server --help` and
 
 ## Tools
 
-Item metadata has exactly `drive_id`, `id`, `name`, `type` and `path`.
+`kdrive_info` returns `{item}` with exactly seven fields: `drive_id`, `id`,
+`name`, `type`, `path`, `size_bytes` and `modified_at`. All other item outputs
+retain their five-field projection (`drive_id`, `id`, `name`, `type`, `path`).
+
+`size_bytes` is raw file `size` in bytes when it is a non-negative safe integer
+(0 through 9007199254740991); folders, including drive root 1, always return
+null. Unknown or invalid sizes are null, independently of the date.
+`modified_at` reads only `last_modified_at`, interpreted as whole Unix epoch
+seconds in 0 through 253402300799 inclusive, for files and folders. It returns
+UTC ISO 8601 `YYYY-MM-DDTHH:mm:ssZ` without fractions; zero is the epoch and
+253402300799 is the final second of year 9999. Negative zero equals zero.
+Missing, null, wrong-type, fractional, non-finite or out-of-range values produce
+independent nulls. Numeric strings and other date fields are never used as a
+fallback; there is no unit guessing or folder-size aggregation. Real-account
+field shape and seconds unit remain unverified pending the owner-run observation.
+
+The read-only owner qualification command is
+`make kdrive-info-acceptance KDRIVE_ACCEPTANCE_DIR=/absolute/owner/directory`,
+after fetching main, checking out its exact clean SHA and running `make setup`.
+The directory is outside the checkout and contains only `kdrive-token` and
+`fixtures.json`; the launcher mounts it read-only and uses the existing token-file
+transport conventions. The manifest has `info.file` and `info.folder`, each
+with positive numeric `driveId` and `id`. `info.file` also has independently known
+`size_bytes` and `modified_at` in the output format. Optional `info.received`
+has the same fields as the file and designates an authorized received-share item;
+use `size_bytes:null` for a received folder.
+Select authorized items only; this procedure creates no fixtures or mutations.
+It makes at most one direct metadata GET and one info call per item, plus bounded
+authorization reads (32 GETs total, 120 seconds). It prints only sanitized
+assertions and the SHA; raw inputs and values stay with the owner. Missing or
+unsupported dates are inconclusive, mismatches fail, and `qualified:true` requires
+all designated items to pass. Without a received item, its real-account metadata
+remains an explicit residual risk. First rehearse the real launcher against the
+synthetic transport with `make test` (`tests/kdrive/info-acceptance.test.ts`).
+After successful actual-main qualification, record the sanitized date, method,
+field shape, seconds unit and conversion outcome with the ticket evidence link
+in `docs/observations/kdrive-api.md`; no observation is claimed yet.
 
 Read tools (all modes):
 

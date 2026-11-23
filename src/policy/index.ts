@@ -114,6 +114,17 @@ const navigationFacades = new WeakMap<
   object,
   (value: unknown) => Promise<NavigationResult>
 >();
+export interface InfoItem extends NavigationItem {
+  readonly size_bytes: number | null;
+  readonly modified_at: string | null;
+}
+type InfoResult =
+  { readonly ok: true; readonly item: InfoItem } | typeof denied;
+const infoFacades = new WeakMap<object, (ref: Ref) => Promise<InfoResult>>();
+/** BR-063 v2: only exact constructed policies expose the info consumer port. */
+export function infoPolicy(policy: object, ref: Ref): Promise<InfoResult> {
+  return infoFacades.get(policy)?.(ref) ?? Promise.resolve(denied);
+}
 export interface CollectionPage {
   readonly entries: readonly NavigationItem[];
   readonly next?: string;
@@ -812,6 +823,26 @@ export function createPolicy(
     },
   });
   navigationFacades.set(facade, navigate);
+  infoFacades.set(facade, async (ref) => {
+    try {
+      const authorized = await evaluate({ kind: "read", target: ref });
+      shared.terminal(authorized.inv.received);
+      const target = authorized.op.target;
+      if (!target) return denied;
+      const source = authorized.inv.inspections.get(`live:${key(target)}`);
+      if (!source) return denied;
+      return {
+        ok: true,
+        item: Object.freeze({
+          ...project(source),
+          size_bytes: source.size_bytes ?? null,
+          modified_at: source.modified_at ?? null,
+        }),
+      };
+    } catch {
+      return denied;
+    }
+  });
   pagingFacades.set(facade, {
     async root(ref) {
       try {
