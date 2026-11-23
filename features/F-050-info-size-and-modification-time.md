@@ -59,11 +59,17 @@ Recheck the ledger on main before freeze and PR creation.
    text result, input schema, annotations, error codes and transport behavior.
 2. Carry only the two validated optional scalars from the configured-tree live
    `inspect()` and received live `inspect()` paths in `src/kdrive/adapter.ts`,
-   through normalization and policy inspection. Keep shared `treeItem()` and
+   through normalization and policy inspection. The configured-tree `inspect()`
+   attaches them only when `location === "live"`; trashed inspections carry
+   neither scalar. Keep shared `treeItem()` and
    `receivedItem()` normalization metadata-free for their other callers:
    list/collection, children, trash, resolve and received-list items acquire
    neither scalar. Attach the validated scalars only in those live inspection
-   paths, preserving them through policy value normalization. Publish them from the
+   paths. Re-validate them in `src/policy/values.ts`'s `item()` and
+   `src/policy/received.ts`'s `parse()`: `size_bytes` accepts only a BR-436
+   non-negative safe integer or `null`; `modified_at` accepts only a string
+   matching `^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$` or `null`.
+   Anything else becomes `null`. Publish them from the
    exact normalized live item authorized in that invocation, after existing
    terminal received-cache checks. Do not fetch separate unchecked metadata,
    call content `describe()`/download, use `execute` payloads, cache a grant,
@@ -118,7 +124,11 @@ Recheck the ledger on main before freeze and PR creation.
    Preserve accepted versions until actual-main acceptance. Synchronize final
    markers in the next reviewed PR. No VERSION, release, tag or ADR is needed.
 9. Prepare a bounded read-only acceptance operator and its documented owner
-   command, using the existing acceptance launcher/transport conventions.
+   command: `scripts/kdrive-info-acceptance.ts`, invoked by the planned
+   `make kdrive-info-acceptance` target. Follow the existing
+   `scripts/kdrive-acceptance.ts` / `make kdrive-acceptance` pattern in the
+   Makefile, using `scripts/kdrive-entry.sh` and its launcher/transport
+   conventions.
    Inputs identify one owner-designated authorized file of independently known
    size and modification time and one authorized folder, plus an optional
    owner-designated authorized received-share item. Apply the same comparisons
@@ -205,7 +215,9 @@ before implementation; it runs `make check` and CI after implementation.
   drive-root enumeration run, then their item keys and envelopes equal the
   pre-change five-field baselines. At the adapter boundary, list/collection,
   children, trash, resolve and received-list items carry neither new scalar,
-  even when their upstream metadata contains valid values. Verified by
+  even when their upstream metadata contains valid values. Configured-tree
+  `inspect()` attaches scalars only for `location === "live"`; trashed
+  inspections carry neither scalar. Verified by
   `TestBR063_v2_non_inspect_metadata_absent` in
   `tests/kdrive/adapter-normalize.test.ts` and
   `tests/kdrive/adapter-received.test.ts`, and by characterization tests
@@ -226,7 +238,10 @@ before implementation; it runs `make check` and CI after implementation.
   proof or incomplete required evidence, when info runs, then it returns the
   existing refusal without size/date. Given hostile extras, accessors, toJSON
   or execute canaries, none is executed or serialized; successful output has
-  no eighth key. The info port refuses an unconstructed policy instance;
+  no eighth key. Given a policy dependency injecting objects, arbitrary strings
+  or wrong types as optional scalars, `item()` and `parse()` re-validate them
+  against Scope 2 and replace invalid values with `null`, without leaking them
+  in info output. The info port refuses an unconstructed policy instance;
   ordinary navigation reads still have exactly five fields. Info operation
   kinds or projection flags sent to `check()`/`dispatch()` retain their existing
   rejection, and read-mode and received-share capability decisions match the
@@ -246,7 +261,8 @@ before implementation; it runs `make check` and CI after implementation.
   and the existing F-042 budget/notice assertions.
 - **AC-08 (BR-436 v1, BR-437 v1)** — Given a synthetic file of known size and
   timestamp, a folder and optional received-share item (both present and absent
-  cases), when the documented owner command runs through its
+  cases), when the planned `make kdrive-info-acceptance` owner command invokes
+  `scripts/kdrive-info-acceptance.ts` through its
   real launcher and injected test-double transport, then it compares raw
   metadata and info end to end within Scope 9's bounds. Missing/wrong-shaped
   date produces an inconclusive qualification, mismatched conversion fails,
@@ -256,15 +272,16 @@ before implementation; it runs `make check` and CI after implementation.
   `TestBR436_v1_owner_procedure_bounds_and_redaction`; the implementation PR
   records the exact command and successful rehearsal before requesting a run.
 - **AC-09 (BR-436 v1, BR-437 v1)** — Given successful rehearsal and designated
-  real-account items, when the owner runs that same command on the actual
+  real-account items, when the owner runs `make kdrive-info-acceptance`
+  (`scripts/kdrive-info-acceptance.ts`), rehearsed in AC-08, on the actual
   merged main SHA, then known file size and whole-second modification time
   match the upstream values and info conversion, folder size is null, and
   Scope 9's sanitized observation is recorded. If a designated received-share
   item is available, compare its raw scalars and info output under the same
   rules and bounds; otherwise the observation explicitly records the residual
   risk of unverified real-account received-share metadata. Its absence alone
-  does not block acceptance. Verified by the documented
-  owner command rehearsed in AC-08 and a ticket acceptance comment with SHA,
+  does not block acceptance. Verified by `make kdrive-info-acceptance`,
+  rehearsed in AC-08, and a ticket acceptance comment with SHA,
   command, results and evidence identifier; the observation links that comment.
   This remains unverified until that run. An unsupported real shape is recorded
   as such, keeps the output null and leaves this AC and ticket acceptance open;
@@ -329,3 +346,13 @@ before implementation; it runs `make check` and CI after implementation.
 - 75-spec-review-1-opus finding 6 (minor) — retained — Context and Decisions
   state repository evidence and allocation status directly, removing references
   to task provenance. The index entry contains no such references.
+- 75-spec-review-2-opus finding 1 (minor) — retained — Scope 2 requires
+  `item()` and `parse()` to re-validate size and timestamp scalars; AC-06 adds
+  policy-dependency injection of objects, arbitrary strings and wrong types.
+- 75-spec-review-2-opus finding 2 (minor) — retained — Scope 2 and AC-04
+  explicitly restrict configured-tree scalar attachment to `location === "live"`
+  and require trashed inspections to carry neither scalar.
+- 75-spec-review-2-opus finding 3 (minor) — retained — Scope 9 and AC-08/AC-09
+  name the planned `scripts/kdrive-info-acceptance.ts` operator and
+  `make kdrive-info-acceptance` target, following the verified existing
+  `scripts/kdrive-acceptance.ts` / `make kdrive-acceptance` launcher pattern.
