@@ -278,7 +278,7 @@ No new BR or ADR is allocated. Next free IDs after F-049 were F-050, BR-436, ADR
 
 Issue #75 allocates [F-050 v1](../features/F-050-info-size-and-modification-time.md)
 and BR-436–BR-437 v1 for info size and modification-time validation, and
-plans BR-063 v2 and BR-428 v2. F-050 v1 is draft; rule records are deferred to
+plans BR-063 v2 and BR-428 v2. F-050 v1 is frozen; rule records are deferred to
 the implementation PR and no new version is accepted or active. Other tool
 outputs retain their five-field projections through a separate guarded info
 consumer port that reuses existing read evaluation without changing operation,

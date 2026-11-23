@@ -2,7 +2,7 @@
 id: F-050
 title: Info size and modification time
 ticket: "#75"
-status: draft
+status: frozen
 version: 1
 ---
 
@@ -356,3 +356,8 @@ before implementation; it runs `make check` and CI after implementation.
   name the planned `scripts/kdrive-info-acceptance.ts` operator and
   `make kdrive-info-acceptance` target, following the verified existing
   `scripts/kdrive-acceptance.ts` / `make kdrive-acceptance` launcher pattern.
+- 75-spec-review-3-opus optional note — rejected — the policy pattern alone
+  accepts calendar-invalid strings such as `2026-13-45T25:61:61Z`. The adapter
+  conversion (Scope 5) emits only valid instants, so the policy check is
+  defense in depth against a faulty dependency; v1 keeps the pattern check
+  only, as a documented residual risk.
