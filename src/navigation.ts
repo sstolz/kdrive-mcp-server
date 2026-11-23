@@ -14,6 +14,7 @@ import {
 import {
   createPolicy,
   navigatePolicy,
+  infoPolicy,
   pagePolicy,
   receivedCandidatesPolicy,
   readPagePolicy,
@@ -261,7 +262,7 @@ const navigationPurposes: Readonly<Record<ToolName, string>> = {
   kdrive_shared_with_me:
     "Discovers authorized received-share roots, optionally filtered by owner drive and type. Use each item's drive_id and id for subsequent calls.",
   kdrive_info:
-    "Gets authorized metadata for a file or folder. Returns JSON item with its IDs, name, path and type; use kdrive_read or kdrive_download for file content. No cursor.",
+    "Gets authorized metadata for a file or folder. Returns JSON item with drive_id, id, name, type, path, size_bytes (bytes; null for folders or unknown size) and modified_at (UTC ISO 8601 to whole seconds; null when unknown). Use kdrive_read or kdrive_download for file content. No cursor.",
   kdrive_resolve_path:
     "Resolves an exact absolute path within an authorized root. Returns JSON item with its IDs, name, path and type; use its id as file_id or folder_id. No cursor.",
   kdrive_download:
@@ -743,10 +744,15 @@ export function createNavigationController(
       }
       return { drives };
     }
-    if (name === "kdrive_info")
-      return {
-        item: (await navigation("read", driveId, args.file_id as number)).item,
-      };
+    if (name === "kdrive_info") {
+      const result = await infoPolicy(policy, {
+        driveId,
+        id: args.file_id as number,
+      });
+      if (boundCode) throw new BoundFailure(boundCode);
+      if (!result.ok) throw new Error(result.code);
+      return { item: result.item };
+    }
     const requested = args.path as string;
     const roots = (await anchors(driveId))
       .filter((item) => within(item.path, requested))

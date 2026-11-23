@@ -14,6 +14,7 @@ import { createMutators } from "./mutators.js";
 import {
   Incomplete,
   identity,
+  liveInfo,
   incomplete,
   originalTrashItem,
   positive,
@@ -164,7 +165,10 @@ export function createKdriveAdapter(
       if (value === "missing") return missingStatus;
       const normalized = treeItem(value.data, target.driveId);
       if (normalized.id !== target.id) incomplete();
-      return normalized;
+      return Object.freeze({
+        ...normalized,
+        ...liveInfo(value.data, normalized.type),
+      });
     });
   }
 
@@ -300,7 +304,10 @@ export function createKdriveAdapter(
         if (value === "missing") return missingStatus;
         const normalized = receivedItem(value.data, target.driveId, role);
         if (normalized.id !== target.id) incomplete();
-        return normalized;
+        return Object.freeze({
+          ...normalized,
+          ...liveInfo(value.data, normalized.type),
+        });
       });
     },
     async children(request: EvidenceRequest): Promise<unknown> {

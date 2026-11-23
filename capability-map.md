@@ -1,5 +1,15 @@
 # Capability map
 
+## Provisional — Info size and modification time
+
+[F-050 v1](features/F-050-info-size-and-modification-time.md) (#75),
+[BR-063 v2](business-rules/BR-063.md), [BR-428 v2](business-rules/BR-428.md),
+[BR-436 v1](business-rules/BR-436.md) and [BR-437 v1](business-rules/BR-437.md)
+are pending acceptance: seven-field info with independently nullable byte size
+and whole-second UTC modification time from the authorized live item. Other
+item outputs retain five fields. Synthetic rehearsal, actual-main acceptance
+and owner-run real-account metadata qualification remain unverified.
+
 ## Accepted — Secret-file BOM refusal
 
 [F-049 v1](features/F-049-secret-file-bom-refusal.md) (#117),

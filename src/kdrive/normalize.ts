@@ -351,3 +351,23 @@ export function receivedItem(value: unknown, driveId: number, role: string) {
     anchorId: (relative[0] as Member).id,
   });
 }
+
+/** F-050: used only by live inspection, never by shared item normalizers. */
+export function liveInfo(value: unknown, type: "file" | "dir") {
+  const r = wire(value);
+  const size = type === "file" ? r.size : undefined;
+  const modified = r.last_modified_at;
+  return Object.freeze({
+    size_bytes:
+      typeof size === "number" && Number.isSafeInteger(size) && size >= 0
+        ? size + 0
+        : null,
+    modified_at:
+      typeof modified === "number" &&
+      Number.isSafeInteger(modified) &&
+      modified >= 0 &&
+      modified <= 253402300799
+        ? new Date(modified * 1000).toISOString().replace(".000Z", "Z")
+        : null,
+  });
+}

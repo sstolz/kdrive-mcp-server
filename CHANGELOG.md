@@ -6,12 +6,21 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
 
 ### Added
 
+- #75 / F-050 v1 (pending acceptance): `kdrive_info` adds `size_bytes` and
+  `modified_at`, always present and independently null when unknown. File
+  sizes use validated byte counts; folders have null size. Modification times
+  use validated whole Unix seconds rendered in UTC. Other item outputs retain
+  their five fields. Includes the bounded read-only owner qualification command.
+
 - #110 / F-048 (accepted 2026-11-21 on main `f4487a2`; [#110 acceptance](https://github.com/sstolz/kdrive-mcp-server/issues/110#issuecomment-7062590216)): redacted stderr
   startup warnings for deny patterns proved outside known applicable roots,
   with conservative wildcard and folder-sharing exceptions; startup eligibility
   and runtime filtering remain unchanged.
 
 ### Changed
+
+- #75 / BR-428 v2 (pending acceptance): info's trusted tool description documents
+  its seven fields, byte units, UTC precision and null semantics.
 
 - #117 / F-049 / BR-026 v3 / BR-027 v3 (accepted 2026-11-22 on main `e3c63b8`; [#117 acceptance](https://github.com/sstolz/kdrive-mcp-server/issues/117#issuecomment-7087203460)): selected token,
   upstream-secret and signing-key files refuse `EF BB BF` anywhere in raw bytes
