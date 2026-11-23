@@ -274,4 +274,12 @@ and versions [BR-026](../business-rules/BR-026.md) and
 [BR-027](../business-rules/BR-027.md) to v3. F-049 v1 is done, accepted
 on main `e3c63b8` on 2026-11-22
 ([#117 acceptance](https://github.com/sstolz/kdrive-mcp-server/issues/117#issuecomment-7087203460)); both rule versions are active.
-No new BR or ADR is allocated. Next free IDs: **F-050, BR-436, ADR-013**.
+No new BR or ADR is allocated. Next free IDs after F-049 were F-050, BR-436, ADR-013.
+
+Issue #75 allocates [F-050 v1](../features/F-050-info-size-and-modification-time.md)
+and BR-436–BR-437 v1 for info size and modification-time validation, and
+plans BR-063 v2 and BR-428 v2. F-050 v1 is draft; rule records are deferred to
+the implementation PR and no new version is accepted or active. Other tool
+outputs retain their five-field projections; the real-account timestamp
+shape and unit remain unverified. No ADR is allocated.
+Next free IDs: **F-051, BR-438, ADR-013**.
