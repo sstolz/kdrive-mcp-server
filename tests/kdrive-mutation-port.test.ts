@@ -625,7 +625,8 @@ describe("F-051 transport edge cases", () => {
     expect(Object.getPrototypeOf(error)).toBe(Error.prototype);
     expect((error as Error).message).toBe(MUTATION_UNKNOWN);
   }
-  const caught = (pending: Promise<unknown>) => pending.catch((e: unknown) => e);
+  const caught = (pending: Promise<unknown>) =>
+    pending.catch((e: unknown) => e);
 
   it("TestBR438_v1_same_tick_secureConnect_error_is_unknown_without_crash", async () => {
     const s = await server(() => okBody("trash"));
@@ -858,7 +859,9 @@ describe("F-051 transport edge cases", () => {
       expect(heldSettled).toBe(0);
       expect(controllers.every((c) => !c.signal.aborted)).toBe(true);
       expect(sockets[7]?.destroyed).toBe(true);
-      expect(sockets.slice(0, 7).every((socket) => !socket.destroyed)).toBe(true);
+      expect(sockets.slice(0, 7).every((socket) => !socket.destroyed)).toBe(
+        true,
+      );
       expect(s.requests.filter((r) => r.path === eighthPath)).toHaveLength(1);
       expect(s.requests.filter((r) => r.path === ninthPath)).toHaveLength(1);
       expect(s.requests).toHaveLength(9);
@@ -934,7 +937,9 @@ describe("F-051 transport edge cases", () => {
         ),
       ).toEqual(c.raw);
       const result = await bounded(
-        gateWith(adapter(s).mutators).run(...(OPS.trash as [string, Operation])),
+        gateWith(adapter(s).mutators).run(
+          ...(OPS.trash as [string, Operation]),
+        ),
       );
       expect(result).toMatchObject({
         result: c.result,
@@ -1006,7 +1011,9 @@ describe("F-051 transport edge cases", () => {
       );
       expect(observed).toEqual([["DELETE", trash.template]]);
       expect(
-        sockets.every((socket) => socket.bytesWritten === 0 && socket.destroyed),
+        sockets.every(
+          (socket) => socket.bytesWritten === 0 && socket.destroyed,
+        ),
       ).toBe(true);
       expect(s.requests).toHaveLength(0);
     }
@@ -1024,7 +1031,9 @@ describe("F-051 transport edge cases", () => {
     const alreadyAborted = new AbortController();
     alreadyAborted.abort();
     expect(
-      await bounded(caught(port.mutate(trash, undefined, alreadyAborted.signal))),
+      await bounded(
+        caught(port.mutate(trash, undefined, alreadyAborted.signal)),
+      ),
     ).toBeInstanceOf(NotSent);
     expect(observed).toEqual([]);
     const controllers = Array.from({ length: 72 }, () => new AbortController());
@@ -1042,7 +1051,9 @@ describe("F-051 transport edge cases", () => {
       ).toBeInstanceOf(NotSent);
       expect(observed).toEqual([]);
       controllers[71]?.abort();
-      expect(await bounded(Promise.resolve(pending[71]))).toBeInstanceOf(NotSent);
+      expect(await bounded(Promise.resolve(pending[71]))).toBeInstanceOf(
+        NotSent,
+      );
       expect(observed).toEqual([]);
       expect(s.requests).toHaveLength(8);
     } finally {
