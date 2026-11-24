@@ -62,7 +62,7 @@ IDs BR-440–BR-442 are allocated to this draft.
   `authorization_endpoint, token_endpoint` in that order. Verified by: AC-01,
   AC-02.
 - **BR-103 v2** — On an inconsistent run, the client fact "rejects inconsistent
-  issuer identification" is needed only if, ignoring that fact, steps 3 or 4
+  issuer identification" is needed exactly when, ignoring that fact, steps 3 or 4
   can select delegation for this provider/client, treating other `unverified`
   facts as potentially `supported`; otherwise it cannot make the result
   `undetermined`. Verified by: AC-03, AC-04.
@@ -77,17 +77,27 @@ IDs BR-440–BR-442 are allocated to this draft.
   (`U+0008`) and ESC (`U+001B`), rejects with `Unsupported control character`
   rather than stripping or returning it. Verified by: AC-06.
 - **BR-442 v1** — Every hidden-read exit once raw-mode activation is attempted
-  restores the pre-read raw state (`isRaw`, default false when unavailable),
-  pauses input, removes the read's data/end/error listeners and writes one
-  cleanup newline before settlement, including success, Ctrl-C, EOF, input
-  error, control refusal and setup failure. If `setRawMode(true)` itself
-  throws after the prompt, the same cleanup restores the captured state and
-  the read rejects. A read on already-ended or destroyed input rejects
-  immediately with `Input ended` without activating raw mode or attaching
-  read listeners. The production runner installs one payload-free stdin
-  `error` handler before any read and retains it for the process lifetime,
-  including between reads and after settlement; it exposes neither error
-  payload nor stack. Late events cannot settle or clean up a read again.
+  attempts each cleanup step once, independently and best-effort: restore the
+  pre-read raw state (`isRaw`, default false when unavailable), pause input,
+  remove each of the read's data/end/error listeners and write one cleanup
+  newline before settlement. This includes success, Ctrl-C, EOF, input error,
+  control refusal and setup failure. A throwing cleanup step cannot prevent
+  the remaining steps or settlement: preserve the original failure, or reject
+  with exactly `Input failed` if cleanup fails on an otherwise successful
+  read, without exposing the cleanup error payload or stack. If
+  `setRawMode(true)` itself throws after the prompt, the same cleanup attempts
+  restoration of the captured state and the read rejects. Admission first
+  refuses non-TTY input or a missing raw-mode setter with `A terminal is required`,
+  then refuses already-ended or destroyed input with `Input ended`; both
+  checks precede the prompt, produce no prompt and no newline, and neither
+  activates raw mode nor attaches read listeners. An exported
+  `createProductionDeps` factory in `scripts/oidc-qualify.ts` takes the input
+  and output streams, installs one payload-free stdin `error` handler before
+  any read and returns the production dependencies including both hidden
+  readers bound to those streams. The main block calls this factory once.
+  The handler remains for the process lifetime, including between reads and
+  after settlement; it exposes neither error payload nor stack. Late events
+  cannot settle or clean up a read again.
   Verified by: AC-07.
 - **BR-127 v2** — Registration with an explicit JSON `null` for
   `token_endpoint_auth_method` or `grant_types` returns 400
@@ -187,14 +197,23 @@ include their BR versions. Existing BR-104 v1 output redaction remains in force.
   control, or setup throws during or after `setRawMode(true)`, Then its raw
   state returns to the captured initial value, input pauses, owned listeners
   are removed and one cleanup newline is written, once before settlement;
-  late data/end cannot repeat cleanup. Given already-ended or destroyed
-  input, When a read starts, Then it rejects immediately with exactly
-  `Input ended`, without raw-mode activation or attached read listeners.
-  Given the production runner's lifetime stdin error handler, When a
-  payload-bearing error arrives after settlement or between its two reads,
+  late data/end cannot repeat cleanup. Given a cleanup step throws (including
+  restoring `setRawMode`, pausing, removing a listener or writing the newline),
+  When a successful or failing read exits, Then every remaining cleanup step
+  is still attempted once and the promise settles once, preserving the
+  original failure or rejecting an otherwise successful read with exactly
+  `Input failed`, without exposing the cleanup error payload or stack.
+  Given already-ended or destroyed TTY input, When a read starts, Then it
+  rejects immediately with exactly `Input ended`; non-TTY input or a missing
+  raw-mode setter instead rejects first with `A terminal is required`, even
+  if ended or destroyed. In each admission refusal, output is empty (no prompt,
+  no newline), raw mode is never activated and no read listeners are attached.
+  Given a fake input emitter and output streams passed directly to the exported
+  `createProductionDeps` factory, When its returned readers run sequentially
+  and a payload-bearing error arrives after settlement or between reads,
   Then it is handled without an uncaught exception, output or stack, cannot
   change the settled result, and the single lifetime handler remains while
-  per-read listeners are removed. Non-TTY refusal never activates raw mode.
+  per-read listeners are removed. The main block uses that same factory.
   Verified by
   `BR-442 v1 AC-07 every exit restores terminal state including Ctrl-C`
   in `tests/auth/terminal.test.ts` and
@@ -289,3 +308,7 @@ include their BR versions. Existing BR-104 v1 output redaction remains in force.
 - 72-spec-review-1-opus #6 (minor) — retained — BR-143 v5 explicitly preserves one store_full event per client/family eviction; AC-09 asserts the exact store/count payloads.
 - 72-spec-review-1-opus #7 (minor) — retained — The business-rule introduction now states that BR-440–BR-442 are allocated, with no allocation question remaining.
 - 72-spec-review-1-opus #8 (minor) — retained — D-3 now states that the current reader returns residual controls and explains why refusal replaces that behavior.
+- 72-spec-review-2-opus #1 (minor) — retained — BR-442 v1 requires an exported createProductionDeps stream factory used by main; AC-07 exercises its returned readers and lifetime handler directly with a fake emitter.
+- 72-spec-review-2-opus #2 (minor) — retained — BR-442 v1 orders non-TTY/missing-setter refusal before ended/destroyed refusal, both before the prompt; AC-07 asserts no prompt, newline, raw-mode activation or read listeners.
+- 72-spec-review-2-opus #3 (minor) — retained — BR-442 v1 makes each cleanup step independently best-effort before one settlement, preserving failures and rejecting successful reads with Input failed on cleanup failure; AC-07 covers throwing restoration and the other cleanup steps.
+- 72-spec-review-2-opus #4 (minor) — retained — BR-103 v2 now says the issuer-rejection fact is needed exactly when a delegation path can apply, matching AC-04's positive direction.
