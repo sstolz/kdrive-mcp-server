@@ -24,6 +24,7 @@ import {
   createTransport,
   MUTATION_UNKNOWN,
   type Connect,
+  type Lookup,
 } from "../src/kdrive/transport.js";
 import type { Operation } from "../src/policy/operation.js";
 import { CANARY } from "./helpers/kdrive.js";
@@ -47,7 +48,10 @@ async function server(handler: RawHandler) {
   return s;
 }
 type Server = Awaited<ReturnType<typeof rawServer>>;
-function adapter(s: Pick<Server, "lookup" | "connect">, extra = {}) {
+function adapter(
+  s: { readonly lookup: Lookup; readonly connect: Connect },
+  extra = {},
+) {
   const observed: [string, string][] = [];
   const a = createKdriveAdapter({
     token: CANARY,
@@ -604,19 +608,23 @@ describe("F-051 transport edge cases", () => {
   function bounded<T>(pending: Promise<T>): Promise<T> {
     let timer: ReturnType<typeof watchdogTimer> | undefined;
     const expired = new Promise<never>((_resolve, reject) => {
-      timer = watchdogTimer(() => reject(new Error("test watchdog")), 3_000);
+      timer = watchdogTimer(() => {
+        reject(new Error("test watchdog"));
+      }, 3_000);
     });
-    return Promise.race([pending, expired]).finally(() => clearWatchdog(timer));
+    return Promise.race([pending, expired]).finally(() => {
+      clearWatchdog(timer);
+    });
   }
   function until(ready: () => boolean): Promise<void> {
-    let stopped = false;
+    const state = { stopped: false };
     return bounded(
       (async () => {
-        while (!stopped && !ready())
+        while (!state.stopped && !ready())
           await new Promise<void>((r) => setImmediate(r));
       })(),
     ).finally(() => {
-      stopped = true;
+      state.stopped = true;
     });
   }
   function unknown(error: unknown) {
