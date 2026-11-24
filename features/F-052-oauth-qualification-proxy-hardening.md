@@ -82,11 +82,13 @@ IDs BR-440–BR-442 are allocated to this draft.
   remove each of the read's data/end/error listeners and write one cleanup
   newline before settlement. This includes success, Ctrl-C, EOF, input error,
   control refusal and setup failure. A throwing cleanup step cannot prevent
-  the remaining steps or settlement: preserve the original failure, or reject
-  with exactly `Input failed` if cleanup fails on an otherwise successful
-  read, without exposing the cleanup error payload or stack. If
+  the remaining steps or settlement: preserve the specified payload-free
+  read failure, or reject with exactly `Input failed` if cleanup fails on an
+  otherwise successful read, without exposing the cleanup error payload or stack. If
   `setRawMode(true)` itself throws after the prompt, the same cleanup attempts
-  restoration of the captured state and the read rejects. Admission first
+  restoration of the captured state. Setup failures during or after
+  `setRawMode(true)` reject with exactly `Input failed`, without the original
+  error text or stack, including when cleanup also fails. Admission first
   refuses non-TTY input or a missing raw-mode setter with `A terminal is required`,
   then refuses already-ended or destroyed input with `Input ended`; both
   checks precede the prompt, produce no prompt and no newline, and neither
@@ -104,10 +106,14 @@ IDs BR-440–BR-442 are allocated to this draft.
   `{"error":"invalid_client_metadata"}` without creating a client; defaults
   apply only when the member is absent. Verified by: AC-08.
 - **BR-143 v5** — Each refusal caused by a full consent, flow or code store
-  emits exactly one `store_full` event, with only `store` and `count` naming
-  the saturated store and its live count. Each client or family eviction
-  continues to emit exactly one `store_full` event with only `{store, count}`
-  naming that store and its live count at capacity. Verified by: AC-09.
+  has a whole log delta of exactly one `store_full` event, with only `store`
+  and `count` naming the saturated store and its live count, without `handler`.
+  The handler-level event is removed, not renamed. This supersedes F-028's
+  "today's" consent-store-full row and handler requirement for that refusal
+  under BR-394 v1; other authorization-refusal events are unchanged.
+  Each client or family eviction continues to emit exactly one `store_full`
+  event with only `{store, count}` naming that store and its live count at
+  capacity. Verified by: AC-09.
 - **BR-306 v3** — A complete header block accepted by Node's HTTP parser
   with status 101, within the existing 8,192-byte bound, ends the CIMD fetch
   immediately as
@@ -197,12 +203,16 @@ include their BR versions. Existing BR-104 v1 output redaction remains in force.
   control, or setup throws during or after `setRawMode(true)`, Then its raw
   state returns to the captured initial value, input pauses, owned listeners
   are removed and one cleanup newline is written, once before settlement;
-  late data/end cannot repeat cleanup. Given a cleanup step throws (including
-  restoring `setRawMode`, pausing, removing a listener or writing the newline),
+  late data/end cannot repeat cleanup. Setup failures during or after
+  `setRawMode(true)` reject with exactly `Input failed`, without the original
+  error text or stack, including when cleanup also throws. Given a cleanup
+  step throws (including restoring `setRawMode`, pausing, removing a listener
+  or writing the newline),
   When a successful or failing read exits, Then every remaining cleanup step
   is still attempted once and the promise settles once, preserving the
-  original failure or rejecting an otherwise successful read with exactly
-  `Input failed`, without exposing the cleanup error payload or stack.
+  specified payload-free read failure or rejecting an otherwise successful
+  read with exactly `Input failed`, without exposing the cleanup error payload
+  or stack.
   Given already-ended or destroyed TTY input, When a read starts, Then it
   rejects immediately with exactly `Input ended`; non-TTY input or a missing
   raw-mode setter instead rejects first with `A terminal is required`, even
@@ -228,8 +238,9 @@ include their BR versions. Existing BR-104 v1 output redaction remains in force.
   in `tests/auth/proxy-registration.test.ts`.
 - **AC-09** (BR-143 v5) — Given respectively 1,000 live consents, flows or
   codes and a valid request needing one more entry, When that request is
-  refused, Then its log delta contains exactly one `store_full` with exactly
-  `{store, count:1000}`, and the existing 503 HTML, `temporarily_unavailable`
+  refused, Then its whole log delta is exactly one `store_full` with exactly
+  `{store, count:1000}`, without `handler` or any additional event under any
+  name, and the existing 503 HTML, `temporarily_unavailable`
   redirect or `server_error` redirect respectively remains; expiry restores
   admission. Given full client and family stores, When the existing eviction
   paths admit a new entry, Then eviction behavior remains and each eviction
@@ -284,7 +295,12 @@ include their BR versions. Existing BR-104 v1 output redaction remains in force.
   messages; the runner retains its fixed diagnostic and no-stack policy.
 - **D-4 — Version existing purposes.** BR-127 v2 tightens registration
   presence semantics; BR-143 v5 defines capacity-event multiplicity and its
-  existing store/count shape. BR-306 v3 makes 101 a final status failure
+  existing store/count shape. Full consent/flow/code refusals remove the
+  handler-level event rather than renaming it: the whole log delta is one
+  `store_full` with only `{store, count}`, without `handler`. For consent-store
+  saturation this supersedes F-028's "today's" row and BR-394 v1's handler
+  requirement; other authorization-refusal events remain unchanged.
+  BR-306 v3 makes 101 a final status failure
   when Node's parser accepts the block rather than an interim block or
   timeout; BR-394 v3 explicitly records its received status. Parser errors
   retain their existing classification; header overflow still takes
@@ -313,3 +329,5 @@ include their BR versions. Existing BR-104 v1 output redaction remains in force.
 - 72-spec-review-2-opus #3 (minor) — retained — BR-442 v1 makes each cleanup step independently best-effort before one settlement, preserving failures and rejecting successful reads with Input failed on cleanup failure; AC-07 covers throwing restoration and the other cleanup steps.
 - 72-spec-review-2-opus #4 (minor) — retained — BR-103 v2 now says the issuer-rejection fact is needed exactly when a delegation path can apply, matching AC-04's positive direction.
 - 72-spec-review-3-opus #1 (minor) — retained — AC-07 states that the main block's use of the factory is verified by code review.
+- 72-spec-decision-1-fable #1 (minor) — retained — BR-143 v5 and D-4 remove the handler-level event and supersede F-028's consent-store-full row and handler requirement; AC-09 asserts the whole log delta is one store_full with only store/count, without handler or any additional event under another name.
+- 72-spec-decision-1-fable #2 (minor) — retained — BR-442 v1 fixes setup-failure rejection to exactly Input failed without original error text or stack, including when cleanup fails; AC-07 asserts that exact result.
