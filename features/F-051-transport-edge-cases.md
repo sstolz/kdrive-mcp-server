@@ -2,11 +2,14 @@
 id: F-051
 title: Transport edge cases
 ticket: "#77"
-status: frozen
+status: done
 version: 1
 ---
 
 ## Context
+
+This version was accepted on main `b249860` on 2026-11-24
+([#77 acceptance](https://github.com/sstolz/kdrive-mcp-server/issues/77#issuecomment-7143986357)).
 
 Mutation callers need socket failures to produce a bounded settlement rather
 than a process crash or a retained concurrency slot. Code reading of

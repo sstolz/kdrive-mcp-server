@@ -32,7 +32,7 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
 
 ### Fixed
 
-- #77 / F-051 v1 (pending acceptance): mutation sockets retain payload-free
+- #77 / F-051 v1 (accepted 2026-11-24 on main `b249860`; [#77 acceptance](https://github.com/sstolz/kdrive-mcp-server/issues/77#issuecomment-7143986357)): mutation sockets retain payload-free
   error handling through TLS handoff and cleanup; close without a response
   releases the slot as unknown, and response statuses below 200 are unknown
   without replay. Observer counts and bounds describe request attempts,
