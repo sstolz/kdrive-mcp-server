@@ -2,7 +2,7 @@
 id: F-051
 title: Transport edge cases
 ticket: "#77"
-status: draft
+status: frozen
 version: 1
 ---
 
@@ -126,8 +126,8 @@ not a real account. A test watchdog may fail a hanging test; it must not abort
 the operation to obtain the expected settlement.
 
 Expected base results: AC-01 is red if the hypothesized listener gap is real;
-AC-03a is expected red for settlement/slot release before abort. AC-07 must
-reject at the port even if base exposes status 101. AC-02, AC-03b, AC-06,
+AC-03a is expected red for settlement/slot release before abort. AC-07 is
+expected red if base exposes status 101 as a raw result. AC-02, AC-03b, AC-06,
 AC-04a/b and AC-05 pin current behavior. These are expectations,
 not execution evidence; the orchestrator records the actual base results.
 
@@ -212,12 +212,14 @@ check uses fake `setTimeout`/`clearTimeout` timers that are never advanced
   legacy keys and numerical bounds stay unchanged, and historical evidence
   is preserved. Verified by the following `grep` checks: the first has no
   matches outside historical evidence (exit 1 if none); the second's output
-  includes all five listed report keys. Compare historical matches and
+  includes all five listed report keys; the third prints a non-zero count
+  for each of the six files. Compare historical matches and
   numerical bounds with the unchanged base.
 
   ```sh
   grep -nEi 'request counts?' scripts/kdrive-acceptance.ts scripts/kdrive-write-acceptance.ts scripts/kdrive-upload-acceptance.ts scripts/kdrive-info-acceptance.ts docs/kdrive-read-probe-plan.md docs/kdrive-write-probe-plan.md
   grep -nE '(^|[^[:alnum:]_])(requests|requestsWithinBound|requests_within_bound|byTemplate|byRoute)([^[:alnum:]_]|$)' scripts/kdrive-acceptance.ts scripts/kdrive-write-acceptance.ts scripts/kdrive-upload-acceptance.ts scripts/kdrive-info-acceptance.ts
+  grep -ci 'attempt' scripts/kdrive-acceptance.ts scripts/kdrive-write-acceptance.ts scripts/kdrive-upload-acceptance.ts scripts/kdrive-info-acceptance.ts docs/kdrive-read-probe-plan.md docs/kdrive-write-probe-plan.md
   ```
 
 ## Decisions
@@ -285,3 +287,7 @@ check uses fake `setTimeout`/`clearTimeout` timers that are never advanced
   comments and pending capability/index entries without promoting acceptance.
 - **77-spec-review-2-opus/7 — minor — retained.** Record rejection of post-TLS
   zero-byte NotSent so freeze preserves BR-267 v1's classification.
+- **77-spec-review-3-opus/1 — minor — retained.** AC-08 adds a third `grep`
+  requiring an `attempt` match in each of the six files.
+- **77-spec-review-3-opus/2 — minor — retained.** The base-result line states
+  AC-07 as an expectation (red if base exposes status 101 as a raw result).
