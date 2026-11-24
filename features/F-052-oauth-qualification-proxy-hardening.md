@@ -2,7 +2,7 @@
 id: F-052
 title: OAuth qualification and proxy hardening
 ticket: "#72"
-status: draft
+status: frozen
 version: 1
 ---
 
