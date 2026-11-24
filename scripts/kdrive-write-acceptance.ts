@@ -2,10 +2,12 @@
 // (make kdrive-write-acceptance KDRIVE_WRITE_FOLDER=<id>). Runs the two
 // phases of the F-017 Acceptance sequence in process through main(deps) with
 // the production {lookup, connect}, mode `write` and the designated folder as
-// the only root, at most 200 upstream requests within 600,000 ms. The audit
+// the only root, at most 200 upstream request attempts within 600,000 ms. The audit
 // log goes to a container temporary file. Prints only a sanitized summary:
-// per-step pass/fail, statuses, request counts by method and route template,
+// per-step pass/fail, statuses, request attempt counts by method and route template,
 // durations and the main SHA; never an ID, name, path, token or `cancel_id`.
+// BR-216 v3: requests, requestsWithinBound and byRoute count/bound attempts,
+// including pre-send failures; counts may exceed requests sent.
 import { randomBytes } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { mkdtempSync, readFileSync } from "node:fs";

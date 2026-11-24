@@ -170,8 +170,8 @@ cite that digest, and the operator refuses to start if its files differ.
 - **Pacing**: one request in flight and at least one second between starts,
   except inside C2, which is exempt (below). No automatic retry. Per-request
   deadline 10 s (30 s for R2).
-- **Caps**: Stage A ≤ 25 requests, Stage B ≤ 105 requests (one or two
-  sessions), Stage C ≤ 25 requests; each session ≤ 15 minutes; uploaded bytes
+- **Caps**: Stage A ≤ 25 request attempts, Stage B ≤ 105 request attempts (one or two
+  sessions), Stage C ≤ 25 request attempts; each session ≤ 15 minutes; uploaded bytes
   ≤ 1.1 MiB total. JSON response ≤ 256 KiB, error body ≤ 8 KiB, total received
   ≤ 4 MiB. A reached cap stops the session; caps are never raised mid-run.
 - **Publication**: logs and receipts hold only UTC time, row, method, path
@@ -185,7 +185,7 @@ cite that digest, and the operator refuses to start if its files differ.
 ## Rows
 
 All fixtures live in `C`. Aliases: `dirA`, `f1`, `f2`… are created by the row
-that first names them. Counts are planned requests including read-backs; async re-reads (one at
+that first names them. Counts are planned request attempts including read-backs; async re-reads (one at
 most per write) are not pre-counted and consume the margin between the planned
 total and the stage cap. Reaching the cap stops the session.
 
@@ -201,7 +201,7 @@ total and the stage cap. Reaching the cap stops the session.
 | T1  | R5 `f1`; R6 `f1` with `with=path,parents`; R6 with `with=path,parents,capabilities` | success, observe | 4        | Former parent/path presence and equality with `C`, depth, `status`, cancellable-action fields.    |
 | T1r | R8 restore `f1` (its former parent `C` still exists); R9 `f1`                       | success          | 3        | Landing place equals `C`; ID kept or changed.                                                     |
 
-Stage A: 21 planned requests, cap 25. It confirms parameter names, response shapes, the
+Stage A: 21 planned request attempts, cap 25. It confirms parameter names, response shapes, the
 journal and the stop behavior before anything larger.
 
 ### Stage B — remaining measurements
@@ -234,7 +234,7 @@ last, because a hang there ends the session.
 | S1  | Public link                                                                                                                                                    | —       | 0        | Blocked (no authorization).                                                                                         |
 | S2  | Invitation                                                                                                                                                     | —       | 0        | Blocked (no authorization).                                                                                         |
 
-Stage B: 73 planned requests for one pass including P0b; C2/C2b repeats add
+Stage B: 73 planned request attempts for one pass including P0b; C2/C2b repeats add
 at most 18 and a second session's P0b 2, so 93 planned, cap 105.
 
 **C2 protocol.** Both intents are journaled and synced before either request
@@ -261,8 +261,14 @@ Any mismatch in X0 or X1 skips X2 for that item and reports it.
 
 ## Evidence and unknowns
 
+BR-216 v3 observer totals and per-method/template counts mean request attempts,
+including pre-send DNS/address-policy, connection and TLS failures. Count and
+bound report fields retain their legacy keys; attempt counts may exceed
+requests sent. Historical observations, planned stage caps and recorded totals
+remain unchanged.
+
 Each executed stage produces (private archive) (sanitized
-receipt summary, request count, operator digest, journal digest) and the
+receipt summary, attempt count, operator digest, journal digest) and the
 consolidated `docs/kdrive-write-evidence.md`. Every row states what remains
 unknown. Known unknowns at the outset:
 

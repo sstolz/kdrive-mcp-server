@@ -2,6 +2,11 @@
 // mutation port and mutators against a raw loopback TLS server.
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { PassThrough } from "node:stream";
+import {
+  setTimeout as watchdogTimer,
+  clearTimeout as clearWatchdog,
+} from "node:timers";
 import { connect as tlsConnect } from "node:tls";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createStderrSink } from "../src/audit/sink.js";
@@ -15,7 +20,12 @@ import {
 import { createKdriveAdapter } from "../src/kdrive/index.js";
 import { createMutators } from "../src/kdrive/mutators.js";
 import { mutationRoutes } from "../src/kdrive/routes.js";
-import { createTransport, MUTATION_UNKNOWN } from "../src/kdrive/transport.js";
+import {
+  createTransport,
+  MUTATION_UNKNOWN,
+  type Connect,
+  type Lookup,
+} from "../src/kdrive/transport.js";
 import type { Operation } from "../src/policy/operation.js";
 import { CANARY } from "./helpers/kdrive.js";
 import {
@@ -38,7 +48,10 @@ async function server(handler: RawHandler) {
   return s;
 }
 type Server = Awaited<ReturnType<typeof rawServer>>;
-function adapter(s: Pick<Server, "lookup" | "connect">, extra = {}) {
+function adapter(
+  s: { readonly lookup: Lookup; readonly connect: Connect },
+  extra = {},
+) {
   const observed: [string, string][] = [];
   const a = createKdriveAdapter({
     token: CANARY,
@@ -587,4 +600,473 @@ describe("AC-12 bodies, checks and F-016 classification", () => {
       expect(replies).toEqual([okBody("trash")]);
     },
   );
+});
+
+// F-051 v1: watchdogs fail tests without supplying transport cancellation.
+describe("F-051 transport edge cases", () => {
+  const trash = mutationRoutes.trash(D, 41);
+  function bounded<T>(pending: Promise<T>): Promise<T> {
+    let timer: ReturnType<typeof watchdogTimer> | undefined;
+    const expired = new Promise<never>((_resolve, reject) => {
+      timer = watchdogTimer(() => {
+        reject(new Error("test watchdog"));
+      }, 3_000);
+    });
+    return Promise.race([pending, expired]).finally(() => {
+      clearWatchdog(timer);
+    });
+  }
+  function until(ready: () => boolean): Promise<void> {
+    const state = { stopped: false };
+    return bounded(
+      (async () => {
+        while (!state.stopped && !ready())
+          await new Promise<void>((r) => setImmediate(r));
+      })(),
+    ).finally(() => {
+      state.stopped = true;
+    });
+  }
+  function unknown(error: unknown) {
+    expect(error).toBeInstanceOf(Error);
+    expect(error).not.toBeInstanceOf(NotSent);
+    expect(Object.getPrototypeOf(error)).toBe(Error.prototype);
+    expect((error as Error).message).toBe(MUTATION_UNKNOWN);
+  }
+  const caught = (pending: Promise<unknown>) =>
+    pending.catch((e: unknown) => e);
+
+  it("TestBR438_v1_same_tick_secureConnect_error_is_unknown_without_crash", async () => {
+    const s = await server(() => okBody("trash"));
+    let receivedBytes = 0;
+    const originalAdd = s.sockets.add.bind(s.sockets);
+    const add = vi.spyOn(s.sockets, "add").mockImplementation((socket) => {
+      socket.on("data", (chunk: Buffer) => {
+        receivedBytes += chunk.length;
+      });
+      return originalAdd(socket);
+    });
+    const stderr = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation(() => true);
+    const uncaught: unknown[] = [];
+    const capture = (error: Error) => {
+      uncaught.push(error);
+    };
+    const sockets: ReturnType<typeof s.connect>[] = [];
+    const connect: Connect = (options) => {
+      const socket = s.connect(options);
+      sockets.push(socket);
+      socket.once("secureConnect", () => {
+        process.nextTick(() => socket.destroy(new Error("x")));
+      });
+      return socket;
+    };
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      let settlements = 0;
+      const port = createTransport({
+        token: CANARY,
+        lookup: s.lookup,
+        connect,
+      });
+      process.prependOnceListener("uncaughtException", capture);
+      const error = await bounded(
+        caught(
+          port.mutate(trash, undefined, new AbortController().signal),
+        ).then((value) => {
+          settlements++;
+          return value;
+        }),
+      );
+      unknown(error);
+      expect(uncaught).toEqual([]);
+      expect(receivedBytes).toBe(0);
+      expect(s.requests).toHaveLength(0);
+      expect(sockets).toHaveLength(1);
+      expect(() => sockets[0]?.emit("error", new Error("late"))).not.toThrow();
+      await new Promise<void>((r) => setImmediate(r));
+      expect(settlements).toBe(1);
+      expect(uncaught).toEqual([]);
+      process.removeListener("uncaughtException", capture);
+      process.prependOnceListener("uncaughtException", capture);
+      const g = gateWith(adapter({ lookup: s.lookup, connect }).mutators);
+      expect(
+        await bounded(g.run(...(OPS.trash as [string, Operation]))),
+      ).toMatchObject({
+        result: "uncertain",
+        code: "UPSTREAM_UNCERTAIN",
+        attempts: 1,
+      });
+      expect(g.lines).toHaveLength(2);
+      expect(() => sockets[1]?.emit("error", new Error("late"))).not.toThrow();
+      await new Promise<void>((r) => setImmediate(r));
+      expect(g.lines).toHaveLength(2);
+      expect(settlements).toBe(1);
+      expect(uncaught).toEqual([]);
+      expect(sockets).toHaveLength(2);
+      expect(sockets.every((socket) => socket.destroyed)).toBe(true);
+      expect(receivedBytes).toBe(0);
+      expect(s.requests).toHaveLength(0);
+      expect(stderr).not.toHaveBeenCalled();
+      expect(g.diagnostics).toEqual([]);
+    } finally {
+      process.removeListener("uncaughtException", capture);
+      stderr.mockRestore();
+      add.mockRestore();
+    }
+  }, 15_000);
+
+  it("TestBR438_v1_pre_handshake_error_is_NotSent_without_crash", async () => {
+    const sockets: PassThrough[] = [];
+    const s = await server(() => okBody("trash"));
+    let failing = true;
+    const connect: Connect = (options) => {
+      if (!failing) return s.connect(options);
+      const socket = new PassThrough();
+      sockets.push(socket);
+      process.nextTick(() =>
+        socket.destroy(new Error("pre-handshake payload")),
+      );
+      return socket;
+    };
+    const stderr = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation(() => true);
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const port = createTransport({
+        token: CANARY,
+        lookup: s.lookup,
+        connect,
+      });
+      expect(
+        await bounded(
+          caught(port.mutate(trash, undefined, new AbortController().signal)),
+        ),
+      ).toBeInstanceOf(NotSent);
+      const g = gateWith(adapter({ lookup: s.lookup, connect }).mutators);
+      expect(
+        await bounded(g.run(...(OPS.trash as [string, Operation]))),
+      ).toMatchObject({
+        result: "failed",
+        code: "NOT_SENT",
+        attempts: 1,
+      });
+      expect(s.requests).toHaveLength(0);
+      failing = false;
+      // Hold all eight admissions on the same limiter to expose a retained slot.
+      s.state.handler = () => ({ hold: true });
+      const recovered = Array.from({ length: 8 }, () =>
+        caught(port.mutate(trash, undefined, new AbortController().signal)),
+      );
+      try {
+        await until(() => s.requests.length === 8);
+        expect(s.requests).toHaveLength(8);
+      } finally {
+        for (const socket of s.sockets) socket.destroy();
+        await bounded(Promise.all(recovered));
+      }
+      expect(sockets.every((socket) => socket.destroyed)).toBe(true);
+      expect(g.diagnostics).toEqual([]);
+      expect(stderr).not.toHaveBeenCalled();
+    } finally {
+      stderr.mockRestore();
+    }
+  });
+
+  async function releasesSlot(
+    action: ReturnType<RawHandler>,
+    throughGate: boolean,
+  ) {
+    const eighthPath = mutationRoutes.trash(D, 48).target;
+    const ninthPath = mutationRoutes.trash(D, 49).target;
+    const s = await server((request) =>
+      request.path === eighthPath
+        ? action
+        : request.path === ninthPath
+          ? okBody("trash")
+          : { hold: true },
+    );
+    const sockets: ReturnType<typeof s.connect>[] = [];
+    let lookups = 0;
+    let allowEighth: (() => void) | undefined;
+    const eighthLookup = new Promise<void>((resolve) => {
+      allowEighth = resolve;
+    });
+    const port = createTransport({
+      token: CANARY,
+      lookup: async () => {
+        if (++lookups === 8) await eighthLookup;
+        return s.lookup();
+      },
+      connect: (options) => {
+        const socket = s.connect(options);
+        sockets.push(socket);
+        return socket;
+      },
+    });
+    const controllers = Array.from({ length: 7 }, () => new AbortController());
+    let heldSettled = 0;
+    const held = controllers.map((c, index) =>
+      caught(
+        port.mutate(mutationRoutes.trash(D, index + 1), undefined, c.signal),
+      ).then((value) => {
+        heldSettled++;
+        return value;
+      }),
+    );
+    try {
+      await until(() => s.requests.length === 7);
+      const signal = new AbortController().signal;
+      let eighthSettled = false;
+      let gateSignal: AbortSignal | undefined;
+      let gateError: unknown;
+      const g = gateWith({
+        trash: async (_op, _payload, sig) => {
+          gateSignal = sig;
+          return port
+            .mutate(mutationRoutes.trash(D, 48), undefined, sig)
+            .catch((error: unknown) => {
+              gateError = error;
+              throw error;
+            });
+        },
+      });
+      const eighth = caught(
+        throughGate
+          ? g.run(...(OPS.trash as [string, Operation]))
+          : port.mutate(mutationRoutes.trash(D, 48), undefined, signal),
+      ).then((value) => {
+        eighthSettled = true;
+        return value;
+      });
+      await until(() => lookups === 8);
+      // The eighth lookup is held until the ninth is queued on this limiter.
+      const ninthSignal = new AbortController().signal;
+      const ninth = caught(
+        port.mutate(mutationRoutes.trash(D, 49), undefined, ninthSignal),
+      );
+      expect(lookups).toBe(8);
+      allowEighth?.();
+      const [error, completed] = await bounded(Promise.all([eighth, ninth]));
+      if (throughGate) {
+        expect(error).toMatchObject({
+          result: "uncertain",
+          code: "UPSTREAM_UNCERTAIN",
+          attempts: 1,
+        });
+        unknown(gateError);
+        expect(gateSignal?.aborted).toBe(false);
+        expect(g.diagnostics).toEqual([]);
+      } else unknown(error);
+      expect(signal.aborted).toBe(false);
+      expect(ninthSignal.aborted).toBe(false);
+      expect(completed).toMatchObject({ status: 200 });
+      expect(eighthSettled).toBe(true);
+      expect(heldSettled).toBe(0);
+      expect(controllers.every((c) => !c.signal.aborted)).toBe(true);
+      expect(sockets[7]?.destroyed).toBe(true);
+      expect(sockets.slice(0, 7).every((socket) => !socket.destroyed)).toBe(
+        true,
+      );
+      expect(s.requests.filter((r) => r.path === eighthPath)).toHaveLength(1);
+      expect(s.requests.filter((r) => r.path === ninthPath)).toHaveLength(1);
+      expect(s.requests).toHaveLength(9);
+    } finally {
+      allowEighth?.();
+      for (const c of controllers) c.abort();
+      for (const socket of sockets) socket.destroy();
+      await bounded(Promise.all(held));
+    }
+  }
+  it("TestBR439_v1_101_close_releases_slot_without_abort", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const action = {
+      write:
+        "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: synthetic\r\n\r\n",
+      end: true,
+    };
+    await releasesSlot(action, false);
+    await releasesSlot(action, true);
+  }, 15_000);
+  it("TestBR439_v1_zero_byte_close_releases_slot_without_abort", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    await releasesSlot({ destroy: true }, false);
+    await releasesSlot({ destroy: true }, true);
+  }, 15_000);
+  it("TestBR268_v3_bare_101_is_uncertain_without_replay", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const action = {
+      write: "HTTP/1.1 101 X\r\nContent-Length: 0\r\n\r\n",
+      end: true,
+    };
+    await releasesSlot(action, false);
+    await releasesSlot(action, true);
+  }, 15_000);
+
+  it("TestBR268_v3_close_after_response_preserves_status", async () => {
+    const complete = JSON.stringify({ result: "success", data: ACTION });
+    const cases = [
+      {
+        action: response(200, complete),
+        raw: { status: 200, body: Buffer.from(complete) },
+        result: "succeeded",
+        code: undefined,
+      },
+      {
+        action: {
+          write:
+            'HTTP/1.1 200 X\r\nContent-Length: 500\r\nConnection: close\r\n\r\n{"result":',
+          end: true,
+        },
+        raw: { status: 200 },
+        result: "uncertain",
+        code: "UPSTREAM_UNCERTAIN",
+      },
+      {
+        action: response(409, "rejected"),
+        raw: { status: 409 },
+        result: "failed",
+        code: "UPSTREAM_REJECTED",
+      },
+    ];
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    for (const c of cases) {
+      const s = await server(() => c.action);
+      const port = createTransport({
+        token: CANARY,
+        lookup: s.lookup,
+        connect: s.connect,
+      });
+      expect(
+        await bounded(
+          port.mutate(trash, undefined, new AbortController().signal),
+        ),
+      ).toEqual(c.raw);
+      const result = await bounded(
+        gateWith(adapter(s).mutators).run(
+          ...(OPS.trash as [string, Operation]),
+        ),
+      );
+      expect(result).toMatchObject({
+        result: c.result,
+        status: c.raw.status,
+        attempts: 1,
+      });
+      expect(result.code).toBe(c.code);
+      expect(s.requests).toHaveLength(2);
+    }
+  }, 15_000);
+
+  it("TestBR216_v3_pre_send_failures_observed_once_and_NotSent", async () => {
+    const s = await server(() => okBody("trash"));
+    const closed = await server(() => okBody("trash"));
+    await closed.close();
+    const cases = ["dns", "address", "connect", "tls"] as const;
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    for (const kind of cases) {
+      const events: string[] = [];
+      const observed: unknown[][] = [];
+      const sockets: ReturnType<typeof tlsConnect>[] = [];
+      const options = {
+        lookup: () => {
+          events.push("lookup");
+          if (kind === "dns") return Promise.reject(new Error("DNS payload"));
+          if (kind === "address")
+            return Promise.resolve([{ address: "127.0.0.1", family: 4 }]);
+          return s.lookup();
+        },
+        connect: (o: Parameters<Connect>[0]) => {
+          events.push("connect");
+          const socket = tlsConnect({
+            host: "127.0.0.1",
+            port: kind === "connect" ? closed.port : s.port,
+            servername: o.servername,
+          });
+          sockets.push(socket);
+          return socket;
+        },
+        onRequest: (...args: unknown[]) => {
+          events.push("observe");
+          observed.push(args);
+        },
+      };
+      const port = createTransport({ token: CANARY, ...options });
+      expect(
+        await bounded(
+          caught(port.mutate(trash, undefined, new AbortController().signal)),
+        ),
+      ).toBeInstanceOf(NotSent);
+      expect(events).toEqual(
+        kind === "dns" || kind === "address"
+          ? ["observe", "lookup"]
+          : ["observe", "lookup", "connect"],
+      );
+      expect(observed).toEqual([["DELETE", trash.template]]);
+      events.length = 0;
+      observed.length = 0;
+      const g = gateWith(
+        adapter(options, { onRequest: options.onRequest }).mutators,
+      );
+      expect(
+        await bounded(g.run(...(OPS.trash as [string, Operation]))),
+      ).toMatchObject({ result: "failed", code: "NOT_SENT", attempts: 1 });
+      expect(events).toEqual(
+        kind === "dns" || kind === "address"
+          ? ["observe", "lookup"]
+          : ["observe", "lookup", "connect"],
+      );
+      expect(observed).toEqual([["DELETE", trash.template]]);
+      expect(
+        sockets.every(
+          (socket) => socket.bytesWritten === 0 && socket.destroyed,
+        ),
+      ).toBe(true);
+      expect(s.requests).toHaveLength(0);
+    }
+  }, 15_000);
+
+  it("TestBR216_v3_queued_refusal_or_abort_is_not_a_request_attempt", async () => {
+    const s = await server(() => ({ hold: true }));
+    const observed: string[] = [];
+    const port = createTransport({
+      token: CANARY,
+      lookup: s.lookup,
+      connect: s.connect,
+      onRequest: (_method, template) => observed.push(template),
+    });
+    const alreadyAborted = new AbortController();
+    alreadyAborted.abort();
+    expect(
+      await bounded(
+        caught(port.mutate(trash, undefined, alreadyAborted.signal)),
+      ),
+    ).toBeInstanceOf(NotSent);
+    expect(observed).toEqual([]);
+    const controllers = Array.from({ length: 72 }, () => new AbortController());
+    const pending = controllers.map((c) =>
+      caught(port.mutate(trash, undefined, c.signal)),
+    );
+    try {
+      await until(() => s.requests.length === 8);
+      expect(observed).toHaveLength(8);
+      observed.length = 0;
+      expect(
+        await bounded(
+          caught(port.mutate(trash, undefined, new AbortController().signal)),
+        ),
+      ).toBeInstanceOf(NotSent);
+      expect(observed).toEqual([]);
+      controllers[71]?.abort();
+      expect(await bounded(Promise.resolve(pending[71]))).toBeInstanceOf(
+        NotSent,
+      );
+      expect(observed).toEqual([]);
+      expect(s.requests).toHaveLength(8);
+    } finally {
+      for (const c of controllers) c.abort();
+      await bounded(Promise.all(pending));
+    }
+  });
 });
