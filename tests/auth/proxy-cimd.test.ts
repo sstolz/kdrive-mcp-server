@@ -988,13 +988,13 @@ describe("F-052 CIMD upgrade lifecycle", () => {
         // Keep the peer open: only the production fetcher can release it.
       };
       if (request.url?.startsWith("/held")) {
-        held.push(() =>
+        held.push(() => {
           reply(
             response,
             200,
             JSON.stringify(cimdDocument(`${origin}${request.url}`)),
-          ),
-        );
+          );
+        });
       } else if (request.url === "/upgrade.json") {
         releaseUpgrade = upgrade;
       } else if (request.url === "/stale.json") {
@@ -1029,16 +1029,15 @@ describe("F-052 CIMD upgrade lifecycle", () => {
       h.proxy.authorize({
         query: h.authorizeQuery(cimd(`${origin}${path}`), s256(VERIFIER)),
       });
-    const bounded = async <T,>(pending: Promise<T>): Promise<T> => {
+    const bounded = async <T>(pending: Promise<T>): Promise<T> => {
       let timer: ReturnType<typeof setTimeout> | undefined;
       try {
         return await Promise.race([
           pending,
           new Promise<never>((_resolve, reject) => {
-            timer = setTimeout(
-              () => reject(new Error("CIMD did not settle before watchdog")),
-              1000,
-            );
+            timer = setTimeout(() => {
+              reject(new Error("CIMD did not settle before watchdog"));
+            }, 1000);
           }),
         ]);
       } finally {
@@ -1055,12 +1054,20 @@ describe("F-052 CIMD upgrade lifecycle", () => {
             return response;
           }),
         );
-      await vi.waitFor(() => expect(held).toHaveLength(3), { timeout: 1000 });
+      await vi.waitFor(
+        () => {
+          expect(held).toHaveLength(3);
+        },
+        { timeout: 1000 },
+      );
       const fourth = authorize("/upgrade.json");
       pending.push(fourth);
-      await vi.waitFor(() => expect(releaseUpgrade).toBeTypeOf("function"), {
-        timeout: 1000,
-      });
+      await vi.waitFor(
+        () => {
+          expect(releaseUpgrade).toBeTypeOf("function");
+        },
+        { timeout: 1000 },
+      );
       const before = h.logs.length;
       const time = h.clock.ms;
       const requests = server.requests.length;
@@ -1091,10 +1098,11 @@ describe("F-052 CIMD upgrade lifecycle", () => {
       expect(heldSettlements).toBe(0);
       expect(h.clock.ms).toBe(time);
       await vi.waitFor(
-        () =>
+        () => {
           expect(
             server.sockets.filter((socket) => !socket.destroyed),
-          ).toHaveLength(3),
+          ).toHaveLength(3);
+        },
         { timeout: 1000 },
       );
       for (const settle of held) settle();

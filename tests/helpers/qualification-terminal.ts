@@ -41,7 +41,10 @@ export function qualificationTerminal(initialRaw = false) {
     return result;
   };
   const originalOff = input.off.bind(input);
-  input.off = (event, listener) => {
+  input.off = (
+    event: string | symbol,
+    listener: (...args: unknown[]) => void,
+  ) => {
     attempts.push(`off:${String(event)}`);
     const result = originalOff(event, listener);
     if (failures.has(`off:${String(event)}`))
@@ -76,10 +79,9 @@ export async function settledHidden(pending: ReturnType<typeof observeHidden>) {
     const outcome = await Promise.race([
       pending,
       new Promise<never>((_resolve, reject) => {
-        watchdog = setTimeout(
-          () => reject(new Error("hidden read did not settle")),
-          250,
-        );
+        watchdog = setTimeout(() => {
+          reject(new Error("hidden read did not settle"));
+        }, 250);
       }),
     ]);
     return outcome;

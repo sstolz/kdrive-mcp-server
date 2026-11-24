@@ -207,7 +207,6 @@ async function finish(
 }
 
 /** BR-096–BR-097: the interactive authorization-code exchange. */
-// eslint-disable-next-line sonarjs/cognitive-complexity -- F-011: pre-existing complex function; splitting it is deferred to keep reviewed control flow unchanged in this ticket (#79)
 async function tokenStep(
   state: RunState,
   options: TokenOptions,

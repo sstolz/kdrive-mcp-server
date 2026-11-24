@@ -182,7 +182,9 @@ describe("F-052 registration presence", () => {
       expect(
         (proxyStateSnapshot(h.proxy) as { clients: unknown[] }).clients,
       ).toHaveLength(0);
-      expect(h.logs.map((entry) => entry.name)).toEqual(["registration_refused"]);
+      expect(h.logs.map((entry) => entry.name)).toEqual([
+        "registration_refused",
+      ]);
     }
     const omitted = await post({ redirect_uris: [CLAUDE] });
     expect(omitted.response.status).toBe(201);

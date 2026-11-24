@@ -757,47 +757,70 @@ describe("BR-306 v2 BR-394 v2 header block bound (F-033)", () => {
   });
 });
 
-describe("F-052 terminal CIMD upgrades", () => {
-  it("BR-306 v3 AC-10 101 settles before deadline and preserves header precedence", async () => {
-    const status101 = { ok: false, reason: "status", status: 101, transient: false };
-    const rows: Array<{
-      parts: Buffer[];
-      gapMs: number;
-      expected: typeof status101;
-    }> = [];
-    for (const upgrade of [false, true]) {
-      for (const fragmented of [false, true]) {
-        for (const interim of [false, true]) {
-          const block = headerBlock(256, {
-            status: "101 Switching Protocols",
-            fields: upgrade ? ["Connection: Upgrade", "Upgrade: synthetic"] : [],
-          });
-          const parts = fragmented
-            ? [
-                block.subarray(0, 17),
-                block.subarray(17, block.length - 2),
-                block.subarray(block.length - 2),
-              ]
-            : [block];
-          rows.push({
-            parts: [...(interim ? [earlyHints()] : []), ...parts],
-            gapMs: fragmented ? 10 : 0,
-            expected: status101,
-          });
-          // Trailing upgraded bytes cannot turn the terminal result into a body failure.
-          rows.push({
-            parts: [
-              ...(interim ? [earlyHints()] : []),
-              ...(fragmented
-                ? [block, Buffer.alloc(6000, 0x61)]
-                : [Buffer.concat([block, Buffer.alloc(6000, 0x61)])]),
-            ],
-            gapMs: fragmented ? 10 : 0,
-            expected: status101,
-          });
-        }
+type UpgradeRow = {
+  parts: Buffer[];
+  gapMs: number;
+  expected: { ok: boolean; reason: string; status: number; transient: boolean };
+};
+
+function upgradeRows(
+  upgrade: boolean,
+  fragmented: boolean,
+  interim: boolean,
+  status101: UpgradeRow["expected"],
+): UpgradeRow[] {
+  const block = headerBlock(256, {
+    status: "101 Switching Protocols",
+    fields: upgrade ? ["Connection: Upgrade", "Upgrade: synthetic"] : [],
+  });
+  const parts = fragmented
+    ? [
+        block.subarray(0, 17),
+        block.subarray(17, block.length - 2),
+        block.subarray(block.length - 2),
+      ]
+    : [block];
+  return [
+    {
+      parts: [...(interim ? [earlyHints()] : []), ...parts],
+      gapMs: fragmented ? 10 : 0,
+      expected: status101,
+    },
+    // Trailing upgraded bytes cannot turn the terminal result into a body failure.
+    {
+      parts: [
+        ...(interim ? [earlyHints()] : []),
+        ...(fragmented
+          ? [block, Buffer.alloc(6000, 0x61)]
+          : [Buffer.concat([block, Buffer.alloc(6000, 0x61)])]),
+      ],
+      gapMs: fragmented ? 10 : 0,
+      expected: status101,
+    },
+  ];
+}
+
+function terminalUpgradeRows(status101: UpgradeRow["expected"]): UpgradeRow[] {
+  const rows: UpgradeRow[] = [];
+  for (const upgrade of [false, true]) {
+    for (const fragmented of [false, true]) {
+      for (const interim of [false, true]) {
+        rows.push(...upgradeRows(upgrade, fragmented, interim, status101));
       }
     }
+  }
+  return rows;
+}
+
+describe("F-052 terminal CIMD upgrades", () => {
+  it("BR-306 v3 AC-10 101 settles before deadline and preserves header precedence", async () => {
+    const status101 = {
+      ok: false,
+      reason: "status",
+      status: 101,
+      transient: false,
+    };
+    const rows = terminalUpgradeRows(status101);
     rows.push(
       { parts: [switching(8192)], gapMs: 0, expected: status101 },
       {
@@ -813,7 +836,12 @@ describe("F-052 terminal CIMD upgrades", () => {
           ),
         ],
         gapMs: 0,
-        expected: { ok: false, reason: "connection", status: 0, transient: true },
+        expected: {
+          ok: false,
+          reason: "connection",
+          status: 0,
+          transient: true,
+        },
       },
     );
     for (const row of rows) {
@@ -835,10 +863,9 @@ describe("F-052 terminal CIMD upgrades", () => {
         const delivery = Promise.race([
           server.delivered,
           new Promise<never>((_resolve, reject) => {
-            watchdog = setTimeout(
-              () => reject(new Error("headers were not delivered")),
-              1000,
-            );
+            watchdog = setTimeout(() => {
+              reject(new Error("headers were not delivered"));
+            }, 1000);
           }),
         ]);
         await delivery;
@@ -846,10 +873,9 @@ describe("F-052 terminal CIMD upgrades", () => {
         const outcome = await Promise.race([
           pending,
           new Promise<never>((_resolve, reject) => {
-            watchdog = setTimeout(
-              () => reject(new Error("101 did not settle before watchdog")),
-              1000,
-            );
+            watchdog = setTimeout(() => {
+              reject(new Error("101 did not settle before watchdog"));
+            }, 1000);
           }),
         ]);
         expect(outcome).toEqual(row.expected);
@@ -862,9 +888,12 @@ describe("F-052 terminal CIMD upgrades", () => {
         );
         expect(destroy).toHaveBeenCalledTimes(1);
         expect(resolver.state.cancels).toBe(1);
-        await vi.waitFor(() => expect(server.sockets.size).toBe(0), {
-          timeout: 1000,
-        });
+        await vi.waitFor(
+          () => {
+            expect(server.sockets.size).toBe(0);
+          },
+          { timeout: 1000 },
+        );
       } finally {
         clearTimeout(watchdog);
         abort.abort();

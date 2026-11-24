@@ -337,7 +337,8 @@ describe("F-052 runner hidden readers", () => {
           "Qualification failed; no report was written.\n",
         );
         // readLine is requested after the existing authorization URL output.
-        const expected = reader === "readLine" ? /^https:\/\/[^\n]+\n$/u : /^$/u;
+        const expected =
+          reader === "readLine" ? /^https:\/\/[^\n]+\n$/u : /^$/u;
         expect(h.out.join("")).toMatch(expected);
         expect(h.calls.filter((call) => call.method === "POST")).toEqual([]);
         expect(h.out.join("") + h.err.join("")).not.toContain(failure);
@@ -357,7 +358,10 @@ describe("F-052 runner hidden readers", () => {
       const deps = createProductionDeps(t.input, t.output);
       expect(t.input.listenerCount("error")).toBe(1);
       const lifetime = t.input.listeners("error")[0];
-      for (const reader of [deps.readSecret, deps.readLine]) {
+      for (const reader of [
+        deps.readSecret.bind(deps),
+        deps.readLine.bind(deps),
+      ]) {
         const before = t.written.join("");
         expect(() =>
           t.input.emit("error", new Error("synthetic-secret between reads")),

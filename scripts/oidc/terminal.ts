@@ -73,8 +73,12 @@ export function readHidden(
       else resolvePromise(value);
       value = "";
     };
-    const onEnd = () => done("Input ended");
-    const onError = () => done("Input failed");
+    const onEnd = () => {
+      done("Input ended");
+    };
+    const onError = () => {
+      done("Input failed");
+    };
     const onData = (chunk: string) => {
       if (settled) return;
       for (const character of chunk) {

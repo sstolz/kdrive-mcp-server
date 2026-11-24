@@ -340,7 +340,11 @@ describe("BR-103 per-client mode decision", () => {
 
 describe("F-052 issuer evidence relevance", () => {
   it("BR-103 v2 AC-03 issuer uncertainty does not block proxy", () => {
-    const rejectionFacts = ["unverified", "supported", "not supported"] as const;
+    const rejectionFacts = [
+      "unverified",
+      "supported",
+      "not supported",
+    ] as const;
     for (const rejectsInconsistentIssuer of rejectionFacts) {
       const facts = client({
         dynamicRegistration: "supported",
@@ -358,7 +362,11 @@ describe("F-052 issuer evidence relevance", () => {
     }
     for (const change of [
       {},
-      { verdict: "delegate-static-capable", dynamicRegistration: "no", cimd: "no" },
+      {
+        verdict: "delegate-static-capable",
+        dynamicRegistration: "no",
+        cimd: "no",
+      },
       { dynamicRegistration: "no", cimd: "yes", tokenAuthNone: "no" },
     ] as const) {
       const facts: ProviderFacts = {
@@ -394,7 +402,11 @@ describe("F-052 issuer evidence relevance", () => {
   });
 
   it("BR-103 v2 AC-04 applicable delegation still needs issuer evidence", () => {
-    const mechanisms = ["dynamicRegistration", "cimd", "manualClientId"] as const;
+    const mechanisms = [
+      "dynamicRegistration",
+      "cimd",
+      "manualClientId",
+    ] as const;
     for (const mechanism of mechanisms) {
       for (const fact of ["supported", "unverified"] as const) {
         const facts = client({

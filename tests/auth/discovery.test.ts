@@ -372,8 +372,9 @@ describe("BR-107 usable JWKS keys", () => {
 });
 
 describe("F-052 endpoint admission", () => {
-  it("BR-096 v2 AC-01 endpoint disagreement refuses token", async () => {
-    const members = ["authorization_endpoint", "token_endpoint"] as const;
+  const members = ["authorization_endpoint", "token_endpoint"] as const;
+
+  function endpointDisagreementChanges() {
     const changes: Array<Record<string, unknown>> = [
       { authorization_endpoint: `${issuer}/other-authorize` },
       { token_endpoint: `${issuer}/other-token` },
@@ -391,8 +392,14 @@ describe("F-052 endpoint admission", () => {
         `${issuer}/${path}/`,
         null,
         42,
-      ]) changes.push({ [member]: value });
+      ])
+        changes.push({ [member]: value });
     }
+    return changes;
+  }
+
+  it("BR-096 v2 AC-01 endpoint disagreement refuses token", async () => {
+    const changes = endpointDisagreementChanges();
     for (const change of changes) {
       for (const reverse of [false, true]) {
         const first = metadata(reverse ? change : {});
@@ -418,7 +425,10 @@ describe("F-052 endpoint admission", () => {
     const precedence = [
       {
         first: metadata({ issuer: "https://other.test" }),
-        second: metadata({ issuer: "https://other.test", token_endpoint: null }),
+        second: metadata({
+          issuer: "https://other.test",
+          token_endpoint: null,
+        }),
         reason: "discovery not usable",
       },
       {
@@ -474,7 +484,10 @@ describe("F-052 endpoint admission", () => {
       },
       {
         first: metadata(),
-        second: metadata({ issuer: "https://other.test", token_endpoint: null }),
+        second: metadata({
+          issuer: "https://other.test",
+          token_endpoint: null,
+        }),
       },
       {
         first: metadata({ issuer: "https://other.test", token_endpoint: null }),
@@ -484,8 +497,10 @@ describe("F-052 endpoint admission", () => {
     for (const row of cases) {
       const h = await harness({
         routes: {
-          [oidcUrl]: row.first === undefined ? { status: 404 } : { body: row.first },
-          [oauthUrl]: row.second === undefined ? { status: 404 } : { body: row.second },
+          [oidcUrl]:
+            row.first === undefined ? { status: 404 } : { body: row.first },
+          [oauthUrl]:
+            row.second === undefined ? { status: 404 } : { body: row.second },
         },
       });
       const result = await discover(issuer, h.deps.fetch);
@@ -533,8 +548,12 @@ describe("F-052 endpoint admission", () => {
     ).toBe(0);
     expect(discovery.report()).toContain("Verdict: `incomplete`");
     for (const member of ["authorization_endpoint", "token_endpoint"])
-      expect(discovery.report()).toContain(`${member} differs between documents`);
+      expect(discovery.report()).toContain(
+        `${member} differs between documents`,
+      );
     expect(discovery.prompts).toEqual([]);
-    expect(discovery.calls.filter((call) => call.method === "POST")).toEqual([]);
+    expect(discovery.calls.filter((call) => call.method === "POST")).toEqual(
+      [],
+    );
   });
 });

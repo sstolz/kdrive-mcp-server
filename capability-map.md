@@ -15,7 +15,6 @@ refuses explicit nulls; capacity refusals emit one store/count event; and
 parser-accepted CIMD 101 responses settle immediately with terminal status and
 release fetch capacity. Local, CI and actual-main acceptance remain unverified.
 
-
 ## Accepted — Mutation transport edge cases and attempt counting
 
 [F-051 v1](features/F-051-transport-edge-cases.md) (#77),

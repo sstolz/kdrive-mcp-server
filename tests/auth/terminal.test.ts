@@ -60,6 +60,32 @@ describe("BR-104 no-echo terminal reader", () => {
   });
 });
 
+async function expectTerminalAdmission(
+  state: "ended" | "destroyed",
+  admission: "tty" | "non-tty" | "no-setter",
+) {
+  const t = qualificationTerminal();
+  Object.defineProperty(
+    t.input,
+    state === "ended" ? "readableEnded" : "destroyed",
+    { value: true },
+  );
+  if (admission === "non-tty") t.input.isTTY = false;
+  if (admission === "no-setter")
+    Object.defineProperty(t.input, "setRawMode", { value: undefined });
+  const outcome = await settledHidden(
+    observeHidden(() => readHidden(t.input, t.output, "Secret: ")),
+  );
+  expectHiddenFailure(
+    outcome,
+    admission === "tty" ? "Input ended" : "A terminal is required",
+  );
+  expect(t.attempts).toEqual([]);
+  expect(t.written).toEqual([]);
+  for (const event of ["data", "end", "error"])
+    expect(t.input.listenerCount(event)).toBe(0);
+}
+
 describe("F-052 hidden terminal lifecycle", () => {
   it("BR-440 v1 AC-05 EOF and errors settle without payload", async () => {
     for (const buffered of ["", "synthetic-secret buffered input"]) {
@@ -131,7 +157,11 @@ describe("F-052 hidden terminal lifecycle", () => {
     error?: string;
   }> = [
     { name: "success", chunk: "synthetic-secret\n" },
-    { name: "interrupt", chunk: "synthetic-secret\u0003", error: "Interrupted" },
+    {
+      name: "interrupt",
+      chunk: "synthetic-secret\u0003",
+      error: "Interrupted",
+    },
     { name: "end", event: "end", error: "Input ended" },
     { name: "error", event: "error", error: "Input failed" },
     {
@@ -203,26 +233,7 @@ describe("F-052 hidden terminal lifecycle", () => {
   it("BR-442 v1 AC-07 every exit restores terminal state including Ctrl-C: admission", async () => {
     for (const state of ["ended", "destroyed"] as const) {
       for (const admission of ["tty", "non-tty", "no-setter"] as const) {
-        const t = qualificationTerminal();
-        Object.defineProperty(
-          t.input,
-          state === "ended" ? "readableEnded" : "destroyed",
-          { value: true },
-        );
-        if (admission === "non-tty") t.input.isTTY = false;
-        if (admission === "no-setter")
-          Object.defineProperty(t.input, "setRawMode", { value: undefined });
-        const outcome = await settledHidden(
-          observeHidden(() => readHidden(t.input, t.output, "Secret: ")),
-        );
-        expectHiddenFailure(
-          outcome,
-          admission === "tty" ? "Input ended" : "A terminal is required",
-        );
-        expect(t.attempts).toEqual([]);
-        expect(t.written).toEqual([]);
-        for (const event of ["data", "end", "error"])
-          expect(t.input.listenerCount(event)).toBe(0);
+        await expectTerminalAdmission(state, admission);
       }
     }
     const noRawState = qualificationTerminal();
@@ -232,7 +243,10 @@ describe("F-052 hidden terminal lifecycle", () => {
     );
     await Promise.resolve();
     noRawState.input.emit("data", "ok\n");
-    expect(await settledHidden(pending)).toEqual({ kind: "value", value: "ok" });
+    expect(await settledHidden(pending)).toEqual({
+      kind: "value",
+      value: "ok",
+    });
     expect(noRawState.input.isRaw).toBe(false);
   });
 });
