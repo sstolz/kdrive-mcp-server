@@ -1,19 +1,21 @@
 # Capability map
 
-## Provisional — OAuth qualification and proxy hardening
+## Accepted — OAuth qualification and proxy hardening
 
 [F-052 v1](features/F-052-oauth-qualification-proxy-hardening.md) (#72),
 [BR-096 v2](business-rules/BR-096.md), [BR-103 v2](business-rules/BR-103.md),
 [BR-127 v2](business-rules/BR-127.md), [BR-143 v5](business-rules/BR-143.md),
 [BR-306 v3](business-rules/BR-306.md), [BR-394 v3](business-rules/BR-394.md)
 and [BR-440 v1](business-rules/BR-440.md), [BR-441 v1](business-rules/BR-441.md),
-[BR-442 v1](business-rules/BR-442.md) are pending acceptance: conflicting usable
+[BR-442 v1](business-rules/BR-442.md) are active: conflicting usable
 discovery endpoints refuse token admission; issuer-evidence uncertainty applies
 only to potentially applicable delegation paths; hidden reads settle EOF and
 errors, refuse unsupported controls and restore terminal state; registration
 refuses explicit nulls; capacity refusals emit one store/count event; and
 parser-accepted CIMD 101 responses settle immediately with terminal status and
-release fetch capacity. Local, CI and actual-main acceptance remain unverified.
+release fetch capacity.
+Accepted on actual main `019f0f5` on 2026-11-25
+([#72 acceptance](https://github.com/sstolz/kdrive-mcp-server/issues/72#issuecomment-7147678234)). F-052 v1 is done.
 
 ## Accepted — Mutation transport edge cases and attempt counting
 
