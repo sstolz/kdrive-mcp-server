@@ -17,7 +17,8 @@ and CIMD protocol upgrades retaining fetch capacity until timeout.
 This is security-sensitive full-path work: discovery selects credential
 destinations, the terminal reads secrets and CIMD fetching consumes bounded
 unauthenticated capacity. The owner fixed the scope on 2026-11-24. This draft
-records no review, freeze, implementation or test result.
+records the review dispositions below, but no freeze, implementation or test
+result.
 
 ## Scope
 
@@ -30,7 +31,7 @@ records no review, freeze, implementation or test result.
 4. `src/auth/proxy/proxy.ts`: refuse explicit null registration members and
    emit one capacity event per full-store refusal.
 5. `src/auth/proxy/client-metadata-fetch.ts`: settle status 101 immediately
-   and release the fetch slot through the existing resolver lifecycle.
+   and release the BR-309 fetch slot through the existing fetch lifecycle.
 
 ### Out of scope
 
@@ -43,16 +44,23 @@ records no review, freeze, implementation or test result.
 ## Business rules
 
 These are deltas: each previous version otherwise holds. New terminal-rule
-IDs BR-440–BR-442 are proposed pending the allocation question below.
+IDs BR-440–BR-442 are allocated to this draft.
 
 - **BR-096 v2** — Token-step admission additionally requires no endpoint
   disagreement between the two usable discovery documents: for each of
-  `authorization_endpoint` and `token_endpoint`, two present string values
-  disagree exactly when their decoded JSON strings are unequal, without URL
-  normalization; disagreement refuses before either interactive prompt,
-  authorization URL output or token exchange and writes an `unsupported`
-  report identifying the conflicting member with its existing
-  `<member> differs between documents` anomaly. Verified by: AC-01, AC-02.
+  `authorization_endpoint` and `token_endpoint`, two present values (neither
+  `undefined`, including `null` and non-strings) disagree exactly when their
+  `JSON.stringify` results differ, matching the existing discovery anomaly
+  without URL normalization. Admission checks run in this order: discovery
+  usable, PKCE S256 yes, endpoint disagreement, effective-endpoint HTTPS,
+  then the supported client-secret authentication-method check. Disagreement
+  refuses before either interactive prompt, authorization URL output or token
+  exchange and writes an `unsupported` report with the existing
+  `<member> differs between documents` anomalies and the exact `tokenStep`
+  `refused: <members> differs between documents`, where `<members>` is
+  `authorization_endpoint`, `token_endpoint`, or
+  `authorization_endpoint, token_endpoint` in that order. Verified by: AC-01,
+  AC-02.
 - **BR-103 v2** — On an inconsistent run, the client fact "rejects inconsistent
   issuer identification" is needed only if, ignoring that fact, steps 3 or 4
   can select delegation for this provider/client, treating other `unverified`
@@ -68,11 +76,18 @@ IDs BR-440–BR-442 are proposed pending the allocation question below.
   `Input ended`, and any other Unicode `Cc` character, including backspace
   (`U+0008`) and ESC (`U+001B`), rejects with `Unsupported control character`
   rather than stripping or returning it. Verified by: AC-06.
-- **BR-442 v1** — Every hidden-read exit after raw-mode activation restores
-  the pre-read raw state (`isRaw`, default false when unavailable), pauses
-  input and removes the read's data/end/error listeners before settlement,
-  including success, Ctrl-C, EOF, input error, control refusal and setup
-  failure; late events cannot settle or clean up the read again.
+- **BR-442 v1** — Every hidden-read exit once raw-mode activation is attempted
+  restores the pre-read raw state (`isRaw`, default false when unavailable),
+  pauses input, removes the read's data/end/error listeners and writes one
+  cleanup newline before settlement, including success, Ctrl-C, EOF, input
+  error, control refusal and setup failure. If `setRawMode(true)` itself
+  throws after the prompt, the same cleanup restores the captured state and
+  the read rejects. A read on already-ended or destroyed input rejects
+  immediately with `Input ended` without activating raw mode or attaching
+  read listeners. The production runner installs one payload-free stdin
+  `error` handler before any read and retains it for the process lifetime,
+  including between reads and after settlement; it exposes neither error
+  payload nor stack. Late events cannot settle or clean up a read again.
   Verified by: AC-07.
 - **BR-127 v2** — Registration with an explicit JSON `null` for
   `token_endpoint_auth_method` or `grant_types` returns 400
@@ -80,13 +95,20 @@ IDs BR-440–BR-442 are proposed pending the allocation question below.
   apply only when the member is absent. Verified by: AC-08.
 - **BR-143 v5** — Each refusal caused by a full consent, flow or code store
   emits exactly one `store_full` event, with only `store` and `count` naming
-  the saturated store and its live count. Verified by: AC-09.
-- **BR-306 v3** — A complete status-101 header block within the existing
-  8,192-byte bound ends the CIMD fetch immediately as
+  the saturated store and its live count. Each client or family eviction
+  continues to emit exactly one `store_full` event with only `{store, count}`
+  naming that store and its live count at capacity. Verified by: AC-09.
+- **BR-306 v3** — A complete header block accepted by Node's HTTP parser
+  with status 101, within the existing 8,192-byte bound, ends the CIMD fetch
+  immediately as
   `{ok:false, reason:"status", status:101, transient:false}`, destroying
   the request, dedicated agent and any upgraded socket, clearing its deadline
-  and releasing its resolver slot without awaiting body bytes, peer closure
-  or the 5,000 ms deadline. Verified by: AC-10, AC-11.
+  and releasing its BR-309 fetch slot without awaiting body bytes, peer
+  closure or the 5,000 ms deadline. A status-line match by the byte watcher
+  alone does not establish status 101: parser errors retain the existing
+  `connection` / `transient:true` classification and status 0 when no response
+  was accepted. Header overflow still takes precedence as `size`, status 0,
+  `transient:false`. Verified by: AC-10, AC-11.
 - **BR-394 v3** — A CIMD authorization refused because of that 101 emits
   exactly one `client_metadata_refused` with
   `{handler:"authorize", reason:"status", status:101}`.
@@ -101,11 +123,20 @@ include their BR versions. Existing BR-104 v1 output redaction remains in force.
 - **AC-01** (BR-096 v2) — Given otherwise qualifying usable documents with
   different authorization endpoints, different token endpoints, or both,
   When `token` runs, Then it writes an `unsupported` report with each existing
-  anomaly and the endpoint refusal, prints no authorization URL, calls no
+  anomaly and exactly `tokenStep: "refused: authorization_endpoint differs between documents"`,
+  `tokenStep: "refused: token_endpoint differs between documents"`, or
+  `tokenStep: "refused: authorization_endpoint, token_endpoint differs between documents"`
+  respectively, prints no authorization URL, calls no
   hidden reader and makes no token request (metadata/JWKS reads remain
   allowed). Include differences only in host case, explicit default port,
   percent-encoding and terminal slash even when URL serialization would make
-  them equal. Verified by `BR-096 v2 AC-01 endpoint disagreement refuses token`
+  them equal. Include a valid HTTPS endpoint in the first document and `null`
+  or a non-string such as `42` in the second, and the reverse order; these
+  refuse on disagreement even when the effective endpoint is invalid.
+  Verify that existing not-usable and PKCE refusals keep precedence, while
+  disagreement precedes both the HTTPS refusal and the unsupported
+  client-secret-method stop (so disagreement yields `unsupported`, not
+  `incomplete`). Verified by `BR-096 v2 AC-01 endpoint disagreement refuses token`
   in `tests/auth/discovery.test.ts`.
 - **AC-02** (BR-096 v2) — Given identical endpoints, one usable document, or
   a member absent from one usable document, When discovery and token
@@ -153,13 +184,22 @@ include their BR versions. Existing BR-104 v1 output redaction remains in force.
   in `tests/auth/terminal.test.ts`.
 - **AC-07** (BR-442 v1) — Given a fake terminal initially raw or nonraw,
   When a hidden read succeeds, receives Ctrl-C, EOF, error or a refused
-  control, or setup throws after activation, Then its raw state returns to
-  the initial value, input pauses and owned listeners are removed once
-  before settlement; late data/end do nothing and a subsequent error handled
-  by the stream's owner cannot change the settled result. Non-TTY refusal
-  never activates raw mode. Verified by
+  control, or setup throws during or after `setRawMode(true)`, Then its raw
+  state returns to the captured initial value, input pauses, owned listeners
+  are removed and one cleanup newline is written, once before settlement;
+  late data/end cannot repeat cleanup. Given already-ended or destroyed
+  input, When a read starts, Then it rejects immediately with exactly
+  `Input ended`, without raw-mode activation or attached read listeners.
+  Given the production runner's lifetime stdin error handler, When a
+  payload-bearing error arrives after settlement or between its two reads,
+  Then it is handled without an uncaught exception, output or stack, cannot
+  change the settled result, and the single lifetime handler remains while
+  per-read listeners are removed. Non-TTY refusal never activates raw mode.
+  Verified by
   `BR-442 v1 AC-07 every exit restores terminal state including Ctrl-C`
-  in `tests/auth/terminal.test.ts`.
+  in `tests/auth/terminal.test.ts` and
+  `BR-442 v1 AC-07 runner retains payload-free stdin error handler`
+  in `tests/auth/qualify-report.test.ts`.
 - **AC-08** (BR-127 v2) — Given otherwise valid registrations, When either
   named member is null, or both are null, Then each returns 400
   `invalid_client_metadata` with no client insertion; when omitted, Then
@@ -172,17 +212,25 @@ include their BR versions. Existing BR-104 v1 output redaction remains in force.
   refused, Then its log delta contains exactly one `store_full` with exactly
   `{store, count:1000}`, and the existing 503 HTML, `temporarily_unavailable`
   redirect or `server_error` redirect respectively remains; expiry restores
-  admission, and client/family eviction behavior remains. Verified by
+  admission. Given full client and family stores, When the existing eviction
+  paths admit a new entry, Then eviction behavior remains and each eviction
+  has exactly one `store_full` log delta with exactly
+  `{store:"clients", count:1000}` or `{store:"families", count:1000}`
+  respectively. Verified by
   `BR-143 v5 AC-09 each full-store refusal emits one event`
   in `tests/auth/proxy-bounds.test.ts`.
 - **AC-10** (BR-306 v3) — Given a local TLS double holding its socket open
   after a 101, with and without upgrade headers, sent whole or fragmented,
-  optionally after 103, When its complete bounded header block arrives,
+  optionally after 103, When its complete bounded header block is accepted
+  by Node's HTTP parser with status 101,
   Then the production fetch returns the exact terminal status outcome before
   a 1,000 ms watchdog after header delivery without advancing the 5,000 ms
   deadline, and closes the socket; trailing bytes do not change the outcome.
   An 8,192-byte block gives status 101, whereas an 8,193-byte block retains
-  `size`, status 0. Verified by
+  `size`, status 0, `transient:false`. A bounded block whose status line
+  matches the byte watcher's status pattern but which Node's parser rejects
+  retains `{ok:false, reason:"connection", status:0, transient:true}` rather
+  than becoming a terminal status-101 outcome. Verified by
   `BR-306 v3 AC-10 101 settles before deadline and preserves header precedence`
   in `tests/auth/cimd-fetch.test.ts`.
 - **AC-11** (BR-306 v3, BR-394 v3) — Given three held CIMD fetches and a
@@ -197,25 +245,31 @@ include their BR versions. Existing BR-104 v1 output redaction remains in force.
 
 ## Decisions
 
-- **D-1 — Exact endpoint strings.** Compare decoded JSON strings exactly,
-  not canonical URLs: metadata must agree on the destination without guessing
-  which lexical differences a provider treats as equivalent. Absence in one
-  document is not disagreement; the existing effective-endpoint HTTPS checks
-  and anomaly handling for malformed present values remain. Reject choosing
-  one conflicting document silently or merely recording the anomaly.
+- **D-1 — Match existing endpoint anomalies.** Compare `JSON.stringify`
+  results for any two present endpoint values, including `null` and
+  non-strings, exactly as discovery already does. For string values this
+  preserves lexical differences without URL normalization: metadata must
+  agree on the destination without guessing which differences a provider
+  treats as equivalent. Absence (`undefined`) in one document is not
+  disagreement. Existing usable/PKCE checks precede disagreement; HTTPS and
+  client-secret-method checks follow it. Reject choosing one conflicting
+  document silently or merely recording the anomaly.
 - **D-2 — Client-specific relevance.** The issuer-rejection fact guards only
   delegation paths; do not require it solely because an issuer is inconsistent.
   Other unknown client facts keep the existing counterfactual relevance rule.
-- **D-3 — Refuse residual controls.** Ctrl-D means EOF in raw mode. Refuse
-  `\b`, ESC and other residual controls instead of stripping them: stripping
-  can silently change a secret or leave escape-sequence suffixes in a pasted
-  URL. Retain the existing DEL editing behavior. Reader failures use fixed
+- **D-3 — Refuse residual controls.** Ctrl-D means EOF in raw mode. The current
+  reader appends `\b`, ESC and other residual controls to the returned value.
+  Refuse them: returning controls can carry escape sequences into a pasted
+  URL, while stripping them could silently change a secret or leave sequence
+  suffixes. Retain the existing DEL editing behavior. Reader failures use fixed
   messages; the runner retains its fixed diagnostic and no-stack policy.
 - **D-4 — Version existing purposes.** BR-127 v2 tightens registration
   presence semantics; BR-143 v5 defines capacity-event multiplicity and its
   existing store/count shape. BR-306 v3 makes 101 a final status failure
-  rather than an interim block or timeout; BR-394 v3 explicitly records its
-  received status. Header overflow still takes precedence. BR-309 v2 already
+  when Node's parser accepts the block rather than an interim block or
+  timeout; BR-394 v3 explicitly records its received status. Parser errors
+  retain their existing classification; header overflow still takes
+  precedence. BR-309 v2 already
   releases settled slots and deletes terminally failed stale entries, so it
   needs no version bump. No new event, reason or ADR is needed.
 - **D-5 — Terminal-slash limitation retained.** The owner's 2026-11-24
@@ -226,3 +280,12 @@ include their BR versions. Existing BR-104 v1 output redaction remains in force.
 ## Open questions
 
 ## Stress-test
+
+- 72-spec-review-1-opus #1 (major) — retained — BR-096 v2 and D-1 now match the existing JSON.stringify anomaly for all present values; AC-01 includes null and non-string conflicts in both document orders.
+- 72-spec-review-1-opus #2 (minor) — retained — BR-096 v2 fixes the exact tokenStep strings, member order and admission-check precedence; AC-01 asserts each outcome.
+- 72-spec-review-1-opus #3 (minor) — retained — BR-442 v1 requires a process-lifetime payload-free stdin error handler and immediate Input ended rejection for ended or destroyed input; AC-07 covers both in named reader and runner tests.
+- 72-spec-review-1-opus #4 (minor) — retained — BR-442 v1 and AC-07 include setRawMode(true) throwing, restoration of captured isRaw and the cleanup newline before rejection.
+- 72-spec-review-1-opus #5 (minor) — retained — BR-306 v3 requires Node parser acceptance for status 101, preserves parser-error classification and names the BR-309 fetch slot; AC-10 covers parser rejection.
+- 72-spec-review-1-opus #6 (minor) — retained — BR-143 v5 explicitly preserves one store_full event per client/family eviction; AC-09 asserts the exact store/count payloads.
+- 72-spec-review-1-opus #7 (minor) — retained — The business-rule introduction now states that BR-440–BR-442 are allocated, with no allocation question remaining.
+- 72-spec-review-1-opus #8 (minor) — retained — D-3 now states that the current reader returns residual controls and explains why refusal replaces that behavior.
