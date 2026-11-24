@@ -27,7 +27,7 @@ const LIMIT = 1000;
 
 describe("BR-142 bounded in-memory stores", () => {
   it(
-    "BR-143 v5 AC-09 each full-store refusal emits one event: client eviction",
+    "BR-142 BR-143 v5 AC-09 each full-store refusal emits one event: client eviction",
     { timeout: 60_000 },
     async () => {
       const h = await harness();
@@ -55,7 +55,7 @@ describe("BR-142 bounded in-memory stores", () => {
   );
 
   it(
-    "BR-143 v5 AC-09 each full-store refusal emits one event: consents",
+    "BR-142 BR-143 v5 AC-09 each full-store refusal emits one event: consents",
     { timeout: 60_000 },
     async () => {
       const h = await harness();
@@ -90,7 +90,7 @@ describe("BR-142 bounded in-memory stores", () => {
   );
 
   it(
-    "BR-143 v5 AC-09 each full-store refusal emits one event: flows",
+    "BR-142 BR-143 v5 AC-09 each full-store refusal emits one event: flows",
     { timeout: 60_000 },
     async () => {
       const h = await harness();
@@ -116,7 +116,7 @@ describe("BR-142 bounded in-memory stores", () => {
   );
 
   it(
-    "BR-143 v5 AC-09 each full-store refusal emits one event: codes",
+    "BR-142 BR-143 v5 AC-09 each full-store refusal emits one event: codes",
     { timeout: 60_000 },
     async () => {
       const h = await harness();
@@ -135,7 +135,7 @@ describe("BR-142 bounded in-memory stores", () => {
   );
 
   it(
-    "BR-143 v5 AC-09 each full-store refusal emits one event: family eviction",
+    "BR-142 BR-143 v5 AC-09 each full-store refusal emits one event: family eviction",
     { timeout: 120_000 },
     async () => {
       const h = await harness();
