@@ -3,6 +3,7 @@
 // an allow-all address policy (loopback is otherwise blocked, BR-307).
 import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { Agent } from "node:https";
 import { createServer, type AddressInfo, type Socket } from "node:net";
 import { resolve } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -753,5 +754,154 @@ describe("BR-306 v2 BR-394 v2 header block bound (F-033)", () => {
     expect(
       (await fetchRaw({ parts: [Buffer.concat([unavailable, body])] })).outcome,
     ).toEqual({ ok: false, reason: "status", status: 503, transient: true });
+  });
+});
+
+type UpgradeRow = {
+  parts: Buffer[];
+  gapMs: number;
+  expected: { ok: boolean; reason: string; status: number; transient: boolean };
+};
+
+function upgradeRows(
+  upgrade: boolean,
+  fragmented: boolean,
+  interim: boolean,
+  status101: UpgradeRow["expected"],
+): UpgradeRow[] {
+  const block = headerBlock(256, {
+    status: "101 Switching Protocols",
+    fields: upgrade ? ["Connection: Upgrade", "Upgrade: synthetic"] : [],
+  });
+  const parts = fragmented
+    ? [
+        block.subarray(0, 17),
+        block.subarray(17, block.length - 2),
+        block.subarray(block.length - 2),
+      ]
+    : [block];
+  return [
+    {
+      parts: [...(interim ? [earlyHints()] : []), ...parts],
+      gapMs: fragmented ? 10 : 0,
+      expected: status101,
+    },
+    // Trailing upgraded bytes cannot turn the terminal result into a body failure.
+    {
+      parts: [
+        ...(interim ? [earlyHints()] : []),
+        ...(fragmented
+          ? [block, Buffer.alloc(6000, 0x61)]
+          : [Buffer.concat([block, Buffer.alloc(6000, 0x61)])]),
+      ],
+      gapMs: fragmented ? 10 : 0,
+      expected: status101,
+    },
+  ];
+}
+
+function terminalUpgradeRows(status101: UpgradeRow["expected"]): UpgradeRow[] {
+  const rows: UpgradeRow[] = [];
+  for (const upgrade of [false, true]) {
+    for (const fragmented of [false, true]) {
+      for (const interim of [false, true]) {
+        rows.push(...upgradeRows(upgrade, fragmented, interim, status101));
+      }
+    }
+  }
+  return rows;
+}
+
+describe("F-052 terminal CIMD upgrades", () => {
+  it("BR-306 v3 AC-10 101 settles before deadline and preserves header precedence", async () => {
+    const status101 = {
+      ok: false,
+      reason: "status",
+      status: 101,
+      transient: false,
+    };
+    const rows = terminalUpgradeRows(status101);
+    rows.push(
+      { parts: [switching(8192)], gapMs: 0, expected: status101 },
+      {
+        parts: [switching(8193)],
+        gapMs: 0,
+        expected: { ok: false, reason: "size", status: 0, transient: false },
+      },
+      // The byte watcher recognizes the status, but the strict Node parser rejects the field.
+      {
+        parts: [
+          Buffer.from(
+            "HTTP/1.1 101 Switching Protocols\r\nBad Header: value\r\n\r\n",
+          ),
+        ],
+        gapMs: 0,
+        expected: {
+          ok: false,
+          reason: "connection",
+          status: 0,
+          transient: true,
+        },
+      },
+    );
+    for (const row of rows) {
+      const server = await serveRaw({
+        parts: row.parts,
+        gapMs: row.gapMs,
+        stall: true,
+      });
+      const abort = new AbortController();
+      const destroy = vi.spyOn(Agent.prototype, "destroy");
+      const timers = vi.spyOn(globalThis, "setTimeout");
+      const cleared = vi.spyOn(globalThis, "clearTimeout");
+      const { fetch, resolver } = port();
+      const pending = fetch.fetch(urlFor(server), abort.signal);
+      let watchdog: ReturnType<typeof setTimeout> | undefined;
+      try {
+        // Bound even a regression which never reaches delivery; the delivery itself
+        // is observed separately so the 1,000 ms assertion starts after headers.
+        const delivery = Promise.race([
+          server.delivered,
+          new Promise<never>((_resolve, reject) => {
+            watchdog = setTimeout(() => {
+              reject(new Error("headers were not delivered"));
+            }, 1000);
+          }),
+        ]);
+        await delivery;
+        clearTimeout(watchdog);
+        const outcome = await Promise.race([
+          pending,
+          new Promise<never>((_resolve, reject) => {
+            watchdog = setTimeout(() => {
+              reject(new Error("101 did not settle before watchdog"));
+            }, 1000);
+          }),
+        ]);
+        expect(outcome).toEqual(row.expected);
+        const deadlineIndex = timers.mock.calls.findIndex(
+          (call) => call[1] === 5000,
+        );
+        expect(deadlineIndex).toBeGreaterThanOrEqual(0);
+        expect(cleared).toHaveBeenCalledWith(
+          timers.mock.results[deadlineIndex]!.value,
+        );
+        expect(destroy).toHaveBeenCalledTimes(1);
+        expect(resolver.state.cancels).toBe(1);
+        await vi.waitFor(
+          () => {
+            expect(server.sockets.size).toBe(0);
+          },
+          { timeout: 1000 },
+        );
+      } finally {
+        clearTimeout(watchdog);
+        abort.abort();
+        await pending;
+        destroy.mockRestore();
+        timers.mockRestore();
+        cleared.mockRestore();
+      }
+    }
   });
 });

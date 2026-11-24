@@ -796,9 +796,13 @@ export function createOAuthProxy(options: OAuthProxyOptions): OAuthProxy {
   function parseMetadata(
     data: Record<string, unknown>,
   ): { method: Method; grants: Grant[]; name: string | undefined } | undefined {
-    const method = data.token_endpoint_auth_method ?? "client_secret_basic";
+    const method =
+      data.token_endpoint_auth_method === undefined
+        ? "client_secret_basic"
+        : data.token_endpoint_auth_method;
     if (!METHODS.includes(method as Method)) return undefined;
-    const grantList = data.grant_types ?? [...GRANTS];
+    const grantList =
+      data.grant_types === undefined ? [...GRANTS] : data.grant_types;
     if (
       !Array.isArray(grantList) ||
       !grantList.every((grant) => GRANTS.includes(grant as Grant)) ||
@@ -1090,7 +1094,7 @@ export function createOAuthProxy(options: OAuthProxyOptions): OAuthProxy {
     if (bound !== undefined && langParameter(query) !== undefined)
       replaceConsent(sha256(bound), request);
     if (full("consents", consents.size))
-      return refusePage("store_full", "authorize", "busy", language, 503);
+      return errorPage("busy", 503, language);
     const binding = bound ?? random(32);
     const consentId = random(32);
     consents.set(consentId, {
@@ -1310,12 +1314,9 @@ export function createOAuthProxy(options: OAuthProxyOptions): OAuthProxy {
     purge(after);
     if (full("flows", flows.size))
       return {
-        response: refuseRedirect(
-          "store_full",
-          "consent",
-          entry.request,
-          "temporarily_unavailable",
-        ),
+        response: clientRedirect(entry.request, [
+          ["error", "temporarily_unavailable"],
+        ]),
       };
     const state = random(32);
     const verifierValue = random(32);
@@ -1603,7 +1604,8 @@ export function createOAuthProxy(options: OAuthProxyOptions): OAuthProxy {
       return refusePage("callback_refused", "callback", "busy", language, 503);
     const issued = now();
     purge(issued);
-    if (full("codes", codes.size)) return fail("store_full", "server_error");
+    if (full("codes", codes.size))
+      return clientRedirect(request, [["error", "server_error"]]);
     const value = random(32);
     codes.set(value, {
       request,

@@ -32,6 +32,7 @@ export interface Discovery {
   effective: Capabilities;
   contradictions: CapabilityName[];
   anomalies: string[];
+  endpointDisagreements: string[];
   authorizationEndpoint?: unknown;
   tokenEndpoint?: unknown;
   jwksUri?: unknown;
@@ -210,6 +211,7 @@ export async function discover(
     effective.jwks = "unknown";
     if (!contradictions.includes("jwks")) contradictions.push("jwks");
   }
+  const endpointDisagreements: string[] = [];
   for (const name of ["authorization_endpoint", "token_endpoint"]) {
     const values = new Set(
       usableDocuments
@@ -217,7 +219,10 @@ export async function discover(
         .filter((value) => value !== undefined)
         .map((value) => JSON.stringify(value)),
     );
-    if (values.size > 1) anomalies.add(`${name} differs between documents`);
+    if (values.size > 1) {
+      endpointDisagreements.push(name);
+      anomalies.add(`${name} differs between documents`);
+    }
   }
   const jwksUri = firstDefined(usableDocuments, "jwks_uri");
   return {
@@ -226,6 +231,7 @@ export async function discover(
     effective,
     contradictions,
     anomalies: [...anomalies],
+    endpointDisagreements,
     authorizationEndpoint: firstDefined(
       usableDocuments,
       "authorization_endpoint",

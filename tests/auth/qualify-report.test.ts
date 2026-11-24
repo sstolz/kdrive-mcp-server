@@ -8,8 +8,8 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
-import { run } from "../../scripts/oidc-qualify.js";
+import { describe, expect, it, vi } from "vitest";
+import { createProductionDeps, run } from "../../scripts/oidc-qualify.js";
 import {
   ACCEPTANCE_SCAN_PATTERNS,
   codeSpan,
@@ -19,6 +19,11 @@ import {
 import { claims, clientId, issuer, sign } from "../helpers/oidc.js";
 import { metadata, tokenUrl } from "../helpers/oidc-provider.js";
 import { harness, redirectUri, tokenArgs } from "../helpers/oidc-run.js";
+import {
+  observeHidden,
+  qualificationTerminal,
+  settledHidden,
+} from "../helpers/qualification-terminal.js";
 
 const longIssuer =
   "https://login.idp.example.test/realm/0f8fad5b-d9cb-469f-a165-70867728950e";
@@ -306,5 +311,92 @@ describe("BR-106 provider-controlled values", () => {
     expect(oauthErrorCode("bad code!")).toBe("`invalid`");
     expect(oauthErrorCode("x".repeat(65))).toBe("`invalid`");
     expect(oauthErrorCode(undefined)).toBe("`invalid`");
+  });
+});
+
+describe("F-052 runner hidden readers", () => {
+  it("BR-440 v1 AC-05 reader failure stays redacted", async () => {
+    for (const reader of ["readLine", "readSecret"] as const) {
+      for (const failure of [
+        "Input ended",
+        "Input failed",
+        "synthetic-secret input failure",
+      ]) {
+        const h = await harness();
+        h.deps[reader] = () => Promise.reject(new Error(failure));
+        expect(
+          await run(
+            tokenArgs(
+              ...(reader === "readSecret" ? ["--client-secret-prompt"] : []),
+            ),
+            h.deps,
+          ),
+        ).toBe(1);
+        expect(h.reports.size).toBe(0);
+        expect(h.err.join("")).toBe(
+          "Qualification failed; no report was written.\n",
+        );
+        // readLine is requested after the existing authorization URL output.
+        const expected =
+          reader === "readLine" ? /^https:\/\/[^\n]+\n$/u : /^$/u;
+        expect(h.out.join("")).toMatch(expected);
+        expect(h.calls.filter((call) => call.method === "POST")).toEqual([]);
+        expect(h.out.join("") + h.err.join("")).not.toContain(failure);
+      }
+    }
+  });
+
+  it("BR-442 v1 AC-07 runner retains payload-free stdin error handler", async () => {
+    const stdout = vi
+      .spyOn(process.stdout, "write")
+      .mockImplementation(() => true);
+    const stderr = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation(() => true);
+    try {
+      const t = qualificationTerminal();
+      const deps = createProductionDeps(t.input, t.output);
+      expect(t.input.listenerCount("error")).toBe(1);
+      const lifetime = t.input.listeners("error")[0];
+      for (const reader of [
+        deps.readSecret.bind(deps),
+        deps.readLine.bind(deps),
+      ]) {
+        const before = t.written.join("");
+        expect(() =>
+          t.input.emit("error", new Error("synthetic-secret between reads")),
+        ).not.toThrow();
+        expect(t.written.join("")).toBe(before);
+        const pending = observeHidden(() => reader("Hidden: "));
+        await Promise.resolve();
+        expect(t.input.listenerCount("error")).toBe(2);
+        t.input.emit("data", "synthetic-secret\n");
+        expect(await settledHidden(pending)).toEqual({
+          kind: "value",
+          value: "synthetic-secret",
+        });
+        expect(t.input.listeners("error")).toEqual([lifetime]);
+        expect(t.input.listenerCount("data")).toBe(0);
+        expect(t.input.listenerCount("end")).toBe(0);
+        const settledOutput = t.written.join("");
+        expect(() =>
+          t.input.emit("error", new Error("synthetic-secret late payload")),
+        ).not.toThrow();
+        t.input.emit("end");
+        t.input.emit("data", "synthetic-secret late\n");
+        expect(t.written.join("")).toBe(settledOutput);
+        expect(t.input.listeners("error")).toEqual([lifetime]);
+        expect(await pending).toEqual({
+          kind: "value",
+          value: "synthetic-secret",
+        });
+      }
+      expect(t.written.join("")).toBe("Hidden: \nHidden: \n");
+      expect(stdout).not.toHaveBeenCalled();
+      expect(stderr).not.toHaveBeenCalled();
+    } finally {
+      stdout.mockRestore();
+      stderr.mockRestore();
+    }
   });
 });

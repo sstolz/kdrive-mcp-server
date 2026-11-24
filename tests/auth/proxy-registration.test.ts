@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { proxyStateSnapshot } from "../../src/auth/proxy/proxy.js";
 import {
   CLAUDE,
   LOCALHOST,
@@ -160,5 +161,52 @@ describe("BR-127 dynamic client registration", () => {
     );
     const { response } = await post(body);
     expect(response.status).toBe(201);
+  });
+});
+
+describe("F-052 registration presence", () => {
+  it("BR-127 v2 AC-08 null is not absent", async () => {
+    for (const members of [
+      { token_endpoint_auth_method: null },
+      { grant_types: null },
+      { token_endpoint_auth_method: null, grant_types: null },
+    ]) {
+      const h = await harness();
+      const before = proxyStateSnapshot(h.proxy);
+      const response = await h.proxy.register({
+        body: JSON.stringify({ redirect_uris: [CLAUDE], ...members }),
+      });
+      expect(response.status).toBe(400);
+      expect(response.body).toBe('{"error":"invalid_client_metadata"}');
+      expect(proxyStateSnapshot(h.proxy)).toEqual(before);
+      expect(
+        (proxyStateSnapshot(h.proxy) as { clients: unknown[] }).clients,
+      ).toHaveLength(0);
+      expect(h.logs.map((entry) => entry.name)).toEqual([
+        "registration_refused",
+      ]);
+    }
+    const omitted = await post({ redirect_uris: [CLAUDE] });
+    expect(omitted.response.status).toBe(201);
+    expect(json(omitted.response)).toMatchObject({
+      token_endpoint_auth_method: "client_secret_basic",
+      grant_types: ["authorization_code", "refresh_token"],
+    });
+    for (const method of ["none", "client_secret_basic", "client_secret_post"])
+      for (const grants of [
+        ["authorization_code"],
+        ["authorization_code", "refresh_token"],
+      ]) {
+        const explicit = await post({
+          redirect_uris: [CLAUDE],
+          token_endpoint_auth_method: method,
+          grant_types: grants,
+        });
+        expect(explicit.response.status).toBe(201);
+        expect(json(explicit.response)).toMatchObject({
+          token_endpoint_auth_method: method,
+          grant_types: grants,
+        });
+      }
   });
 });
