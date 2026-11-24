@@ -135,8 +135,17 @@ export function decideClientMode(
   const result = documentedMode(provider, client);
   const needed = FACT_NAMES.some((name) => {
     if (client[name] !== "unverified") return false;
-    if (name === "rejectsInconsistentIssuer" && provider.issuerInconsistent)
-      return true;
+    if (name === "rejectsInconsistentIssuer") {
+      if (!provider.issuerInconsistent) return false;
+      const potential: ClientFacts = {
+        ...client,
+        rejectsInconsistentIssuer: "not supported",
+      };
+      for (const fact of FACT_NAMES)
+        if (potential[fact] === "unverified") potential[fact] = "supported";
+      const mode = documentedMode(provider, potential);
+      return mode === "delegate" || mode === "delegate-static";
+    }
     return (
       documentedMode(provider, { ...client, [name]: "supported" }) !== result
     );

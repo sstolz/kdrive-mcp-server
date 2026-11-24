@@ -354,6 +354,14 @@ function runFetch(
           },
         });
       });
+      // BR-306 v3: only the HTTP parser can accept an upgrade response.
+      pending.on("upgrade", (response: IncomingMessage, socket: Socket) => {
+        if (!done) {
+          status = response.statusCode ?? 0;
+          fail("status", false);
+        }
+        socket.destroy();
+      });
       pending.on("error", (error: unknown) => {
         queueMicrotask(() => {
           classify(error);

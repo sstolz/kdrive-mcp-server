@@ -19,6 +19,11 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
 
 ### Changed
 
+- #72 / F-052 v1 (pending acceptance): hidden qualification input refuses
+  residual control characters, treats Ctrl-D as EOF and retains DEL editing;
+  registration defaults apply only to absent members, with explicit nulls
+  refused. Full-store refusals emit exactly one store/count capacity event.
+
 - #75 / BR-428 v2 (pending acceptance): info's trusted tool description documents
   its seven fields, byte units, UTC precision and null semantics.
 
@@ -31,6 +36,13 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
   retain the same key and kid.
 
 ### Fixed
+
+- #72 / F-052 v1 (pending acceptance): token admission refuses conflicting
+  discovery endpoints before prompting or printing an authorization URL;
+  irrelevant issuer uncertainty no longer blocks proxy selection. Hidden
+  reads settle EOF and errors with fixed diagnostics and restore terminal
+  state on every exit. Parser-accepted CIMD 101 responses settle immediately
+  as terminal status failures and release fetch capacity.
 
 - #77 / F-051 v1 (accepted 2026-11-24 on main `b249860`; [#77 acceptance](https://github.com/sstolz/kdrive-mcp-server/issues/77#issuecomment-7143986357)): mutation sockets retain payload-free
   error handling through TLS handoff and cleanup; close without a response

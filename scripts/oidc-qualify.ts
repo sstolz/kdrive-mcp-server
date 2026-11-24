@@ -29,7 +29,11 @@ import { postForm, type Fetch } from "./oidc/http.ts";
 import { parseMatrix, type Matrix } from "./oidc/matrix.ts";
 import { containsLeak, secretValues } from "./oidc/redaction.ts";
 import { renderReport, type ReportModel } from "./oidc/report.ts";
-import { readHidden } from "./oidc/terminal.ts";
+import {
+  readHidden,
+  type TerminalInput,
+  type TerminalOutput,
+} from "./oidc/terminal.ts";
 
 export interface QualifyDeps {
   fetch: Fetch;
@@ -213,20 +217,25 @@ async function tokenStep(
   const effective = discovery.effective;
   const endpoint = discovery.authorizationEndpoint;
   const tokenEndpoint = discovery.tokenEndpoint;
-  if (
-    !discovery.usable ||
-    effective.pkceS256 !== "yes" ||
-    !isHttpsUrl(endpoint) ||
-    !isHttpsUrl(tokenEndpoint)
-  )
+  if (!discovery.usable)
     return finish(state, {
       token: "refused",
-      tokenStep: !discovery.usable
-        ? "refused: discovery not usable"
-        : // eslint-disable-next-line sonarjs/no-nested-conditional -- F-011: pre-existing nested conditional kept unchanged; refactor tracked in #79
-          effective.pkceS256 !== "yes"
-          ? "refused: PKCE S256 is not yes"
-          : "refused: authorization or token endpoint is not an https URL",
+      tokenStep: "refused: discovery not usable",
+    });
+  if (effective.pkceS256 !== "yes")
+    return finish(state, {
+      token: "refused",
+      tokenStep: "refused: PKCE S256 is not yes",
+    });
+  if (discovery.endpointDisagreements.length)
+    return finish(state, {
+      token: "refused",
+      tokenStep: `refused: ${discovery.endpointDisagreements.join(", ")} differs between documents`,
+    });
+  if (!isHttpsUrl(endpoint) || !isHttpsUrl(tokenEndpoint))
+    return finish(state, {
+      token: "refused",
+      tokenStep: "refused: authorization or token endpoint is not an https URL",
     });
   const method = clientAuthentication(
     options.clientSecretPrompt,
@@ -382,9 +391,6 @@ export async function run(
   }
 }
 
-const hidden = (prompt: string) =>
-  readHidden(process.stdin, process.stdout, prompt);
-
 function commit(): Promise<string> {
   return new Promise((resolvePromise) => {
     execFile(
@@ -399,14 +405,17 @@ function commit(): Promise<string> {
   });
 }
 
-if (
-  process.argv[1] &&
-  resolve(process.argv[1]) === fileURLToPath(import.meta.url)
-) {
-  process.exitCode = await run(process.argv.slice(2), {
+/** BR-442 v1: retain a payload-free input error sink between hidden reads. */
+export function createProductionDeps(
+  input: TerminalInput,
+  output: TerminalOutput,
+): QualifyDeps {
+  input.on("error", () => undefined);
+  const hidden = (prompt: string) => readHidden(input, output, prompt);
+  return {
     fetch: globalThis.fetch,
     env: process.env,
-    stdout: (text) => process.stdout.write(text),
+    stdout: (text) => output.write(text),
     stderr: (text) => process.stderr.write(text),
     readLine: hidden,
     readSecret: hidden,
@@ -418,5 +427,15 @@ if (
     },
     commit,
     matrix: () => readFile("docs/mcp-client-compatibility.md", "utf8"),
-  });
+  };
+}
+
+if (
+  process.argv[1] &&
+  resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+) {
+  process.exitCode = await run(
+    process.argv.slice(2),
+    createProductionDeps(process.stdin, process.stdout),
+  );
 }

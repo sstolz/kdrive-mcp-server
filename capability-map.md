@@ -1,5 +1,21 @@
 # Capability map
 
+## Provisional — OAuth qualification and proxy hardening
+
+[F-052 v1](features/F-052-oauth-qualification-proxy-hardening.md) (#72),
+[BR-096 v2](business-rules/BR-096.md), [BR-103 v2](business-rules/BR-103.md),
+[BR-127 v2](business-rules/BR-127.md), [BR-143 v5](business-rules/BR-143.md),
+[BR-306 v3](business-rules/BR-306.md), [BR-394 v3](business-rules/BR-394.md)
+and [BR-440 v1](business-rules/BR-440.md), [BR-441 v1](business-rules/BR-441.md),
+[BR-442 v1](business-rules/BR-442.md) are pending acceptance: conflicting usable
+discovery endpoints refuse token admission; issuer-evidence uncertainty applies
+only to potentially applicable delegation paths; hidden reads settle EOF and
+errors, refuse unsupported controls and restore terminal state; registration
+refuses explicit nulls; capacity refusals emit one store/count event; and
+parser-accepted CIMD 101 responses settle immediately with terminal status and
+release fetch capacity. Local, CI and actual-main acceptance remain unverified.
+
+
 ## Accepted — Mutation transport edge cases and attempt counting
 
 [F-051 v1](features/F-051-transport-edge-cases.md) (#77),
@@ -193,6 +209,9 @@ Accepted on actual main `14f5266` on 2026-11-15 (#49 comment `6893052881`).
 
 ## Accepted — OAuth proxy admission and grant handling hardened
 
+BR-127 v2 and BR-143 v5 tighten registration and capacity-event behavior
+under F-052; these versions are pending acceptance (#72).
+
 [F-035 v1](features/F-035-oauth-proxy-hardening.md) (#46), BR-421 and BR-422
 v1 with BR-023 v4, BR-024 v5, BR-131 v2, BR-133 v2, BR-137 v2, BR-162 v3,
 BR-167 v3, BR-184 v3 and BR-186 v2: in `proxy` mode an invalid token request
@@ -226,6 +245,9 @@ on actual main `570c4b2` on 2026-11-15 (#4 comment
 `4-acceptance-1-orchestrator`).
 
 ## Accepted — CIMD document handling hardened
+
+BR-306 v3 and BR-394 v3 extend this accepted scope with terminal status-101
+handling; these F-052 versions are pending acceptance (#72).
 
 [F-033 v1](features/F-033-cimd-hardening.md) (#26), BR-129 v6 with BR-306 v2,
 BR-307 v2, BR-309 v2 and BR-394 v2: in `proxy` mode the consent page shows a
@@ -583,6 +605,9 @@ termination are bounded. No OCR, arbitrary PDF compatibility, provider version
 qualification or production entrypoint is established at that SHA; #6/#7 passed later with F-014.
 
 ## Accepted — OIDC qualification tooling and validator
+
+BR-096 v2 and BR-103 v2, with BR-440–BR-442 v1, extend this accepted
+qualification scope under F-052; these versions are pending acceptance (#72).
 
 Accepted on actual main 2cec566ab8e2f030dbbbf47f04bf541e5eb48dc4, 2026-11-03, with owner-run
 AC-20 on actual main 7b046a0446930ab6a935510314c6c1b975d13550: [F-008 v1](features/F-008-oidc-qualification.md),
