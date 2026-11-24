@@ -225,9 +225,4 @@ include their BR versions. Existing BR-104 v1 output redaction remains in force.
 
 ## Open questions
 
-- The brief starts new rules at BR-438, but BR-438 v1 and BR-439 v1 are
-  already active for F-051 (#77); `docs/spec-index.md` names BR-440 as next
-  free. Confirm the proposed BR-440–BR-442 allocation before freeze; existing
-  IDs are not reused. No product decision remains open.
-
 ## Stress-test
