@@ -370,3 +370,171 @@ describe("BR-107 usable JWKS keys", () => {
     expect(usableKeys({ keys: [{ ...rsa, k: "x" }] })).toEqual([]);
   });
 });
+
+describe("F-052 endpoint admission", () => {
+  it("BR-096 v2 AC-01 endpoint disagreement refuses token", async () => {
+    const members = ["authorization_endpoint", "token_endpoint"] as const;
+    const changes: Array<Record<string, unknown>> = [
+      { authorization_endpoint: `${issuer}/other-authorize` },
+      { token_endpoint: `${issuer}/other-token` },
+      {
+        authorization_endpoint: `${issuer}/other-authorize`,
+        token_endpoint: `${issuer}/other-token`,
+      },
+    ];
+    for (const member of members) {
+      const path = member === "authorization_endpoint" ? "authorize" : "token";
+      for (const value of [
+        `https://IDP.test/${path}`,
+        `https://idp.test:443/${path}`,
+        `https://idp.test/%${path.codePointAt(0)!.toString(16)}${path.slice(1)}`,
+        `${issuer}/${path}/`,
+        null,
+        42,
+      ]) changes.push({ [member]: value });
+    }
+    for (const change of changes) {
+      for (const reverse of [false, true]) {
+        const first = metadata(reverse ? change : {});
+        const second = metadata(reverse ? {} : change);
+        const h = await harness({
+          metadata: first,
+          routes: { [oauthUrl]: { body: second } },
+        });
+        expect(await run(tokenArgs("--client-secret-prompt"), h.deps)).toBe(0);
+        const names = members.filter((member) => member in change);
+        expect(h.report()).toContain("Verdict: `unsupported`");
+        expect(h.report()).toContain(
+          `- Token step: refused: ${names.join(", ")} differs between documents`,
+        );
+        for (const name of names)
+          expect(h.report()).toContain(`${name} differs between documents`);
+        expect(h.prompts).toEqual([]);
+        expect(h.out.join("")).not.toContain("https://");
+        expect(h.calls.filter((call) => call.method === "POST")).toEqual([]);
+      }
+    }
+
+    const precedence = [
+      {
+        first: metadata({ issuer: "https://other.test" }),
+        second: metadata({ issuer: "https://other.test", token_endpoint: null }),
+        reason: "discovery not usable",
+      },
+      {
+        first: metadata({ code_challenge_methods_supported: ["plain"] }),
+        second: metadata({
+          code_challenge_methods_supported: ["plain"],
+          token_endpoint: null,
+        }),
+        reason: "PKCE S256 is not yes",
+      },
+      {
+        first: metadata({ token_endpoint: "http://idp.test/token" }),
+        second: metadata(),
+        reason: "token_endpoint differs between documents",
+      },
+      {
+        first: metadata({
+          token_endpoint_auth_methods_supported: ["private_key_jwt"],
+        }),
+        second: metadata({
+          token_endpoint_auth_methods_supported: ["private_key_jwt"],
+          token_endpoint: null,
+        }),
+        reason: "token_endpoint differs between documents",
+      },
+    ];
+    for (const row of precedence) {
+      const h = await harness({
+        metadata: row.first,
+        routes: { [oauthUrl]: { body: row.second } },
+      });
+      expect(await run(tokenArgs("--client-secret-prompt"), h.deps)).toBe(0);
+      expect(h.report()).toContain(`- Token step: refused: ${row.reason}`);
+      expect(h.report()).toContain("Verdict: `unsupported`");
+      expect(h.prompts).toEqual([]);
+      expect(h.out.join("")).not.toContain("https://");
+      expect(h.calls.filter((call) => call.method === "POST")).toEqual([]);
+    }
+  });
+
+  it("BR-096 v2 AC-02 endpoint agreement and discovery boundaries", async () => {
+    const cases = [
+      { first: metadata(), second: metadata() },
+      { first: metadata(), second: undefined },
+      { first: undefined, second: metadata() },
+      {
+        first: without(metadata(), "authorization_endpoint", "token_endpoint"),
+        second: metadata(),
+      },
+      {
+        first: metadata(),
+        second: without(metadata(), "authorization_endpoint", "token_endpoint"),
+      },
+      {
+        first: metadata(),
+        second: metadata({ issuer: "https://other.test", token_endpoint: null }),
+      },
+      {
+        first: metadata({ issuer: "https://other.test", token_endpoint: null }),
+        second: metadata(),
+      },
+    ];
+    for (const row of cases) {
+      const h = await harness({
+        routes: {
+          [oidcUrl]: row.first === undefined ? { status: 404 } : { body: row.first },
+          [oauthUrl]: row.second === undefined ? { status: 404 } : { body: row.second },
+        },
+      });
+      const result = await discover(issuer, h.deps.fetch);
+      expect(result.authorizationEndpoint).toBe(`${issuer}/authorize`);
+      expect(result.tokenEndpoint).toBe(`${issuer}/token`);
+      expect(result.anomalies).toEqual([]);
+      expect(await run(tokenArgs(), h.deps)).toBe(0);
+      expect(h.prompts).toHaveLength(1);
+      expect(h.calls.filter((call) => call.method === "POST")).toHaveLength(1);
+      expect(h.report()).toContain("- Token step: completed");
+    }
+    for (const member of ["authorization_endpoint", "token_endpoint"]) {
+      for (const value of [undefined, null, 42, "http://idp.test/endpoint"]) {
+        const document =
+          value === undefined
+            ? without(metadata(), member)
+            : metadata({ [member]: value });
+        const h = await harness({
+          metadata: document,
+          routes: { [oauthUrl]: { body: document } },
+        });
+        expect(await run(tokenArgs(), h.deps)).toBe(0);
+        expect(h.report()).toContain(
+          "refused: authorization or token endpoint is not an https URL",
+        );
+        expect(h.prompts).toEqual([]);
+        expect(h.calls.filter((call) => call.method === "POST")).toEqual([]);
+      }
+    }
+    const discovery = await harness({
+      routes: {
+        [oauthUrl]: {
+          body: metadata({
+            authorization_endpoint: `${issuer}/other`,
+            token_endpoint: null,
+          }),
+        },
+      },
+    });
+    expect(
+      await run(
+        ["discover", "--issuer", issuer, "--label", "synthetic"],
+        discovery.deps,
+      ),
+    ).toBe(0);
+    expect(discovery.report()).toContain("Verdict: `incomplete`");
+    for (const member of ["authorization_endpoint", "token_endpoint"])
+      expect(discovery.report()).toContain(`${member} differs between documents`);
+    expect(discovery.prompts).toEqual([]);
+    expect(discovery.calls.filter((call) => call.method === "POST")).toEqual([]);
+  });
+});

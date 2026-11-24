@@ -337,3 +337,92 @@ describe("BR-103 per-client mode decision", () => {
       ).toBe(false);
   });
 });
+
+describe("F-052 issuer evidence relevance", () => {
+  it("BR-103 v2 AC-03 issuer uncertainty does not block proxy", () => {
+    const rejectionFacts = ["unverified", "supported", "not supported"] as const;
+    for (const rejectsInconsistentIssuer of rejectionFacts) {
+      const facts = client({
+        dynamicRegistration: "supported",
+        rejectsInconsistentIssuer,
+      });
+      expect(
+        decideClientModes(
+          { ...provider, verdict: "proxy-only", issuerInconsistent: true },
+          [facts],
+        ),
+      ).toEqual({
+        decisions: [{ client: "Synthetic", mode: "proxy" }],
+        promoteProxy: true,
+      });
+    }
+    for (const change of [
+      {},
+      { verdict: "delegate-static-capable", dynamicRegistration: "no", cimd: "no" },
+      { dynamicRegistration: "no", cimd: "yes", tokenAuthNone: "no" },
+    ] as const) {
+      const facts: ProviderFacts = {
+        ...provider,
+        ...change,
+        issuerInconsistent: true,
+      };
+      expect(
+        decideClientMode(
+          facts,
+          client({ rejectsInconsistentIssuer: "unverified" }),
+        ),
+      ).toBe("not decided");
+    }
+    // Neither unknown mechanism can enable delegation under supported completions.
+    expect(
+      decideClientMode(
+        {
+          ...provider,
+          dynamicRegistration: "no",
+          cimd: "yes",
+          tokenAuthNone: "no",
+          usableIdToken: false,
+          issuerInconsistent: true,
+        },
+        client({
+          dynamicRegistration: "unverified",
+          cimd: "unverified",
+          rejectsInconsistentIssuer: "unverified",
+        }),
+      ),
+    ).toBe("not decided");
+  });
+
+  it("BR-103 v2 AC-04 applicable delegation still needs issuer evidence", () => {
+    const mechanisms = ["dynamicRegistration", "cimd", "manualClientId"] as const;
+    for (const mechanism of mechanisms) {
+      for (const fact of ["supported", "unverified"] as const) {
+        const facts = client({
+          [mechanism]: fact,
+          rejectsInconsistentIssuer: "unverified",
+        });
+        const eligible = {
+          ...provider,
+          cimd: "yes" as const,
+          issuerInconsistent: true,
+        };
+        expect(decideClientMode(eligible, facts)).toBe("undetermined");
+        const consistent = decideClientMode(
+          { ...eligible, issuerInconsistent: false },
+          facts,
+        );
+        expect(consistent).toBe(
+          fact === "unverified"
+            ? "undetermined"
+            : mechanism === "manualClientId"
+              ? "delegate-static"
+              : "delegate",
+        );
+        for (const verdict of ["unsupported", "incomplete"] as const)
+          expect(decideClientMode({ ...eligible, verdict }, facts)).toBe(
+            "not decided",
+          );
+      }
+    }
+  });
+});

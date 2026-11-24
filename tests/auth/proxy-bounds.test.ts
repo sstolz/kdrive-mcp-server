@@ -27,7 +27,7 @@ const LIMIT = 1000;
 
 describe("BR-142 bounded in-memory stores", () => {
   it(
-    "BR-142 a full client store evicts the client with the oldest last use",
+    "BR-143 v5 AC-09 each full-store refusal emits one event: client eviction",
     { timeout: 60_000 },
     async () => {
       const h = await harness();
@@ -42,8 +42,11 @@ describe("BR-142 bounded in-memory stores", () => {
       h.clock.advance(1);
       await h.proxy.authorize({ query: h.authorizeQuery(keep, challenge) });
       h.clock.advance(1);
+      const logged = h.logs.length;
       await h.register();
-      expect(h.logs.some((entry) => entry.name === "store_full")).toBe(true);
+      expect(h.logs.slice(logged)).toEqual([
+        { name: "store_full", fields: { store: "clients", count: LIMIT } },
+      ]);
       const gone = await h.refresh(evicted, issued.refresh_token as string);
       expect(gone.status).toBe(401);
       const kept = await h.refresh(keep, "unknown");
@@ -52,7 +55,7 @@ describe("BR-142 bounded in-memory stores", () => {
   );
 
   it(
-    "BR-142 a full consent store refuses with 503 until entries expire",
+    "BR-143 v5 AC-09 each full-store refusal emits one event: consents",
     { timeout: 60_000 },
     async () => {
       const h = await harness();
@@ -65,9 +68,13 @@ describe("BR-142 bounded in-memory stores", () => {
             })
           ).status,
         ).toBe(200);
+      const logged = h.logs.length;
       const full = await h.proxy.authorize({
         query: h.authorizeQuery(client, challenge),
       });
+      expect(h.logs.slice(logged)).toEqual([
+        { name: "store_full", fields: { store: "consents", count: LIMIT } },
+      ]);
       expect(full.status).toBe(503);
       expect(header(full, "content-type")).toContain("text/html");
       expect(header(full, "location")).toBeUndefined();
@@ -83,7 +90,7 @@ describe("BR-142 bounded in-memory stores", () => {
   );
 
   it(
-    "BR-142 a full flow store answers temporarily_unavailable until flows expire",
+    "BR-143 v5 AC-09 each full-store refusal emits one event: flows",
     { timeout: 60_000 },
     async () => {
       const h = await harness();
@@ -92,7 +99,11 @@ describe("BR-142 bounded in-memory stores", () => {
         expect(
           (await h.approve(client, "v".repeat(43))).upstreamRedirect.status,
         ).toBe(302);
+      const logged = h.logs.length;
       const full = await h.approve(client, "v".repeat(43));
+      expect(h.logs.slice(logged)).toEqual([
+        { name: "store_full", fields: { store: "flows", count: LIMIT } },
+      ]);
       expect(location(full.upstreamRedirect).searchParams.get("error")).toBe(
         "temporarily_unavailable",
       );
@@ -105,14 +116,18 @@ describe("BR-142 bounded in-memory stores", () => {
   );
 
   it(
-    "BR-142 a full code store answers server_error until codes expire",
+    "BR-143 v5 AC-09 each full-store refusal emits one event: codes",
     { timeout: 60_000 },
     async () => {
       const h = await harness();
       const client = await h.register();
       for (let index = 0; index < LIMIT; index += 1) await h.login(client);
       const flow = await h.approve(client, "v".repeat(43));
+      const logged = h.logs.length;
       const full = await h.callback(flow);
+      expect(h.logs.slice(logged)).toEqual([
+        { name: "store_full", fields: { store: "codes", count: LIMIT } },
+      ]);
       expect(location(full).searchParams.get("error")).toBe("server_error");
       h.clock.advance(60 * SECOND);
       await expect(h.login(client)).resolves.toMatchObject({ client });
@@ -120,7 +135,7 @@ describe("BR-142 bounded in-memory stores", () => {
   );
 
   it(
-    "BR-142 a full family store evicts the oldest family",
+    "BR-143 v5 AC-09 each full-store refusal emits one event: family eviction",
     { timeout: 120_000 },
     async () => {
       const h = await harness();
@@ -135,7 +150,11 @@ describe("BR-142 bounded in-memory stores", () => {
         await h.redeem(await h.login(client));
       }
       h.clock.advance(61 * SECOND);
+      const logged = h.logs.length;
       await h.redeem(await h.login(client));
+      expect(h.logs.slice(logged)).toEqual([
+        { name: "store_full", fields: { store: "families", count: LIMIT } },
+      ]);
       expect((await h.refresh(client, oldest)).status).toBe(400);
       expect((await h.refresh(client, second)).status).toBe(200);
     },

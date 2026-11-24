@@ -1,6 +1,7 @@
 // F-028 AC-02, AC-05, AC-06 and AC-07: Client ID Metadata Documents in the
 // proxy, with a counting fake fetch port and the fake clock.
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { createClientMetadataFetch } from "../../src/auth/proxy/client-metadata-fetch.js";
 import type { OAuthProxy, ProxyResponse } from "../../src/auth/proxy/index.js";
 import { proxyStateSnapshot } from "../../src/auth/proxy/proxy.js";
 import type { OAuthStateStore } from "../../src/auth/proxy/store.js";
@@ -13,6 +14,7 @@ import {
   cimdCertificates,
   cimdDocument,
   scriptedResolver,
+  reply,
   startDocumentServer,
   type DocumentServer,
   type Served,
@@ -968,5 +970,159 @@ describe("BR-309 v2 BR-306 v2 stale entries and header overflow (F-033)", () => 
     });
     expectPage(await authorize(), 503);
     expect(meta.calls).toHaveLength(3);
+  });
+});
+
+describe("F-052 CIMD upgrade lifecycle", () => {
+  it("BR-306 v3 BR-394 v3 AC-11 101 releases capacity and refuses terminally", async () => {
+    const held: Array<() => void> = [];
+    let releaseUpgrade: (() => void) | undefined;
+    let staleMode: "document" | "upgrade" | "connection" = "document";
+    let staleCalls = 0;
+    let origin = "";
+    const server = await startDocumentServer((request, response) => {
+      const upgrade = () => {
+        response.socket!.write(
+          "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: synthetic\r\n\r\n",
+        );
+        // Keep the peer open: only the production fetcher can release it.
+      };
+      if (request.url?.startsWith("/held")) {
+        held.push(() =>
+          reply(
+            response,
+            200,
+            JSON.stringify(cimdDocument(`${origin}${request.url}`)),
+          ),
+        );
+      } else if (request.url === "/upgrade.json") {
+        releaseUpgrade = upgrade;
+      } else if (request.url === "/stale.json") {
+        staleCalls += 1;
+        if (staleMode === "upgrade") upgrade();
+        else if (staleMode === "connection") response.socket!.destroy();
+        else
+          reply(
+            response,
+            200,
+            JSON.stringify(cimdDocument(`${origin}/stale.json`)),
+            { "Cache-Control": "max-age=300" },
+          );
+      } else {
+        reply(
+          response,
+          200,
+          JSON.stringify(cimdDocument(`${origin}${request.url}`)),
+        );
+      }
+    });
+    documentServers.push(server);
+    origin = `https://${CIMD_HOST}:${String(server.port)}`;
+    const resolver = scriptedResolver({ v4: ["127.0.0.1"] });
+    const production = createClientMetadataFetch({
+      resolver: resolver.factory,
+      addressPolicy: allowEveryAddress,
+      ca: [cimdCertificates().ca],
+    });
+    const h = await harness({ origins: [origin], clientMetadata: production });
+    const authorize = (path: string) =>
+      h.proxy.authorize({
+        query: h.authorizeQuery(cimd(`${origin}${path}`), s256(VERIFIER)),
+      });
+    const bounded = async <T,>(pending: Promise<T>): Promise<T> => {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        return await Promise.race([
+          pending,
+          new Promise<never>((_resolve, reject) => {
+            timer = setTimeout(
+              () => reject(new Error("CIMD did not settle before watchdog")),
+              1000,
+            );
+          }),
+        ]);
+      } finally {
+        clearTimeout(timer);
+      }
+    };
+    const pending: Array<Promise<ProxyResponse>> = [];
+    let heldSettlements = 0;
+    try {
+      for (let index = 0; index < 3; index += 1)
+        pending.push(
+          authorize(`/held${index}.json`).then((response) => {
+            heldSettlements += 1;
+            return response;
+          }),
+        );
+      await vi.waitFor(() => expect(held).toHaveLength(3), { timeout: 1000 });
+      const fourth = authorize("/upgrade.json");
+      pending.push(fourth);
+      await vi.waitFor(() => expect(releaseUpgrade).toBeTypeOf("function"), {
+        timeout: 1000,
+      });
+      const before = h.logs.length;
+      const time = h.clock.ms;
+      const requests = server.requests.length;
+      // All four slots are occupied until the held-open upgrade is delivered.
+      expectPage(await authorize("/blocked.json"), 503);
+      expect(server.requests).toHaveLength(requests);
+      const afterBusy = h.logs.length;
+      releaseUpgrade!();
+      const refused = await bounded(fourth);
+      expectPage(refused, 400);
+      expect(refused.body).toContain(TEXTS.en.error.invalid_request);
+      expect(h.logs.slice(afterBusy)).toEqual([
+        {
+          name: "client_metadata_refused",
+          fields: { handler: "authorize", reason: "status", status: 101 },
+        },
+      ]);
+      expect(h.logs.slice(before, afterBusy)).toEqual([
+        {
+          name: "client_metadata_refused",
+          fields: { handler: "authorize", reason: "busy", status: 0 },
+        },
+      ]);
+      expect((await bounded(authorize("/fifth.json"))).status).toBe(200);
+      expect(server.requests.map((request) => request.url)).toContain(
+        "/fifth.json",
+      );
+      expect(heldSettlements).toBe(0);
+      expect(h.clock.ms).toBe(time);
+      await vi.waitFor(
+        () =>
+          expect(
+            server.sockets.filter((socket) => !socket.destroyed),
+          ).toHaveLength(3),
+        { timeout: 1000 },
+      );
+      for (const settle of held) settle();
+      expect(
+        (await bounded(Promise.all(pending.slice(0, 3)))).map(
+          (response) => response.status,
+        ),
+      ).toEqual([200, 200, 200]);
+
+      expect((await bounded(authorize("/stale.json"))).status).toBe(200);
+      expect(staleCalls).toBe(1);
+      h.clock.advance(300 * SECOND);
+      staleMode = "upgrade";
+      const logged = h.logs.length;
+      expectPage(await bounded(authorize("/stale.json")), 400);
+      expect(h.logs.slice(logged)).toEqual([
+        {
+          name: "client_metadata_refused",
+          fields: { handler: "authorize", reason: "status", status: 101 },
+        },
+      ]);
+      // A transient failure now gives 503: the terminal 101 removed the stale entry.
+      staleMode = "connection";
+      expectPage(await bounded(authorize("/stale.json")), 503);
+      expect(staleCalls).toBe(3);
+    } finally {
+      h.proxy.cancelFetches();
+      await Promise.allSettled(pending);
+    }
   });
 });

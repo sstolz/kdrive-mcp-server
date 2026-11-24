@@ -194,6 +194,10 @@ export interface RawScript {
 
 export interface RawDocumentServer {
   port: number;
+  /** F-052: inspect peer closure after a held-open response. */
+  sockets: ReadonlySet<TLSSocket>;
+  /** F-052: resolves after all scripted response bytes have been written. */
+  delivered: Promise<void>;
   close(): Promise<void>;
 }
 
@@ -220,6 +224,10 @@ export async function startRawDocumentServer(
 ): Promise<RawDocumentServer> {
   const tls = cimdCertificates();
   const sockets = new Set<TLSSocket>();
+  let delivered!: () => void;
+  const delivery = new Promise<void>((done) => {
+    delivered = done;
+  });
   const server = createTlsServer({ key: tls.key, cert: tls.cert }, (socket) => {
     sockets.add(socket);
     socket.on("close", () => sockets.delete(socket));
@@ -229,7 +237,7 @@ export async function startRawDocumentServer(
       head += chunk.toString("latin1");
       if (!head.includes("\r\n\r\n")) return;
       socket.off("data", onData);
-      void writeScript(socket, script);
+      void writeScript(socket, script).then(delivered);
     };
     socket.on("data", onData);
   });
@@ -238,6 +246,8 @@ export async function startRawDocumentServer(
   });
   return {
     port: (server.address() as AddressInfo).port,
+    sockets,
+    delivered: delivery,
     close: () =>
       new Promise<void>((resolve) => {
         for (const socket of sockets) socket.destroy();
