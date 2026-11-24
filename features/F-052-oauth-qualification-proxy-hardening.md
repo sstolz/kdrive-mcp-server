@@ -110,7 +110,7 @@ IDs BR-440–BR-442 are allocated to this draft.
   and `count` naming the saturated store and its live count, without `handler`.
   The handler-level event is removed, not renamed. This supersedes F-028's
   "today's" consent-store-full row and handler requirement for that refusal
-  under BR-394 v1; other authorization-refusal events are unchanged.
+  under BR-394 v1–v2 (via F-028 Contract details); other authorization-refusal events are unchanged.
   Each client or family eviction continues to emit exactly one `store_full`
   event with only `{store, count}` naming that store and its live count at
   capacity. Verified by: AC-09.
@@ -298,7 +298,7 @@ include their BR versions. Existing BR-104 v1 output redaction remains in force.
   existing store/count shape. Full consent/flow/code refusals remove the
   handler-level event rather than renaming it: the whole log delta is one
   `store_full` with only `{store, count}`, without `handler`. For consent-store
-  saturation this supersedes F-028's "today's" row and BR-394 v1's handler
+  saturation this supersedes F-028's "today's" row and BR-394 v1–v2's handler
   requirement; other authorization-refusal events remain unchanged.
   BR-306 v3 makes 101 a final status failure
   when Node's parser accepts the block rather than an interim block or
@@ -331,3 +331,4 @@ include their BR versions. Existing BR-104 v1 output redaction remains in force.
 - 72-spec-review-3-opus #1 (minor) — retained — AC-07 states that the main block's use of the factory is verified by code review.
 - 72-spec-decision-1-fable #1 (minor) — retained — BR-143 v5 and D-4 remove the handler-level event and supersede F-028's consent-store-full row and handler requirement; AC-09 asserts the whole log delta is one store_full with only store/count, without handler or any additional event under another name.
 - 72-spec-decision-1-fable #2 (minor) — retained — BR-442 v1 fixes setup-failure rejection to exactly Input failed without original error text or stack, including when cleanup fails; AC-07 asserts that exact result.
+- 72-spec-review-4-opus #1 (minor) — retained — the supersession now names BR-394 v1–v2 (via F-028 Contract details).
