@@ -39,7 +39,7 @@ export interface ConnectOptions {
   readonly servername: string;
 }
 export type Connect = (options: ConnectOptions) => Duplex;
-/** BR-216 v2: method and route template of every request (F-017 adds POST/DELETE). */
+/** BR-216 v3: method and route template once per request attempt, before DNS/connect. */
 export type RequestObserver = (
   method: "GET" | "POST" | "DELETE",
   routeTemplate: string,
@@ -214,7 +214,7 @@ export type JsonOutcome =
   | { readonly kind: "envelope" }
   | { readonly kind: "missing" };
 
-/** F-017 BR-268: the raw attempt result of one mutation request. */
+/** BR-268 v3: raw mutation result only after a final non-1xx response event. */
 export interface MutationResponse {
   readonly status: number;
   /** The raw `Retry-After` text, only when it is at most 32 bytes. */
@@ -239,6 +239,7 @@ export function createTransport(options: TransportOptions) {
   const { token, lookup } = options;
   const agent = new PinnedAgent(options.connect);
   const limiter = new Limiter();
+  const socketErrors = new WeakSet<Duplex>();
 
   function observe(
     template: string,
@@ -716,15 +717,17 @@ export function createTransport(options: TransportOptions) {
       call.onAbort(abort);
     });
   }
-  /** BR-268: status, bounded `Retry-After` and a complete bounded 2xx body. */
+  /** BR-268 v3: final non-1xx response, bounded header and complete bounded 2xx body. */
   function exchange(
     call: Call,
     socket: Duplex,
     route: MutationRoute,
     body: Buffer | undefined,
   ): Promise<MutationResponse> {
+    if (socketErrors.has(socket)) return Promise.reject(mutationUnknown());
     return new Promise<MutationResponse>((resolve, reject) => {
-      let settled = false;
+      let settled = false,
+        receivedResponse = false;
       const settle = (value: MutationResponse | undefined) => {
         if (settled) return;
         settled = true;
@@ -759,8 +762,20 @@ export function createTransport(options: TransportOptions) {
         socket.destroy();
         settle(undefined);
       });
+      req.on("close", () => {
+        if (!receivedResponse) {
+          socket.destroy();
+          settle(undefined);
+        }
+      });
       req.on("response", (response: IncomingMessage) => {
+        receivedResponse = true;
         const status = response.statusCode ?? 0;
+        if (status < 200) {
+          socket.destroy();
+          settle(undefined);
+          return;
+        }
         refused(status);
         const raw = response.headers["retry-after"];
         const retryAfter =
@@ -833,6 +848,12 @@ export function createTransport(options: TransportOptions) {
         host: address,
         port: HTTPS_PORT,
         servername: API_HOST,
+      });
+      // BR-438: retain a payload-free listener through handoff and cleanup.
+      socket.on("error", () => {
+        if (socketErrors.has(socket)) return;
+        socketErrors.add(socket);
+        socket.destroy();
       });
       call.sockets.add(socket);
       await handshake(call, socket);

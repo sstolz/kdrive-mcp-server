@@ -89,6 +89,7 @@ override the current Docker-only development contract.
 | F-041 | #47 lot E | `features/F-041-configured-root-ancestors.md`         | Done v1, accepted on main 448a48f (2026-11-15); BR-277 and BR-278 v2 and BR-427 v1 active; no ADR                                                                                                                                                                                                                                                        |
 | F-042 | #42       | `features/F-042-mcp-tool-descriptions.md`             | Done v1, accepted on main 3b035b8 (2026-11-15); BR-428–BR-430 v1 active; no ADR                                                                                                                                                                                                                                                                          |
 | F-043 | #67       | `features/F-043-queue-changelog-release-sections.md`  | Done v1, accepted on main f72a15b (2026-11-15); BR-387 v2 active; no new BR or ADR                                                                                                                                                                                                                                                                       |
+| F-051 | #77       | `features/F-051-transport-edge-cases.md`              | Frozen v1; BR-438/439 v1 and BR-216/268 v3 pending acceptance; separate read-deadline decision remains open on #77                                                                                                                                                                                                                                       |
 
 Version history: [v1 immutable snapshot](../features/history/F-001-v1.md),
 [v2 immutable snapshot](../features/history/F-001-v2.md),
@@ -287,4 +288,14 @@ mode or received capability contracts. Only live adapter inspection paths carry
 the optional scalars. Real-account timestamp shape and unit remain unverified;
 the owner observation includes an optional received-share item and records its
 absence as a residual risk. No ADR is allocated.
-Next free IDs: **F-051, BR-438, ADR-013**.
+Next free IDs after F-050 were **F-051, BR-438, ADR-013**.
+
+Issue #77 allocates [F-051 v1](../features/F-051-transport-edge-cases.md)
+and BR-438–BR-439 v1, and prepares BR-268 v3 and BR-216 v3. F-051 v1
+remains frozen and all four rule records are pending acceptance. Accepted
+BR-268 v2 and BR-216 v2 remain active. Mutation socket handoff errors,
+close without a response and response statuses below 200 settle under
+BR-267 v1 without replay. Observer totals and bounds count request attempts
+with unchanged timing, keys and numerical bounds. No ADR is allocated;
+the separate read-deadline decision stays open on #77.
+Next free IDs: **F-052, BR-440, ADR-013**.

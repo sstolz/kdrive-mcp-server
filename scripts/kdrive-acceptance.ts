@@ -1,12 +1,14 @@
 // F-014 BR-215: owner-run acceptance on actual main (make kdrive-acceptance).
 // Executes the AC-23–AC-26 checks in process through main(deps) with the
 // production {lookup, connect} and a counting onRequest observer, plus a
-// packaged-CLI smoke. At most 400 GET requests and 900,000 ms. Prints only a
-// sanitized summary: per-check pass/fail, request counts, durations, byte
+// packaged-CLI smoke. At most 400 GET request attempts and 900,000 ms. Prints only a
+// sanitized summary: per-check pass/fail, request attempt counts, durations, byte
 // totals and the main SHA; never an ID, name, path, cursor, ETag, URL or token.
 // BR-215 v2: it also reports, on a monotonic clock, the maximum single-request
 // duration per route template and the maximum navigation invocation duration;
 // any REQUEST_TIMEOUT fails the check that met it.
+// BR-216 v3: requests, requestsWithinBound and byTemplate count/bound attempts,
+// including pre-send failures; counts may exceed requests sent.
 import { spawn } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { readFileSync } from "node:fs";

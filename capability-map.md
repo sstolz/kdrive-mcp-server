@@ -1,5 +1,17 @@
 # Capability map
 
+## Provisional — Mutation transport edge cases and attempt counting
+
+[F-051 v1](features/F-051-transport-edge-cases.md) (#77),
+[BR-438 v1](business-rules/BR-438.md), [BR-439 v1](business-rules/BR-439.md),
+[BR-268 v3](business-rules/BR-268.md) and [BR-216 v3](business-rules/BR-216.md)
+are pending acceptance: permanent payload-free mutation socket error handling,
+immediate unknown settlement and slot release on close without a response,
+and raw-port results only after a final non-1xx response event. Observer totals
+count request attempts, including pre-send failures, with unchanged timing,
+report keys and bounds. Accepted BR-268 v2 and BR-216 v2 remain active until
+actual-main acceptance. The separate read-deadline decision stays open on #77.
+
 ## Provisional — Info size and modification time
 
 [F-050 v1](features/F-050-info-size-and-modification-time.md) (#75),

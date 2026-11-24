@@ -1,6 +1,8 @@
 // F-050 v1 AC-08/09: bounded read-only owner qualification on actual main.
 // One direct metadata read and one SDK info call per designated item. No raw
 // values, identifiers, provider diagnostics or credentials enter the report.
+// BR-216 v3: requests and requests_within_bound count/bound request attempts
+// (at most 32), including pre-send failures; counts may exceed requests sent.
 import { EventEmitter } from "node:events";
 import { readFileSync, realpathSync } from "node:fs";
 import { PassThrough } from "node:stream";

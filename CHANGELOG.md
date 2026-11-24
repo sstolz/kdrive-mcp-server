@@ -30,6 +30,14 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
   today, now stops startup. Re-save it as UTF-8 without a BOM, then restart;
   retain the same key and kid.
 
+### Fixed
+
+- #77 / F-051 v1 (pending acceptance): mutation sockets retain payload-free
+  error handling through TLS handoff and cleanup; close without a response
+  releases the slot as unknown, and response statuses below 200 are unknown
+  without replay. Observer counts and bounds describe request attempts,
+  including pre-send failures, with unchanged timing and report keys.
+
 ## [1.0.1] - 2026-11-20
 
 ### Added
