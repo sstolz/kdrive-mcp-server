@@ -128,8 +128,8 @@ unique tests. Historical-only rules retain their original AC targets without
 invented obsolete implementations. See the migration evidence (private archive)
 and each record's Verification for preserved historical limits.
 
-All 437 allocated IDs have records, including pending F-050 and F-051 rules.
-Withdrawn BR-376/BR-377 remain excluded and never reused. Next free BR-440.
+All 440 allocated IDs have records, including the pending F-050 rules.
+Withdrawn BR-376/BR-377 remain excluded and never reused. Next free BR-443.
 
 ## Maintaining this index
 
