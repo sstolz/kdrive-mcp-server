@@ -213,7 +213,7 @@ include their BR versions. Existing BR-104 v1 output redaction remains in force.
   and a payload-bearing error arrives after settlement or between reads,
   Then it is handled without an uncaught exception, output or stack, cannot
   change the settled result, and the single lifetime handler remains while
-  per-read listeners are removed. The main block uses that same factory.
+  per-read listeners are removed. The main block uses that same factory (verified by code review).
   Verified by
   `BR-442 v1 AC-07 every exit restores terminal state including Ctrl-C`
   in `tests/auth/terminal.test.ts` and
@@ -312,3 +312,4 @@ include their BR versions. Existing BR-104 v1 output redaction remains in force.
 - 72-spec-review-2-opus #2 (minor) — retained — BR-442 v1 orders non-TTY/missing-setter refusal before ended/destroyed refusal, both before the prompt; AC-07 asserts no prompt, newline, raw-mode activation or read listeners.
 - 72-spec-review-2-opus #3 (minor) — retained — BR-442 v1 makes each cleanup step independently best-effort before one settlement, preserving failures and rejecting successful reads with Input failed on cleanup failure; AC-07 covers throwing restoration and the other cleanup steps.
 - 72-spec-review-2-opus #4 (minor) — retained — BR-103 v2 now says the issuer-rejection fact is needed exactly when a delegation path can apply, matching AC-04's positive direction.
+- 72-spec-review-3-opus #1 (minor) — retained — AC-07 states that the main block's use of the factory is verified by code review.
