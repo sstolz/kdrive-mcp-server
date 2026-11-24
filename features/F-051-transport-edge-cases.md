@@ -50,7 +50,9 @@ changes, execution, review or freeze is claimed.
    upgrade without a normal `response` event counts as no response here;
    bytes arriving on the wire alone do not establish the raw-port result.
    A close after a final non-1xx `response` retains BR-268's status/body
-   handling, including truncated bodies. Prepare BR-439 v1 and BR-268 v3
+   handling, including truncated bodies. Any `response` with status below 200,
+   including a bare 101, destroys the socket and rejects with unbranded
+   `MUTATION_UNKNOWN` under BR-267 v1. Prepare BR-439 v1 and BR-268 v3
    in the implementation phase; BR-267 v1 owns the failure classification.
 3. Version BR-216 to v3 to clarify observer counting while preserving its
    other provisions and existing read/mutation timing. An attempt is each
@@ -72,6 +74,11 @@ changes, execution, review or freeze is claimed.
    `requests_within_bound`, `byTemplate`, `byRoute`) and numerical bounds;
    document them as attempt counts, which may over-count requests sent.
    Preserve historical observations and recorded totals.
+   Update stale comments in `src/kdrive/transport.ts`: the `RequestObserver`
+   comment uses BR-216 v3 attempt wording; `MutationResponse` and `exchange()`
+   cite BR-268 v3's final-response boundary. Prepare the BR-268 reference in
+   `capability-map.md` and the F-051 entry in `docs/spec-index.md` as pending
+   acceptance, preserving accepted history (AGENTS.md §6).
 
 ### Out of scope
 
@@ -93,18 +100,21 @@ changes, execution, review or freeze is claimed.
 - **BR-439 v1** — A mutation request closing before any `response` event
   settles immediately under BR-267 v1 as `MUTATION_UNKNOWN` with its socket
   destroyed and limiter slot released, without replay or waiting for abort.
-  Verified by: AC-03.
+  Verified by: AC-03a, AC-03b.
 - **BR-268 v3** — The v2 rule applies only to a final non-1xx status line and
   headers delivered as a `response` event. A 101 upgrade with both
-  `Connection: Upgrade` and `Upgrade:` is not such a response. Body validation,
-  header bounds and terminal 429 handling remain unchanged. Verified by: AC-03.
+  `Connection: Upgrade` and `Upgrade:` is not such a response. Any `response`
+  event with status below 200, including a bare 101, destroys the socket and
+  rejects with unbranded `MUTATION_UNKNOWN` under BR-267 v1; the gate returns
+  `uncertain` without replay. Body validation, header bounds and terminal 429
+  handling remain unchanged. Verified by: AC-06, AC-07.
 - **BR-216 v3** — The v2 rule with only “once per outgoing HTTP request”
   replaced by “once per request attempt”. An attempt means each entry into
   `hop()` (every read hop, retries and the redirect hop included) and each
   `mutate()` network phase after limiter admission and its abort check.
   Queue refusal or cancellation is not an attempt. Pre-send DNS/address-policy,
   connection and TLS failures count, so counts may exceed requests sent.
-  Verified by: AC-04–AC-05.
+  Verified by: AC-04a, AC-04b, AC-05, AC-08.
 
 ## Acceptance criteria
 
@@ -116,20 +126,21 @@ not a real account. A test watchdog may fail a hanging test; it must not abort
 the operation to obtain the expected settlement.
 
 Expected base results: AC-01 is red if the hypothesized listener gap is real;
-AC-03a is expected red for settlement/slot release before abort. AC-02,
-AC-03b/c/d, AC-04 and AC-05 only pin current behavior. These are expectations,
+AC-03a is expected red for settlement/slot release before abort. AC-07 must
+reject at the port even if base exposes status 101. AC-02, AC-03b, AC-06,
+AC-04a/b and AC-05 pin current behavior. These are expectations,
 not execution evidence; the orchestrator records the actual base results.
 
-- **AC-01 (BR-438 v1, BR-267 v1)** — Given `connect` returning a loopback TLS
+- **AC-01 (BR-438 v1)** — Given `connect` returning a loopback TLS
   socket and adding a `secureConnect` listener that schedules
   `process.nextTick(() => socket.destroy(new Error("x")))`, when TLS completes,
   this destroys the socket before the `await handshake` continuation. Then no
   uncaught exception occurs, the port rejects with unbranded `MUTATION_UNKNOWN`, and
   the gate returns `uncertain` / `UPSTREAM_UNCERTAIN`, `attempts:1`, without
-  replay, and the server receives zero request bytes. Assert the permanent
-  listener remains present through the handoff and cleanup and that a later
-  cleanup error is handled without resettlement
-  or error-payload output. Capture a crash with a test-scoped
+  replay, and the server receives zero request bytes. After settlement,
+  `socket.emit("error", new Error("late"))` does not throw, causes no uncaught
+  exception or resettlement, and writes nothing to captured stderr or
+  diagnostics. Capture a crash with a test-scoped
   `process.prependOnceListener("uncaughtException", …)` removed in `finally`,
   or run the fixture in a child process to isolate it from the test runner.
   This test must fail on current code if the hypothesized gap is real. If the
@@ -144,42 +155,51 @@ not execution evidence; the orchestrator records the actual base results.
   gate returns `failed` / `NOT_SENT`, and cleanup destroys the socket and
   releases the slot. Verified by: `tests/kdrive-mutation-port.test.ts`,
   `TestBR438_v1_pre_handshake_error_is_NotSent_without_crash`.
-- **AC-03 (BR-439 v1, BR-267 v1, BR-268 v3)** — Given all nine mutations
-  using one transport instance, with seven held mutations
-  occupying seven of the eight slots, an eighth sent mutation, and a ninth
-  queued mutation, when the eighth receives either (a) HTTP 101 with both
-  `Connection: Upgrade` and `Upgrade:` headers and no normal `response` event
-  or (b) socket closure after its
-  request is received with zero response bytes, then each case settles before
-  any abort: the port rejects with unbranded `MUTATION_UNKNOWN`, the gate
-  returns `uncertain` / `UPSTREAM_UNCERTAIN`, `attempts:1`, its socket is
-  destroyed, and the ninth mutation proceeds and completes while the other
-  seven remain held. Assert exactly one request for the eighth operation and
-  no replay. Case (b) is pinning-only: base already settles through
-  `socket hang up` and the request `error` handler. In (c), given a final
-  non-1xx `response` followed by request close, when the exchange completes,
-  then its known status and BR-268 v3 body handling remain intact, including
-  a truncated body. In (d), given a bare 101 without either upgrade header,
-  followed by close, then the gate returns `uncertain` / `UPSTREAM_UNCERTAIN`,
-  `attempts:1`, without replay, and the socket and slot are released before
-  abort as above. No final non-1xx response establishes a BR-268 v3 raw result.
-  Its runtime event shape is unverified: pin the uncertain outcome, whether
-  the port rejects as unknown or the parser exposes status 101 (which the gate's
-  `classify()` in `src/mutation-gate.ts` also maps to uncertain).
+
+For AC-03a, AC-03b and AC-07 (former AC-03d), use one transport for nine
+mutations: seven held, an eighth sent and a ninth queued. Drive the port with
+a never-aborted signal and assert `signal.aborted === false` at settlement.
+Each case rejects with unbranded `MUTATION_UNKNOWN`, destroys the eighth
+socket and lets the ninth complete while the other seven remain held. Check
+exactly one request for the eighth operation and no replay. Any gate-level
+check uses fake `setTimeout`/`clearTimeout` timers that are never advanced
+(as in `tests/kdrive-mutation-port.test.ts:358`), and asserts `uncertain` /
+`UPSTREAM_UNCERTAIN`, `attempts:1`; the gate's 30,000 ms abort cannot settle it.
+
+- **AC-03a (BR-439 v1)** — Given HTTP 101 with both `Connection: Upgrade`
+  and `Upgrade:` headers and no normal `response` event, when the request
+  closes, then the shared port-settlement and slot-release assertions hold.
   Verified by: `tests/kdrive-mutation-port.test.ts`,
-  `TestBR439_v1_101_close_releases_slot_without_abort`,
-  `TestBR439_v1_zero_byte_close_releases_slot_without_abort`,
-  `TestBR268_v3_close_after_response_preserves_status`,
+  `TestBR439_v1_101_close_releases_slot_without_abort`.
+- **AC-03b (BR-439 v1)** — Given the server received the request, when its
+  socket closes with zero response bytes, then the shared assertions hold.
+  This is pinning-only: base already settles through `socket hang up` and
+  the request `error` handler. Verified by:
+  `tests/kdrive-mutation-port.test.ts`,
+  `TestBR439_v1_zero_byte_close_releases_slot_without_abort`.
+- **AC-06 (BR-268 v3)** — Given a final non-1xx `response`, when request
+  close follows, then its known status and body handling remain intact,
+  including a truncated body. Verified by:
+  `tests/kdrive-mutation-port.test.ts`,
+  `TestBR268_v3_close_after_response_preserves_status`.
+- **AC-07 (BR-268 v3)** — Given a bare 101 without either upgrade header
+  delivered as a `response` event, when it is received, then the port
+  immediately rejects with unbranded `MUTATION_UNKNOWN`
+  and the shared assertions hold; it never returns a raw status 101 result.
+  Verified by: `tests/kdrive-mutation-port.test.ts`,
   `TestBR268_v3_bare_101_is_uncertain_without_replay`.
-- **AC-04 (BR-216 v3)** — Given injected mutation attempts ending in DNS
+- **AC-04a (BR-216 v3)** — Given injected mutation attempts ending in DNS
   failure, address-policy refusal, connection failure or TLS handshake failure,
   when each attempt runs, then the observer is called once before lookup and
   any connect, receives only the method/template, and the port ends `NotSent`
   with zero request bytes sent; the gate returns `failed` / `NOT_SENT`.
-  Given refusal or cancellation while queued before the network phase, when
-  it ends, then no observer call occurs. Verified by:
+  Verified by:
   `tests/kdrive-mutation-port.test.ts`,
-  `TestBR216_v3_pre_send_failures_observed_once_and_NotSent`,
+  `TestBR216_v3_pre_send_failures_observed_once_and_NotSent`.
+- **AC-04b (BR-216 v3)** — Given queue refusal, cancellation while queued,
+  or a signal already aborted at admission while a slot is free, when the
+  mutation ends, then the port rejects with branded `NotSent` and zero
+  observer calls occur. Verified by: `tests/kdrive-mutation-port.test.ts`,
   `TestBR216_v3_queued_refusal_or_abort_is_not_a_request_attempt`.
 - **AC-05 (BR-216 v3)** — Given the existing read retry, redirect and throwing
   observer fixtures plus a DNS-failing read, when they run, then each entered
@@ -187,9 +207,18 @@ not execution evidence; the orchestrator records the actual base results.
   retry and redirect hop, and observer exceptions leave results unchanged.
   Verified by: `tests/kdrive/adapter-origin.test.ts`,
   `TestBR216_v3_read_attempts_keep_pre_DNS_observation_and_results`.
-  Also inspect Scope 3's script/docs wording: reported observer counts and
-  bounds mean attempts, legacy keys and numerical bounds stay unchanged, and
-  historical evidence is not rewritten.
+- **AC-08 (BR-216 v3)** — Given Scope 3's six script/docs files, when their
+  current reporting wording is checked, then counts and bounds mean attempts,
+  legacy keys and numerical bounds stay unchanged, and historical evidence
+  is preserved. Verified by the following `grep` checks: the first has no
+  matches outside historical evidence (exit 1 if none); the second's output
+  includes all five listed report keys. Compare historical matches and
+  numerical bounds with the unchanged base.
+
+  ```sh
+  grep -nEi 'request counts?' scripts/kdrive-acceptance.ts scripts/kdrive-write-acceptance.ts scripts/kdrive-upload-acceptance.ts scripts/kdrive-info-acceptance.ts docs/kdrive-read-probe-plan.md docs/kdrive-write-probe-plan.md
+  grep -nE '(^|[^[:alnum:]_])(requests|requestsWithinBound|requests_within_bound|byTemplate|byRoute)([^[:alnum:]_]|$)' scripts/kdrive-acceptance.ts scripts/kdrive-write-acceptance.ts scripts/kdrive-upload-acceptance.ts scripts/kdrive-info-acceptance.ts
+  ```
 
 ## Decisions
 
@@ -197,9 +226,12 @@ not execution evidence; the orchestrator records the actual base results.
   v3 for the final-response boundary. Reject BR-267 v2: BR-267 v1 already owns
   “close after handshake → MUTATION_UNKNOWN”; BR-439 only adds the timing
   rule. BR-438 separately covers continuous error handling.
+- Reject `NotSent` after handshake completion even when zero request bytes
+  are proven: that option requires BR-267 v2 and byte-level proof. BR-267 v1
+  keeps AC-01 `uncertain` without replay.
 - Plan History lines in the implementation phase (using its actual date):
   `v3 — YYYY-MM-DD — F-051 v1 (#77) — BR-268 raw-port results require a final
-  non-1xx response event; 101 upgrades are excluded`; and
+  non-1xx response event; response statuses below 200 reject as unknown`; and
   `v3 — YYYY-MM-DD — F-051 v1 (#77) — BR-216 counts request attempts rather
   than outgoing HTTP requests; observation timing and other provisions unchanged`.
 - BR-266 v2's “BR-216 v2 connect” reference need not move to v3: the `connect`
@@ -236,3 +268,20 @@ not execution evidence; the orchestrator records the actual base results.
   `record()` abort check, plan its History line and retain BR-266's valid reference.
 - **77-spec-review-1-opus / 6 — minor — retained.** Name the dated read-deadline
   owner decision and keep #77 open after merge.
+- **77-spec-review-2-opus/1 — major — retained.** Reject every response status
+  below 200 as unknown; AC-07 deterministically asserts the port rejection,
+  removing the conflicting raw-101 alternative.
+- **77-spec-review-2-opus/2 — minor — retained.** Give each named test one AC
+  and one BR; AC-08 names executable wording/key checks instead of inspection.
+- **77-spec-review-2-opus/3 — minor — retained.** Use never-aborted port
+  signals and unadvanced fake gate timers so abort cannot mask missing close
+  settlement.
+- **77-spec-review-2-opus/4 — minor — retained.** Observe late error emission,
+  no throw, uncaught exception, resettlement or output instead of counting
+  inaccessible listeners.
+- **77-spec-review-2-opus/5 — minor — retained.** AC-04b includes already
+  aborted admission with a free slot, proving zero observer calls and NotSent.
+- **77-spec-review-2-opus/6 — minor — retained.** Scope includes stale transport
+  comments and pending capability/index entries without promoting acceptance.
+- **77-spec-review-2-opus/7 — minor — retained.** Record rejection of post-TLS
+  zero-byte NotSent so freeze preserves BR-267 v1's classification.
