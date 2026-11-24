@@ -15,6 +15,8 @@ import {
   kdriveFixture,
 } from "../helpers/kdrive.js";
 import { brandedRead } from "../../src/read-retry.js";
+import { routes } from "../../src/kdrive/routes.js";
+import { createTransport } from "../../src/kdrive/transport.js";
 import { runMain, stdioClient, textOf, tokenFile } from "../helpers/main.js";
 
 let fixture: Awaited<ReturnType<typeof kdriveFixture>> | undefined;
@@ -76,6 +78,109 @@ function walk(node: ts.Node, visit: (node: ts.Node) => void) {
 }
 
 describe("BR-216 fixed origin and seams", () => {
+  it("TestBR216_v3_read_attempts_keep_pre_DNS_observation_and_results", async () => {
+    const f = (fixture = await kdriveFixture());
+    const events: string[] = [];
+    const observed: unknown[][] = [];
+    const lookup = (host: string) => {
+      events.push("lookup");
+      return f.lookup(host);
+    };
+    const connect = (options: Parameters<typeof f.connect>[0]) => {
+      events.push("connect");
+      return f.connect(options);
+    };
+    const onRequest = (...args: unknown[]) => {
+      events.push("observe");
+      observed.push(args);
+      throw new Error("observer payload");
+    };
+    let failures = 2;
+    let failedAttempts = 0;
+    f.drive.overrides.push((r) => {
+      if (
+        r.path === routes.item(DRIVE, 12).target.split("?")[0] &&
+        failures > 0
+      ) {
+        failures--;
+        failedAttempts++;
+        return { status: 503, body: "" };
+      }
+      return undefined;
+    });
+    const run = await runMain({
+      argv: [],
+      env: { KDRIVE_ID: "101", KDRIVE_TOKEN_FILE: tokenFile() },
+      lookup,
+      connect,
+      onRequest,
+    });
+    const client = await stdioClient(run);
+    try {
+      expect(
+        textOf(
+          await client.callTool({
+            name: "kdrive_info",
+            arguments: { drive_id: DRIVE, file_id: 12 },
+          }),
+        ),
+      ).toHaveProperty("ok");
+    } finally {
+      await client.close();
+      await (run.handle as { close(): Promise<void> }).close();
+    }
+    expect(failedAttempts).toBe(2);
+    expect(
+      observed.filter((args) => args[1] === routes.item(DRIVE, 12).template)
+        .length,
+    ).toBeGreaterThanOrEqual(3);
+    expect(observed).toHaveLength(f.upstream.seen.length);
+    expect(events).toEqual(
+      observed.flatMap(() => ["observe", "lookup", "connect"]),
+    );
+
+    events.length = 0;
+    observed.length = 0;
+    const a = await adapterFor({ lookup, connect }, { onRequest });
+    expect(
+      await a.dependencies.inspect({ driveId: DRIVE, id: 12 }, "live"),
+    ).toMatchObject({ id: 12 });
+    expect(
+      await a.dependencies.content.describe(
+        { driveId: DRIVE, id: 12 },
+        new AbortController().signal,
+      ),
+    ).toMatchObject({ version_bound: true });
+    expect(observed).toEqual([
+      ["GET", routes.item(DRIVE, 12).template],
+      ["GET", routes.item(DRIVE, 12).template],
+      ["GET", routes.download(DRIVE, 12).template],
+      ["GET", "{storage}"],
+    ]);
+    expect(events).toEqual(
+      observed.flatMap(() => ["observe", "lookup", "connect"]),
+    );
+
+    events.length = 0;
+    observed.length = 0;
+    const port = createTransport({
+      token: "SYNTHETIC",
+      lookup: () => {
+        events.push("lookup");
+        return Promise.reject(new Error("DNS payload"));
+      },
+      connect: () => {
+        throw new Error("unexpected connect");
+      },
+      onRequest,
+    });
+    await expect(port.json(routes.item(DRIVE, 12))).rejects.toThrow(
+      "READ_UNAVAILABLE",
+    );
+    expect(events).toEqual(["observe", "lookup"]);
+    expect(observed).toEqual([["GET", routes.item(DRIVE, 12).template]]);
+  }, 20_000);
+
   it("TestBR216_origin_environment_names_change_nothing", async () => {
     const f = (fixture = await kdriveFixture());
     // KDRIVE_* names are refused by F-002 before any request.
