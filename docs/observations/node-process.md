@@ -42,8 +42,7 @@ author.
   Run each case once.
 - Result: in the single run without a listener, the write returns, an
   asynchronous EPIPE `error` is uncaught and the child exits 1. In the single
-  run with one listener, EPIPE is delivered to it, the child survives and exits
-  0. This matches the stderr observations above.
+  run with one listener, EPIPE is delivered to it, the child survives and exits 0. This matches the stderr observations above.
 - Evidence: [139-probe-1-orchestrator](https://github.com/sstolz/kdrive-mcp-server/issues/139#issuecomment-7157090270).
 
 ## Pending stdout write after transport-style close
