@@ -51,7 +51,10 @@ Stdio is unaffected.
 - Keep a post-bind `error` listener with a bounded, payload-free diagnostic
   (BR-444, BR-167 v4).
 - Carry an HTTP disconnect signal to the SDK request (BR-166 v2) and use it
-  to cancel queued, not-yet-started invocations (BR-445). The navigation
+  to cancel queued, not-yet-started invocations (BR-445). `serve`
+  (`src/http/adapter.ts`) creates the disconnect controller and passes its
+  signal to `handle()` as an explicit parameter; `sdkRequest`
+  (`src/http/handler.ts`) sets it on the SDK request (D-4). The navigation
   controller's `invoke`, `invokeMutation` and `readResource`
   (`src/navigation.ts`) gain an optional disconnect-signal parameter, read
   by the tool, mutation, resource-template and custom `resources/read`
@@ -62,8 +65,9 @@ Stdio is unaffected.
 - Records: `CHANGELOG.md` `## [Unreleased]` lines citing #73; the F-012
   Contract details status table and the `docs/oauth-proxy.md` "Limits and
   residual risks" list gain the 431 header-count row and the
-  disconnect-cancellation behaviour; F-026 D-8 gets a note that F-053
-  reverses it for queued calls.
+  disconnect-cancellation behaviour. The reversal of F-026 D-8 for queued
+  calls is recorded only in D-4 and the CHANGELOG; F-026, a closed spec, is
+  not edited.
 
 ### Out of scope
 
@@ -127,17 +131,24 @@ BR-443–BR-446 are allocated to this draft.
   the event is emitted. A bind error before the
   listener is bound still yields `LISTEN_FAILED` (BR-153). Verified by:
   AC-06, AC-07.
-- **BR-166 v2** — v1 holds, plus: the request given to the SDK transport
-  carries an `AbortSignal` that aborts when, and only when, the client
-  connection of that HTTP request closes before its response has been
-  completely written (the `ServerResponse` `close` event with
-  `writableFinished` false); it never aborts after the response was
-  written, and it never carries `Authorization`, `Cookie` or `authInfo`.
-  Handlers read that signal only from the SDK context field `ctx.http.req`
-  (the request given to the transport); it is distinct from, and never
-  linked to, `ctx.mcpReq.signal`, so a disconnect does not abort
-  `ctx.mcpReq.signal`, and a `notifications/cancelled` does not abort the
-  disconnect signal. Verified by: AC-08.
+- **BR-166 v2** — v1 holds, plus: for each HTTP request, `serve` creates one
+  disconnect `AbortController` and passes its signal to `handle()` as an
+  explicit parameter. That controller aborts when, and only when, either the
+  `ServerResponse` `close` event or the `close` event of `req.socket` fires
+  while the response's `writableFinished` is false; it never aborts after
+  the response was completely written, and both listeners are removed once
+  the response settles (finishes or closes), so a kept-alive socket holds no
+  listener of a settled request. `sdkRequest` sets that signal directly as
+  the `signal` of the request given to the SDK transport; the request built
+  by `toRequest` is constructed without a `signal` option and is never
+  aborted by a disconnect. The router keeps the SDK request strongly
+  referenced until its response settles. The SDK request never carries
+  `Authorization`, `Cookie` or `authInfo`. Handlers read that signal only
+  from the SDK context field `ctx.http.req` (the request given to the
+  transport); it is distinct from, and never linked to,
+  `ctx.mcpReq.signal`, so a disconnect does not abort `ctx.mcpReq.signal`,
+  and a `notifications/cancelled` does not abort the disconnect signal.
+  Verified by: AC-08, AC-14.
 - **BR-445** — A tool call, resource read or `mutate` call carried by an
   HTTP request is *started* once it holds its controller's slot: the
   BR-383 `start` step has run, which sets its invocation deadline (BR-384),
@@ -159,7 +170,7 @@ BR-443–BR-446 are allocated to this draft.
   disconnect and a slot release fall in the same synchronous step, the
   BR-383 order decides: a call that took the slot first is started. This
   reverses F-026 D-8 for calls that have not started. Verified by: AC-08,
-  AC-09, AC-10, AC-11.
+  AC-09, AC-10, AC-11, AC-14.
 - **BR-169 v4** — v3 holds, plus: the server sets `maxHeadersCount` to 101,
   so Node keeps at least one header line beyond the BR-446 bound;
   `maxHeaderSize` stays 16,384 bytes. Verified by: AC-12.
@@ -228,14 +239,15 @@ names cite their BR versions.
   "BR-443 BR-161 AC-05 keeps only live identity windows".
 - **AC-06** (BR-444, BR-167 v4) — Given a started HTTP server with a
   recording logger, When the listening server emits `error` with codes
-  `EMFILE`, then a non-string code, then a code `emfile`, Then the process
-  stays up, a following MCP request is answered, the first error emits
-  `listener_error` `{code:"EMFILE", suppressed:0}`, the others within
-  60,000 ms emit nothing, and an `ENFILE` error at 60,000 ms after the
-  first emits `{code:"ENFILE", suppressed:2}`; and When the clock then
-  reads 1,000 ms before that last emit and an `EMFILE` error follows, Then
-  it is emitted with `suppressed:0`; no event field holds a message,
-  address or stack. Verified by:
+  `EMFILE` at t=0, then a non-string code, then a code `emfile`, then
+  `EAGAIN` at t=59,999, Then the process stays up, a following MCP request
+  is answered, the first error emits `listener_error`
+  `{code:"EMFILE", suppressed:0}`, the three others emit nothing, and an
+  `ENFILE` error at t=60,000 emits `{code:"ENFILE", suppressed:3}`; and
+  When the clock then reads 1,000 ms before that last emit and an error
+  with code `emfile` follows, Then it is emitted as
+  `{code:"other", suppressed:0}`; no event field holds a message, address
+  or stack. Verified by:
   `tests/http/startup.test.ts` "BR-444 BR-167 v4 AC-06 logs accept-time
   errors once per minute and keeps serving".
 - **AC-07** (BR-444) — Given a logger whose `event` throws, and a custom
@@ -254,7 +266,10 @@ names cite their BR versions.
   call returned `ACCESS_DENIED` with zero kDrive requests and zero audit
   records, a held tool handler observes `ctx.http.req.signal` aborted while
   its `ctx.mcpReq.signal` stays not aborted, and a request whose response
-  was fully written never sees its signal abort; and Given a resource read
+  was fully written never sees its signal abort; and Given a held tool
+  call, When the client sends `notifications/cancelled` for it on a live
+  connection, Then its `ctx.mcpReq.signal` aborts while its
+  `ctx.http.req.signal` stays not aborted; and Given a resource read
   through the custom `resources/read` handler waiting the same way, When
   its client disconnects, Then it is answered protocol error `-32000`
   `ACCESS_DENIED` with zero kDrive requests, and the waiter's disconnect
@@ -289,14 +304,28 @@ names cite their BR versions.
   Verified by: `tests/http/lifecycle.test.ts` "BR-169 v4 BR-446 AC-12 pins
   the header count and accepts 100 header lines".
 - **AC-13** (BR-446, BR-167 v4) — Given socket requests with 101 header
-  lines and with 2,500 header lines (each within 16,384 bytes when possible,
-  including repeated names), sent to `/mcp` with a valid token and to an
+  lines and with 2,500 header lines (each request's entire header block
+  under 16,384 bytes, e.g. repeated `x:` lines with empty values, so
+  repeated names are included), sent to `/mcp` with a valid token and to an
   unknown path during shutdown, When they arrive, Then each gets 431
   `{"error":"invalid_request"}` with `Connection: close`, no
   authentication, window count or body read occurs, and one
   `request_refused` (`route` `mcp` or `unknown`, `status` 431) is emitted.
   Verified by: `tests/http/lifecycle.test.ts` "BR-446 BR-167 v4 AC-13
   refuses more than 100 header lines with 431".
+- **AC-14** (BR-166 v2, BR-445) — Given `serve` handling a request, When
+  `handle()` is called, Then it receives the disconnect signal as an
+  explicit parameter, the SDK request's `signal` aborts when that
+  controller aborts, and the `toRequest` request stays not aborted after a
+  disconnect; and Given two pipelined HTTP/1.1 requests written in one
+  socket write on one session, the first holding a started tool call and
+  the second's tool call waiting behind it, When the client destroys the
+  socket, Then the second call returns `ACCESS_DENIED` with zero kDrive
+  requests and zero audit records, the first runs to completion; and Given
+  10 sequential requests on one kept-alive socket, When each has settled,
+  Then the socket holds no `close` listener added by `serve`. Verified by:
+  `tests/http/disconnect.test.ts` "BR-166 v2 BR-445 AC-14 the disconnect
+  signal is passed explicitly and covers pipelined requests".
 
 ## Decisions
 
@@ -318,9 +347,31 @@ names cite their BR versions.
   signal from the SDK's `notifications/cancelled` signal: it is listened to
   only while the call waits and is never attached to the started
   invocation's cancel listener, so it cannot abort a read or a gate run
-  that started. The adapter sets it as the `signal` of the `Request` built
-  by `sdkRequest`; the handlers read `ctx.http?.req?.signal` and pass it to
-  the controller next to `ctx.mcpReq.signal`. Measured in the installed
+  that started. `serve` owns the disconnect controller and passes its
+  signal to `handle()` as an explicit parameter; `sdkRequest` sets it
+  directly as the `signal` of the SDK `Request`; the `toRequest` `Request`
+  carries none; the router keeps the SDK `Request` strongly referenced
+  until its response settles; the handlers read `ctx.http?.req?.signal` and
+  pass it to the controller next to `ctx.mcpReq.signal`. Reason, measured
+  in the dev container's Node v26.13.0 (2026-11-25, `node --expose-gc`,
+  one bounded script): a `Request` built from another `Request` follows
+  the parent's signal only while the parent is reachable; with the
+  intermediate `Request` dropped and `gc()` run five times, aborting the
+  original controller left the derived request's signal not aborted,
+  while a `Request` given the controller's signal directly and kept
+  referenced aborted. A two-hop chain (`toRequest` then `sdkRequest`) is
+  therefore GC-dependent and rejected. No GC-forcing AC is added: a forced
+  `gc()` does not guarantee collection, so such a test could pass on a
+  broken chain and cannot be made deterministic; AC-14 instead pins the
+  structure (explicit parameter, direct signal, no signal on the
+  `toRequest` request). The disconnect also listens on `req.socket`
+  `close`: a pipelined HTTP/1.1 request whose response does not own the
+  socket yet may never see its `ServerResponse` `close`, and the socket
+  listener is cheaper than excluding pipelined requests with a separate
+  rule; it is removed when the response settles, so kept-alive sockets do
+  not accumulate listeners. This reverses F-026 D-8 for queued calls; the
+  reversal is recorded here and in the CHANGELOG, and F-026 (closed) is not
+  edited. Measured in the installed
   `@modelcontextprotocol/server` 2.4.0 (read-only, dev container,
   2026-11-25): `WebStandardStreamableHTTPServerTransport.handlePostRequest`
   passes the request it received unchanged (`dist/index.mjs:500`) as
@@ -385,3 +436,25 @@ names cite their BR versions.
 - 73-spec-review-1-opus #7 (minor) — retained — Scope lists the controller
   parameter and the handlers that pass it; stdio passes none and is
   unchanged.
+- 73-spec-review-2-opus #1 (major) — retained — measured in Node v26.13.0
+  that a derived `Request` stops following its parent's signal once the
+  parent is collected; BR-166 v2, Scope and D-4 now fix the path: `serve`
+  creates the controller and passes its signal to `handle()`, `sdkRequest`
+  sets it directly, `toRequest` carries none, the router holds the SDK
+  request until its response settles; AC-14 pins the structure; no
+  GC-forcing AC (not deterministic, D-4).
+- 73-spec-review-2-opus #2 (minor) — retained — AC-06 adds an error at
+  t=59,999 (suppressed, count 3) and the post-rewind `emfile` error now
+  expects `{code:"other", suppressed:0}`.
+- 73-spec-review-2-opus #3 (minor) — retained — AC-08 adds a
+  `notifications/cancelled` case: `ctx.mcpReq.signal` aborts,
+  `ctx.http.req.signal` does not.
+- 73-spec-review-2-opus #4 (minor) — retained — BR-166 v2 also aborts on
+  `req.socket` `close` while the response is unfinished, with listeners
+  removed at settle; AC-14 tests a pipelined waiting call and listener
+  cleanup on a kept-alive socket.
+- 73-spec-review-2-opus #5 (minor) — retained — AC-13 requires each
+  request's entire header block under 16,384 bytes (repeated empty `x:`
+  lines).
+- 73-spec-review-2-opus #6 (minor) — retained — Scope no longer edits
+  F-026; the D-8 reversal is recorded only in D-4 and the CHANGELOG.
