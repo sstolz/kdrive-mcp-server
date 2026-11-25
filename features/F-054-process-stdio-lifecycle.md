@@ -37,8 +37,9 @@ The inspected composition has four gaps:
 
 [Node process observations](../docs/observations/node-process.md) records the
 supplied Node v26.13.0 measurements, not new measurements by this author.
-The supplied stdout probes reproduce this failure in three of three runs;
-the orchestrator extended this draft's scope after that measurement.
+The supplied pending-write-after-destroy stdout probe reproduces this failure
+in three of three runs; the orchestrator extended this draft's scope after
+that measurement.
 
 ## Scope
 
@@ -96,18 +97,21 @@ BR-447–BR-448 v1 are new allocations. Recheck IDs on main before freeze and PR
   returning dependencies to `main`, covering every `deps.stderr` write in both
   transports, including HTTP logger events.
   Verified by: AC-06, AC-07, AC-09, AC-10.
-- **BR-448 v1** — The process stream owner treats stderr EPIPE as unavailable
-  diagnostic delivery and every other non-flush stderr error as a latched
-  process failure. Errors from the helper's empty flush writes count only as
-  completion, retaining BR-254 v2 semantics. Stdout latches only for errors on MCP protocol frames written or
-  pending in stdio mode, including post-close EPIPE; the helper's empty flush
-  write is excluded and HTTP stdout never latches. No error payload is logged
-  or retained. Verified by: AC-06, AC-07, AC-08, AC-09, AC-10.
+- **BR-448 v1** — The process stream owner contains stderr EPIPE `error` events as
+  unavailable diagnostic delivery without changing the exit code. Every other
+  stderr `error` event latches process failure, whatever its origin, including
+  empty flush writes. The stdout latch is driven only by a protocol frame whose
+  write callback reports an error, issued by the stdio transport, including
+  callbacks after transport close. Stdout `error` events are only contained,
+  never latch; empty stdout flush writes and HTTP stdout never latch. No error
+  payload is logged or retained. Verified by: AC-06, AC-07, AC-08, AC-09, AC-10.
 - **BR-254 v3 (failure precedence)** — A close failure, unexpected stderr
   failure or stdio protocol-frame stdout failure observed before the exit
   primitive runs prevents a later success request or flush completion from selecting exit 0, without
   interrupting committed mutation drain. Verified by: AC-03, AC-04, AC-08,
-  AC-09, AC-10.
+  AC-09, AC-10. Owned closure considers only that session's own close outcome
+  for its status setter; process-level stream latches affect only dedicated
+  process exit, never a later owned session's status.
 
 BR-169 v4, BR-069 v2, BR-070 v5 and BR-426 v1 remain dependencies, not new
 versions: HTTP server close ordering, sanitized channels, stdio budgets and
@@ -133,7 +137,7 @@ Every BR-254 v2 clause is retained or replaced as follows:
 | First call fixes code/deadline; repeated calls cannot reset code/deadline | Replaced only for code: observed close failure, unexpected stderr failure or stdio protocol-frame stdout failure upgrades success to 1 before primitive exit; later success cannot downgrade 1. First deadline remains fixed. |
 | Set requested `process.exitCode`; arm ref'd timer before either empty stdout/stderr write behind queued output | Kept, with effective code upgraded to 1 on the qualifying failures above. |
 | Both stream completions race 250 ms from helper entry, capped at `max(0, min(250, shutdownDeadline - now()))` when supplied; exhausted budget exits immediately | Kept. |
-| Destroyed streams, error callbacks and synchronous write throws count as completion; flush errors never throw, emit unhandled errors or change code | Kept for the empty flush writes, including stdout on EOF and in HTTP mode. A distinct qualifying protocol-frame failure can upgrade code during this wait. |
+| Destroyed streams, error callbacks and synchronous write throws count as completion; flush errors never throw, emit unhandled errors or change code | Replaced only for non-EPIPE stderr `error` events: these latch failure even during empty flushing. Flush callback errors and synchronous throws remain completion-only; stdout `error` events and stderr EPIPE `error` events are contained without changing code. A distinct qualifying protocol-frame callback failure can upgrade code during this wait. |
 | Exactly one primitive exit; clear timer when streams win; ignore late callbacks/errors safely; repeated calls never write again | Kept. Failures observed before primitive exit can upgrade code; no post-exit observation is promised. |
 | Dedicated STDIO_OUTPUT_FAILED/STDIO_START_FAILED preserve 1; non-shutdown callers retain codes and 250 ms cap | Kept, subject to the explicit failure-upgrade rule above. HTTP stdout never latches. |
 | Queued output may be lost at cap or shorter stdio remainder | Kept. |
@@ -156,7 +160,8 @@ files and then Docker/Make `make check` during implementation, not authoring.
   Verified by: `TestBR254_unchanged_F016_AC21_AC01_dedicated_SIGTERM_drains_3000ms_mutation`
   in `tests/mutation-composition.test.ts`.
 - **AC-02** (unchanged BR-254, F-016 AC-21) — Given the same committed virtual mutator through
-  `runMain` with owned protocol streams and an observable status setter,
+  `main` via the `runMain` test seam with owned protocol streams and an
+  observable status setter,
   When its injected signal source emits SIGTERM, Then closure remains pending
   at 1,000 and 2,999 ms and settles only after outcome append and sink close at
   3,000 ms, with no call to the terminating exit port.
@@ -182,7 +187,9 @@ files and then Docker/Make `make check` during implementation, not authoring.
   contains neither diagnostic nor error payload. Include a row in both
   compositions where gate close resolves first while server close remains
   pending, then server close rejects: neither dedicated exit nor owned
-  `closed` settles early, and final status is 1.
+  `closed` settles early, and final status is 1. Add an owned-session row where
+  a process-level stderr failure latched earlier and a later owned session
+  closes cleanly: that session's setter reports 0, without terminating its host.
   Verified by: `TestBR254_v3_AC04_stdio_signal_close_rejection_is_contained`
   in `tests/mutation-composition.test.ts`.
 - **AC-05** (BR-262 v2) — Given the actual owned transport's send boundary and
@@ -208,7 +215,9 @@ files and then Docker/Make `make check` during implementation, not authoring.
   production-style dependencies that install both owners before entry: a
   broken stderr reader causes an observed EPIPE on a `deps.stderr` write
   (including an HTTP logger event), no crash, and subsequent SIGTERM exits 0.
-  An unexpected non-flush error latches failure 1 without keeping/logging its message, stack or other properties.
+  Any non-EPIPE stderr `error` event, including one from an empty flush write,
+  latches process failure 1 without keeping/logging its message, stack or other
+  properties.
   Verified by: `TestBR447_TestBR448_AC06_permanent_stderr_owner`
   in new `tests/process-stderr.test.ts`, and
   `TestBR447_AC06_extraction_diagnostic_after_session_close`
@@ -234,15 +243,19 @@ files and then Docker/Make `make check` during implementation, not authoring.
   Additional rows: dedicated stdio EOF shutdown with stdout reader closed
   and no pending protocol frame exits 0 even if the helper's empty stdout flush write errors;
   HTTP shutdown with a stdout error exits 0 absent another failure. Empty
-  flush callback errors, error events and synchronous throws count as stream
-  completion without changing the code in either mode.
+  flush callback errors and synchronous throws count as stream completion
+  without changing the code in either mode. Stdout `error` events never latch;
+  stderr EPIPE `error` events are contained without changing code, while
+  non-EPIPE stderr `error` events latch failure even from an empty flush write.
   Verified by: `TestBR254_v3_TestBR448_AC08_failure_survives_exit_flush`
   in `tests/cli.test.ts`, retaining F-039 AC-12 success/failure/late-event rows.
 - **AC-09** (BR-254 v3, BR-447 v1, BR-448 v1) — Given the dedicated stdio
   composition, the real transport and gate, a process stdout double retaining
-  a pending frame write through destroy(), and a committed 3,000 virtual ms
-  mutator with a healthy synthetic file audit sink, When SIGTERM closes the
-  transport and, during gate drain, the pending write callback receives EPIPE
+  a pending 256 KiB frame (including its newline, below byteLimit 1,048,576)
+  from the named synthetic tool `synthetic_large_result` through destroy(),
+  and a committed 3,000 virtual ms mutator with a healthy synthetic file audit
+  sink, When SIGTERM closes the transport before the frame's 1,000 ms write
+  bound expires and, during gate drain, the pending write callback receives EPIPE
   and the stream emits its asynchronous EPIPE error, Then no uncaught error or
   unhandled rejection occurs, the process remains up with exit unrequested at
   1,000 and 2,999 ms, and at 3,000 ms mutation success → successful outcome
@@ -250,19 +263,27 @@ files and then Docker/Make `make check` during implementation, not authoring.
   installation across two sessions leaves exactly one owner listener after
   both close; the transport listener may be removed independently. Repeat with
   a non-EPIPE stdout error and an already selected close failure: failure
-  remains 1, without error payloads or protocol retries. Verified by:
+  remains 1, without error payloads or protocol retries. In every row stderr
+  contains no `STDIO_OUTPUT_FAILED`, excluding the existing per-frame timeout
+  or transport failure path as the source of exit 1. Verified by:
   `TestBR254_v3_TestBR447_TestBR448_AC09_stdout_failure_during_drain`
   in `tests/mutation-composition.test.ts`.
 - **AC-10** (BR-254 v3, BR-447 v1, BR-448 v1) — Given a child running the
   dedicated stdio composition with real process.stdout, a parent pausing its
-  pipe reader, a pending 1 MiB frame write (write returned false and
-  writableLength is positive), and a committed mutator held at a synthetic
-  upstream response barrier with a healthy file audit sink, When the parent
-  sends SIGTERM to initiate transport closure, the child acknowledges transport closure and pending gate drain over IPC and the
-  parent then destroys the reader, Then the child acknowledges the contained
+  pipe reader, a pending 256 KiB frame (including its newline, below byteLimit
+  1,048,576 and larger than pipe capacity) from the named synthetic tool
+  `synthetic_large_result` (write returned false and writableLength is positive),
+  and a committed mutator held at a synthetic upstream response barrier with a
+  healthy file audit sink, When the parent
+  sends SIGTERM before the frame's 1,000 ms write bound expires to initiate
+  transport closure, the child acknowledges transport closure and pending gate
+  drain over IPC and the parent then destroys the reader, Then the child
+  acknowledges the contained
   EPIPE while still draining and before exit. After the parent releases the
   mutator, its successful outcome is recorded and the sink closes before the
-  actual child exits 1, with neither uncaught error nor unhandled rejection.
+  actual child exits 1, with neither uncaught error nor unhandled rejection
+  and no `STDIO_OUTPUT_FAILED` on stderr, excluding the existing per-frame
+  timeout or transport failure path as the source of exit 1.
   Verify ordered IPC milestones and the synthetic audit record; IPC barriers,
   not sleeps, establish pending write, transport close, EPIPE and release order.
   A bounded watchdog detects a stuck test. Verified by:
@@ -293,19 +314,21 @@ files and then Docker/Make `make check` during implementation, not authoring.
    fixed diagnostic; reporting it is best effort and cannot replace status 1.
 3. **Install process stream ownership lazily before built-in writes.** A
    shared process module exposes an owner factory over an injectable stream,
-   with failure state scoped to that owner. Production has one shared instance
-   per process stream, reused by writers, stdio and exit helpers; each test row
-   creates fresh owners/streams, so no process-global latch contaminates later
-   rows. `productionDependencies()` installs both owners before returning to
-   `main`, including HTTP mode's `deps.stderr` and logger writes;
+   with failure state scoped to that owner. A `WeakMap` keyed by stream object
+   identity resolves shared owners at call time through the `process.stdout`
+   and `process.stderr` getters, reused by writers, stdio and exit helpers.
+   Fresh stream objects in each test row therefore get fresh owners/latches;
+   reject module-level stream singletons, which bypass getter spies and leak
+   state across test rows. `productionDependencies()` installs both owners
+   before returning to `main`, including HTTP mode's `deps.stderr` and logger writes;
    importing modules alone does not attach listeners. Extraction admission,
    default stdio diagnostics and production stderr use that same owner before
    writing. Built-in protocol use of process.stdout installs its owner before
    transport writes, and production flushes ensure ownership of both streams.
    Installation is idempotent per stream for the process lifetime, including
    repeated sessions and exit-helper creation. Reject installation only in
-   `main`/`runMain`: embedded/default writers can run without that entry and
-   detached extraction outlives sessions. The owner never removes itself,
+   the `main` entry (`runMain` is only a test seam): embedded/default writers
+   can run without that entry and detached extraction outlives sessions. The owner never removes itself,
    ends/destroys either stream, retries, recursively logs, or throws from its
    error handler. Injected owned streams retain their transport ownership;
    they do not acquire process-lifetime listeners. Existing transport listeners
@@ -316,19 +339,27 @@ files and then Docker/Make `make check` during implementation, not authoring.
    production helper uses the permanent owners for both stdout and stderr,
    rather than installing another process-level error listener per helper.
    Flush completion can subscribe to the owners without owning/removing their
-   stream listeners. Empty-flush errors are completion-only on both streams;
-   unexpected stderr failure latching concerns other writes/errors. Stderr EPIPE alone means failed best-effort diagnostic
-   delivery and leaves an otherwise successful exit at 0. Only stdout errors
-   associated with written or pending MCP protocol frames in stdio mode latch
-   failure, including post-close EPIPE on a pending frame:
-   protocol delivery failed, even when the committed mutation succeeds and its
-   outcome is recorded. Latch that failure immediately without terminating
-   drain. The stdio shutdown-result layer in `src/stdio.ts` reads the owner
-   latch after server/gate/sink closure and selects 1 through the injected exit
-   port (observable in AC-09), or through the owned status setter. The production
-   exit helper also checks shared owner state until primitive exit to catch
-   qualifying failures during flush. Its own empty stdout flush errors count
-   only as completion; HTTP mode never enables stdout failure latching.
+   stream listeners. Stderr EPIPE `error` events are contained as unavailable
+   diagnostic delivery and leave an otherwise successful exit at 0. Any other
+   stderr `error` event latches process failure, whatever its origin, including
+   an empty flush write. Flush callback errors and synchronous throws count as
+   completion without changing code; stdout `error` events are only contained
+   and never latch. Only a protocol frame whose write callback reports an error,
+   issued by the stdio transport, drives the stdout latch, including callbacks
+   after close. Change the callback's early return at `src/stdio-transport.ts:235`:
+   notify the process stdout owner of an error before the `settled || closed`
+   guard, then retain the guard for transport settlement/failure handling.
+   Reject routing all frames through the owner: callback notification is the
+   narrower change and preserves transport write/queue ownership. Empty stdout
+   flush writes are excluded and HTTP stdout never latches.
+   Latch a qualifying failure immediately without terminating committed drain.
+   The dedicated stdio shutdown-result layer in `src/stdio.ts` reads the process
+   stream latches after server/gate/sink closure and selects 1 through the injected
+   exit port (observable in AC-09). Owned sessions have no process stdout owner;
+   their non-terminating status setter considers only their own close outcome,
+   ignoring the process-level stderr latch, including failures from earlier
+   sessions. The production exit helper also checks shared owner state until
+   primitive exit to catch qualifying failures during flush.
    Exit 1 only after the existing shutdown obligations settle.
    A previously selected failure remains 1, including a close or audit failure;
    a later success cannot overwrite it. Failure state takes precedence until
@@ -406,5 +437,29 @@ Spec review round 1 (`139-spec-review-1-opus`) produced these decisions:
 - **Finding 9 — retained.** AC-10 names parent-sent SIGTERM as the transport
   closure trigger, making the IPC ordering reproducible.
 
-No freeze or acceptance is claimed. All round-1 findings are resolved in this
-draft; independent approval remains a later orchestrator step.
+Spec review round 2 (`139-spec-review-2-opus`) produced these decisions:
+
+- **Finding 1 — retained.** BR-448, AC-06/AC-08 and D-4 classify stdout only
+  through stdio protocol-frame write callbacks, even after close; move owner
+  notification before the callback guard rather than routing frames through the
+  owner, preserving transport ownership. Stdout events are only contained.
+  Stderr EPIPE events never change code; all other stderr events latch,
+  including flush events. The BR-254 clause table records this replacement.
+- **Finding 2 — retained.** AC-09/AC-10 use a 256 KiB encoded frame including
+  newline from `synthetic_large_result`, below byteLimit and above pipe capacity
+  for the child probe. SIGTERM precedes its 1,000 ms bound and stderr must lack
+  `STDIO_OUTPUT_FAILED`, so the existing timeout cannot prove the new latch.
+- **Finding 3 — retained.** D-3 resolves owners through process getters at call
+  time, keyed by stream identity in a `WeakMap`; reject module-level stream
+  singletons to preserve getter-spy substitution and test-row isolation.
+- **Finding 4 — retained.** BR-254 and D-4 limit owned status to that session's
+  close outcome; process stderr latches affect only dedicated-process exit.
+  AC-04 adds earlier stderr failure followed by a clean owned close/status 0.
+- **Finding 5 — retained.** Node observations and Context distinguish the
+  once-run stdout listener/no-listener cases from the pending-write-after-destroy
+  probe's three identical runs, matching the supplied evidence.
+- **Finding 6 — retained.** AC-02 and D-3 name `main` as the entry and `runMain`
+  as its test seam; no production `runMain` entry is implied.
+
+No freeze or acceptance is claimed. All round-1 and round-2 findings are resolved
+in this draft; independent approval remains a later orchestrator step.

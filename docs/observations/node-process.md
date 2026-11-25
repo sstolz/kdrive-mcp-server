@@ -39,11 +39,11 @@ author.
 - Method: on Node v26.13.0 in the dev container, use a child process whose
   stdout is a pipe; the parent pauses its reader, then destroys it. Compare
   child writes without an `error` listener and with one listener installed.
-  Repeat each case three times.
-- Result: three of three runs per case were identical. Without a listener,
-  the write returns, an asynchronous EPIPE `error` is uncaught and the child
-  exits 1. With one listener, EPIPE is delivered to it, the child survives and
-  exits 0. This matches the stderr observations above.
+  Run each case once.
+- Result: in the single run without a listener, the write returns, an
+  asynchronous EPIPE `error` is uncaught and the child exits 1. In the single
+  run with one listener, EPIPE is delivered to it, the child survives and exits
+  0. This matches the stderr observations above.
 - Evidence: [139-probe-1-orchestrator](https://github.com/sstolz/kdrive-mcp-server/issues/139#issuecomment-7157090270).
 
 ## Pending stdout write after transport-style close
