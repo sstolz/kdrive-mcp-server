@@ -2923,13 +2923,15 @@ it.each(
           await vi.advanceTimersByTimeAsync(deadline - 1);
           expect(closed.settled).toBe(false);
           expect(exits).toEqual([]);
-          if (!row.includes("without-onclose"))
-            expect(order).toContain("sink-close");
+          // AC-04: gate/sink drain completes before the deadline and before exit.
+          expect(order).toContain("sink-close");
           await vi.advanceTimersByTimeAsync(1);
           await microtasks();
           expect(closed.settled).toBe(true);
-          if (row.includes("without-onclose"))
-            expect(order).toContain("sink-close");
+          if (order.includes("exit-1"))
+            expect(order.indexOf("sink-close")).toBeLessThan(
+              order.indexOf("exit-1"),
+            );
           rejectServer(Error("PRIVATE_AFTER_EXPIRY_CANARY"));
           await microtasks();
         }

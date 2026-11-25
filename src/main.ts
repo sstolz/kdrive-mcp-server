@@ -243,29 +243,18 @@ async function stdio(
     gate,
   });
   if (owned) {
-    let failed = false;
     const removeSignals = () => {
       deps.signals.off("SIGINT", stop);
       deps.signals.off("SIGTERM", stop);
     };
-    const closeFailure = () => {
-      if (!failed) {
-        failed = true;
-        deps.setExitCode?.(1);
-        try {
-          deps.stderr.write("PROCESS_CLOSE_FAILED\n");
-        } catch {
-          // Best effort; an owned composition never terminates its host.
-        }
-      }
-      removeSignals();
-    };
+    // BR-254 v3: `close()` and `closed` never reject; the stdio layer already
+    // selected status 1 and wrote PROCESS_CLOSE_FAILED once for a failed close.
     const stop = () => {
-      void started.close().then(removeSignals, closeFailure);
+      void started.close().then(removeSignals, removeSignals);
     };
     deps.signals.on("SIGINT", stop);
     deps.signals.on("SIGTERM", stop);
-    void started.closed.then(removeSignals, closeFailure);
+    void started.closed.then(removeSignals, removeSignals);
   }
   await started.ready;
   return Object.freeze({ close: () => started.close() });
