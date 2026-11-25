@@ -51,7 +51,12 @@ Stdio is unaffected.
 - Keep a post-bind `error` listener with a bounded, payload-free diagnostic
   (BR-444, BR-167 v4).
 - Carry an HTTP disconnect signal to the SDK request (BR-166 v2) and use it
-  to cancel queued, not-yet-started invocations (BR-445).
+  to cancel queued, not-yet-started invocations (BR-445). The navigation
+  controller's `invoke`, `invokeMutation` and `readResource`
+  (`src/navigation.ts`) gain an optional disconnect-signal parameter, read
+  by the tool, mutation, resource-template and custom `resources/read`
+  handlers from the SDK context (D-4). Stdio passes none, so stdio
+  behaviour is unchanged.
 - Pin `maxHeadersCount` and refuse more than 100 header lines with 431
   (BR-169 v4, BR-446, BR-167 v4).
 - Records: `CHANGELOG.md` `## [Unreleased]` lines citing #73; the F-012
@@ -79,11 +84,14 @@ These are deltas: each previous version otherwise holds. New IDs
 BR-443–BR-446 are allocated to this draft.
 
 - **BR-164 v2** — v1 holds, plus: when the SDK transport's handling of an
-  `initialize` request throws or rejects after its `onsessioninitialized`
-  callback registered the session, the router closes that session with
-  reason `initialize_failed` (closing its transport and `McpServer`) before
-  it answers, and answers HTTP-layer error 500 `server_error`; the session
-  no longer counts toward the 8 or 64 bounds and its ID yields 404. A
+  `initialize` request, after its `onsessioninitialized` callback registered
+  the session, either throws or rejects, or resolves with a response whose
+  status is outside 200–299, the router closes that session with reason
+  `initialize_failed` (closing its transport and `McpServer`) before it
+  answers, and answers HTTP-layer error 500 `server_error` (the SDK's
+  response body is discarded); the session no longer counts toward the 8 or
+  64 bounds and its ID yields 404. A session that another reason already
+  closed is not closed again and is answered as under v1. A
   `DELETE` whose SDK handling is in flight when its session closes for a
   reason other than that DELETE settles at once with BR-164's 503
   `temporarily_unavailable` without `Retry-After`, without waiting on the
@@ -93,8 +101,10 @@ BR-443–BR-446 are allocated to this draft.
   opens a new window for a key (no window for that key, or its window has
   ended: `now >= start + windowMs`), first removes every entry whose window
   has ended at `now`; a `take` that counts into or refuses from a live
-  window removes nothing. After any `take`, the limiter holds only entries
-  whose window is live at that `take`'s `now`. Pruning changes no
+  window removes nothing. After a `take` that opens a window, the limiter
+  holds only entries whose window is live at that `take`'s `now`; after a
+  `take` that counts into or refuses from a live window, the entry count is
+  unchanged. Pruning changes no
   admission or `Retry-After` result of BR-161 or BR-325. An aggregate
   `size` accessor (test evidence only, exposing no key) reports the entry
   count. Verified by: AC-04, AC-05.
@@ -109,7 +119,12 @@ BR-443–BR-446 are allocated to this draft.
   previous `listener_error`, `0` for the first). At most one
   `listener_error` is emitted per 60,000 ms of the handler clock: an error
   less than 60,000 ms after the last emitted `listener_error` is only
-  counted. A logger that throws changes nothing. A bind error before the
+  counted. The window is measured from the last emit attempt: an attempt
+  starts a new 60,000 ms window and resets the suppressed count to `0`
+  whether or not the logger throws; a throwing logger otherwise changes
+  nothing. When the clock reads earlier than the last emit attempt
+  (negative elapsed time), the elapsed time counts as 60,000 ms or more and
+  the event is emitted. A bind error before the
   listener is bound still yields `LISTEN_FAILED` (BR-153). Verified by:
   AC-06, AC-07.
 - **BR-166 v2** — v1 holds, plus: the request given to the SDK transport
@@ -118,7 +133,11 @@ BR-443–BR-446 are allocated to this draft.
   completely written (the `ServerResponse` `close` event with
   `writableFinished` false); it never aborts after the response was
   written, and it never carries `Authorization`, `Cookie` or `authInfo`.
-  Verified by: AC-08.
+  Handlers read that signal only from the SDK context field `ctx.http.req`
+  (the request given to the transport); it is distinct from, and never
+  linked to, `ctx.mcpReq.signal`, so a disconnect does not abort
+  `ctx.mcpReq.signal`, and a `notifications/cancelled` does not abort the
+  disconnect signal. Verified by: AC-08.
 - **BR-445** — A tool call, resource read or `mutate` call carried by an
   HTTP request is *started* once it holds its controller's slot: the
   BR-383 `start` step has run, which sets its invocation deadline (BR-384),
@@ -130,7 +149,9 @@ BR-443–BR-446 are allocated to this draft.
   `-32000`), with zero kDrive requests, zero dependency calls and zero
   audit records (no intent appended); its wait timer and listeners are
   removed, and the calls behind it keep their order and move up (as
-  BR-385). A call that has started is unaffected by the disconnect: it
+  BR-385). The disconnect listener is removed in the same BR-383 step in
+  which the call takes the slot, so it is never attached while the call
+  runs. A call that has started is unaffected by the disconnect: it
   runs until it settles under its existing bounds, a gate run keeps every
   BR-258 v2 and BR-250 semantics, including a committed write and its
   audit outcome, and its result is discarded by the adapter. A disconnect
@@ -171,9 +192,15 @@ names cite their BR versions.
   one `session_closed` with `reason` `initialize_failed` and the decremented
   `count` was emitted before the response, the transport and server were
   closed, a request with that session ID gets 404, and 8 further
-  `initialize` calls of that identity evict nothing. Verified by:
-  `tests/http/sessions.test.ts` "BR-164 v2 BR-167 v4 AC-01 closes a
-  registered session when initialize handling throws".
+  `initialize` calls of that identity evict nothing; and Given the real SDK
+  transport answering a registered `initialize` with its own 500 (its
+  `_checkScopeChallenge` step made to reject, SDK `index.mjs:549-553`),
+  Then the same holds: the router answers 500 `server_error` with no SDK
+  body, `session_closed` `initialize_failed` is emitted, and the ID yields
+  404. Verified by: `tests/http/sessions.test.ts` "BR-164 v2 BR-167 v4
+  AC-01 closes a registered session when initialize handling throws" and
+  "BR-164 v2 AC-01 closes a registered session when the SDK answers
+  initialize with a non-2xx status".
 - **AC-02** (BR-164 v2) — Given 64 sessions of which one is created by a
   throwing `initialize` as in AC-01, When a 65th `initialize` arrives, Then
   it is admitted (the failed session freed its slot). Verified by:
@@ -189,8 +216,9 @@ names cite their BR versions.
   held DELETE when its session closes for another reason".
 - **AC-04** (BR-443) — Given a `WindowLimiter` (limit 120, 60,000 ms) with
   windows for keys A and B opened at t=0, When key C takes at t=60,000,
-  Then `size` is 1; and When A takes at t=59,999 (live window), Then
-  nothing is removed. Verified by: `tests/http/rate-limits.test.ts`
+  Then `size` is 1; and Given a fresh limiter where A takes at t=0 and B at
+  t=30,000, When B takes at t=60,000 (A's window has ended, B's is live),
+  Then `size` is still 2. Verified by: `tests/http/rate-limits.test.ts`
   "BR-443 AC-04 prunes ended windows only when a new window opens".
 - **AC-05** (BR-443, BR-161) — Given 1,000 distinct keys each taking once
   at successive times spanning more than 60,000 ms, When each take
@@ -204,13 +232,18 @@ names cite their BR versions.
   stays up, a following MCP request is answered, the first error emits
   `listener_error` `{code:"EMFILE", suppressed:0}`, the others within
   60,000 ms emit nothing, and an `ENFILE` error at 60,000 ms after the
-  first emits `{code:"ENFILE", suppressed:2}`; no event
-  field holds a message, address or stack. Verified by:
+  first emits `{code:"ENFILE", suppressed:2}`; and When the clock then
+  reads 1,000 ms before that last emit and an `EMFILE` error follows, Then
+  it is emitted with `suppressed:0`; no event field holds a message,
+  address or stack. Verified by:
   `tests/http/startup.test.ts` "BR-444 BR-167 v4 AC-06 logs accept-time
   errors once per minute and keeps serving".
 - **AC-07** (BR-444) — Given a logger whose `event` throws, and a custom
   `ListenPort`, When the server emits `error` after bind, Then nothing
-  throws and the server keeps answering; and Given a port in use, Then
+  throws and the server keeps answering, and a second error 1 ms later is
+  suppressed (the throwing attempt started the window) and counted as
+  `suppressed:1` in the next `listener_error` 60,000 ms after that attempt,
+  emitted to a logger that no longer throws; and Given a port in use, Then
   startup still fails with `LISTEN_FAILED`. Verified by:
   `tests/http/startup.test.ts` "BR-444 AC-07 contains a throwing logger and
   keeps LISTEN_FAILED before bind".
@@ -219,19 +252,28 @@ names cite their BR versions.
   destroys its connection, Then the request the SDK saw carried no
   `Authorization`, `Cookie` or `authInfo`, its signal aborted, the waiting
   call returned `ACCESS_DENIED` with zero kDrive requests and zero audit
-  records, and a request whose response was fully written never sees its
-  signal abort. Verified by: `tests/http/disconnect.test.ts` "BR-166 v2
-  BR-445 AC-08 a disconnect cancels a waiting call".
+  records, a held tool handler observes `ctx.http.req.signal` aborted while
+  its `ctx.mcpReq.signal` stays not aborted, and a request whose response
+  was fully written never sees its signal abort; and Given a resource read
+  through the custom `resources/read` handler waiting the same way, When
+  its client disconnects, Then it is answered protocol error `-32000`
+  `ACCESS_DENIED` with zero kDrive requests, and the waiter's disconnect
+  listener count is 0 once a call takes the slot. Verified by:
+  `tests/http/disconnect.test.ts` "BR-166 v2 BR-445 AC-08 a disconnect
+  cancels a waiting call".
 - **AC-09** (BR-445) — Given a `mutate` call waiting behind a held read,
   When its client disconnects, Then the mutation never runs: zero intent,
   zero kDrive requests, zero audit records, and the next waiter takes the
   slot in order. Verified by: `tests/http/disconnect.test.ts` "BR-445 AC-09
   a disconnect cancels a queued write before intent".
-- **AC-10** (BR-445) — Given a started read and, separately, a started
-  gate run that has appended its intent, When their clients disconnect,
-  Then the read runs to completion with its kDrive requests, and the gate
-  run commits its write and appends its audit outcome as without a
-  disconnect; nothing is written to the closed connection. Verified by:
+- **AC-10** (BR-445) — Given a started read; separately, a started gate
+  run that has appended its intent; and separately, a started gate run held
+  in a pre-intent `dispatch` step (slot taken, no intent appended yet),
+  When their clients disconnect, Then the read runs to completion with its
+  kDrive requests, both gate runs append their intent, commit their write
+  and append their audit outcome as without a disconnect (the pre-intent
+  run's BR-250 `interrupted` check never reports `CANCELLED`), and nothing
+  is written to the closed connections. Verified by:
   `tests/http/disconnect.test.ts` "BR-445 AC-10 a started invocation runs to
   completion after a disconnect".
 - **AC-11** (BR-445) — Given a waiting call, When the slot is released and
@@ -272,16 +314,43 @@ names cite their BR versions.
   decision); logging every event (an `EMFILE` storm repeats per accept
   attempt and would flood the log).
 - **D-4 — The disconnect signal reaches only the queue (owner decision
-  2026-11-25).** The disconnect is a separate signal from the SDK's
-  `notifications/cancelled` signal: it is listened to only while the call
-  waits and is never attached to the started invocation's cancel listener,
-  so it cannot abort a read or a gate run that started. The implementation
-  carries it on the SDK `Request` (`signal`) and passes it to the
-  controller next to the existing signal; whether the SDK also links the
-  `Request` signal to its own request signal is pinned by AC-10 (a started
-  call must survive the disconnect). Rejected: cancelling started reads too
-  (owner decision); keeping F-026 D-8 (a queued write would run for a gone
-  client).
+  2026-11-25), through `ctx.http.req`.** The disconnect is a separate
+  signal from the SDK's `notifications/cancelled` signal: it is listened to
+  only while the call waits and is never attached to the started
+  invocation's cancel listener, so it cannot abort a read or a gate run
+  that started. The adapter sets it as the `signal` of the `Request` built
+  by `sdkRequest`; the handlers read `ctx.http?.req?.signal` and pass it to
+  the controller next to `ctx.mcpReq.signal`. Measured in the installed
+  `@modelcontextprotocol/server` 2.4.0 (read-only, dev container,
+  2026-11-25): `WebStandardStreamableHTTPServerTransport.handlePostRequest`
+  passes the request it received unchanged (`dist/index.mjs:500`) as
+  `request` to `onmessage` (`:571-574`, `:616-620`); `buildContext` puts it
+  on `ctx.http.req` (`dist/mcp-oHn3ureC.mjs:931-933`), typed
+  `req?: globalThis.Request` (`dist/mcp-BCJHyo7l.d.mts:2254`);
+  `ctx.mcpReq.signal` is a fresh `AbortController` per request
+  (`dist/src-DdvbAHrR.mjs:6518-6531`), aborted only by
+  `notifications/cancelled` (`:6350`) and transport close (`:6427-6436`),
+  never from the request's signal; and the transport reads no
+  `req.signal` (only the unused stateless handler does, `index.mjs:871`).
+  The field is therefore clean and unlinked; AC-08 pins both facts, so an
+  SDK upgrade that moves or links it fails the gate. Rejected: a
+  per-session map keyed by JSON-RPC id set before `handleRequest`
+  (SDK-independent, but more state and a duplicate-id case to define; kept
+  as the fallback if AC-08 fails after an SDK upgrade); cancelling started
+  reads too (owner decision); keeping F-026 D-8 (a queued write would run
+  for a gone client).
+- **D-6 — A non-2xx `initialize` after registration is a failure.**
+  Measured in the same SDK source: after `onsessioninitialized`
+  (`dist/index.mjs:539`) the transport catches its own failures and
+  resolves non-2xx responses instead of throwing: 404 `-32001` when closed
+  (`:547`), 500 `-32603` when `_checkScopeChallenge` throws (`:549-553`),
+  and 400 `-32700` with `data: String(error)` for any other caught error
+  (`:636-638`). The router today returns such a response as-is once the
+  session is registered, so the session would leak. BR-164 v2 closes it
+  and answers 500 `server_error`, which also keeps the SDK's
+  `String(error)` out of the response. Rejected: forwarding the SDK
+  response (leaks the session and possibly error text); excluding the case
+  (it is reachable in the installed SDK).
 - **D-5 — Count header lines from `rawHeaders` with `maxHeadersCount` 101.**
   Node truncates beyond `maxHeadersCount`, so a limit of 101 guarantees a
   request over 100 lines shows 101 pairs; the 16,384-byte limit still
@@ -293,3 +362,26 @@ names cite their BR versions.
 ## Open questions
 
 ## Stress-test
+
+- 73-spec-review-1-opus #1 (major) — retained — BR-166 v2 and D-4 name the
+  channel `ctx.http.req.signal`, measured in SDK 2.4.0 as passed unchanged
+  and unlinked to `ctx.mcpReq.signal`; AC-08 pins both; the per-session map
+  is recorded as the rejected fallback.
+- 73-spec-review-1-opus #2 (major) — retained — AC-10 adds a started gate
+  run held before its intent append; it must append intent, commit and
+  audit as without a disconnect.
+- 73-spec-review-1-opus #3 (major) — retained — BR-443's invariant is
+  limited to a `take` that opens a window; AC-04's second case uses a fresh
+  limiter (A at 0, B at 30,000, B again at 60,000, `size` 2).
+- 73-spec-review-1-opus #4 (minor) — retained — the SDK source shows
+  non-2xx answers after registration (D-6); BR-164 v2 closes the session
+  on them too and answers 500; AC-01 adds a real-SDK case.
+- 73-spec-review-1-opus #5 (minor) — retained — BR-444: an emit attempt
+  starts the window even when the logger throws; negative elapsed time
+  counts as 60,000 ms or more; AC-06 and AC-07 cover both.
+- 73-spec-review-1-opus #6 (minor) — retained — BR-445 removes the
+  disconnect listener in the BR-383 slot-take step; AC-08 adds a custom
+  `resources/read` case (`-32000`) and the listener count.
+- 73-spec-review-1-opus #7 (minor) — retained — Scope lists the controller
+  parameter and the handlers that pass it; stdio passes none and is
+  unchanged.
