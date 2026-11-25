@@ -2,7 +2,7 @@
 
 ## Provisional — HTTP lifecycle hardening
 
-[F-053 v1](features/F-053-http-lifecycle-hardening.md) (#73),
+[F-053 v2](features/F-053-http-lifecycle-hardening.md) (#73),
 [BR-164 v2](business-rules/BR-164.md), [BR-166 v2](business-rules/BR-166.md),
 [BR-167 v4](business-rules/BR-167.md), [BR-169 v4](business-rules/BR-169.md)
 and [BR-443 v1](business-rules/BR-443.md), [BR-444 v1](business-rules/BR-444.md),

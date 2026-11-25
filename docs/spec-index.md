@@ -91,7 +91,7 @@ override the current Docker-only development contract.
 | F-043 | #67       | `features/F-043-queue-changelog-release-sections.md`    | Done v1, accepted on main f72a15b (2026-11-15); BR-387 v2 active; no new BR or ADR                                                                                                                                                                                                                                                                       |
 | F-051 | #77       | `features/F-051-transport-edge-cases.md`                | Done v1, accepted on main b249860 (2026-11-24); BR-438/439 v1 and BR-216/268 v3 active; separate read-deadline decision remains open on #77                                                                                                                                                                                                              |
 | F-052 | #72       | `features/F-052-oauth-qualification-proxy-hardening.md` | Done v1, accepted on main 019f0f5 (2026-11-25); BR-440–BR-442 v1, BR-096/103/127 v2, BR-143 v5 and BR-306/394 v3 active                                                                                                                                                                                                                                  |
-| F-053 | #73       | `features/F-053-http-lifecycle-hardening.md`            | Frozen v1; BR-443–BR-446 v1, BR-164/166 v2 and BR-167/169 v4 pending acceptance                                                                                                                                                                                                                                                                          |
+| F-053 | #73       | `features/F-053-http-lifecycle-hardening.md`            | Frozen v2 (v1 in history); BR-443–BR-446 v1, BR-164/166 v2 and BR-167/169 v4 pending acceptance                                                                                                                                                                                                                                                          |
 
 Version history: [v1 immutable snapshot](../features/history/F-001-v1.md),
 [v2 immutable snapshot](../features/history/F-001-v2.md),
@@ -315,13 +315,13 @@ to v3. F-052 v1 is done, accepted on main `019f0f5` on 2026-11-25
 Previous accepted versions are preserved as superseded history. No ADR is allocated.
 Next free IDs after F-052 were **F-053, BR-443, ADR-013**.
 
-Issue #73 allocates [F-053 v1](../features/F-053-http-lifecycle-hardening.md)
+Issue #73 allocates [F-053 v2](../features/F-053-http-lifecycle-hardening.md)
 and [BR-443](../business-rules/BR-443.md), [BR-444](../business-rules/BR-444.md),
 [BR-445](../business-rules/BR-445.md) and [BR-446](../business-rules/BR-446.md)
 v1. It versions [BR-164](../business-rules/BR-164.md) and
 [BR-166](../business-rules/BR-166.md) to v2 and
 [BR-167](../business-rules/BR-167.md) and [BR-169](../business-rules/BR-169.md)
-to v4. F-053 v1 is frozen; all eight rule versions are pending acceptance.
+to v4. F-053 v2 is frozen (v1 in `features/history/F-053-v1.md`); all eight rule versions are pending acceptance.
 Its D-4 reverses F-026 D-8 for queued calls that have not started; F-026
 (closed) is not edited. No ADR is allocated.
 Next free IDs: **F-054, BR-447, ADR-013**.

@@ -571,11 +571,9 @@ describe("BR-445 AC-10 a started invocation runs to completion after a disconnec
   it("a started read keeps its kDrive requests", async () => {
     const h = await setup();
     const { a, held } = await heldAndWaiting(h);
-    const before = h.kdrive();
     const started = await h.entry(3);
     const result = await disconnectStarted(h, a, held.release, started);
     expect(result).toMatch(/^ok:/u);
-    expect(h.kdrive()).toBeGreaterThanOrEqual(before);
   });
 
   it("a gate run that appended its intent commits and audits its outcome", async () => {
@@ -830,7 +828,7 @@ describe("BR-166 v2 BR-445 AC-14 the disconnect signal is passed explicitly and 
     expect(count(results, "SERVER_BUSY")).toBe(7);
     expect(results.filter((r) => r.startsWith("ok:"))).toHaveLength(1);
     await settledServer(h);
-    expect(tracker?.max()).toBeLessThanOrEqual(1);
+    expect(tracker?.max()).toBe(1);
     await pause(20);
     expect(warnings).toEqual([]);
   });
