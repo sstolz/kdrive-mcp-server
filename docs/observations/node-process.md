@@ -13,7 +13,7 @@ author.
   callback to `process.stderr.write(data, cb)`.
 - Result: write returns normally, then an asynchronous EPIPE `error` event is
   uncaught and the process exits 1. The write callback does not prevent this.
-- Evidence: orchestrator probe, ticket #139.
+- Evidence: [Earlier stderr/close probes](https://github.com/sstolz/kdrive-mcp-server/issues/139#issuecomment-7156888846).
 
 ## Closed stderr pipe with one error listener
 
@@ -22,7 +22,7 @@ author.
   attempt later writes as well.
 - Result: every later write emits an EPIPE `error` event to the listener; the
   process keeps running and exits 0.
-- Evidence: orchestrator probe, ticket #139.
+- Evidence: [Earlier stderr/close probes](https://github.com/sstolz/kdrive-mcp-server/issues/139#issuecomment-7156888846).
 
 ## Unhandled close rejection
 
@@ -31,7 +31,7 @@ author.
   async function that rejects through `void close().then(exit0)`, without a
   rejection handler.
 - Result: Node prints the rejection's stack trace to stderr and exits 1.
-- Evidence: orchestrator probe, ticket #139.
+- Evidence: [Earlier stderr/close probes](https://github.com/sstolz/kdrive-mcp-server/issues/139#issuecomment-7156888846).
 
 ## Closed stdout pipe with and without an error listener
 
@@ -44,7 +44,7 @@ author.
   the write returns, an asynchronous EPIPE `error` is uncaught and the child
   exits 1. With one listener, EPIPE is delivered to it, the child survives and
   exits 0. This matches the stderr observations above.
-- Evidence: orchestrator probe, ticket #139.
+- Evidence: [139-probe-1-orchestrator](https://github.com/sstolz/kdrive-mcp-server/issues/139#issuecomment-7157090270).
 
 ## Pending stdout write after transport-style close
 
@@ -62,4 +62,4 @@ author.
   Removing the transport listener therefore leaves pending stdout errors
   uncontained after transport close, including while the mutation gate drains
   before production exit flushing installs its listener.
-- Evidence: orchestrator probe, ticket #139.
+- Evidence: [139-probe-1-orchestrator](https://github.com/sstolz/kdrive-mcp-server/issues/139#issuecomment-7157090270).
