@@ -2,11 +2,14 @@
 id: F-052
 title: OAuth qualification and proxy hardening
 ticket: "#72"
-status: frozen
+status: done
 version: 1
 ---
 
 ## Context
+
+This version was accepted on main `019f0f5` on 2026-11-25
+([#72 acceptance](https://github.com/sstolz/kdrive-mcp-server/issues/72#issuecomment-7147678234)).
 
 The qualification operator and clients using the OAuth proxy encounter five
 edge cases in F-008, F-010 and F-033: conflicting discovery endpoints,

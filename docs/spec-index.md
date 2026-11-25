@@ -90,7 +90,7 @@ override the current Docker-only development contract.
 | F-042 | #42       | `features/F-042-mcp-tool-descriptions.md`               | Done v1, accepted on main 3b035b8 (2026-11-15); BR-428–BR-430 v1 active; no ADR                                                                                                                                                                                                                                                                          |
 | F-043 | #67       | `features/F-043-queue-changelog-release-sections.md`    | Done v1, accepted on main f72a15b (2026-11-15); BR-387 v2 active; no new BR or ADR                                                                                                                                                                                                                                                                       |
 | F-051 | #77       | `features/F-051-transport-edge-cases.md`                | Done v1, accepted on main b249860 (2026-11-24); BR-438/439 v1 and BR-216/268 v3 active; separate read-deadline decision remains open on #77                                                                                                                                                                                                              |
-| F-052 | #72       | `features/F-052-oauth-qualification-proxy-hardening.md` | Frozen v1; BR-440–BR-442 v1, BR-096/103/127 v2, BR-143 v5 and BR-306/394 v3 pending acceptance                                                                                                                                                                                                                                                           |
+| F-052 | #72       | `features/F-052-oauth-qualification-proxy-hardening.md` | Done v1, accepted on main 019f0f5 (2026-11-25); BR-440–BR-442 v1, BR-096/103/127 v2, BR-143 v5 and BR-306/394 v3 active                                                                                                                                                                                                                                  |
 
 Version history: [v1 immutable snapshot](../features/history/F-001-v1.md),
 [v2 immutable snapshot](../features/history/F-001-v2.md),
@@ -309,7 +309,7 @@ It versions [BR-096](../business-rules/BR-096.md),
 [BR-103](../business-rules/BR-103.md) and [BR-127](../business-rules/BR-127.md)
 to v2, [BR-143](../business-rules/BR-143.md) to v5, and
 [BR-306](../business-rules/BR-306.md) and [BR-394](../business-rules/BR-394.md)
-to v3. F-052 v1 is frozen; all nine new rule versions are pending acceptance.
-Previous accepted versions remain accepted; no new capability or actual-main
-verification is established. No ADR is allocated.
+to v3. F-052 v1 is done, accepted on main `019f0f5` on 2026-11-25
+([#72 acceptance](https://github.com/sstolz/kdrive-mcp-server/issues/72#issuecomment-7147678234)); all nine rule versions are active.
+Previous accepted versions are preserved as superseded history. No ADR is allocated.
 Next free IDs: **F-053, BR-443, ADR-013**.
