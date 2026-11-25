@@ -43,7 +43,7 @@ author.
 - Result: in the single run without a listener, the write returns, an
   asynchronous EPIPE `error` is uncaught and the child exits 1. In the single
   run with one listener, EPIPE is delivered to it, the child survives and exits 0. This matches the stderr observations above.
-- Evidence: [139-probe-1-orchestrator](https://github.com/sstolz/kdrive-mcp-server/issues/139#issuecomment-7157090270).
+- Evidence: [139-probe-1-orchestrator](https://github.com/sstolz/kdrive-mcp-server/issues/139#issuecomment-7157090270), repeat counts in its [amendment](https://github.com/sstolz/kdrive-mcp-server/issues/139#issuecomment-7157327883).
 
 ## Pending stdout write after transport-style close
 
@@ -61,4 +61,4 @@ author.
   Removing the transport listener therefore leaves pending stdout errors
   uncontained after transport close, including while the mutation gate drains
   before production exit flushing installs its listener.
-- Evidence: [139-probe-1-orchestrator](https://github.com/sstolz/kdrive-mcp-server/issues/139#issuecomment-7157090270).
+- Evidence: [139-probe-1-orchestrator](https://github.com/sstolz/kdrive-mcp-server/issues/139#issuecomment-7157090270), repeat counts in its [amendment](https://github.com/sstolz/kdrive-mcp-server/issues/139#issuecomment-7157327883).

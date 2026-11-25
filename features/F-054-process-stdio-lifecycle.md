@@ -2,7 +2,7 @@
 id: F-054
 title: Close process and stdio lifecycle gaps
 ticket: "#139"
-status: draft
+status: ready-for-freeze
 version: 1
 ---
 
@@ -252,7 +252,9 @@ files and then Docker/Make `make check` during implementation, not authoring.
 - **AC-09** (BR-254 v3, BR-447 v1, BR-448 v1) — Given the dedicated stdio
   composition, the real transport and gate, a process stdout double retaining
   a pending 256 KiB frame (including its newline, below byteLimit 1,048,576)
-  from the named synthetic tool `synthetic_large_result` through destroy(),
+  from the named synthetic tool `synthetic_large_result` (a test fixture
+  registered only in the AC-09 test composition and the AC-10 child fixture,
+  never in a production tool list) through destroy(),
   and a committed 3,000 virtual ms mutator with a healthy synthetic file audit
   sink, When SIGTERM closes the transport before the frame's 1,000 ms write
   bound expires and, during gate drain, the pending write callback receives EPIPE
@@ -274,8 +276,9 @@ files and then Docker/Make `make check` during implementation, not authoring.
   1,048,576 and larger than pipe capacity) from the named synthetic tool
   `synthetic_large_result` (write returned false and writableLength is positive),
   and a committed mutator held at a synthetic upstream response barrier with a
-  healthy file audit sink, When the parent
-  sends SIGTERM before the frame's 1,000 ms write bound expires to initiate
+  healthy file audit sink, the child acknowledging over IPC right after that
+  write() returns false, When the parent sends SIGTERM as soon as that
+  acknowledgment arrives, before the frame's 1,000 ms write bound expires, to initiate
   transport closure, the child acknowledges transport closure and pending gate
   drain over IPC and the parent then destroys the reader, Then the child
   acknowledges the contained
@@ -286,7 +289,8 @@ files and then Docker/Make `make check` during implementation, not authoring.
   timeout or transport failure path as the source of exit 1.
   Verify ordered IPC milestones and the synthetic audit record; IPC barriers,
   not sleeps, establish pending write, transport close, EPIPE and release order.
-  A bounded watchdog detects a stuck test. Verified by:
+  A bounded watchdog detects a stuck test. A `STDIO_OUTPUT_FAILED` on stderr is
+  reported as a harness timing failure, never as a pass. Verified by:
   `TestBR254_v3_TestBR447_TestBR448_AC10_pending_stdout_pipe_drain`
   in `tests/mutation-composition.test.ts`.
 
@@ -347,8 +351,10 @@ files and then Docker/Make `make check` during implementation, not authoring.
    and never latch. Only a protocol frame whose write callback reports an error,
    issued by the stdio transport, drives the stdout latch, including callbacks
    after close. Change the callback's early return at `src/stdio-transport.ts:235`:
-   notify the process stdout owner of an error before the `settled || closed`
-   guard, then retain the guard for transport settlement/failure handling.
+   notify, before the `settled || closed` guard, the owner registered in the
+   owner `WeakMap` for the transport's own `output` stream identity (never
+   resolved through the `process.stdout` getter; a no-op for injected owned
+   streams, which have no registered owner), then retain the guard for transport settlement/failure handling.
    Reject routing all frames through the owner: callback notification is the
    narrower change and preserves transport write/queue ownership. Empty stdout
    flush writes are excluded and HTTP stdout never latches.
@@ -461,5 +467,18 @@ Spec review round 2 (`139-spec-review-2-opus`) produced these decisions:
 - **Finding 6 — retained.** AC-02 and D-3 name `main` as the entry and `runMain`
   as its test seam; no production `runMain` entry is implied.
 
-No freeze or acceptance is claimed. All round-1 and round-2 findings are resolved
-in this draft; independent approval remains a later orchestrator step.
+### 139-spec-review-3-opus (diff-only confirmation, approve)
+
+- **Minor 1 — retained.** AC-09 states that `synthetic_large_result` is a test
+  fixture registered only in the AC-09 and AC-10 test compositions, never in a
+  production tool list.
+- **Minor 2 — retained.** D-4 resolves the stdout owner from the owner `WeakMap`
+  by the transport's own `output` stream identity, never through the
+  `process.stdout` getter; injected owned streams have no owner.
+- **Minor 3 — retained.** The probe evidence comment was amended with repeat
+  counts (stdout listener cases once each; pending-write probe 3/3).
+- **Minor 4 — retained.** AC-10 acknowledges right after `write()` returns false,
+  the parent sends SIGTERM on that acknowledgment, and a `STDIO_OUTPUT_FAILED`
+  is a harness timing failure, never a pass.
+
+No freeze or acceptance is claimed in this section.
