@@ -2,7 +2,7 @@
 id: F-053
 title: HTTP lifecycle hardening
 ticket: "#73"
-status: draft
+status: frozen
 version: 2
 ---
 
@@ -469,8 +469,14 @@ names cite their BR versions.
   strongest-tier pass measured the cost of the first v2 choice. Rejected:
   `maxHeadersCount` 0 (every refusal in our shape, but on Node v26.13.0
   about 340 KB of heap per unauthenticated connection holding 16,300
-  unterminated lines: +84.7 MB for 250 connections against +0.7 MB with
-  101 or 2,000); `maxHeadersCount` 100 (every refusal silent and unlogged);
+  unterminated lines: +84.7 MB for 250 connections, where a 101 or 2,000
+  cap makes Node close those connections, +0.7 MB). Accepted residual of
+  the 2,000 cap (73-spec-v2-decision-2-fable, Node v26.13.0): 250
+  connections each holding 2,000 unterminated lines stay open and cost
+  +12.0 MB of heap with empty values and +23.1 MB with 6-byte values (other
+  shapes not tried), so about 24 MB at the 256-connection limit for one
+  `headersTimeout` cycle; this is no regression, since `main` sets no
+  `maxHeadersCount` and Node's documented default is 2,000. Also rejected: `maxHeadersCount` 100 (every refusal silent and unlogged);
   `maxHeadersCount` 101 (v1, resting on the truncation premise); handling
   Node's 431 in `clientError` (it also covers oversized headers, outside
   scope); answering 400 (431 is the standard status).
@@ -541,10 +547,11 @@ names cite their BR versions.
 - 73-spec-decision-1-fable #5 (minor) — retained — D-5 reads "at least 101
   pairs".
 - 73-spec-review-4-opus #1 (minor) — retained — AC-14 now states the 4 waiting / 7 refused split under BR-381 v1, the socket destroyed after both, and cites BR-381 v1.
-- v2 (2026-11-25, implementation phase) — the v1 D-5 premise (Node truncates beyond `maxHeadersCount`) was measured false on Node v26.13.0; BR-169 v4 now sets `maxHeadersCount` 0 and BR-446 alone applies the 100-line bound (owner choice); v1 is kept in `features/history/F-053-v1.md`.
+- v2 (2026-11-25, implementation phase) — the v1 D-5 premise (Node truncates beyond `maxHeadersCount`) was measured false on Node v26.13.0; v2 first chose `maxHeadersCount` 0, then 2,000 after 73-spec-v2-decision-1-fable (owner choice), with BR-446 covering 101–2,000 lines; v1 is kept in `features/history/F-053-v1.md`.
 - 73-spec-v2-review-1-opus #1 (major) — retained — the bound is about 16,300 pairs (Node counts name and value bytes), measured and cited in Context item 6, BR-169 v4 and D-5.
 - 73-spec-v2-review-1-opus #2 (minor) — retained — D-5 states that trailers stay outside BR-446, bounded by `maxHeaderSize`, with Node's parse-error path on overflow.
 - 73-spec-v2-review-2-opus #1, #2 (minor) — retained — "proportional to the 16,384-byte limit"; lines re-wrapped.
 - 73-spec-v2-decision-1-fable #1 (major) — retained — owner chose `maxHeadersCount` 2,000 (BR-169 v4, AC-12, AC-13, D-5); the 0 option and its measured memory cost are recorded as rejected in D-5.
 - 73-spec-v2-decision-1-fable #2 (minor) — retained — D-5 states that trailers are parsed on any chunked request, unauthenticated included.
 - 73-spec-v2-review-3-opus #1 (major), #2 (minor) — retained — BR-446 is bounded to 101–2,000 lines and defers above to BR-169 v4; the AC-13 2,001-line case uses the same size-safe lines and asserts the empty body.
+- 73-spec-v2-decision-2-fable #1, #2 (minor) — retained — the v2 history line states both choices; D-5 states the measured residual of the 2,000 cap.
