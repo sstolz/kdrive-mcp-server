@@ -2,11 +2,14 @@
 id: F-053
 title: HTTP lifecycle hardening
 ticket: "#73"
-status: frozen
+status: done
 version: 2
 ---
 
 ## Context
+
+This version was accepted on main `4492616` on 2026-11-25
+([#73 acceptance](https://github.com/sstolz/kdrive-mcp-server/issues/73#issuecomment-7155904032)).
 
 Ticket #73 collects six HTTP-layer gaps found during F-012, F-026 and F-035
 reviews. Each leaves a resource held after its owner is gone, or an

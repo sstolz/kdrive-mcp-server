@@ -37,7 +37,7 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
 
 ### Fixed
 
-- #73 / F-053 v2 (pending acceptance): over HTTP, a session whose `initialize`
+- #73 / F-053 v2 (accepted 2026-11-25 on main `4492616`; [#73 acceptance](https://github.com/sstolz/kdrive-mcp-server/issues/73#issuecomment-7155904032)): over HTTP, a session whose `initialize`
   fails after registration is closed (`initialize_failed`) and answered 500
   instead of holding a session slot for 30 minutes; a DELETE in flight settles
   503 when its session closes for another reason; ended identity and
