@@ -2,7 +2,7 @@
 id: F-053
 title: HTTP lifecycle hardening
 ticket: "#73"
-status: draft
+status: frozen
 version: 1
 ---
 
@@ -325,17 +325,18 @@ names cite their BR versions.
   `request_refused` (`route` `mcp` or `unknown`, `status` 431) is emitted.
   Verified by: `tests/http/lifecycle.test.ts` "BR-446 BR-167 v4 AC-13
   refuses more than 100 header lines with 431".
-- **AC-14** (BR-166 v2, BR-445) — Given `serve` handling a request, When
+- **AC-14** (BR-166 v2, BR-445, BR-381 v1) — Given `serve` handling a request, When
   `handle()` is called, Then it receives the disconnect signal as an
   explicit parameter, looking up the SDK request in the map returns that
   same signal, and after a disconnect neither the `toRequest` request's
   nor the SDK request's own `signal` is aborted; and Given 12 pipelined
   HTTP/1.1 requests written in one socket write on one session, the first
   holding a started tool call and the 11 others carrying tool calls, When
-  the client destroys the socket, Then each of the 11 that waited behind
-  the first returns `ACCESS_DENIED` and each refused at arrival by the
-  BR-381 queue bound returns `SERVER_BUSY`, all with zero kDrive requests
-  and zero audit records, the first runs to completion, every `serve`
+  4 calls wait behind the first and the other 7 have been refused at
+  arrival by BR-381 v1, and the client then destroys the socket, Then the
+  4 waiting calls return `ACCESS_DENIED` and the 7 refused calls returned
+  `SERVER_BUSY`, all with zero kDrive requests and zero audit records, the
+  first runs to completion, every `serve`
   promise settles, the server's in-flight set is empty, the socket never
   held more than one `close` listener added by `serve`, and the process
   emitted no `warning` event; and Given 10 sequential requests on one
@@ -509,3 +510,4 @@ names cite their BR versions.
   only; one policy: no closed spec is edited.
 - 73-spec-decision-1-fable #5 (minor) — retained — D-5 reads "at least 101
   pairs".
+- 73-spec-review-4-opus #1 (minor) — retained — AC-14 now states the 4 waiting / 7 refused split under BR-381 v1, the socket destroyed after both, and cites BR-381 v1.
