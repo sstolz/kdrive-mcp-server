@@ -633,8 +633,14 @@ describe("F-039 production exit flush", () => {
         // F-054 BR-254 v3 / BR-448 v1 amends failure precedence before primitive exit.
         if (row === "first-call-wins") ports.exit(1 - code, start + 50);
         if (row === "stderr-event-before-exit")
-          err.emit("error", Object.assign(Error("SYNTHETIC_STDERR_FAILURE"), { code: "EIO" }));
-        const effectiveCode = row === "first-call-wins" || row === "stderr-event-before-exit" ? 1 : code;
+          err.emit(
+            "error",
+            Object.assign(Error("SYNTHETIC_STDERR_FAILURE"), { code: "EIO" }),
+          );
+        const effectiveCode =
+          row === "first-call-wins" || row === "stderr-event-before-exit"
+            ? 1
+            : code;
         expect(process.exitCode).toBe(effectiveCode);
         // Both writes are issued at entry, so a blocked stdout cannot starve stderr.
         expect(err.writes).toEqual([
@@ -648,7 +654,9 @@ describe("F-039 production exit flush", () => {
         expect((fallbackTimer as { hasRef(): boolean }).hasRef()).toBe(true);
         const prompt = await completeFlushStreams(row, out, err, ports, start);
         if (prompt) {
-          expect(ports.exits).toEqual([{ code: effectiveCode, at: start + 10 }]);
+          expect(ports.exits).toEqual([
+            { code: effectiveCode, at: start + 10 },
+          ]);
           expect(vi.getTimerCount()).toBe(0);
         } else {
           const cap = row === "remaining-100" ? 100 : 250;
@@ -657,7 +665,9 @@ describe("F-039 production exit flush", () => {
           );
           expect(ports.exits).toEqual([]);
           await vi.advanceTimersByTimeAsync(1);
-          expect(ports.exits).toEqual([{ code: effectiveCode, at: start + cap }]);
+          expect(ports.exits).toEqual([
+            { code: effectiveCode, at: start + cap },
+          ]);
         }
         // Repeated calls and late/error completions must never retry exit or change its code.
         if (row === "first-call-wins")
@@ -709,61 +719,122 @@ it("BR-026 v3 BR-027 v3 F-049 AC-23 CLI BOM refusal is redacted", async () => {
 });
 
 // F-054 BR-254 v3 / BR-448 v1. The production helper and transport callback remain real.
-it.each([0, 1].flatMap((initial) => ["before", "during"].flatMap((phase) =>
-  [100, 250].flatMap((cap) => [
-    "close", "stderr-EIO", "stderr-EPIPE", "stdout-event", "protocol-EPIPE", "protocol-EIO",
-    "stdio-EOF-empty-callback", "HTTP-empty-callback", "stdio-empty-throw", "HTTP-empty-throw",
-  ].map((row) => ({ initial, phase, cap, row }))),
-)))("TestBR254_v3_TestBR448_AC08_failure_survives_exit_flush [$initial $phase $cap $row]", async ({ initial, phase, cap, row }) => {
-  vi.useFakeTimers();
-  const { ProcessOutput } = await import("./helpers/f054-process-stream.js");
-  const { createOwnedStdioTransport } = await import("../src/stdio-transport.js");
-  const { PassThrough } = await import("node:stream");
-  const out = new ProcessOutput(), err = new FlushPort();
-  const ports = processPorts(out as never, err);
-  const expected = initial === 1 || ["close", "stderr-EIO", "protocol-EPIPE", "protocol-EIO"].includes(row) ? 1 : 0;
-  let failFrame: (() => void) | undefined;
-  try {
-    if (row.startsWith("protocol")) {
-      out.holdFrames = true;
-      const transport = createOwnedStdioTransport(new PassThrough(), out as never, { diagnostic: () => {}, onFailure: () => {} });
-      await transport.start();
-      void transport.send({ jsonrpc: "2.0", id: 1, result: { content: [{ type: "text", text: "safe" }] } }).catch(() => {});
-      await transport.close();
-      failFrame = () => {
-        const error = Object.assign(Error("PRIVATE_PROTOCOL_CANARY"), { code: row === "protocol-EPIPE" ? "EPIPE" : "EIO" });
-        out.frameCallbacks[0]!(error); out.emit("error", error);
+it.each(
+  [0, 1].flatMap((initial) =>
+    ["before", "during"].flatMap((phase) =>
+      [100, 250].flatMap((cap) =>
+        [
+          "close",
+          "stderr-EIO",
+          "stderr-EPIPE",
+          "stdout-event",
+          "protocol-EPIPE",
+          "protocol-EIO",
+          "stdio-EOF-empty-callback",
+          "HTTP-empty-callback",
+          "stdio-empty-throw",
+          "HTTP-empty-throw",
+        ].map((row) => ({ initial, phase, cap, row })),
+      ),
+    ),
+  ),
+)(
+  "TestBR254_v3_TestBR448_AC08_failure_survives_exit_flush [$initial $phase $cap $row]",
+  async ({ initial, phase, cap, row }) => {
+    vi.useFakeTimers();
+    const { ProcessOutput } = await import("./helpers/f054-process-stream.js");
+    const { createOwnedStdioTransport } =
+      await import("../src/stdio-transport.js");
+    const { PassThrough } = await import("node:stream");
+    const out = new ProcessOutput(),
+      err = new FlushPort();
+    const ports = processPorts(out, err);
+    const expected =
+      initial === 1 ||
+      ["close", "stderr-EIO", "protocol-EPIPE", "protocol-EIO"].includes(row)
+        ? 1
+        : 0;
+    let failFrame: (() => void) | undefined;
+    try {
+      if (row.startsWith("protocol")) {
+        out.holdFrames = true;
+        const transport = createOwnedStdioTransport(
+          new PassThrough(),
+          out as never,
+          { diagnostic: () => {}, onFailure: () => {} },
+        );
+        await transport.start();
+        void transport
+          .send({
+            jsonrpc: "2.0",
+            id: 1,
+            result: { content: [{ type: "text", text: "safe" }] },
+          })
+          .catch(() => {});
+        await transport.close();
+        failFrame = () => {
+          const error = Object.assign(Error("PRIVATE_PROTOCOL_CANARY"), {
+            code: row === "protocol-EPIPE" ? "EPIPE" : "EIO",
+          });
+          out.frameCallbacks[0]!(error);
+          out.emit("error", error);
+        };
+      }
+      const failure = () => {
+        if (row === "close") ports.exit(1, performance.now() + cap);
+        else if (row.startsWith("stderr"))
+          err.emit(
+            "error",
+            Object.assign(Error("PRIVATE_STDERR_CANARY"), {
+              code: row === "stderr-EPIPE" ? "EPIPE" : "EIO",
+            }),
+          );
+        else if (row === "stdout-event")
+          out.emit(
+            "error",
+            Object.assign(Error("PRIVATE_STDOUT_CANARY"), { code: "EIO" }),
+          );
+        else failFrame?.();
       };
+      if (phase === "before") failure();
+      if (row.endsWith("throw"))
+        out.onWrite = () => {
+          throw Error("PRIVATE_EMPTY_THROW_CANARY");
+        };
+      const start = performance.now();
+      ports.exit(initial, cap === 100 ? start + 100 : undefined);
+      if (phase === "during") {
+        await vi.advanceTimersByTimeAsync(1);
+        failure();
+      }
+      expect(ports.exits).toEqual([]);
+      if (row.endsWith("callback")) {
+        // EOF with a closed reader and HTTP stdout only have an empty flush, no frame latch.
+        out.callbacks[0]?.(
+          Object.assign(Error("PRIVATE_EMPTY_CANARY"), { code: "EPIPE" }),
+        );
+      }
+      await vi.advanceTimersByTimeAsync(start + cap - 1 - performance.now());
+      expect(ports.exits).toEqual([]);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(ports.exits).toEqual([{ code: expected, at: start + cap }]);
+      ports.exit(0);
+      ports.exit(1);
+      out.callbacks[0]?.();
+      err.callbacks[0]?.();
+      expect(() =>
+        out.emit("error", Error("PRIVATE_POST_EXIT_CANARY")),
+      ).not.toThrow();
+      expect(ports.exits).toHaveLength(1);
+      expect(err.writes.join("")).not.toContain("PRIVATE_");
+      expect(out.listenerCount("error")).toBe(1);
+      expect(err.listenerCount("error")).toBe(1);
+    } finally {
+      ports.restore();
+      vi.useRealTimers();
     }
-    const failure = () => {
-      if (row === "close") ports.exit(1, performance.now() + cap);
-      else if (row.startsWith("stderr")) err.emit("error", Object.assign(Error("PRIVATE_STDERR_CANARY"), { code: row === "stderr-EPIPE" ? "EPIPE" : "EIO" }));
-      else if (row === "stdout-event") out.emit("error", Object.assign(Error("PRIVATE_STDOUT_CANARY"), { code: "EIO" }));
-      else failFrame?.();
-    };
-    if (phase === "before") failure();
-    if (row.endsWith("throw")) out.onWrite = () => { throw Error("PRIVATE_EMPTY_THROW_CANARY"); };
-    const start = performance.now();
-    ports.exit(initial, cap === 100 ? start + 100 : undefined);
-    if (phase === "during") { await vi.advanceTimersByTimeAsync(1); failure(); }
-    expect(ports.exits).toEqual([]);
-    if (row.endsWith("callback")) {
-      // EOF with a closed reader and HTTP stdout only have an empty flush, no frame latch.
-      out.callbacks[0]?.(Object.assign(Error("PRIVATE_EMPTY_CANARY"), { code: "EPIPE" }));
-    }
-    await vi.advanceTimersByTimeAsync(start + cap - 1 - performance.now());
-    expect(ports.exits).toEqual([]);
-    await vi.advanceTimersByTimeAsync(1);
-    expect(ports.exits).toEqual([{ code: expected, at: start + cap }]);
-    ports.exit(0); ports.exit(1);
-    out.callbacks[0]?.(); err.callbacks[0]?.();
-    expect(() => out.emit("error", Error("PRIVATE_POST_EXIT_CANARY"))).not.toThrow();
-    expect(ports.exits).toHaveLength(1);
-    expect(err.writes.join("")).not.toContain("PRIVATE_");
-    expect(out.listenerCount("error")).toBe(1);
-    expect(err.listenerCount("error")).toBe(1);
-  } finally { ports.restore(); vi.useRealTimers(); }
-});
+  },
+);
 
 // BR-254 v3 / BR-448 v1: real dedicated EOF, no protocol frame was ever queued.
 it("TestBR254_v3_TestBR448_AC08_failure_survives_exit_flush [dedicated EOF closed reader]", async () => {
@@ -772,15 +843,30 @@ it("TestBR254_v3_TestBR448_AC08_failure_survives_exit_flush [dedicated EOF close
   const { navigationFixture } = await import("./helpers/navigation.js");
   const { startStdioNavigation } = await import("../src/stdio.js");
   const { microtasks } = await import("./helpers/f039-composition.js");
-  const out = new ProcessOutput(), err = new FlushPort(), ports = processPorts(out as never, err);
+  const out = new ProcessOutput(),
+    err = new FlushPort(),
+    ports = processPorts(out, err);
   const f = await navigationFixture();
   try {
     out.onWrite = (callback) => {
-      callback(Object.assign(Error("PRIVATE_EMPTY_STDOUT_CANARY"), { code: "EPIPE" }));
-      queueMicrotask(() => out.emit("error", Object.assign(Error("PRIVATE_EMPTY_STDOUT_CANARY"), { code: "EPIPE" })));
+      callback(
+        Object.assign(Error("PRIVATE_EMPTY_STDOUT_CANARY"), { code: "EPIPE" }),
+      );
+      queueMicrotask(() =>
+        out.emit(
+          "error",
+          Object.assign(Error("PRIVATE_EMPTY_STDOUT_CANARY"), {
+            code: "EPIPE",
+          }),
+        ),
+      );
     };
-    err.onWrite = (callback) => { callback(); };
-    const session = startStdioNavigation(f.config, f.dependencies, { exit: ports.exit });
+    err.onWrite = (callback) => {
+      callback();
+    };
+    const session = startStdioNavigation(f.config, f.dependencies, {
+      exit: ports.exit,
+    });
     await session.ready;
     ports.input.end();
     await microtasks();
@@ -790,5 +876,8 @@ it("TestBR254_v3_TestBR448_AC08_failure_survives_exit_flush [dedicated EOF close
     expect(ports.exits.map((exit) => exit.code)).toEqual([0]);
     expect(err.writes).toEqual([""]);
     expect(out.writes).toEqual([""]);
-  } finally { ports.restore(); vi.useRealTimers(); }
+  } finally {
+    ports.restore();
+    vi.useRealTimers();
+  }
 });

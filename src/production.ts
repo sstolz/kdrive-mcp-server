@@ -1,40 +1,54 @@
 import { productionConnect, productionLookup } from "./kdrive/production.js";
 import type { MainDependencies } from "./main.js";
+import { processStderr, processStdout } from "./process-streams.js";
 
-/** BR-254 v2: the first exit request owns the code, deadline and flush pair. */
+/** BR-254 v3: first deadline wins; failure can upgrade the code until exit. */
 export function productionExit(): MainDependencies["exit"] {
   let started = false;
+  let requested = 0;
+  let exited = false;
   return (code, shutdownDeadline) => {
-    if (started) return;
+    if (exited) return;
+    if (!started || code === 1) requested = code;
+    if (started) {
+      if (code === 1) process.exitCode = 1;
+      return;
+    }
     started = true;
-    process.exitCode = code;
+    const streams = [processStdout(), processStderr()];
+    const effectiveCode = () =>
+      streams.some(({ owner }) => owner.failed) ? 1 : requested;
+    process.exitCode = effectiveCode();
     const remaining = Math.min(
       250,
       (shutdownDeadline ?? Infinity) - performance.now(),
     );
     if (remaining <= 0) {
-      process.exit(code);
+      exited = true;
+      process.exit(effectiveCode());
       return;
     }
-    let exited = false;
     let completed = 0;
+    const unsubscribers: (() => void)[] = [];
     const finish = () => {
       if (exited) return;
       exited = true;
       clearTimeout(timer);
-      process.exit(code);
+      for (const unsubscribe of unsubscribers) unsubscribe();
+      process.exitCode = effectiveCode();
+      process.exit(effectiveCode());
     };
     // Arm before either write, including synchronous callbacks/throws; keep ref'd.
     const timer = setTimeout(finish, remaining);
-    for (const stream of [process.stdout, process.stderr]) {
+    for (const { stream, owner } of streams) {
       let done = false;
       const complete = () => {
+        if (!exited) process.exitCode = effectiveCode();
         if (done) return;
         done = true;
         if (++completed === 2) finish();
       };
-      // Retain one handler per stream for errors emitted after the flush callback.
-      stream.on("error", complete);
+      unsubscribers.push(owner.subscribe(complete));
       if (stream.destroyed) complete();
       else {
         try {
@@ -52,8 +66,8 @@ export function productionDependencies(): MainDependencies {
   return {
     argv: process.argv.slice(2),
     env: process.env,
-    stdout: process.stdout,
-    stderr: process.stderr,
+    stdout: processStdout().stream,
+    stderr: processStderr().stream,
     signals: {
       on: (name, listener) => process.on(name, listener),
       off: (name, listener) => process.off(name, listener),

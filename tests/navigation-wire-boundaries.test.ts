@@ -284,16 +284,30 @@ it("TestBR069_v3_TestBR262_v2_AC05_stdio_emits_only_validated_gate_JSON", async 
   const valid = [
     { result: "denied", attempts: 0 },
     { result: "failed", attempts: 1, status: 403, code: "ACCESS_DENIED" },
-    { result: "uncertain", attempts: 1, message: UNCERTAIN_MESSAGE,
-      op: "000102030405060708090a0b0c0d0e0f", audit: "outcome_unrecorded" },
+    {
+      result: "uncertain",
+      attempts: 1,
+      message: UNCERTAIN_MESSAGE,
+      op: "000102030405060708090a0b0c0d0e0f",
+      audit: "outcome_unrecorded",
+    },
     // Finite numbers retain the validator's existing behavior (no new integer/range contract).
     { result: "failed", attempts: -0.5, status: 200.5 },
   ];
   const rows = [
-    { text: '{"result":"private-canary","result":"denied","attempts":0}', expected: '{"result":"denied","attempts":0}' },
-    ...valid.map((value) => ({ text: JSON.stringify(value), expected: JSON.stringify(value) })),
+    {
+      text: '{"result":"private-canary","result":"denied","attempts":0}',
+      expected: '{"result":"denied","attempts":0}',
+    },
+    ...valid.map((value) => ({
+      text: JSON.stringify(value),
+      expected: JSON.stringify(value),
+    })),
     ...[
-      "{", "null", "[]", '{"result":"succeeded","attempts":0}',
+      "{",
+      "null",
+      "[]",
+      '{"result":"succeeded","attempts":0}',
       '{"result":"denied","attempts":0,"private":"private-canary"}',
       '{"result":"denied","attempts":"0"}',
       '{"result":"failed","attempts":0,"status":"403"}',
@@ -304,31 +318,60 @@ it("TestBR069_v3_TestBR262_v2_AC05_stdio_emits_only_validated_gate_JSON", async 
       '{"result":"denied","attempts":0,"op":"private-canary"}',
       '{"result":"denied","attempts":0,"audit":"private-canary"}',
     ].map((text) => ({ text, expected: "INVALID_ARGUMENTS" })),
-    ...["ACCESS_DENIED", "REQUEST_TIMEOUT", "SERVER_BUSY", "INVALID_ARGUMENTS", "NO_EXTRACTABLE_TEXT"].map((text) => ({ text, expected: text })),
+    ...[
+      "ACCESS_DENIED",
+      "REQUEST_TIMEOUT",
+      "SERVER_BUSY",
+      "INVALID_ARGUMENTS",
+      "NO_EXTRACTABLE_TEXT",
+    ].map((text) => ({ text, expected: text })),
   ];
   for (const { text, expected } of rows) {
-    const input = new PassThrough(), output = new PassThrough();
+    const input = new PassThrough(),
+      output = new PassThrough();
     let wire = "";
-    output.on("data", (chunk: Buffer) => { wire += chunk.toString(); });
+    output.on("data", (chunk: Buffer) => {
+      wire += chunk.toString();
+    });
     const transport = createOwnedStdioTransport(input, output, {
-      diagnostic: () => { throw Error("Unexpected diagnostic"); },
-      onFailure: () => { throw Error("Unexpected failure"); },
+      diagnostic: () => {
+        throw Error("Unexpected diagnostic");
+      },
+      onFailure: () => {
+        throw Error("Unexpected failure");
+      },
     });
     await transport.start();
     try {
-      await transport.send({ jsonrpc: "2.0", id: 1, result: {
-        isError: true, content: [{ type: "text", text }],
-      } });
-      expect(JSON.parse(wire)).toEqual({ jsonrpc: "2.0", id: 1, result: {
-        isError: true, content: [{ type: "text", text: expected }],
-      } });
+      await transport.send({
+        jsonrpc: "2.0",
+        id: 1,
+        result: {
+          isError: true,
+          content: [{ type: "text", text }],
+        },
+      });
+      expect(JSON.parse(wire)).toEqual({
+        jsonrpc: "2.0",
+        id: 1,
+        result: {
+          isError: true,
+          content: [{ type: "text", text: expected }],
+        },
+      });
       expect(wire).not.toContain("private-canary");
       wire = "";
-      const success = { jsonrpc: "2.0" as const, id: 2, result: {
-        content: [{ type: "text" as const, text: "successful-data" }],
-      } };
+      const success = {
+        jsonrpc: "2.0" as const,
+        id: 2,
+        result: {
+          content: [{ type: "text", text: "successful-data" }],
+        },
+      };
       await transport.send(success);
       expect(JSON.parse(wire)).toEqual(success);
-    } finally { await transport.close(); }
+    } finally {
+      await transport.close();
+    }
   }
 });

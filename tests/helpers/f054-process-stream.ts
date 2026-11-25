@@ -19,5 +19,8 @@ export class ProcessOutput extends FlushPort {
     callback?.();
     return true;
   }
-  destroy() { this.closes++; return this; }
+  destroy() {
+    this.closes++;
+    return this;
+  }
 }

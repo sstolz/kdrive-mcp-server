@@ -54,7 +54,12 @@ import {
 import { runMain, stdioClient, textOf, tokenFile } from "./helpers/main.js";
 
 const hooks = vi.hoisted(() => {
-  const state: { servers: unknown[]; tool: string; operation: unknown; largeResult: boolean } = {
+  const state: {
+    servers: unknown[];
+    tool: string;
+    operation: unknown;
+    largeResult: boolean;
+  } = {
     servers: [],
     tool: "kdrive_rename",
     operation: undefined,
@@ -72,9 +77,15 @@ vi.mock("../src/navigation.js", async (importOriginal) => {
     ) => {
       const server = original.createNavigationServer(...args);
       hooks.servers.push(server);
-      if (hooks.largeResult) server.registerTool("synthetic_large_result", { description: "F-054 test fixture only" }, async () => ({
-        content: [{ type: "text", text: "x".repeat(262070) }],
-      }));
+      if (hooks.largeResult)
+        server.registerTool(
+          "synthetic_large_result",
+          { description: "F-054 test fixture only" },
+          () =>
+            Promise.resolve({
+              content: [{ type: "text", text: "x".repeat(262070) }],
+            }),
+        );
       // Test-only tool: the first write tools arrive with #18.
       server.registerTool(
         "test_mutate",
@@ -1685,7 +1696,8 @@ async function f039Main(
       ? { KDRIVE_MCP_TRANSPORT: "http", KDRIVE_MCP_INSECURE_NO_AUTH: "1" }
       : {}),
   });
-  const out = options.output ?? new PassThrough();
+  // ProcessOutput models process.stdout at runtime; the seam needs stream typing.
+  const out = (options.output ?? new PassThrough()) as PassThrough;
   const frames: Record<string, unknown>[] = [];
   let wireBuffer = "";
   out.on("data", (bytes: Buffer) => {
@@ -1840,7 +1852,9 @@ async function f039Main(
         off: (name, fn) => signals.off(name, fn),
       },
       mutators: {
-        rename: options.mutator ?? (() => Promise.resolve(ok(200, { value: { id: 42 } }))),
+        rename:
+          options.mutator ??
+          (() => Promise.resolve(ok(200, { value: { id: 42 } }))),
       },
     });
     return {
@@ -2592,38 +2606,60 @@ describe("F-041 received-share controls", () => {
 // F-054: unchanged BR-254 drain coverage from F-016 AC-21.
 function f054HealthyFile(order: string[]) {
   const records: auditModule.AuditRecord[] = [];
-  return auditModule.openFileSink("/synthetic/f054-audit", { port: {
-    open: async () => 3,
-    fstat: async () => ({ isFile: () => true, uid: 1000, mode: 0o100600 }),
-    geteuid: () => 1000,
-    write: async (_fd, bytes) => {
-      const record = JSON.parse(Buffer.from(bytes).toString()) as auditModule.AuditRecord;
-      records.push(record);
-      order.push(records.length === 1 ? "intent" : "outcome");
-      return bytes.length;
-    },
-    fdatasync: async () => {},
-    close: async () => { order.push("sink-close"); },
-  } }).then((sink) => ({ sink, records }));
+  return auditModule
+    .openFileSink("/synthetic/f054-audit", {
+      port: {
+        open: () => Promise.resolve(3),
+        fstat: () =>
+          Promise.resolve({ isFile: () => true, uid: 1000, mode: 0o100600 }),
+        geteuid: () => 1000,
+        write: (_fd, bytes) => {
+          const record = JSON.parse(
+            Buffer.from(bytes).toString(),
+          ) as auditModule.AuditRecord;
+          records.push(record);
+          order.push(records.length === 1 ? "intent" : "outcome");
+          return Promise.resolve(bytes.length);
+        },
+        fdatasync: () => Promise.resolve(),
+        close: () => {
+          order.push("sink-close");
+          return Promise.resolve();
+        },
+      },
+    })
+    .then((sink) => ({ sink, records }));
 }
 function f054TimedMutation(order: string[]) {
   let dispatch!: () => void;
-  const dispatched = new Promise<void>((resolve) => { dispatch = resolve; });
-  const mutator = vi.fn<Mutator>(() => new Promise((resolve) => {
-    dispatch();
-    setTimeout(() => {
-      order.push("mutator-success");
-      resolve(ok(200, { value: { id: 42 } }));
-    }, 3000);
-  }));
+  const dispatched = new Promise<void>((resolve) => {
+    dispatch = resolve;
+  });
+  const mutator = vi.fn<Mutator>(
+    () =>
+      new Promise((resolve) => {
+        dispatch();
+        setTimeout(() => {
+          order.push("mutator-success");
+          resolve(ok(200, { value: { id: 42 } }));
+        }, 3000);
+      }),
+  );
   return { mutator, dispatched };
 }
 it("TestBR254_unchanged_F016_AC21_AC01_dedicated_SIGTERM_drains_3000ms_mutation", async () => {
   vi.useFakeTimers();
-  const order: string[] = [], file = await f054HealthyFile(order);
-  const mutation = f054TimedMutation(order), exits: number[] = [];
-  const h = await f039Main(file.sink, { order, mutator: mutation.mutator,
-    exit: (code) => { exits.push(code); order.push(`exit-${String(code)}`); },
+  const order: string[] = [],
+    file = await f054HealthyFile(order);
+  const mutation = f054TimedMutation(order),
+    exits: number[] = [];
+  const h = await f039Main(file.sink, {
+    order,
+    mutator: mutation.mutator,
+    exit: (code) => {
+      exits.push(code);
+      order.push(`exit-${String(code)}`);
+    },
   });
   try {
     const run = await h.wireMutation();
@@ -2636,29 +2672,50 @@ it("TestBR254_unchanged_F016_AC21_AC01_dedicated_SIGTERM_drains_3000ms_mutation"
     expect(exits).toEqual([]);
     await vi.advanceTimersByTimeAsync(1);
     await microtasks();
-    expect(order.filter((s) => ["mutator-success", "outcome", "sink-close", "exit-0"].includes(s)))
-      .toEqual(["mutator-success", "outcome", "sink-close", "exit-0"]);
+    expect(
+      order.filter((s) =>
+        ["mutator-success", "outcome", "sink-close", "exit-0"].includes(s),
+      ),
+    ).toEqual(["mutator-success", "outcome", "sink-close", "exit-0"]);
     expect(exits).toEqual([0]);
     expect(mutation.mutator).toHaveBeenCalledTimes(1);
     expect(file.records).toHaveLength(2);
     expect(run.value).toMatchObject({ result: "succeeded", attempts: 1 });
-  } finally { h.restore(); }
+  } finally {
+    h.restore();
+  }
 });
 it("TestBR254_unchanged_F016_AC21_AC02_owned_SIGTERM_drains_3000ms_mutation", async () => {
   const f = await kdriveFixture();
-  const order: string[] = [], file = await f054HealthyFile(order);
-  const sinkSpy = vi.spyOn(auditModule, "openAuditSink").mockResolvedValue(file.sink);
+  const order: string[] = [],
+    file = await f054HealthyFile(order);
+  const sinkSpy = vi
+    .spyOn(auditModule, "openAuditSink")
+    .mockResolvedValue(file.sink);
   const setter = vi.fn();
   const mutation = f054TimedMutation(order);
   let run: Awaited<ReturnType<typeof runMain>> | undefined;
   try {
-    run = await runMain({ argv: [], env: {
-      KDRIVE_ID: "101", KDRIVE_TOKEN_FILE: tokenFile(), KDRIVE_MCP_MODE: "write",
-    }, lookup: f.lookup, connect: f.connect, mutators: { rename: mutation.mutator }, setExitCode: setter });
+    run = await runMain({
+      argv: [],
+      env: {
+        KDRIVE_ID: "101",
+        KDRIVE_TOKEN_FILE: tokenFile(),
+        KDRIVE_MCP_MODE: "write",
+      },
+      lookup: f.lookup,
+      connect: f.connect,
+      mutators: { rename: mutation.mutator },
+      setExitCode: setter,
+    });
     const client = await stdioClient(run);
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
-    hooks.operation = { kind: "rename", target: { driveId: 101, id: 12 }, name: "b" };
-    const call = observed(client.callTool({ name: "test_mutate", arguments: {} }));
+    hooks.operation = {
+      kind: "rename",
+      target: { driveId: 101, id: 12 },
+      name: "b",
+    };
+    observed(client.callTool({ name: "test_mutate", arguments: {} }));
     await mutation.dispatched;
     run.signals.emit("SIGTERM");
     const closed = observed((run.handle as { close(): Promise<void> }).close());
@@ -2669,104 +2726,182 @@ it("TestBR254_unchanged_F016_AC21_AC02_owned_SIGTERM_drains_3000ms_mutation", as
     await vi.advanceTimersByTimeAsync(1);
     await microtasks();
     expect(closed).toEqual({ settled: true, value: undefined });
-    expect(order).toEqual(["intent", "mutator-success", "outcome", "sink-close"]);
+    expect(order).toEqual([
+      "intent",
+      "mutator-success",
+      "outcome",
+      "sink-close",
+    ]);
     expect(file.records).toHaveLength(2);
     expect(mutation.mutator).toHaveBeenCalledTimes(1);
     expect(run.exits).toEqual([]);
     expect(setter).not.toHaveBeenCalled();
-    void call;
-  } finally { vi.useRealTimers(); sinkSpy.mockRestore(); await f.close(); }
+  } finally {
+    vi.useRealTimers();
+    sinkSpy.mockRestore();
+    await f.close();
+  }
 });
 
 // BR-254 v3: rejecting ports are synthetic; real transport and mutation gate retain ownership.
 const F054_CLOSE_ROWS = [
-  "signal-server", "signal-gate", "signal-diagnostic-throws", "gate-first",
-  "expiry", "expiry-committed", "reject-without-onclose", "expiry-without-onclose",
-  "expiry-without-onclose-committed", "eof", "failure", "sdk-close", "start-failure", "host-close",
+  "signal-server",
+  "signal-gate",
+  "signal-diagnostic-throws",
+  "gate-first",
+  "expiry",
+  "expiry-committed",
+  "reject-without-onclose",
+  "expiry-without-onclose",
+  "expiry-without-onclose-committed",
+  "eof",
+  "failure",
+  "sdk-close",
+  "start-failure",
+  "host-close",
   "earlier-stderr",
 ] as const;
-it.each([false, true].flatMap((owned) => F054_CLOSE_ROWS
-  .filter((row) => owned || row !== "earlier-stderr")
-  .flatMap((row) => ["SIGINT", "SIGTERM"].map((signal) => ({ owned, row, signal })))))(
+it.each(
+  [false, true].flatMap((owned) =>
+    F054_CLOSE_ROWS.filter((row) => owned || row !== "earlier-stderr").flatMap(
+      (row) =>
+        (["SIGINT", "SIGTERM"] as const).map((signal) => ({
+          owned,
+          row,
+          signal,
+        })),
+    ),
+  ),
+)(
   "TestBR254_v3_AC04_stdio_signal_close_rejection_is_contained [$owned $row $signal]",
   async ({ owned, row, signal }) => {
     vi.useFakeTimers();
-    const order: string[] = [], file = await f054HealthyFile(order);
+    const order: string[] = [],
+      file = await f054HealthyFile(order);
     const f = await navigationFixture({ KDRIVE_MCP_MODE: "write" });
     const mutation = f054TimedMutation(order);
     const realGate = f039Gate(file.sink, mutation.mutator);
     let gateCalls = 0;
     const target = realGate.gate;
     // The real gate is frozen: proxy an empty delegate so `close` can be replaced.
-    const gate = new Proxy(Object.create(target) as typeof target, { get(_delegate, key) {
-      if (key === "close") return async (deadline?: number) => {
-        gateCalls++;
-        order.push("gate-close-start");
-        await target.close(deadline);
-        order.push("gate-close-done");
-        if (row === "signal-gate") throw Error("PRIVATE_CLOSE_CANARY");
-      };
-      return Reflect.get(target, key, target) as unknown;
-    } });
+    const gate = new Proxy(Object.create(target) as typeof target, {
+      get(_delegate, key) {
+        if (key === "close") {
+          return async (deadline?: number) => {
+            gateCalls++;
+            order.push("gate-close-start");
+            await target.close(deadline);
+            order.push("gate-close-done");
+            if (row === "signal-gate") throw Error("PRIVATE_CLOSE_CANARY");
+          };
+        }
+        return Reflect.get(target, key, target) as unknown;
+      },
+    });
     const ports = processPorts(new PassThrough());
     const output = ports.stdout as PassThrough;
     let stdout = "";
-    output.on("data", (bytes: Buffer) => { stdout += bytes.toString(); });
-    const before = new Map(["SIGINT", "SIGTERM"].map((name) => [name, process.listeners(name)]));
-    const diagnostics: string[] = [], exits: number[] = [], statuses: number[] = [];
+    output.on("data", (bytes: Buffer) => {
+      stdout += bytes.toString();
+    });
+    const before = new Map(
+      ["SIGINT", "SIGTERM"].map((name) => [name, process.listeners(name)]),
+    );
+    const diagnostics: string[] = [],
+      exits: number[] = [],
+      statuses: number[] = [];
     const unhandled: unknown[] = [];
-    const onUnhandled = (reason: unknown) => { unhandled.push(reason); };
+    const onUnhandled = (reason: unknown) => {
+      unhandled.push(reason);
+    };
     process.on("unhandledRejection", onUnhandled);
     const sdkInstances: StdioServerTransport[] = [];
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- The original is invoked with the synthetic SDK instance through call().
     const sdkStart = StdioServerTransport.prototype.start;
-    const startSpy = vi.spyOn(StdioServerTransport.prototype, "start").mockImplementation(function (this: StdioServerTransport) {
-      sdkInstances.push(this);
-      if (row === "start-failure") return Promise.reject(Error("PRIVATE_START_CANARY"));
-      return sdkStart.call(this);
-    });
-    const sdkClose = vi.spyOn(StdioServerTransport.prototype, "close").mockRejectedValue(Error("PRIVATE_SDK_CANARY"));
+    const startSpy = vi
+      .spyOn(StdioServerTransport.prototype, "start")
+      .mockImplementation(function (this: StdioServerTransport) {
+        sdkInstances.push(this);
+        if (row === "start-failure")
+          return Promise.reject(Error("PRIVATE_START_CANARY"));
+        return sdkStart.call(this);
+      });
+    const sdkClose = vi
+      .spyOn(StdioServerTransport.prototype, "close")
+      .mockRejectedValue(Error("PRIVATE_SDK_CANARY"));
     let rejectServer!: (reason: unknown) => void;
-    const serverPending = new Promise<void>((_resolve, reject) => { rejectServer = reject; });
-    const serverOriginal = McpServer.prototype.close;
-    const serverSpy = vi.spyOn(McpServer.prototype, "close").mockImplementation(async function (this: McpServer) {
-      if (row === "earlier-stderr" || row === "signal-gate") {
-        sdkClose.mockResolvedValue(undefined);
-        return serverOriginal.call(this);
-      }
-      if (!row.includes("without-onclose")) {
-        // Observe the original transport close; the SDK failure is consumed here only
-        // for server-port rows. EOF/failure/SDK-close rows exercise the transport's own void sites.
-        await serverOriginal.call(this).catch(() => {});
-      }
-      if (row === "gate-first" || row.startsWith("expiry")) return serverPending;
-      throw Error("PRIVATE_SERVER_CANARY");
+    const serverPending = new Promise<void>((_resolve, reject) => {
+      rejectServer = reject;
     });
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- The original is invoked with the synthetic server instance through call().
+    const serverOriginal = McpServer.prototype.close;
+    const serverSpy = vi
+      .spyOn(McpServer.prototype, "close")
+      .mockImplementation(async function (this: McpServer) {
+        if (row === "earlier-stderr" || row === "signal-gate") {
+          sdkClose.mockResolvedValue(undefined);
+          return serverOriginal.call(this);
+        }
+        if (!row.includes("without-onclose")) {
+          // Observe the original transport close; the SDK failure is consumed here only
+          // for server-port rows. EOF/failure/SDK-close rows exercise the transport's own void sites.
+          await serverOriginal.call(this).catch(() => {});
+        }
+        if (row === "gate-first" || row.startsWith("expiry"))
+          return serverPending;
+        throw Error("PRIVATE_SERVER_CANARY");
+      });
     let started: ReturnType<typeof startStdioNavigation> | undefined;
     try {
       if (row === "earlier-stderr") {
-        expect(() => ports.stderr.emit("error", Object.assign(Error("PRIVATE_STDERR_CANARY"), { code: "EIO" }))).not.toThrow();
+        expect(() =>
+          ports.stderr.emit(
+            "error",
+            Object.assign(Error("PRIVATE_STDERR_CANARY"), { code: "EIO" }),
+          ),
+        ).not.toThrow();
       }
-      started = startStdioNavigation(f.config, gatedDependencies(f.dependencies, gate), {
-        ...(owned ? { input: ports.input, output } : {}), gate,
-        diagnostic: (text) => {
-          diagnostics.push(text);
-          if (row === "signal-diagnostic-throws") throw Error("PRIVATE_DIAGNOSTIC_CANARY");
+      started = startStdioNavigation(
+        f.config,
+        gatedDependencies(f.dependencies, gate),
+        {
+          ...(owned ? { input: ports.input, output } : {}),
+          gate,
+          diagnostic: (text) => {
+            diagnostics.push(text);
+            if (row === "signal-diagnostic-throws")
+              throw Error("PRIVATE_DIAGNOSTIC_CANARY");
+          },
+          setExitCode: (code) => {
+            statuses.push(code);
+          },
+          exit: (code) => {
+            exits.push(code);
+            order.push(`exit-${String(code)}`);
+          },
         },
-        setExitCode: (code) => { statuses.push(code); },
-        exit: (code) => { exits.push(code); order.push(`exit-${String(code)}`); },
-      });
+      );
       const ready = observed(started.ready);
       await microtasks();
       const committed = row === "eof" || row.includes("committed");
-      if (committed) { void realGate.run(); await mutation.dispatched; }
+      if (committed) {
+        observed(realGate.run());
+        await mutation.dispatched;
+      }
       if (row === "eof") ports.input.end();
-      else if (row === "failure") ports.input.emit("error", Error("PRIVATE_INPUT_CANARY"));
+      else if (row === "failure")
+        ports.input.emit("error", Error("PRIVATE_INPUT_CANARY"));
       else if (row === "sdk-close") sdkInstances[0]!.onclose?.();
       else if (row === "host-close") observed(started.close());
       else if (row !== "start-failure") {
-        const listeners = process.listeners(signal).filter((fn) => !before.get(signal)?.includes(fn));
+        const listeners = process
+          .listeners(signal)
+          .filter((fn) => !before.get(signal)?.includes(fn));
         expect(listeners).toHaveLength(1);
-        for (const listener of listeners) { listener(signal); listener(signal); }
+        for (const listener of listeners) {
+          listener(signal);
+          listener(signal);
+        }
       }
       const closed = observed(started.closed);
       await microtasks();
@@ -2796,8 +2931,11 @@ it.each([false, true].flatMap((owned) => F054_CLOSE_ROWS
         expect(closed.settled).toBe(false);
         await vi.advanceTimersByTimeAsync(1);
         await microtasks();
-        expect(order.filter((text) => ["mutator-success", "outcome", "sink-close"].includes(text)))
-          .toEqual(["mutator-success", "outcome", "sink-close"]);
+        expect(
+          order.filter((text) =>
+            ["mutator-success", "outcome", "sink-close"].includes(text),
+          ),
+        ).toEqual(["mutator-success", "outcome", "sink-close"]);
         expect(file.records).toHaveLength(2);
       }
       expect(closed).toEqual({ settled: true, value: undefined });
@@ -2805,10 +2943,13 @@ it.each([false, true].flatMap((owned) => F054_CLOSE_ROWS
       await expect(started.close()).resolves.toBeUndefined();
       expect(gateCalls).toBe(1);
       expect(order).toContain("sink-close");
-      expect(owned ? statuses : exits).toEqual(row === "earlier-stderr" ? [] : [1]);
+      expect(owned ? statuses : exits).toEqual(
+        row === "earlier-stderr" ? [] : [1],
+      );
       if (owned) expect(exits).toEqual([]);
-      expect(diagnostics.filter((text) => text === "PROCESS_CLOSE_FAILED\n"))
-        .toHaveLength(row === "earlier-stderr" ? 0 : 1);
+      expect(
+        diagnostics.filter((text) => text === "PROCESS_CLOSE_FAILED\n"),
+      ).toHaveLength(row === "earlier-stderr" ? 0 : 1);
       expect(diagnostics.join("") + stdout).not.toContain("PRIVATE_");
       expect(stdout).toBe("");
       expect(unhandled).toEqual([]);
@@ -2817,37 +2958,60 @@ it.each([false, true].flatMap((owned) => F054_CLOSE_ROWS
     } finally {
       for (const name of ["SIGINT", "SIGTERM"])
         for (const listener of process.listeners(name))
-          if (!before.get(name)?.includes(listener)) process.off(name, listener);
+          if (!before.get(name)?.includes(listener))
+            process.off(name, listener);
       process.off("unhandledRejection", onUnhandled);
-      serverSpy.mockRestore(); sdkClose.mockRestore(); startSpy.mockRestore(); ports.restore();
+      serverSpy.mockRestore();
+      sdkClose.mockRestore();
+      startSpy.mockRestore();
+      ports.restore();
     }
   },
 );
 
 // BR-254 v3 / BR-447 v1 / BR-448 v1: IPC orders real OS pipe failure and committed drain.
 it.each(["broken", "healthy"] as const)(
-  "TestBR254_v3_TestBR447_TestBR448_AC10_pending_stdout_pipe_drain [%s]", async (row) => {
+  "TestBR254_v3_TestBR447_TestBR448_AC10_pending_stdout_pipe_drain [%s]",
+  async (row) => {
     const { lifecycleChild } = await import("./helpers/f054-child.js");
     const child = lifecycleChild("stdout");
     try {
-      await child.wait("ready"); await child.wait("committed");
-      child.write({ jsonrpc: "2.0", id: 0, method: "initialize", params: {
-        protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "f054", version: "1" },
-      } });
+      await child.wait("ready");
+      await child.wait("committed");
+      child.write({
+        jsonrpc: "2.0",
+        id: 0,
+        method: "initialize",
+        params: {
+          protocolVersion: "2025-06-18",
+          capabilities: {},
+          clientInfo: { name: "f054", version: "1" },
+        },
+      });
       // An explicit initialization response barrier precedes pausing the pipe.
       const initialized = new Promise<void>((resolve) => {
         const inspect = () => {
-          if (child.stdout().includes('"id":0')) { child.process.stdout!.off("data", inspect); resolve(); }
+          if (child.stdout().includes('"id":0')) {
+            child.process.stdout!.off("data", inspect);
+            resolve();
+          }
         };
-        child.process.stdout!.on("data", inspect); inspect();
+        child.process.stdout!.on("data", inspect);
+        inspect();
       });
       await initialized;
       child.write({ jsonrpc: "2.0", method: "notifications/initialized" });
       const prefix = Buffer.byteLength(child.stdout());
       child.process.stdout!.pause();
-      child.write({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "synthetic_large_result", arguments: {} } });
+      child.write({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "tools/call",
+        params: { name: "synthetic_large_result", arguments: {} },
+      });
       const pending = await child.wait("pending-frame");
-      expect(pending.bytes).toBe(262144); expect(pending.returned).toBe(false);
+      expect(pending.bytes).toBe(262144);
+      expect(pending.returned).toBe(false);
       expect(pending.writableLength).toBeGreaterThan(0);
       child.process.kill("SIGTERM");
       await child.wait("transport-closed-draining");
@@ -2859,91 +3023,153 @@ it.each(["broken", "healthy"] as const)(
         const received = new Promise<void>((resolve) => {
           const inspect = () => {
             if (Buffer.byteLength(child.stdout()) - prefix === 262144) {
-              child.process.stdout!.off("data", inspect); resolve();
+              child.process.stdout!.off("data", inspect);
+              resolve();
             }
           };
-          child.process.stdout!.on("data", inspect); inspect();
+          child.process.stdout!.on("data", inspect);
+          inspect();
         });
         child.process.stdout!.resume();
         await Promise.all([received, child.wait("write-callback-no-error")]);
         expect(Buffer.byteLength(child.stdout()) - prefix).toBe(262144);
       }
       expect(child.process.exitCode).toBeNull();
-      expect(child.messages.some((message) => message.event === "outcome")).toBe(false);
+      expect(
+        child.messages.some((message) => message.event === "outcome"),
+      ).toBe(false);
       child.send("release-mutator");
       await child.wait("mutator-success");
       const outcome = await child.wait("outcome");
       await child.wait("sink-close");
       expect(outcome.records).toHaveLength(2);
-      expect(outcome.records?.[1]).toMatchObject({ result: "succeeded", attempts: 1 });
-      expect(await child.exited).toEqual({ code: row === "broken" ? 1 : 0, signal: null });
+      expect(outcome.records?.[1]).toMatchObject({
+        result: "succeeded",
+        attempts: 1,
+      });
+      expect(await child.exited).toEqual({
+        code: row === "broken" ? 1 : 0,
+        signal: null,
+      });
       const events = child.messages.map((message) => message.event);
-      const milestones = ["intent", "committed", "pending-frame", "transport-closed-draining",
-        ...(row === "broken" ? ["write-callback-error", "contained-EPIPE-draining"] : ["write-callback-no-error"]),
-        "mutator-success", "outcome", "sink-close"];
-      expect(events.filter((event) => milestones.includes(event))).toEqual(milestones);
+      const milestones = [
+        "intent",
+        "committed",
+        "pending-frame",
+        "transport-closed-draining",
+        ...(row === "broken"
+          ? ["write-callback-error", "contained-EPIPE-draining"]
+          : ["write-callback-no-error"]),
+        "mutator-success",
+        "outcome",
+        "sink-close",
+      ];
+      expect(events.filter((event) => milestones.includes(event))).toEqual(
+        milestones,
+      );
       // A timeout/transport failure would test the old path, so it is always a harness failure.
-      expect(child.stderr(), "Harness timing failure: per-frame deadline expired").not.toContain("STDIO_OUTPUT_FAILED");
+      expect(
+        child.stderr(),
+        "Harness timing failure: per-frame deadline expired",
+      ).not.toContain("STDIO_OUTPUT_FAILED");
       expect(child.stderr()).not.toMatch(/uncaught|unhandled|Error:|at .*\(/iu);
-    } finally { child.dispose(); }
-  }, 15000,
+    } finally {
+      child.dispose();
+    }
+  },
+  15000,
 );
 
 // BR-254 v3 / BR-447 v1 / BR-448 v1: a late protocol callback must survive transport close.
 it.each(["EPIPE", "EIO", "EPIPE-with-close-failure"] as const)(
-  "TestBR254_v3_TestBR447_TestBR448_AC09_stdout_failure_during_drain [%s]", async (row) => {
+  "TestBR254_v3_TestBR447_TestBR448_AC09_stdout_failure_during_drain [%s]",
+  async (row) => {
     vi.useFakeTimers();
     hooks.largeResult = true;
     const output = new ProcessOutput();
     for (let session = 0; session < 2; session++) {
       output.holdFrames = false;
-      const order: string[] = [], file = await f054HealthyFile(order);
-      const mutation = f054TimedMutation(order), exits: number[] = [];
-      const h = await f039Main(file.sink, { output, order, mutator: mutation.mutator,
-        exit: (code) => { exits.push(code); order.push(`exit-${String(code)}`); },
+      const order: string[] = [],
+        file = await f054HealthyFile(order);
+      const mutation = f054TimedMutation(order),
+        exits: number[] = [];
+      const h = await f039Main(file.sink, {
+        output,
+        order,
+        mutator: mutation.mutator,
+        exit: (code) => {
+          exits.push(code);
+          order.push(`exit-${String(code)}`);
+        },
       });
       let closeSpy: { mockRestore(): void } | undefined;
       try {
-        const run = await h.wireMutation(); await mutation.dispatched;
+        const run = await h.wireMutation();
+        await mutation.dispatched;
         expect(h.gate.hasCommitted).toBe(true);
         output.holdFrames = true;
-        h.ports.input.write(`${JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "synthetic_large_result", arguments: {} } })}\n`);
-        await vi.advanceTimersByTimeAsync(0); await microtasks();
+        h.ports.input.write(
+          `${JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "synthetic_large_result", arguments: {} } })}\n`,
+        );
+        await vi.advanceTimersByTimeAsync(0);
+        await microtasks();
         const frame = output.frames.at(-1)!;
         expect(Buffer.byteLength(frame)).toBe(262144);
         expect(Buffer.byteLength(frame)).toBeLessThan(1048576);
-        expect(JSON.parse(frame)).toMatchObject({ jsonrpc: "2.0", id: 1, result: { content: [{ type: "text", text: "x".repeat(262070) }] } });
+        expect(JSON.parse(frame)).toMatchObject({
+          jsonrpc: "2.0",
+          id: 1,
+          result: { content: [{ type: "text", text: "x".repeat(262070) }] },
+        });
         expect(output.writableLength).toBe(262144);
         if (row === "EPIPE-with-close-failure") {
-          const server = lastServer(), original = server.close.bind(server);
+          const server = lastServer(),
+            original = server.close.bind(server);
           closeSpy = vi.spyOn(server, "close").mockImplementation(async () => {
-            await original(); throw Error("PRIVATE_CLOSE_CANARY");
+            await original();
+            throw Error("PRIVATE_CLOSE_CANARY");
           });
         }
-        h.signal("SIGTERM"); await microtasks();
+        h.signal("SIGTERM");
+        await microtasks();
         expect(exits).toEqual([]);
         expect(output.closes).toBeGreaterThan(0);
         expect(output.listenerCount("error")).toBe(1);
-        const failure = Object.assign(Error("PRIVATE_PROTOCOL_CANARY"), { code: row === "EIO" ? "EIO" : "EPIPE" });
+        const failure = Object.assign(Error("PRIVATE_PROTOCOL_CANARY"), {
+          code: row === "EIO" ? "EIO" : "EPIPE",
+        });
         output.frameCallbacks.at(-1)!(failure);
         expect(() => output.emit("error", failure)).not.toThrow();
         await vi.advanceTimersByTimeAsync(1000);
         expect(exits).toEqual([]);
         await vi.advanceTimersByTimeAsync(1999);
         expect(exits).toEqual([]);
-        await vi.advanceTimersByTimeAsync(1); await microtasks();
+        await vi.advanceTimersByTimeAsync(1);
+        await microtasks();
         expect(exits).toEqual([1]);
-        expect(order.filter((event) => ["mutator-success", "outcome", "sink-close", "exit-1"].includes(event)))
-          .toEqual(["mutator-success", "outcome", "sink-close", "exit-1"]);
+        expect(
+          order.filter((event) =>
+            ["mutator-success", "outcome", "sink-close", "exit-1"].includes(
+              event,
+            ),
+          ),
+        ).toEqual(["mutator-success", "outcome", "sink-close", "exit-1"]);
         expect(file.records).toHaveLength(2);
         expect(run.value).toMatchObject({ result: "succeeded", attempts: 1 });
         expect(mutation.mutator).toHaveBeenCalledTimes(1);
-        expect(h.err.writes.join("")).not.toMatch(/STDIO_OUTPUT_FAILED|PRIVATE_/u);
+        expect(h.err.writes.join("")).not.toMatch(
+          /STDIO_OUTPUT_FAILED|PRIVATE_/u,
+        );
         expect(output.listenerCount("error")).toBe(1);
-      } finally { closeSpy?.mockRestore(); h.restore(); }
+      } finally {
+        closeSpy?.mockRestore();
+        h.restore();
+      }
     }
     expect(output.listenerCount("error")).toBe(1);
     // Exactly one large protocol frame per session: the failed callback is never retried.
-    expect(output.frames.filter((frame) => Buffer.byteLength(frame) === 262144)).toHaveLength(2);
+    expect(
+      output.frames.filter((frame) => Buffer.byteLength(frame) === 262144),
+    ).toHaveLength(2);
   },
 );

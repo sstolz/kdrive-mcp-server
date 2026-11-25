@@ -243,15 +243,29 @@ async function stdio(
     gate,
   });
   if (owned) {
+    let failed = false;
+    const removeSignals = () => {
+      deps.signals.off("SIGINT", stop);
+      deps.signals.off("SIGTERM", stop);
+    };
+    const closeFailure = () => {
+      if (!failed) {
+        failed = true;
+        deps.setExitCode?.(1);
+        try {
+          deps.stderr.write("PROCESS_CLOSE_FAILED\n");
+        } catch {
+          // Best effort; an owned composition never terminates its host.
+        }
+      }
+      removeSignals();
+    };
     const stop = () => {
-      void started.close();
+      void started.close().then(removeSignals, closeFailure);
     };
     deps.signals.on("SIGINT", stop);
     deps.signals.on("SIGTERM", stop);
-    void started.closed.then(() => {
-      deps.signals.off("SIGINT", stop);
-      deps.signals.off("SIGTERM", stop);
-    });
+    void started.closed.then(removeSignals, closeFailure);
   }
   await started.ready;
   return Object.freeze({ close: () => started.close() });
@@ -295,25 +309,40 @@ async function http(
     return undefined;
   }
   let closing: Promise<void> | undefined;
+  let stopping = false;
   const close = () => {
     closing ??= (async () => {
-      // BR-254: the HTTP close (BR-169), then the gate, then exit. The signal
-      // handlers stay installed until the gate has drained.
+      // Keep signal handlers through transport closure and committed gate drain.
       try {
         await server.close();
       } finally {
-        await gate.close();
-        deps.signals.off("SIGINT", stop);
-        deps.signals.off("SIGTERM", stop);
+        try {
+          await gate.close();
+        } finally {
+          deps.signals.off("SIGINT", stop);
+          deps.signals.off("SIGTERM", stop);
+        }
       }
     })();
     return closing;
   };
-  // BR-210: SIGTERM or SIGINT runs the F-012 BR-169 close() and exits 0.
+  // BR-210 v2: repeated signals join one result and one exit request.
   const stop = () => {
-    void close().then(() => {
-      deps.exit(0);
-    });
+    if (stopping) return;
+    stopping = true;
+    void close().then(
+      () => {
+        deps.exit(0);
+      },
+      () => {
+        try {
+          deps.stderr.write("PROCESS_CLOSE_FAILED\n");
+        } catch {
+          // Best effort: failure status is independent of diagnostic delivery.
+        }
+        deps.exit(1);
+      },
+    );
   };
   deps.signals.on("SIGINT", stop);
   deps.signals.on("SIGTERM", stop);

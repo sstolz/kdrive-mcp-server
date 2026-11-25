@@ -836,13 +836,17 @@ it("TestBR084_F040_uncontended_metadata_raw_and_resource_projections", async () 
 // F-054 BR-447 v1: detached extraction diagnostics outlive the navigation session.
 it("TestBR447_AC06_extraction_diagnostic_after_session_close", async () => {
   const { FlushPort } = await import("./helpers/f039-composition.js");
-  const { DETACH_LINE, RELEASE_LINE } = await import("./helpers/f040-lifecycle.js");
+  const { DETACH_LINE, RELEASE_LINE } =
+    await import("./helpers/f040-lifecycle.js");
   const stderr = new FlushPort();
   h = admissionHarness();
-  const getter = vi.spyOn(process, "stderr", "get").mockReturnValue(stderr as unknown as typeof process.stderr);
+  const getter = vi
+    .spyOn(process, "stderr", "get")
+    .mockReturnValue(stderr as unknown as typeof process.stderr);
   try {
     for (const label of ["first-session", "second-session"]) {
-      const caller = await h.caller(label), call = caller.invoke();
+      const caller = await h.caller(label),
+        call = caller.invoke();
       await pump();
       const worker = h.workers.at(-1)!;
       worker.terminate.mockRejectedValue(Error("PRIVATE_TERMINATION_CANARY"));
@@ -851,7 +855,12 @@ it("TestBR447_AC06_extraction_diagnostic_after_session_close", async () => {
       expect(await call.task).toEqual(contentError("ACCESS_DENIED"));
       expect(stderr.listenerCount("error")).toBe(1);
       expect(stderr.writes.at(-1)).toBe(DETACH_LINE);
-      queueMicrotask(() => stderr.emit("error", Object.assign(Error("PRIVATE_EPIPE_CANARY"), { code: "EPIPE" })));
+      queueMicrotask(() =>
+        stderr.emit(
+          "error",
+          Object.assign(Error("PRIVATE_EPIPE_CANARY"), { code: "EPIPE" }),
+        ),
+      );
       await pump();
       worker.exited = true;
       worker.emit("exit", 0);
@@ -859,12 +868,24 @@ it("TestBR447_AC06_extraction_diagnostic_after_session_close", async () => {
       await pump();
       expect(stderr.writes.at(-1)).toBe(RELEASE_LINE);
       expect(stderr.listenerCount("error")).toBe(1);
-      expect(() => stderr.emit("error", Object.assign(Error("PRIVATE_LATE_CANARY"), { code: "EPIPE" }))).not.toThrow();
+      expect(() =>
+        stderr.emit(
+          "error",
+          Object.assign(Error("PRIVATE_LATE_CANARY"), { code: "EPIPE" }),
+        ),
+      ).not.toThrow();
       // None of the diagnostic callbacks has fired; capacity and results still settle.
       expect(stderr.callbacks).toHaveLength(stderr.writes.length);
     }
-    expect(stderr.writes).toEqual([DETACH_LINE, RELEASE_LINE, DETACH_LINE, RELEASE_LINE]);
+    expect(stderr.writes).toEqual([
+      DETACH_LINE,
+      RELEASE_LINE,
+      DETACH_LINE,
+      RELEASE_LINE,
+    ]);
     expect(stderr.destroyed).toBe(false);
     await recover();
-  } finally { getter.mockRestore(); }
+  } finally {
+    getter.mockRestore();
+  }
 });
