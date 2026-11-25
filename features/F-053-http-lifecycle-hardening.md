@@ -42,7 +42,9 @@ asynchronous failure uncontained:
    2,501 `rawHeaders` pairs; with `maxHeadersCount` 0 and `maxHeaderSize`
    16,384, 16,300 empty-value lines reach it and 17,000 get Node's 431
    (Node counts name and value bytes, not separators; 73-spec-v2-review-1).
-   v1 assumed silent truncation; v2 corrects it.
+   With `maxHeadersCount` 2,000, 2,000 lines (`Host` included) reach the
+   handler and 2,001 get Node's 431. v1 assumed silent truncation; v2
+   corrects it.
 
 Users affected: operators of the HTTP transport (availability, memory,
 logs) and MCP clients over HTTP (disconnect and header-limit behaviour).
@@ -188,11 +190,11 @@ BR-443–BR-446 are allocated to this draft.
   BR-383 order decides: a call that took the slot first is started. This
   reverses F-026 D-8 for calls that have not started. Verified by: AC-08,
   AC-09, AC-10, AC-11, AC-14.
-- **BR-169 v4** — v3 holds, plus: the server sets `maxHeadersCount` to 0
-  (no Node count limit), so every header line reaches the adapter, where
-  BR-446 applies the 100-line bound; `maxHeaderSize` stays 16,384 bytes and
-  still bounds the header block (at most about 16,300 lines, D-5). Verified by:
-  AC-12, AC-13.
+- **BR-169 v4** — v3 holds, plus: the server sets `maxHeadersCount` to
+  2,000, so a request with 101 to 2,000 header lines reaches the adapter,
+  where BR-446 applies the 100-line bound, and a request with more than
+  2,000 lines gets Node's own empty-body 431 without reaching the router;
+  `maxHeaderSize` stays 16,384 bytes. Verified by: AC-12, AC-13.
 - **BR-446** — A request whose header block holds more than 100 header
   lines, counted as the name/value pairs Node reports in `rawHeaders`
   (repeated names counted separately, `Host` included, trailers excluded),
@@ -320,18 +322,21 @@ names cite their BR versions.
   Verified by: `tests/http/disconnect.test.ts` "BR-445 AC-11 the slot order
   decides a disconnect at release".
 - **AC-12** (BR-169 v4, BR-446) — Given the created server, Then
-  `maxHeadersCount` is 0 and `maxHeaderSize` 16,384; and Given a socket
+  `maxHeadersCount` is 2,000 and `maxHeaderSize` 16,384; and Given a socket
   request with exactly 100 header lines, Then it is handled as before.
   Verified by: `tests/http/lifecycle.test.ts` "BR-169 v4 BR-446 AC-12 pins
   the header count and accepts 100 header lines".
 - **AC-13** (BR-446, BR-167 v4) — Given socket requests with 101 header
-  lines and with 2,500 header lines (each request's entire header block
+  lines and with 2,000 header lines (each request's entire header block
   under 16,384 bytes, e.g. repeated `x:` lines with empty values, so
   repeated names are included), sent to `/mcp` with a valid token and to an
   unknown path during shutdown, When they arrive, Then each gets 431
   `{"error":"invalid_request"}` with `Connection: close`, no
   authentication, window count or body read occurs, and one
-  `request_refused` (`route` `mcp` or `unknown`, `status` 431) is emitted.
+  `request_refused` (`route` `mcp` or `unknown`, `status` 431) is emitted;
+  and Given a socket request with 2,001 header lines, When it arrives,
+  Then it gets a 431 status line from Node, the router's handler never
+  runs and no `request_refused` is emitted.
   Verified by: `tests/http/lifecycle.test.ts` "BR-446 BR-167 v4 AC-13
   refuses more than 100 header lines with 431".
 - **AC-14** (BR-166 v2, BR-445, BR-381 v1) — Given `serve` handling a request, When
@@ -446,28 +451,26 @@ names cite their BR versions.
   `String(error)` out of the response. Rejected: forwarding the SDK
   response (leaks the session and possibly error text); excluding the case
   (it is reachable in the installed SDK).
-- **D-5 — Count header lines from `rawHeaders` with `maxHeadersCount` 0
-  (v2).** Measured (Context item 6): Node refuses, rather than truncates,
-  a request over `maxHeadersCount`, with an empty-body 431 that bypasses the
-  router. With 0, every request reaches the adapter, which applies the
-  100-line bound with the BR-167 body and one `request_refused`; the
-  16,384-byte limit still bounds the block: Node counts name and value
-  bytes, not separators, so at most about 16,300 pairs (32,600 `rawHeaders`
-  entries of at most 16,384 bytes in total) reach the adapter, whose check
-  reads only `rawHeaders.length` (constant cost) before any other work. That
-  is more pairs than the current default cap of 2,000, but the parser work
-  and memory stay proportional to the 16,384-byte limit per request.
-  Trailers stay outside BR-446: with no count limit they are bounded only by
-  `maxHeaderSize` (measured: 16,300 trailers accepted, 17,000 refused by
-  Node), exist only on requests whose body is read, and keep Node's existing
-  parse-error path on overflow. The check runs in the adapter before
-  `handle()`, because the Fetch `Headers` object merges repeated names. Owner choice (2026-11-25) between
-  the two options of v2. Rejected: `maxHeadersCount` 100, leaving Node's
-  refusal (silent, unlogged, a body shape unlike every other refusal);
-  `maxHeadersCount` 101 (v1, which rested on the truncation premise and
-  leaves our refusal reachable only at exactly 101 lines); handling Node's
-  431 in `clientError` (it also covers oversized headers, outside scope);
-  answering 400 (431 is the standard status).
+- **D-5 — Count header lines from `rawHeaders` with `maxHeadersCount`
+  2,000 (v2).** Measured (Context item 6): Node refuses, rather than
+  truncates, a request over `maxHeadersCount`, with an empty-body 431 that
+  bypasses the router. With 2,000, requests of 101 to 2,000 lines reach the
+  adapter, which applies the 100-line bound with the BR-167 body and one
+  `request_refused`; only a request over 2,000 lines, far beyond any real
+  client, gets Node's silent 431. The check runs in the adapter before
+  `handle()`, because the Fetch `Headers` object merges repeated names.
+  Trailers stay outside BR-446; Node parses them on any chunked request,
+  unauthenticated included, whether or not the body is read
+  (73-spec-v2-decision-1-fable), under Node's own limits, and keeps its
+  parse-error path on overflow. Owner choice (2026-11-25), after the
+  strongest-tier pass measured the cost of the first v2 choice. Rejected:
+  `maxHeadersCount` 0 (every refusal in our shape, but on Node v26.13.0
+  about 340 KB of heap per unauthenticated connection holding 16,300
+  unterminated lines: +84.7 MB for 250 connections against +0.7 MB with
+  101 or 2,000); `maxHeadersCount` 100 (every refusal silent and unlogged);
+  `maxHeadersCount` 101 (v1, resting on the truncation premise); handling
+  Node's 431 in `clientError` (it also covers oversized headers, outside
+  scope); answering 400 (431 is the standard status).
 
 ## Open questions
 
@@ -539,3 +542,5 @@ names cite their BR versions.
 - 73-spec-v2-review-1-opus #1 (major) — retained — the bound is about 16,300 pairs (Node counts name and value bytes), measured and cited in Context item 6, BR-169 v4 and D-5.
 - 73-spec-v2-review-1-opus #2 (minor) — retained — D-5 states that trailers stay outside BR-446, bounded by `maxHeaderSize`, with Node's parse-error path on overflow.
 - 73-spec-v2-review-2-opus #1, #2 (minor) — retained — "proportional to the 16,384-byte limit"; lines re-wrapped.
+- 73-spec-v2-decision-1-fable #1 (major) — retained — owner chose `maxHeadersCount` 2,000 (BR-169 v4, AC-12, AC-13, D-5); the 0 option and its measured memory cost are recorded as rejected in D-5.
+- 73-spec-v2-decision-1-fable #2 (minor) — retained — D-5 states that trailers are parsed on any chunked request, unauthenticated included.
