@@ -21,7 +21,8 @@ The inspected composition has four gaps:
    signal path or the `main` owned-signal path.
 2. HTTP's `void close().then(exit0)` has no rejection handler. Both the owned
    stdio stop in `src/main.ts` and the dedicated signal in `src/stdio.ts` also
-   discard a close promise. `src/http/server.ts` can propagate a rejected
+   discard a close promise, as do the transport EOF, failure and SDK-close
+   callbacks. `src/http/server.ts` can propagate a rejected
    handler close. The gate's production close, by contrast, is specified to
    resolve even on sink failure (BR-254 v2).
 3. `src/stdio-transport.ts` validates parsed gate error JSON through
@@ -44,8 +45,10 @@ that measurement.
 ## Scope
 
 - Complete the F-016 AC-21 SIGTERM coverage with a 3,000 ms virtual mutator.
-- Handle close rejection in HTTP and both stdio signal compositions with a
-  fixed failure diagnostic and the appropriate failure status.
+- Handle close rejection in HTTP signal shutdown and both stdio compositions,
+  including transport EOF, failure and SDK-close callbacks, with a fixed failure
+  diagnostic and the appropriate failure status. Bound the stdio server-close
+  wait by the existing shutdown deadline.
 - Emit re-serialized validated gate error JSON at the stdio output boundary,
   requiring finite numeric `attempts` and optional `status`.
 - Give process stderr and process stdout one permanent process-owned error
@@ -65,7 +68,7 @@ deliverable creates no BR files, tests, code or acceptance markers.
 
 ## Business rules
 
-Proposed versions: BR-210 v2, BR-254 v3 and BR-262 v2 retain their existing
+Proposed versions: BR-069 v3, BR-210 v2, BR-254 v3 and BR-262 v2 retain their existing
 purposes and IDs. Only the deltas below are new; inherited clauses remain.
 BR-447–BR-448 v1 are new allocations. Recheck IDs on main before freeze and PR.
 
@@ -78,18 +81,25 @@ BR-447–BR-448 v1 are new allocations. Recheck IDs on main before freeze and PR
 - **BR-210 v2** — An HTTP signal stop requests exit 0 only after transport and
   gate close both fulfill, and requests exit 1 if either rejects.
   Verified by: AC-03.
-- **BR-254 v3 (stdio failure status)** — A rejected signal-driven stdio close
-  selects failure status 1 through the dedicated exit port or the owned host's
-  non-terminating status setter, respectively. Dedicated exit and owned `closed`
-  both wait for server close and gate close to settle, even when transport
-  `onclose` starts gate cleanup before server close settles. Verified by: AC-04.
-- **BR-254 v3 (close diagnostic)** — Each failed signal shutdown offers exactly
+- **BR-254 v3 (stdio failure status)** — A rejected stdio close, including
+  signal, EOF, transport-failure and SDK-close paths, selects failure status 1
+  through the dedicated exit port or the owned host's non-terminating status
+  setter, respectively, without an unhandled rejection. Dedicated exit and
+  owned `closed` wait for gate close and for server close to settle or reach
+  the existing shutdown deadline; server-close expiry is a close failure. This
+  holds even when transport `onclose` starts gate cleanup first. No new
+  allowance extends the existing 1,000 ms no-committed-run or 45,000 ms gate
+  bound. Verified by: AC-04.
+- **BR-254 v3 (close diagnostic)** — Each failed HTTP signal shutdown or stdio
+  shutdown (including server-close expiry) offers exactly
   one `PROCESS_CLOSE_FAILED\n` diagnostic without any rejection payload.
   Verified by: AC-03, AC-04.
-- **BR-262 v2** — A stdio gate error text that passes the parsed-object
-  validator, narrowed to require `Number.isFinite` for required `attempts` and
-  optional `status`, is emitted as JSON.stringify of that validated object
-  rather than as the original input text. Verified by: AC-05.
+- **BR-262 v2** — The gate error parsed-object validator requires
+  `Number.isFinite` for required `attempts` and optional `status`.
+  Verified by: AC-05.
+- **BR-069 v3** — At the stdio output boundary, gate error text that passes
+  that validator is emitted as JSON.stringify of the validated object rather
+  than as the original input text. Verified by: AC-05.
 - **BR-447 v1** — Built-in use of process stderr and process stdout shares one
   idempotently installed process-owned error listener per stream, installed
   before its first built-in write and never removed by a session close.
@@ -110,16 +120,18 @@ BR-447–BR-448 v1 are new allocations. Recheck IDs on main before freeze and PR
   primitive runs prevents a later success request or flush completion from selecting exit 0, without
   interrupting committed mutation drain. Verified by: AC-03, AC-04, AC-08,
   AC-09, AC-10. Owned closure considers only that session's own close outcome
-  for its status setter; process-level stream latches affect only dedicated
+  for its status setter; owned closure calls the setter only with 1, never
+  with 0. Process-level stream latches affect only dedicated
   process exit, never a later owned session's status.
 
-BR-169 v4, BR-069 v2, BR-070 v5 and BR-426 v1 remain dependencies, not new
-versions: HTTP server close ordering, sanitized channels, stdio budgets and
-best-effort extraction diagnostic delivery retain their purposes and behavior.
-BR-262 v2 narrows numeric validation and serialization together; it preserves
-its single mutate call, single text item, result fields and `isError`
+BR-169 v4, BR-070 v5 and BR-426 v1 remain dependencies, not new versions:
+HTTP server close ordering, stdio budgets and best-effort extraction diagnostic
+delivery retain their purposes and behavior. BR-069 is currently v2; proposed
+v3 adds the stdio-boundary reserialization clause while retaining its sanitized
+channels and audit-record exception. BR-262 v2 narrows numeric validation; it
+preserves its single mutate call, single text item, result fields and `isError`
 classification. Its persisted BR version is currently v1; v2 is the proposed
-version for both changes, not an additional draft-version bump.
+version, not an additional draft-version bump.
 
 Every BR-254 v2 clause is retained or replaced as follows:
 
@@ -131,7 +143,7 @@ Every BR-254 v2 clause is retained or replaced as follows:
 | No write/sync after latching; repeated close shares completion/deadline and never releases twice; queued unwritten appends reject without I/O | Kept. |
 | Guarded gate close bound 45,000 ms; pre-intent guard 10,000 ms and no commit after close | Kept. |
 | No-committed-run stdio's remaining 1,000 ms also shortens non-committed appends, then sink close, without a fresh allowance | Kept. |
-| Transport → gate → dedicated exit; HTTP in-flight 503 remains independent of audit outcome | Kept; signal-driven stdio exit/owned closure additionally waits for server close to settle, so a late rejection cannot follow a successful exit request. |
+| Transport → gate → dedicated exit; HTTP in-flight 503 remains independent of audit outcome | Kept; stdio exit/owned closure additionally waits for server close to settle or reach the existing shutdown deadline; expiry selects close failure, and any later rejection is consumed. |
 | Dedicated stdio uses shared production helper via `deps.exit`, separately from owned status setter; owned/library never terminates host, including transport failure | Kept. |
 | `exit(code, shutdownDeadline?)` uses absolute monotonic time; HTTP, non-shutdown and committed-run shutdown omit deadline | Kept. |
 | First call fixes code/deadline; repeated calls cannot reset code/deadline | Replaced only for code: observed close failure, unexpected stderr failure or stdio protocol-frame stdout failure upgrades success to 1 before primitive exit; later success cannot downgrade 1. First deadline remains fixed. |
@@ -189,10 +201,28 @@ files and then Docker/Make `make check` during implementation, not authoring.
   pending, then server close rejects: neither dedicated exit nor owned
   `closed` settles early, and final status is 1. Add an owned-session row where
   a process-level stderr failure latched earlier and a later owned session
-  closes cleanly: that session's setter reports 0, without terminating its host.
+  closes cleanly: that session's setter is not called (calls equal `[]`),
+  without terminating its host. Add dedicated and owned rows with a
+  never-settling server close: with no committed run, gate/sink drain completes
+  before the existing 1,000 ms deadline, closure stays pending until that
+  deadline, then dedicated exit is requested with 1 or owned closure settles
+  with setter 1, offering exactly `PROCESS_CLOSE_FAILED\n`. A committed-run
+  row uses the existing 45,000 ms gate deadline without a fresh allowance;
+  gate/sink drain completes before exit 1 at that deadline. Consume a server
+  rejection arriving after expiry without another diagnostic/status request.
+  Also exercise each `src/stdio-transport.ts` EOF, failure and SDK-close
+  `void close()` site with a rejecting `sdk.close()` in both compositions:
+  consume the rejection, select status 1, and finish gate/sink drain before
+  exit or owned `closed`, with no unhandled rejection or canary disclosure.
+  The EOF row uses the F-016 AC-21 committed mutator settling successfully
+  at 3,000 virtual ms: reject `sdk.close()` during gate drain, verify no exit
+  at 1,000 or 2,999 ms, then outcome append → sink close → exit 1 (or owned
+  setter 1 and `closed`) at 3,000 ms. Each failed shutdown offers the fixed
+  close-failure diagnostic once, even when the transport already reported
+  its separate fixed failure diagnostic.
   Verified by: `TestBR254_v3_AC04_stdio_signal_close_rejection_is_contained`
   in `tests/mutation-composition.test.ts`.
-- **AC-05** (BR-262 v2) — Given the actual owned transport's send boundary and
+- **AC-05** (BR-069 v3, BR-262 v2) — Given the actual owned transport's send boundary and
   error text `{"result":"private-canary","result":"denied","attempts":0}`,
   When the frame is written, Then its one text item is exactly
   `{"result":"denied","attempts":0}`, without the canary or duplicate key.
@@ -203,7 +233,7 @@ files and then Docker/Make `make check` during implementation, not authoring.
   `INVALID_ARGUMENTS` because the parsed numeric field is non-finite. Finite
   numeric fields retain their validation behavior; existing allowed plain
   tool errors and successful tool envelopes retain their behavior. Verified by:
-  `TestBR262_v2_AC05_stdio_emits_only_validated_gate_JSON`
+  `TestBR069_v3_TestBR262_v2_AC05_stdio_emits_only_validated_gate_JSON`
   in `tests/navigation-wire-boundaries.test.ts`, with existing
   `TestBR262_*` coverage retained in `tests/mutation-tools.test.ts`.
 - **AC-06** (BR-447 v1, BR-448 v1) — Given an isolated process stderr double,
@@ -248,7 +278,10 @@ files and then Docker/Make `make check` during implementation, not authoring.
   stderr EPIPE `error` events are contained without changing code, while
   non-EPIPE stderr `error` events latch failure even from an empty flush write.
   Verified by: `TestBR254_v3_TestBR448_AC08_failure_survives_exit_flush`
-  in `tests/cli.test.ts`, retaining F-039 AC-12 success/failure/late-event rows.
+  in `tests/cli.test.ts`, retaining F-039 AC-12 success/failure/late-event rows
+  except the row "contain subsequent error events without changing code",
+  amended for non-EPIPE stderr errors before primitive exit: code 0 becomes 1
+  and code 1 stays 1. EPIPE, stdout and post-exit rows stay unchanged.
 - **AC-09** (BR-254 v3, BR-447 v1, BR-448 v1) — Given the dedicated stdio
   composition, the real transport and gate, a process stdout double retaining
   a pending 256 KiB frame (including its newline, below byteLimit 1,048,576)
@@ -273,11 +306,12 @@ files and then Docker/Make `make check` during implementation, not authoring.
 - **AC-10** (BR-254 v3, BR-447 v1, BR-448 v1) — Given a child running the
   dedicated stdio composition with real process.stdout, a parent pausing its
   pipe reader, a pending 256 KiB frame (including its newline, below byteLimit
-  1,048,576 and larger than pipe capacity) from the named synthetic tool
-  `synthetic_large_result` (write returned false and writableLength is positive),
+  1,048,576) from the named synthetic tool `synthetic_large_result`
+  (write returned false and writableLength is positive),
   and a committed mutator held at a synthetic upstream response barrier with a
   healthy file audit sink, the child acknowledging over IPC right after that
-  write() returns false, When the parent sends SIGTERM as soon as that
+  write() returns false (assert this and positive writableLength before
+  acknowledging; fail loudly otherwise), When the parent sends SIGTERM as soon as that
   acknowledgment arrives, before the frame's 1,000 ms write bound expires, to initiate
   transport closure, the child acknowledges transport closure and pending gate
   drain over IPC and the parent then destroys the reader, Then the child
@@ -286,7 +320,19 @@ files and then Docker/Make `make check` during implementation, not authoring.
   mutator, its successful outcome is recorded and the sink closes before the
   actual child exits 1, with neither uncaught error nor unhandled rejection
   and no `STDIO_OUTPUT_FAILED` on stderr, excluding the existing per-frame
-  timeout or transport failure path as the source of exit 1.
+  timeout or transport failure path as the source of exit 1. Add a healthy
+  slow-client row with the same pending write and transport-close barriers:
+  the parent resumes its reader instead of destroying it, receives all
+  262144 frame bytes, and the write callback reports no error. No stdout
+  failure latches; after mutator release, outcome append and sink close
+  precede actual exit 0, without uncaught error or unhandled rejection.
+  The 262144-byte frame includes the JSON-RPC envelope and newline: use a
+  successful response with numeric id 1, one text item and ASCII padding.
+  Use `{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":""}]}}`
+  as the empty-text envelope: 74 bytes including newline, so 262070 ASCII text
+  bytes produce exactly 262144 bytes, below byteLimit 1048576. Assert the
+  encoded size. The supplied pending-threshold measurement is setup-dependent,
+  not a pipe-capacity guarantee; the write-return assertion is mandatory.
   Verify ordered IPC milestones and the synthetic audit record; IPC barriers,
   not sleeps, establish pending write, transport close, EPIPE and release order.
   A bounded watchdog detects a stuck test. A `STDIO_OUTPUT_FAILED` on stderr is
@@ -306,13 +352,24 @@ files and then Docker/Make `make check` during implementation, not authoring.
    the latter alone misses the specified elapsed-time and signal composition.
 2. **One shutdown result owner per composition.** Attach explicit fulfillment
    and rejection handling to every signal-started close, including the cleanup
-   gate promise in stdio. Settle cleanup and remove signal handlers in a finally
+   gate promise in stdio, and to the EOF, failure and SDK-close `void close()`
+   sites in `src/stdio-transport.ts` (currently around lines 111, 150 and 315).
+   Those transport paths consume a rejected `sdk.close()` and select failure
+   status 1 without an unhandled rejection, including during EOF gate drain.
+   Settle cleanup and remove signal handlers in a finally
    path, keeping handlers installed during committed mutation drain. A server
    close rejection still attempts gate drain before reporting failure. Both
-   closes must settle before dedicated exit or owned `closed`, including when
-   synchronous transport `onclose` starts gate cleanup first. Dedicated
+   stdio closes are observed before dedicated exit or owned `closed`, including
+   when synchronous transport `onclose` starts gate cleanup first: gate close
+   keeps its existing bound, and server close races the same existing absolute
+   shutdown deadline (1,000 ms without a committed run, otherwise the existing
+   45,000 ms gate bound). Do not start another allowance for server close.
+   Server-close expiry counts as close failure with status 1 and the fixed
+   diagnostic, while gate/sink drain still completes before exit/owned `closed`.
+   Keep a rejection handler attached to server close after expiry. Dedicated
    modes use `deps.exit(1)` (stdio's injected exit port); owned modes use their
-   setter and never terminate the host. Repeated signals join the same result.
+   setter only with 1, never with 0, and never terminate the host. Repeated
+   signals join the same result.
    Reject fire-and-forget promises and an unconditional final exit 0: both lose
    the explicit failure contract. `PROCESS_CLOSE_FAILED\n` is the sole new
    fixed diagnostic; reporting it is best effort and cannot replace status 1.
@@ -385,7 +442,13 @@ files and then Docker/Make `make check` during implementation, not authoring.
    verdict. Before freeze the orchestrator obtains independent strong-tier
    approval followed by the security-sensitive strongest-tier decision pass,
    records evidence/available token counters in the ticket. The stdout
-   measurement premise is resolved by the supplied probes. Subsequent BR
+   measurement premise is resolved by the supplied owner-listener and
+   pending-threshold measurements in [Node process observations](../docs/observations/node-process.md),
+   [139-probe-2-orchestrator](https://github.com/sstolz/kdrive-mcp-server/issues/139#issuecomment-7157477735):
+   after transport-listener removal and destroy(), the remaining owner contains
+   EPIPE in 3/3 broken-reader runs; resumed readers get all 1048576 bytes and
+   error-free callbacks in 3/3 runs. The 262144-byte pending threshold was
+   observed once and must be asserted in the AC-10 setup. Subsequent BR
    records carry the listed versions and pending acceptance status, not
    active status. No ADR is needed for this
    local correction of existing ownership contracts.
@@ -434,8 +497,9 @@ Spec review round 1 (`139-spec-review-1-opus`) produced these decisions:
 - **Finding 6 — retained.** AC-01/AC-02, their test names and rule bullets cite
   unchanged BR-254 drain coverage from F-016 AC-21, distinguishing proof from
   a new behavioral delta.
-- **Finding 7 — retained.** Proposed BR-262 v2 includes finite numeric
-  validation and reserialization; AC-05 rejects overflowing attempts and
+- **Finding 7 — retained, allocation amended by the decision pass below.**
+  Proposed BR-262 v2 includes finite numeric validation and BR-069 v3 owns
+  stdio reserialization; AC-05 rejects overflowing attempts and
   status, preventing serialized null from escaping the validator contract.
 - **Finding 8 — retained.** Node observations link the supplied identified
   stdout and earlier stderr/close ticket evidence, making each premise
@@ -452,15 +516,19 @@ Spec review round 2 (`139-spec-review-2-opus`) produced these decisions:
   Stderr EPIPE events never change code; all other stderr events latch,
   including flush events. The BR-254 clause table records this replacement.
 - **Finding 2 — retained.** AC-09/AC-10 use a 256 KiB encoded frame including
-  newline from `synthetic_large_result`, below byteLimit and above pipe capacity
-  for the child probe. SIGTERM precedes its 1,000 ms bound and stderr must lack
+  newline from `synthetic_large_result`, below byteLimit; the measured
+  setup-dependent pending threshold and mandatory assertion below supersede
+  the earlier pipe-capacity claim. SIGTERM precedes its 1,000 ms bound and
+  stderr must lack
   `STDIO_OUTPUT_FAILED`, so the existing timeout cannot prove the new latch.
 - **Finding 3 — retained.** D-3 resolves owners through process getters at call
   time, keyed by stream identity in a `WeakMap`; reject module-level stream
   singletons to preserve getter-spy substitution and test-row isolation.
 - **Finding 4 — retained.** BR-254 and D-4 limit owned status to that session's
   close outcome; process stderr latches affect only dedicated-process exit.
-  AC-04 adds earlier stderr failure followed by a clean owned close/status 0.
+  AC-04 adds earlier stderr failure followed by a clean owned close; the
+  decision-pass correction below requires no setter call, preserving earlier
+  failure status.
 - **Finding 5 — retained.** Node observations and Context distinguish the
   once-run stdout listener/no-listener cases from the pending-write-after-destroy
   probe's three identical runs, matching the supplied evidence.
@@ -480,5 +548,35 @@ Spec review round 2 (`139-spec-review-2-opus`) produced these decisions:
 - **Minor 4 — retained.** AC-10 acknowledges right after `write()` returns false,
   the parent sends SIGTERM on that acknowledgment, and a `STDIO_OUTPUT_FAILED`
   is a harness timing failure, never a pass.
+
+### 139-spec-decision-1-fable (strongest-tier decision pass, changes)
+
+- **Finding 1 — retained.** Owned closure calls its setter only with 1, never
+  with 0; AC-04 expects `[]` for a clean owned close after an earlier stderr
+  latch. This preserves the existing contract and cannot clear an earlier 1.
+- **Finding 2 — retained, measured.** Record the supplied 2026-11-25
+  `139-probe-2-orchestrator` owner-listener results in Node observations and
+  cite them in D-6. AC-10 adds resumed-reader delivery without a latch and
+  exit 0, ruling out a false failure on a healthy slow client.
+- **Finding 3 — retained.** Bound stdio server-close observation by the
+  existing shutdown deadline. Expiry selects 1 and `PROCESS_CLOSE_FAILED\n`;
+  AC-04 covers never-settling close, completed drain before deadline exit and
+  safely consumed late rejection. No new shutdown allowance is introduced.
+- **Finding 4 — retained.** Include transport EOF, failure and SDK-close
+  fire-and-forget sites in D-2/BR-254 v3. AC-04 covers rejecting `sdk.close()`
+  on each path, including F-016 AC-21 EOF during committed drain, with failure
+  status 1 and no unhandled rejection.
+- **Finding 5 — retained.** The persisted BR-069 is v2; propose v3 for stdio
+  boundary reserialization and retain BR-262 v2 for finite-number validation.
+  AC-05 maps both versions; no new BR ID or BR-file edit is needed here.
+- **Finding 6 — retained.** AC-08 explicitly amends F-039 AC-12's "contain
+  subsequent error events without changing code" row for non-EPIPE stderr
+  errors before primitive exit (0 becomes 1). EPIPE, stdout and post-exit
+  rows retain their existing expectations.
+- **Finding 7 — retained, measured.** Record the supplied one-run-per-size
+  pending threshold and its setup dependence. Keep the 262144-byte frame
+  including envelope/newline below byteLimit; AC-10 asserts its encoded size,
+  `write() === false` and positive writableLength before IPC acknowledgment,
+  failing loudly if the setup does not produce backpressure.
 
 No freeze or acceptance is claimed in this section.

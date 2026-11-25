@@ -62,3 +62,33 @@ author.
   uncontained after transport close, including while the mutation gate drains
   before production exit flushing installs its listener.
 - Evidence: [139-probe-1-orchestrator](https://github.com/sstolz/kdrive-mcp-server/issues/139#issuecomment-7157090270), repeat counts in its [amendment](https://github.com/sstolz/kdrive-mcp-server/issues/139#issuecomment-7157327883).
+
+## Pending stdout write with a remaining owner listener
+
+- Date: 2026-11-25.
+- Method: on Node v26.13.0 in the dev container, use real process.stdout in a
+  child with a paused parent pipe reader and a 1 MiB pending write. Attach
+  separate transport and owner `error` listeners, then call
+  `process.stdout.off("error", transportListener)` and
+  `process.stdout.destroy()`, leaving the owner attached. After that close,
+  (a) destroy the parent reader or (b) resume it. Run each case three times.
+- Result: (a) 3/3 runs: the write callback reports EPIPE, the owner listener
+  receives EPIPE, the process survives and exits 0. (b) 3/3 runs: the write
+  callback reports no error, all 1048576 bytes arrive and the process exits 0.
+  A remaining owner contains the broken-reader error after transport-style
+  close, while a healthy slow reader does not produce a callback failure.
+- Evidence: [139-probe-2-orchestrator](https://github.com/sstolz/kdrive-mcp-server/issues/139#issuecomment-7157477735).
+
+## Setup-dependent stdout pending threshold
+
+- Date: 2026-11-25.
+- Method: in the same child/paused-parent stdout setup, compare writes of
+  131072 and 262144 bytes, one run per size, observing the write return value
+  and writableLength.
+- Result: 131072 bytes did not stay pending: write returned true. With
+  262144 bytes, write returned false and writableLength was 262144. This is
+  setup-dependent because the paused parent stream buffers; it does not
+  establish a general pipe-capacity threshold. A test using a 262144-byte
+  encoded frame must assert that write returned false and writableLength is
+  positive before acknowledging readiness, failing loudly otherwise.
+- Evidence: [139-probe-2-orchestrator](https://github.com/sstolz/kdrive-mcp-server/issues/139#issuecomment-7157477735).
