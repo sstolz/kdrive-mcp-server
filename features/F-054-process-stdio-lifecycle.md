@@ -2,7 +2,7 @@
 id: F-054
 title: Close process and stdio lifecycle gaps
 ticket: "#139"
-status: ready-for-freeze
+status: frozen
 version: 1
 ---
 
@@ -66,6 +66,10 @@ public error payload. No redesign of HTTP close steps (BR-169 v4), gate drain,
 or the existing operating-system teardown limitations. This spec-authoring
 deliverable creates no BR files, tests, code or acceptance markers.
 
+Stdin `error` after transport close is an accepted residual: it is unmeasured
+and unlikely on pipes; any stdin failure before close is already handled by
+the transport.
+
 ## Business rules
 
 Proposed versions: BR-069 v3, BR-210 v2, BR-254 v3 and BR-262 v2 retain their existing
@@ -82,16 +86,20 @@ BR-447–BR-448 v1 are new allocations. Recheck IDs on main before freeze and PR
   gate close both fulfill, and requests exit 1 if either rejects.
   Verified by: AC-03.
 - **BR-254 v3 (stdio failure status)** — A rejected stdio close, including
-  signal, EOF, transport-failure and SDK-close paths, selects failure status 1
+  signal, EOF, transport-failure, SDK-close, start-failure and host-invoked
+  paths, selects failure status 1
   through the dedicated exit port or the owned host's non-terminating status
   setter, respectively, without an unhandled rejection. Dedicated exit and
   owned `closed` wait for gate close and for server close to settle or reach
   the existing shutdown deadline; server-close expiry is a close failure. This
   holds even when transport `onclose` starts gate cleanup first. No new
   allowance extends the existing 1,000 ms no-committed-run or 45,000 ms gate
-  bound. Verified by: AC-04.
+  bound. Session `close()` and `ready` never reject after a consumed close
+  failure; status 1 is selected through the same shutdown result owner.
+  Server-close rejection or expiry starts cleanup if it has not started,
+  re-evaluating `hasCommitted` before exit. Verified by: AC-04.
 - **BR-254 v3 (close diagnostic)** — Each HTTP signal shutdown or stdio
-  shutdown whose server/transport close rejects or reaches the deadline offers exactly
+  shutdown whose server/transport or gate close rejects or reaches the deadline offers exactly
   one `PROCESS_CLOSE_FAILED\n` diagnostic without any rejection payload.
   Verified by: AC-03, AC-04.
 - **BR-262 v2** — The gate error parsed-object validator requires
@@ -121,7 +129,8 @@ BR-447–BR-448 v1 are new allocations. Recheck IDs on main before freeze and PR
   interrupting committed mutation drain. Verified by: AC-03, AC-04, AC-08,
   AC-09, AC-10. Owned closure considers only that session's own close outcome
   for its status setter; owned closure calls the setter only with 1, never
-  with 0. Process-level stream latches affect only dedicated
+  with 0, selecting status 1 once per session regardless of the number of
+  failure sources. Process-level stream latches affect only dedicated
   process exit, never a later owned session's status.
 
 BR-169 v4, BR-070 v5 and BR-426 v1 remain dependencies, not new versions:
@@ -195,6 +204,9 @@ files and then Docker/Make `make check` during implementation, not authoring.
   settles rather than hanging, the fixed failure diagnostic is offered once,
   and dedicated exit is 1 while owned closure reports 1 only through its
   setter; repeat signals cannot produce exit 0 or duplicate failure handling.
+  In the owned transport-failure row followed by a rejecting close, expected
+  setter calls are `[1]`: status 1 is selected once per session regardless of
+  the number of failure sources.
   A throwing diagnostic does not suppress the failure status, and stdout
   contains neither diagnostic nor error payload. Include a row in both
   compositions where gate close resolves first while server close remains
@@ -211,10 +223,20 @@ files and then Docker/Make `make check` during implementation, not authoring.
   call, without a fresh allowance;
   gate/sink drain completes before exit 1 at that deadline. Consume a server
   rejection arriving after expiry without another diagnostic/status request.
+  Add dedicated and owned variants where server close rejects or expires
+  without invoking transport `onclose`: cleanup starts if it has not started,
+  re-evaluates `hasCommitted` to choose the existing bound, and gate/sink drain
+  completes before exit or owned `closed`.
   Also exercise each `src/stdio-transport.ts` EOF, failure and SDK-close
   `void close()` site with a rejecting `sdk.close()` in both compositions:
   consume the rejection, select status 1, and finish gate/sink drain before
   exit or owned `closed`, with no unhandled rejection or canary disclosure.
+  Add a start-failure row with a rejecting `sdk.close()` in both compositions:
+  session `ready` and `close()` fulfill after the close failure is consumed,
+  status 1 is selected through the same result owner, and gate/sink drain
+  completes before exit or owned `closed`, without an unhandled rejection or
+  canary/stack disclosure. Exercise host-invoked session `close()` with the
+  same rejecting close and fulfillment/status expectations.
   The EOF row uses the F-016 AC-21 committed mutator settling successfully
   at 3,000 virtual ms: reject `sdk.close()` during gate drain, verify no exit
   at 1,000 or 2,999 ms, then outcome append → sink close → exit 1 (or owned
@@ -355,11 +377,14 @@ files and then Docker/Make `make check` during implementation, not authoring.
    real 3,000 ms sleeps and a release-only proof: the former is slow/flaky,
    the latter alone misses the specified elapsed-time and signal composition.
 2. **One shutdown result owner per composition.** Attach explicit fulfillment
-   and rejection handling to every signal-started close, including the cleanup
+   and rejection handling to every signal-started close, start-failure close
+   and host-invoked session close, including the cleanup
    gate promise in stdio, and to the EOF, failure and SDK-close `void close()`
    sites in `src/stdio-transport.ts` (currently around lines 111, 150 and 315).
    Those transport paths consume a rejected `sdk.close()` and select failure
    status 1 without an unhandled rejection, including during EOF gate drain.
+   Session `close()` and `ready` never reject after a consumed close failure;
+   status 1 goes through the same shutdown result owner.
    Settle cleanup and remove signal handlers in a finally
    path, keeping handlers installed during committed mutation drain. A server
    close rejection still attempts gate drain before reporting failure. Both
@@ -371,9 +396,12 @@ files and then Docker/Make `make check` during implementation, not authoring.
    when cleanup evaluates `hasCommitted`). Do not start another allowance for server close.
    Server-close expiry counts as close failure with status 1 and the fixed
    diagnostic, while gate/sink drain still completes before exit/owned `closed`.
+   Server-close rejection or expiry starts cleanup if it has not started,
+   re-evaluating `hasCommitted` to choose the existing bound before exit.
    Keep a rejection handler attached to server close after expiry. Dedicated
    modes use `deps.exit(1)` (stdio's injected exit port); owned modes use their
-   setter only with 1, never with 0, and never terminate the host. Repeated
+   setter only with 1, never with 0, selecting 1 once per session regardless of
+   the number of failure sources, and never terminate the host. Repeated
    signals join the same result.
    Reject fire-and-forget promises and an unconditional final exit 0: both lose
    the explicit failure contract. `PROCESS_CLOSE_FAILED\n` is the sole new
@@ -401,6 +429,9 @@ files and then Docker/Make `make check` during implementation, not authoring.
    may remain for in-session failure detection; their removal cannot remove
    process ownership. Existing audit listeners still classify/latch audit
    failures independently, including EPIPE.
+   Accepted consequence for embedded hosts: the first built-in stderr write
+   installs a permanent listener that also contains the host's own non-EPIPE
+   stderr errors and latches process failure; no owned session reads that latch.
 4. **Share ownership with exit flushing and preserve failure status.** The
    production helper uses the permanent owners for both stdout and stderr,
    rather than installing another process-level error listener per helper.
@@ -597,3 +628,27 @@ No freeze or acceptance is claimed in this section.
 - **Minor 3 — retained.** The committed-run bound is the existing 45,000 ms
   counted from the gate close call, chosen when cleanup evaluates
   `hasCommitted`.
+
+### 139-spec-decision-2-fable (strongest-tier decision pass, approve)
+
+- **Finding 1 — retained.** BR-254 v3 and D-2 include start-failure and
+  host-invoked close paths: session `close()` and `ready` never reject after a
+  consumed close failure, with status 1 through the same result owner. AC-04
+  adds start failure with rejecting `sdk.close()` and host-invoked close.
+- **Finding 2 — retained, accepted residual.** Choose the Out-of-scope line:
+  stdin `error` after transport close is unmeasured and unlikely on pipes;
+  any stdin failure before close is already handled by the transport.
+- **Finding 3 — retained.** Add gate close to the close-diagnostic BR bullet,
+  matching AC-03/AC-04's defensive gate-close rejection rows.
+- **Finding 4 — retained.** AC-04 expects owned setter calls `[1]` when
+  transport failure is followed by rejecting close: status 1 is selected once
+  per session regardless of the number of failure sources; BR-254 and D-2
+  state the same rule.
+- **Finding 5 — retained, accepted consequence.** D-3 records that the first
+  built-in stderr write in an embedded host installs a permanent listener
+  containing the host's own non-EPIPE stderr errors, while no owned session
+  reads the process failure latch.
+- **Finding 6 — retained.** BR-254 and D-2 require server-close rejection or
+  expiry to start cleanup if it has not started, re-evaluating `hasCommitted`
+  before exit. AC-04 adds variants without transport `onclose`, with gate/sink
+  drain completed before exit or owned `closed`.
