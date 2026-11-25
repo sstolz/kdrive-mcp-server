@@ -195,14 +195,15 @@ BR-443–BR-446 are allocated to this draft.
   where BR-446 applies the 100-line bound, and a request with more than
   2,000 lines gets Node's own empty-body 431 without reaching the router;
   `maxHeaderSize` stays 16,384 bytes. Verified by: AC-12, AC-13.
-- **BR-446** — A request whose header block holds more than 100 header
+- **BR-446** — A request whose header block holds 101 to 2,000 header
   lines, counted as the name/value pairs Node reports in `rawHeaders`
   (repeated names counted separately, `Host` included, trailers excluded),
   is answered with HTTP-layer error 431 `invalid_request` (BR-167 body and
   headers, plus `Connection: close`), before `handle()` runs and so before
   the shutdown, target-length, `Host`, authentication, window and body
   checks, with no body read; a request with exactly 100 header lines is
-  handled as before. Verified by: AC-12, AC-13.
+  handled as before, and a request with more than 2,000 lines never reaches
+  the adapter: Node refuses it under BR-169 v4. Verified by: AC-12, AC-13.
 - **BR-167 v4** — v3 holds, plus: `session_closed` `reason` may also be
   `initialize_failed` (BR-164 v2); the feature adds the event
   `listener_error` with exactly the fields of BR-444, built from no error
@@ -334,9 +335,11 @@ names cite their BR versions.
   `{"error":"invalid_request"}` with `Connection: close`, no
   authentication, window count or body read occurs, and one
   `request_refused` (`route` `mcp` or `unknown`, `status` 431) is emitted;
-  and Given a socket request with 2,001 header lines, When it arrives,
-  Then it gets a 431 status line from Node, the router's handler never
-  runs and no `request_refused` is emitted.
+  and Given a socket request with 2,001 header lines built the same way
+  (empty-value `x:` lines, `Host` included, header block under 16,384
+  bytes), When it arrives, Then it gets a 431 status line from Node with an
+  empty body, the router's handler never runs and no `request_refused` is
+  emitted.
   Verified by: `tests/http/lifecycle.test.ts` "BR-446 BR-167 v4 AC-13
   refuses more than 100 header lines with 431".
 - **AC-14** (BR-166 v2, BR-445, BR-381 v1) — Given `serve` handling a request, When
@@ -544,3 +547,4 @@ names cite their BR versions.
 - 73-spec-v2-review-2-opus #1, #2 (minor) — retained — "proportional to the 16,384-byte limit"; lines re-wrapped.
 - 73-spec-v2-decision-1-fable #1 (major) — retained — owner chose `maxHeadersCount` 2,000 (BR-169 v4, AC-12, AC-13, D-5); the 0 option and its measured memory cost are recorded as rejected in D-5.
 - 73-spec-v2-decision-1-fable #2 (minor) — retained — D-5 states that trailers are parsed on any chunked request, unauthenticated included.
+- 73-spec-v2-review-3-opus #1 (major), #2 (minor) — retained — BR-446 is bounded to 101–2,000 lines and defers above to BR-169 v4; the AC-13 2,001-line case uses the same size-safe lines and asserts the empty body.
