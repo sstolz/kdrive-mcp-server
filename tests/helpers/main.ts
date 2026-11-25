@@ -36,6 +36,7 @@ export async function runMain(options: {
   mutators?: Record<string, unknown>;
   /** Observe/throw only synthetic stderr writes (F-048 best-effort warnings). */
   onStderrWrite?: (text: string) => void;
+  setExitCode?: (code: number) => void;
 }): Promise<MainRun> {
   const { main } = await import("../../src/main.js");
   let stdout = "",
@@ -68,6 +69,7 @@ export async function runMain(options: {
       },
     },
     protocol: { input, output },
+    ...(options.setExitCode ? { setExitCode: options.setExitCode } : {}),
     signals: {
       on: (name, listener) => signals.on(name, listener),
       off: (name, listener) => signals.off(name, listener),
