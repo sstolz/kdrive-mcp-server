@@ -129,7 +129,7 @@ invented obsolete implementations. See the migration evidence (private archive)
 and each record's Verification for preserved historical limits.
 
 All 444 allocated IDs have records, including the pending F-050 rules.
-Withdrawn BR-376/BR-377 remain excluded and never reused. Next free BR-443.
+Withdrawn BR-376/BR-377 remain excluded and never reused. Next free BR-447.
 
 ## Maintaining this index
 
