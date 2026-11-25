@@ -13,6 +13,7 @@ import {
   createHttpServer,
   startHttpServer,
 } from "../../src/http/index.js";
+import type { HttpHandler } from "../../src/http/index.js";
 import { recordingPort, stateOptions } from "../helpers/http-state.js";
 import { kdriveFixture } from "../helpers/kdrive.js";
 import { runMain, tokenFile } from "../helpers/main.js";
@@ -45,6 +46,36 @@ import {
   rawText,
 } from "../helpers/http.js";
 import { navigationFixture } from "../helpers/navigation.js";
+
+// F-053 AC-13: records every handler the server builds and each target its
+// `handle()` receives, so a refusal before `handle()` is observable.
+const routed = vi.hoisted(() => ({
+  handlers: [] as HttpHandler[],
+  targets: [] as string[],
+}));
+vi.mock("../../src/http/handler.js", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("../../src/http/handler.js")>();
+  return {
+    ...actual,
+    createHttpHandler: (
+      options: Parameters<typeof actual.createHttpHandler>[0],
+    ) => {
+      const handler = actual.createHttpHandler(options);
+      const handle = Reflect.get(handler, "handle") as (
+        ...args: unknown[]
+      ) => Promise<Response>;
+      handler.handle = async (
+        ...args: Parameters<typeof handler.handle>
+      ): Promise<Response> => {
+        routed.targets.push(args[1]);
+        return await handle.apply(handler, args);
+      };
+      routed.handlers.push(handler);
+      return handler;
+    },
+  };
+});
 
 afterEach(() => {
   vi.useRealTimers();
@@ -479,6 +510,130 @@ describe("BR-304 BR-169 v2 OAuth state store lifecycle (AC-13)", () => {
       expect(await childOpen(path)).toMatch(/^open /u);
     } finally {
       process.off("unhandledRejection", unhandled);
+    }
+  });
+});
+
+// ---- F-053 BR-169 v4, BR-446: header-line count ----
+
+/** `base` padded with empty repeated `x:` lines up to `total` header lines. */
+function headerLines(
+  total: number,
+  base: Array<[string, string]>,
+): Array<[string, string]> {
+  return [
+    ...base,
+    ...Array.from(
+      { length: total - base.length },
+      (): [string, string] => ["x", ""],
+    ),
+  ];
+}
+
+const mcpBase = (token: string, length: number): Array<[string, string]> => [
+  ["Host", HOST],
+  ["Authorization", `Bearer ${token}`],
+  ["Content-Type", "application/json"],
+  ["Accept", "application/json, text/event-stream"],
+  ["Content-Length", String(length)],
+];
+
+async function expect431(
+  port: number,
+  request: Parameters<typeof rawText>[0],
+): Promise<void> {
+  // The whole header block stays under the 16,384-byte limit (AC-13).
+  expect(Buffer.byteLength(rawText({ ...request, body: "" }))).toBeLessThan(
+    16_384,
+  );
+  const client = await RawClient.connect(port);
+  client.write(rawText(request));
+  const response = await client.next(1000);
+  client.destroy();
+  expect(response?.status).toBe(431);
+  expect(response?.body).toBe('{"error":"invalid_request"}');
+  expect(rawHeader(response!, "content-type")).toBe("application/json");
+  expect(rawHeader(response!, "cache-control")).toBe("no-store");
+  expect(rawHeader(response!, "x-content-type-options")).toBe("nosniff");
+  expect(rawHeader(response!, "connection")?.toLowerCase()).toBe("close");
+}
+
+describe("F-053 BR-169 v4 BR-446 header-line count", () => {
+  it("BR-169 v4 BR-446 AC-12 pins the header count and accepts 100 header lines", async () => {
+    const f = await httpFixture();
+    const server = await listening(f);
+    try {
+      expect(server.server.maxHeadersCount).toBe(101);
+      expect(Reflect.get(server.server, "maxHeaderSize")).toBe(16_384);
+      const token = await f.mint();
+      const headers = headerLines(
+        100,
+        mcpBase(token, Buffer.byteLength(INITIALIZE)),
+      );
+      expect(headers).toHaveLength(100);
+      const response = await exchange(server.port, {
+        method: "POST",
+        target: "/mcp",
+        headers,
+        body: INITIALIZE,
+      });
+      expect(response?.status).toBe(200);
+      expect(rawHeader(response!, "mcp-session-id")).toMatch(
+        /^[A-Za-z0-9_-]{43}$/u,
+      );
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("BR-446 BR-167 v4 AC-13 refuses more than 100 header lines with 431", async () => {
+    const f = await httpFixture();
+    const server = await listening(f);
+    const handler = routed.handlers.at(-1);
+    try {
+      const token = await f.mint();
+      const handled = routed.targets.length;
+      for (const total of [101, 2500]) {
+        const before = f.logs.length;
+        // A declared body is never sent: a body read would stall the answer.
+        await expect431(server.port, {
+          method: "POST",
+          target: "/mcp",
+          headers: headerLines(total, mcpBase(token, 20)),
+        });
+        expect(f.logs.slice(before)).toEqual([
+          {
+            name: "request_refused",
+            fields: { route: "mcp", status: 431, error: "invalid_request" },
+          },
+        ]);
+      }
+      // Neither request reached handle(): no authentication, window or body.
+      expect(routed.targets).toHaveLength(handled);
+
+      // During shutdown, before the shutdown, target and Host checks.
+      await handler?.close();
+      const shutdown = await exchange(server.port, {
+        target: "/nope",
+        headers: headerLines(100, [["Host", HOST]]),
+      });
+      expect(shutdown?.status).toBe(503);
+      for (const total of [101, 2500]) {
+        const before = f.logs.length;
+        await expect431(server.port, {
+          target: "/nope",
+          headers: headerLines(total, [["Host", "evil.test"]]),
+        });
+        expect(f.logs.slice(before)).toEqual([
+          {
+            name: "request_refused",
+            fields: { route: "unknown", status: 431, error: "invalid_request" },
+          },
+        ]);
+      }
+      expect(routed.targets).toHaveLength(handled + 1);
+    } finally {
+      await server.close();
     }
   });
 });

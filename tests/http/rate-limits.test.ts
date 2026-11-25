@@ -1,7 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/server";
 import { createOAuthProxy } from "../../src/auth/proxy/index.js";
-import { OAuthWindowLimiter } from "../../src/http/limits.js";
+import {
+  IDENTITY_LIMIT,
+  IDENTITY_WINDOW_MS,
+  OAuthWindowLimiter,
+  WindowLimiter,
+} from "../../src/http/limits.js";
 import { httpAdmissionSnapshot } from "../../src/http/handler.js";
 import { harness, json } from "../helpers/proxy.js";
 import { expectError, httpFixture, wrapProxy } from "../helpers/http.js";
@@ -574,4 +579,56 @@ it("BR-162 v3 AC-18 refused and non-OAuth requests count in no OAuth window", as
   } finally {
     await f.handler.close();
   }
+});
+
+// ---- F-053 BR-443: expired WindowLimiter windows are pruned ----
+
+describe("F-053 BR-443 WindowLimiter pruning", () => {
+  it("BR-443 AC-04 prunes ended windows only when a new window opens", () => {
+    const opened = new WindowLimiter(120, 60_000);
+    expect(opened.take("A", 0)).toBeUndefined();
+    expect(opened.take("B", 0)).toBeUndefined();
+    expect(opened.size).toBe(2);
+    expect(opened.take("C", 60_000)).toBeUndefined();
+    expect(opened.size).toBe(1);
+
+    const counted = new WindowLimiter(120, 60_000);
+    counted.take("A", 0);
+    counted.take("B", 30_000);
+    // B counts into its live window: nothing is removed, A stays.
+    expect(counted.take("B", 60_000)).toBeUndefined();
+    expect(counted.size).toBe(2);
+    // A reopens its own ended window; B is live and kept.
+    expect(counted.take("A", 60_000)).toBeUndefined();
+    expect(counted.size).toBe(2);
+  });
+
+  it("BR-443 BR-161 AC-05 keeps only live identity windows", () => {
+    const limiter = new WindowLimiter(IDENTITY_LIMIT, IDENTITY_WINDOW_MS);
+    const step = 100;
+    const over: Array<{ key: number; size: number; live: number }> = [];
+    for (let i = 0; i < 1000; i++) {
+      const now = i * step;
+      limiter.take(`key-${String(i)}`, now);
+      // Keys j <= i whose window [j*step, j*step + 60,000) holds `now`.
+      const live = Math.min(i + 1, Math.ceil(IDENTITY_WINDOW_MS / step));
+      if (limiter.size > live) over.push({ key: i, size: limiter.size, live });
+    }
+    expect(999 * step).toBeGreaterThan(IDENTITY_WINDOW_MS);
+    expect(over).toEqual([]);
+
+    // BR-161 unchanged while other identities open (and prune) windows.
+    const identity = new WindowLimiter(IDENTITY_LIMIT, IDENTITY_WINDOW_MS);
+    for (let i = 0; i < 120; i++)
+      expect(identity.take("user", i * 10)).toBeUndefined();
+    identity.take("other-1", 5_000);
+    identity.take("other-2", 2_000);
+    expect(identity.take("user", 10_500)).toBe(50);
+    identity.take("other-3", 30_000);
+    expect(identity.take("user", 59_999)).toBe(1);
+    identity.take("other-4", 59_999);
+    expect(identity.take("user", 60_000)).toBeUndefined();
+    // The reopened window pruned nothing live: user plus four live others.
+    expect(identity.size).toBe(5);
+  });
 });

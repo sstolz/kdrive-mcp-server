@@ -372,3 +372,216 @@ describe("BR-164 session bounds", () => {
     },
   );
 });
+
+// ---- F-053: initialize failures and held DELETEs (BR-164 v2, BR-167 v4) ----
+
+const TIMEOUT = Symbol("timeout");
+
+/** Bounded wait: the work's value, or TIMEOUT well below the Vitest timeout. */
+async function within<T>(
+  work: Promise<T>,
+  ms: number,
+): Promise<T | typeof TIMEOUT> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      work,
+      new Promise<typeof TIMEOUT>((resolve) => {
+        timer = setTimeout(() => {
+          resolve(TIMEOUT);
+        }, ms);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+const transportProto = WebStandardStreamableHTTPServerTransport.prototype;
+const originalHandle = Reflect.get(
+  transportProto,
+  "handleRequest",
+) as typeof transportProto.handleRequest;
+
+/**
+ * Runs the next transport `handleRequest` for real, records the session ID
+ * the SDK registered and the SDK's own status, then throws when `fail`.
+ */
+function captureInitialize(fail: boolean) {
+  const ids: Array<string | undefined> = [];
+  const statuses: number[] = [];
+  vi.spyOn(transportProto, "handleRequest").mockImplementationOnce(
+    async function (
+      this: WebStandardStreamableHTTPServerTransport,
+      ...args: Parameters<typeof transportProto.handleRequest>
+    ) {
+      const response = await originalHandle.apply(this, args);
+      ids.push(this.sessionId);
+      statuses.push(response.status);
+      if (fail) throw new Error("synthetic transport failure");
+      return response;
+    },
+  );
+  return { ids, statuses };
+}
+
+/** Holds the next transport call (the DELETE), then answers it 200. */
+function holdDelete() {
+  let release!: () => void;
+  const opened = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const spy = vi
+    .spyOn(transportProto, "handleRequest")
+    .mockImplementationOnce(async () => {
+      await opened;
+      return new Response(null, { status: 200 });
+    });
+  return { release, spy };
+}
+
+const sessionEvents = (f: Fixture) =>
+  f.logs
+    .filter((e) =>
+      ["session_opened", "session_closed", "request_refused"].includes(e.name),
+    )
+    .map((e) => e.name);
+
+async function expectGoneSession(f: Fixture, token: string, id?: string) {
+  expect(id).toMatch(SESSION);
+  await expectError(
+    await f.mcp(token, jsonRpc("tools/list", 2), id),
+    404,
+    "session_not_found",
+  );
+}
+
+describe("F-053 BR-164 v2 initialize failures and held DELETEs", () => {
+  it("BR-164 v2 BR-167 v4 AC-01 closes a registered session when initialize handling throws", async () => {
+    const f = await httpFixture();
+    const transport = transportClose();
+    const server = serverClose();
+    const token = await f.mint();
+    const captured = captureInitialize(true);
+    const response = await f.mcp(token, INITIALIZE);
+    await expectError(response, 500, "server_error");
+    expect(captured.ids).toHaveLength(1);
+    // BR-164 v2: the session is closed before the router answers.
+    expect(sessionEvents(f)).toEqual([
+      "session_opened",
+      "session_closed",
+      "request_refused",
+    ]);
+    expect(sessionClosed(f)).toEqual([
+      { reason: "initialize_failed", count: 0 },
+    ]);
+    expect(f.events("request_refused").map((e) => e.fields)).toEqual([
+      { route: "mcp", status: 500, error: "server_error" },
+    ]);
+    expect(transport).toHaveBeenCalled();
+    expect(server).toHaveBeenCalled();
+    await expectGoneSession(f, token, captured.ids[0]);
+    // The failed session holds no per-identity slot: eight more evict nothing.
+    for (let i = 0; i < 8; i++) await f.open(await second(f));
+    expect(sessionClosed(f).map((e) => e.reason)).toEqual([
+      "initialize_failed",
+    ]);
+    expect(f.events("session_opened").at(-1)?.fields.count).toBe(8);
+    await f.handler.close();
+  });
+
+  it("BR-164 v2 AC-01 closes a registered session when the SDK answers initialize with a non-2xx status", async () => {
+    const f = await httpFixture();
+    const token = await f.mint();
+    const scope = vi
+      .spyOn(
+        transportProto as unknown as { _checkScopeChallenge: () => unknown },
+        "_checkScopeChallenge",
+      )
+      .mockImplementationOnce(() => {
+        throw new Error("synthetic scope failure");
+      });
+    const captured = captureInitialize(false);
+    const response = await f.mcp(token, INITIALIZE);
+    expect(scope).toHaveBeenCalled();
+    // The SDK answered its own 500 after registration (D-6).
+    expect(captured.statuses).toEqual([500]);
+    expect(response.headers.get("mcp-session-id")).toBeNull();
+    // The SDK body is discarded: only the BR-167 body is sent.
+    await expectError(response, 500, "server_error");
+    expect(sessionClosed(f)).toEqual([
+      { reason: "initialize_failed", count: 0 },
+    ]);
+    await expectGoneSession(f, token, captured.ids[0]);
+    await f.handler.close();
+  });
+
+  it("BR-164 v2 AC-02 a failed initialize frees its process slot", async () => {
+    const subjects = Array.from({ length: 8 }, (_, i) => `u${String(i)}`);
+    const f = await httpFixture({
+      env: { OAUTH_ALLOWED_SUBJECTS: subjects.join(",") },
+    });
+    captureInitialize(true);
+    await expectError(
+      await f.mcp(await f.mint({ sub: "u7" }), INITIALIZE),
+      500,
+      "server_error",
+    );
+    for (const sub of subjects.slice(0, 7))
+      for (let n = 0; n < 8; n++) await f.open(await f.mint({ sub }));
+    for (let n = 0; n < 7; n++) await f.open(await f.mint({ sub: "u7" }));
+    // 64 initialize calls registered a session; one of them failed.
+    expect(f.events("session_opened")).toHaveLength(64);
+    const admitted = await f.mcp(await f.mint({ sub: "u7" }), INITIALIZE);
+    expect(admitted.status).toBe(200);
+    await admitted.text();
+    expect(f.events("session_opened").at(-1)?.fields.count).toBe(64);
+    await f.handler.close();
+  });
+
+  const closers = [
+    { reason: "evicted" },
+    { reason: "idle" },
+    { reason: "shutdown" },
+  ] as const;
+
+  async function closeFor(
+    f: Fixture,
+    reason: (typeof closers)[number]["reason"],
+  ): Promise<void> {
+    if (reason === "evicted")
+      for (let i = 0; i < 8; i++) await f.open(await second(f));
+    else if (reason === "idle") {
+      f.clock.advance(1_800_000);
+      await f.open(await f.mint());
+    } else await f.handler.close();
+  }
+
+  it.each(closers)(
+    "BR-164 v2 AC-03 settles a held DELETE when its session closes for another reason ($reason)",
+    async ({ reason }) => {
+      const f = await httpFixture();
+      const token = await f.mint();
+      const session = await f.open(token);
+      const hold = holdDelete();
+      const deleting = f.del(token, session);
+      await vi.waitFor(() => {
+        expect(hold.spy).toHaveBeenCalled();
+      });
+      await closeFor(f, reason);
+      // Answered while the transport still holds the DELETE.
+      const response = await within(deleting, 1000);
+      expect(response).not.toBe(TIMEOUT);
+      if (response === TIMEOUT) return;
+      expect(response.headers.get("retry-after")).toBeNull();
+      await expectError(response, 503, "temporarily_unavailable");
+      const closed = () => sessionClosed(f).map((e) => e.reason);
+      expect(closed()).toEqual([reason]);
+      // The transport then answers 200: nothing is closed a second time.
+      hold.release();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(closed()).toEqual([reason]);
+      await f.handler.close();
+    },
+  );
+});

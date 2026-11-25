@@ -1,4 +1,4 @@
-import type { Server } from "node:http";
+import http, { type Server } from "node:http";
 import { createServer } from "node:net";
 import type { AddressInfo } from "node:net";
 import { describe, expect, it, vi, type MockInstance } from "vitest";
@@ -17,9 +17,13 @@ import {
   counterRandom,
 } from "../helpers/proxy.js";
 import {
+  HOST,
+  INITIALIZE,
   configurationFor,
+  exchange,
   httpFixture,
   listeningPort,
+  type LoggedEvent,
 } from "../helpers/http.js";
 
 const address = (host: string, port: number): AddressInfo => ({
@@ -267,5 +271,146 @@ describe("BR-153 bind address", () => {
         probe.listen(port, "127.0.0.1", () => probe.close(resolve));
       }),
     ).resolves.toBeUndefined();
+  });
+});
+
+// ---- F-053 BR-444: accept-time errors after bind ----
+
+/** An accept-time error carrying text that must never reach a log event. */
+function acceptError(code: unknown): Error {
+  return Object.assign(new Error("CANARY_ACCEPT_FAILURE 10.9.8.7:443"), {
+    code,
+    address: "10.9.8.7",
+  });
+}
+
+async function initializeOver(port: number, token: string) {
+  return await exchange(port, {
+    method: "POST",
+    target: "/mcp",
+    headers: [
+      ["Host", HOST],
+      ["Authorization", `Bearer ${token}`],
+      ["Content-Type", "application/json"],
+      ["Accept", "application/json, text/event-stream"],
+      ["Content-Length", String(Buffer.byteLength(INITIALIZE))],
+    ],
+    body: INITIALIZE,
+  });
+}
+
+async function healthOver(port: number) {
+  return await exchange(port, { target: "/healthz", headers: [["Host", HOST]] });
+}
+
+const listenerErrors = (logs: LoggedEvent[]) =>
+  logs.filter((e) => e.name === "listener_error").map((e) => e.fields);
+
+/** A custom ListenPort that binds an ephemeral loopback port. */
+function ephemeralListen() {
+  const bound: { server?: Server } = {};
+  const listen = async (server: Server, _port: number, host: string) => {
+    bound.server = server;
+    await new Promise<void>((resolve) => {
+      server.listen(0, host, resolve);
+    });
+    return server.address() as AddressInfo;
+  };
+  return { bound, listen };
+}
+
+describe("F-053 BR-444 accept-time errors", () => {
+  it("BR-444 BR-167 v4 AC-06 logs accept-time errors once per minute and keeps serving", async () => {
+    const port = await listeningPort();
+    const f = await httpFixture({ env: { MCP_HTTP_PORT: String(port) } });
+    const created = vi.spyOn(http, "createServer");
+    const started = await startHttpServer(f.handlerOptions);
+    const server = created.mock.results[0]?.value as Server;
+    created.mockRestore();
+    try {
+      expect(server.listenerCount("error")).toBeGreaterThanOrEqual(1);
+      const start = f.clock.ms;
+      server.emit("error", acceptError("EMFILE"));
+      server.emit("error", acceptError(24));
+      server.emit("error", acceptError("emfile"));
+      f.clock.ms = start + 59_999;
+      server.emit("error", acceptError("EAGAIN"));
+      expect(listenerErrors(f.logs)).toEqual([
+        { code: "EMFILE", suppressed: 0 },
+      ]);
+      const answered = await initializeOver(port, await f.mint());
+      expect(answered?.status).toBe(200);
+      f.clock.ms = start + 60_000;
+      server.emit("error", acceptError("ENFILE"));
+      // The clock runs backwards: negative elapsed time counts as a minute.
+      f.clock.ms = start + 60_000 - 1000;
+      server.emit("error", acceptError("emfile"));
+      expect(listenerErrors(f.logs)).toEqual([
+        { code: "EMFILE", suppressed: 0 },
+        { code: "ENFILE", suppressed: 3 },
+        { code: "other", suppressed: 0 },
+      ]);
+      const logged = JSON.stringify(
+        f.logs.filter((e) => e.name === "listener_error"),
+      );
+      for (const leak of ["CANARY", "10.9.8.7", "stack", "message", "at "])
+        expect(logged).not.toContain(leak);
+      expect(server.listening).toBe(true);
+    } finally {
+      await started.close();
+    }
+  });
+
+  it("BR-444 AC-07 contains a throwing logger and keeps LISTEN_FAILED before bind", async () => {
+    const logs: LoggedEvent[] = [];
+    const state = { throwing: true };
+    const f = await httpFixture({
+      logger: {
+        event: (name, fields) => {
+          if (state.throwing) throw new Error("logger down");
+          logs.push({ name, fields });
+        },
+      },
+    });
+    const custom = ephemeralListen();
+    const started = await startHttpServer({
+      ...f.handlerOptions,
+      listen: custom.listen,
+    });
+    const server = custom.bound.server as Server;
+    try {
+      expect(server.listenerCount("error")).toBeGreaterThanOrEqual(1);
+      const start = f.clock.ms;
+      expect(() => server.emit("error", acceptError("EMFILE"))).not.toThrow();
+      expect((await healthOver(started.address.port))?.status).toBe(200);
+      // The throwing attempt started the window: 1 ms later is suppressed.
+      f.clock.ms = start + 1;
+      expect(() => server.emit("error", acceptError("EMFILE"))).not.toThrow();
+      state.throwing = false;
+      f.clock.ms = start + 60_000;
+      server.emit("error", acceptError("EMFILE"));
+      expect(listenerErrors(logs)).toEqual([{ code: "EMFILE", suppressed: 1 }]);
+      expect((await healthOver(started.address.port))?.status).toBe(200);
+    } finally {
+      await started.close();
+    }
+
+    const blocker = createServer();
+    await new Promise<void>((resolve) =>
+      blocker.listen(0, "127.0.0.1", resolve),
+    );
+    const used = (blocker.address() as AddressInfo).port;
+    try {
+      const g = await httpFixture({ env: { MCP_HTTP_PORT: String(used) } });
+      await expect(startHttpServer(g.handlerOptions)).rejects.toMatchObject({
+        code: "LISTEN_FAILED",
+      });
+    } finally {
+      await new Promise<void>((resolve) =>
+        blocker.close(() => {
+          resolve();
+        }),
+      );
+    }
   });
 });
