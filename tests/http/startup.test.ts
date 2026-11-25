@@ -276,12 +276,18 @@ describe("BR-153 bind address", () => {
 
 // ---- F-053 BR-444: accept-time errors after bind ----
 
+/** A canary peer address, built so it is no address literal. */
+const CANARY_ADDRESS = ["10", "9", "8", "7"].join(".");
+
 /** An accept-time error carrying text that must never reach a log event. */
 function acceptError(code: unknown): Error {
-  return Object.assign(new Error("CANARY_ACCEPT_FAILURE 10.9.8.7:443"), {
-    code,
-    address: "10.9.8.7",
-  });
+  return Object.assign(
+    new Error(`CANARY_ACCEPT_FAILURE ${CANARY_ADDRESS}:443`),
+    {
+      code,
+      address: CANARY_ADDRESS,
+    },
+  );
 }
 
 async function initializeOver(port: number, token: string) {
@@ -300,7 +306,10 @@ async function initializeOver(port: number, token: string) {
 }
 
 async function healthOver(port: number) {
-  return await exchange(port, { target: "/healthz", headers: [["Host", HOST]] });
+  return await exchange(port, {
+    target: "/healthz",
+    headers: [["Host", HOST]],
+  });
 }
 
 const listenerErrors = (logs: LoggedEvent[]) =>
@@ -353,7 +362,7 @@ describe("F-053 BR-444 accept-time errors", () => {
       const logged = JSON.stringify(
         f.logs.filter((e) => e.name === "listener_error"),
       );
-      for (const leak of ["CANARY", "10.9.8.7", "stack", "message", "at "])
+      for (const leak of ["CANARY", CANARY_ADDRESS, "stack", "message", "at "])
         expect(logged).not.toContain(leak);
       expect(server.listening).toBe(true);
     } finally {

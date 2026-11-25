@@ -398,10 +398,7 @@ async function within<T>(
 }
 
 const transportProto = WebStandardStreamableHTTPServerTransport.prototype;
-const originalHandle = Reflect.get(
-  transportProto,
-  "handleRequest",
-) as typeof transportProto.handleRequest;
+const originalHandle = Reflect.get(transportProto, "handleRequest");
 
 /**
  * Runs the next transport `handleRequest` for real, records the session ID

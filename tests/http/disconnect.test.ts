@@ -70,10 +70,7 @@ vi.mock("../../src/http/handler.js", async (importOriginal) => {
 });
 
 const transportProto = WebStandardStreamableHTTPServerTransport.prototype;
-const originalHandleRequest = Reflect.get(
-  transportProto,
-  "handleRequest",
-) as typeof transportProto.handleRequest;
+const originalHandleRequest = Reflect.get(transportProto, "handleRequest");
 const serverProto = McpServer.prototype;
 const originalRegisterTool = Reflect.get(serverProto, "registerTool") as (
   ...args: unknown[]

@@ -115,7 +115,7 @@ export function createHttpServer(options: HttpHandlerOptions): HttpServer {
     },
   );
   server.maxConnections = 256;
-  // BR-169 v4: one line beyond the BR-446 bound, so the excess shows.
+  // BR-169 v4: up to 2,000 lines reach BR-446; Node refuses more with 431.
   server.maxHeadersCount = MAX_HEADERS_COUNT;
   inFlightSets.set(server, inflight);
   let closing: Promise<void> | undefined;

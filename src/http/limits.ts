@@ -7,8 +7,11 @@ export const MAX_TOKEN_BYTES = 4096;
 export const MAX_TARGET_BYTES = 8192;
 /** BR-446: the most header lines a request may carry. */
 export const MAX_HEADER_LINES = 100;
-/** BR-169 v4: Node keeps one header line beyond the BR-446 bound. */
-export const MAX_HEADERS_COUNT = MAX_HEADER_LINES + 1;
+/**
+ * BR-169 v4: requests of 101 to 2,000 header lines reach the BR-446 check;
+ * Node refuses more with its own empty-body 431.
+ */
+export const MAX_HEADERS_COUNT = 2000;
 /** BR-161 and BR-162 windows. */
 export const IDENTITY_LIMIT = 120;
 export const IDENTITY_WINDOW_MS = 60_000;

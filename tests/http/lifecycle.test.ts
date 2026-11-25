@@ -523,10 +523,10 @@ function headerLines(
 ): Array<[string, string]> {
   return [
     ...base,
-    ...Array.from(
-      { length: total - base.length },
-      (): [string, string] => ["x", ""],
-    ),
+    ...Array.from({ length: total - base.length }, (): [string, string] => [
+      "x",
+      "",
+    ]),
   ];
 }
 
@@ -563,7 +563,7 @@ describe("F-053 BR-169 v4 BR-446 header-line count", () => {
     const f = await httpFixture();
     const server = await listening(f);
     try {
-      expect(server.server.maxHeadersCount).toBe(101);
+      expect(server.server.maxHeadersCount).toBe(2000);
       expect(Reflect.get(server.server, "maxHeaderSize")).toBe(16_384);
       const token = await f.mint();
       const headers = headerLines(
@@ -593,7 +593,7 @@ describe("F-053 BR-169 v4 BR-446 header-line count", () => {
     try {
       const token = await f.mint();
       const handled = routed.targets.length;
-      for (const total of [101, 2500]) {
+      for (const total of [101, 2000]) {
         const before = f.logs.length;
         // A declared body is never sent: a body read would stall the answer.
         await expect431(server.port, {
@@ -618,7 +618,7 @@ describe("F-053 BR-169 v4 BR-446 header-line count", () => {
         headers: headerLines(100, [["Host", HOST]]),
       });
       expect(shutdown?.status).toBe(503);
-      for (const total of [101, 2500]) {
+      for (const total of [101, 2000]) {
         const before = f.logs.length;
         await expect431(server.port, {
           target: "/nope",
@@ -632,6 +632,28 @@ describe("F-053 BR-169 v4 BR-446 header-line count", () => {
         ]);
       }
       expect(routed.targets).toHaveLength(handled + 1);
+
+      // Over 2,000 lines Node answers its own empty-body 431 (BR-169 v4).
+      let requests = 0;
+      server.server.on("request", () => {
+        requests += 1;
+      });
+      const before = f.logs.length;
+      const lines = headerLines(2001, [["Host", HOST]]);
+      expect(lines).toHaveLength(2001);
+      const request = { target: "/mcp", headers: lines };
+      expect(Buffer.byteLength(rawText({ ...request, body: "" }))).toBeLessThan(
+        16_384,
+      );
+      const client = await RawClient.connect(server.port);
+      client.write(rawText(request));
+      const response = await client.next(1000);
+      client.destroy();
+      expect(response?.status).toBe(431);
+      expect(response?.body).toBe("");
+      expect(requests).toBe(0);
+      expect(routed.targets).toHaveLength(handled + 1);
+      expect(f.logs.slice(before)).toEqual([]);
     } finally {
       await server.close();
     }
