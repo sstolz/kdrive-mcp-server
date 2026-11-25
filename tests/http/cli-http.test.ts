@@ -224,8 +224,8 @@ it.each(
       errors: string[] = [],
       stdout: string[] = [],
       exits: number[] = [];
-    const pending = deferred<void>(),
-      gatePending = deferred<void>();
+    const pending = deferred<undefined>(),
+      gatePending = deferred<undefined>();
     const realAdapter = adapters.createKdriveAdapter;
     const realGate = gates.createMutationGate;
     const mocks = [

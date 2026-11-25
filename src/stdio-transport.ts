@@ -53,28 +53,31 @@ function sanitized(message: OutboundMessage): OutboundMessage {
     };
   }
   if ("result" in message && message.result.isError === true) {
-    const content = message.result.content;
-    const first: unknown = Array.isArray(content) ? content[0] : undefined;
-    let text = "INVALID_ARGUMENTS";
-    if (
-      typeof first === "object" &&
-      first !== null &&
-      "text" in first &&
-      typeof first.text === "string"
-    ) {
-      if (allowedToolErrors.has(first.text)) text = first.text;
-      else {
-        const validated = parsedGateErrorText(first.text);
-        if (validated) text = JSON.stringify(validated);
-      }
-    }
     return {
       jsonrpc: "2.0",
       id: message.id,
-      result: { isError: true, content: [{ type: "text", text }] },
+      result: {
+        isError: true,
+        content: [
+          { type: "text", text: sanitizedToolError(message.result.content) },
+        ],
+      },
     };
   }
   return message;
+}
+function sanitizedToolError(content: unknown): string {
+  const first: unknown = Array.isArray(content) ? content[0] : undefined;
+  if (
+    typeof first !== "object" ||
+    first === null ||
+    !("text" in first) ||
+    typeof first.text !== "string"
+  )
+    return "INVALID_ARGUMENTS";
+  if (allowedToolErrors.has(first.text)) return first.text;
+  const validated = parsedGateErrorText(first.text);
+  return validated ? JSON.stringify(validated) : "INVALID_ARGUMENTS";
 }
 interface OwnerOptions {
   diagnostic(message: string): void;

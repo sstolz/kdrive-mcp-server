@@ -24,6 +24,29 @@ export interface StdioNavigationOptions {
   /** F-016: the mutation gate; the runner closes it after the transport (BR-254). */
   readonly gate?: MutationGate;
 }
+/** Observe server close without extending the gate's current absolute bound. */
+async function observeClose(
+  closing: Promise<void>,
+  deadline: () => number,
+  expired: () => void,
+) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const expiry = new Promise<void>((resolve) => {
+    function checkDeadline() {
+      const remaining = deadline() - performance.now();
+      if (remaining <= 0) {
+        expired();
+        resolve();
+      } else timer = setTimeout(checkDeadline, remaining);
+    }
+    checkDeadline();
+  });
+  try {
+    await Promise.race([closing, expiry]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
 /** BR-059 v2/069/070: explicit start owns streams/signals; importing never starts a session. */
 export function startStdioNavigation(
   configuration: unknown,
@@ -86,6 +109,7 @@ export function startStdioNavigation(
     shutdownStarted = true;
     if (!options.gate?.hasCommitted)
       shutdownDeadline = performance.now() + 1000;
+    gateDeadline = shutdownDeadline ?? performance.now() + 45000;
   }
   let finish!: () => void;
   const closed = new Promise<void>((resolve) => {
@@ -122,37 +146,19 @@ export function startStdioNavigation(
     if (closing) return closing;
     beginClose();
     closing = Promise.resolve().then(async () => {
-      let serverClose: Promise<void>;
+      // Cleanup normally starts from transport onclose. A pending transport close
+      // must still allow an admitted run to commit before the gate closes.
+      const observed = Promise.resolve()
+        .then(() => server.close())
+        .catch(() => {
+          closeFailure();
+        });
       try {
-        serverClose = server.close();
-      } catch {
-        closeFailure();
-        serverClose = Promise.resolve();
-      }
-      const drained = cleanup();
-      // cleanup can already have started from synchronous transport onclose.
-      const deadline = shutdownDeadline ?? gateDeadline;
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      const observed = serverClose.catch(() => {
-        closeFailure();
-      });
-      try {
-        await Promise.race([
-          observed,
-          new Promise<void>((resolve) => {
-            timer = setTimeout(
-              () => {
-                closeFailure();
-                resolve();
-              },
-              Math.max(0, deadline - performance.now()),
-            );
-          }),
-        ]);
-        if (timer !== undefined) clearTimeout(timer);
-        await drained;
+        await observeClose(observed, () => gateDeadline, closeFailure);
+        // Rejection/expiry without onclose must also start cleanup, using the
+        // committed state at this point rather than the state at signal time.
+        await cleanup();
       } finally {
-        if (timer !== undefined) clearTimeout(timer);
         process.off("SIGINT", signal);
         process.off("SIGTERM", signal);
         if (dedicated) {

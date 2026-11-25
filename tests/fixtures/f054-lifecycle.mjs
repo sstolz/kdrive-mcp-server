@@ -154,15 +154,14 @@ if (process.argv[2] === "stderr") {
     });
     return returned;
   };
-  const originalDestroy = process.stdout.destroy.bind(process.stdout);
-  process.stdout.destroy = (...args) => {
-    const value = originalDestroy(...args);
+  const originalClose = session.server.server.onclose;
+  session.server.server.onclose = () => {
+    originalClose?.();
     assert.equal(process.stdout.destroyed, false);
     assert.equal(gate.hasCommitted, true);
     // This IPC message is sent after the transport removes its own error listener.
     assert.equal(process.stdout.listenerCount("error"), 1);
     send("transport-closed-draining");
-    return value;
   };
   const originalEmit = process.stdout.emit;
   process.stdout.emit = function (event, ...args) {

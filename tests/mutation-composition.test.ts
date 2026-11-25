@@ -2888,56 +2888,72 @@ it.each(
         observed(realGate.run());
         await mutation.dispatched;
       }
-      if (row === "eof") ports.input.end();
-      else if (row === "failure")
-        ports.input.emit("error", Error("PRIVATE_INPUT_CANARY"));
-      else if (row === "sdk-close") sdkInstances[0]!.onclose?.();
-      else if (row === "host-close") observed(started.close());
-      else if (row !== "start-failure") {
-        const listeners = process
-          .listeners(signal)
-          .filter((fn) => !before.get(signal)?.includes(fn));
-        expect(listeners).toHaveLength(1);
-        for (const listener of listeners) {
-          listener(signal);
-          listener(signal);
+      function triggerClose(session: ReturnType<typeof startStdioNavigation>) {
+        if (row === "eof") ports.input.end();
+        else if (row === "failure")
+          ports.input.emit("error", Error("PRIVATE_INPUT_CANARY"));
+        else if (row === "sdk-close") sdkInstances[0]!.onclose?.();
+        else if (row === "host-close") observed(session.close());
+        else if (row !== "start-failure") {
+          const listeners = process
+            .listeners(signal)
+            .filter((fn) => !before.get(signal)?.includes(fn));
+          expect(listeners).toHaveLength(1);
+          for (const listener of listeners) {
+            listener(signal);
+            listener(signal);
+          }
         }
       }
+      triggerClose(started);
       const closed = observed(started.closed);
       await microtasks();
-      if (row === "gate-first") {
-        expect(order).toContain("gate-close-done");
-        expect(closed.settled).toBe(false);
-        expect(exits).toEqual([]);
-        rejectServer(Error("PRIVATE_LATE_CANARY"));
-        await microtasks();
+      async function verifyGateFirst() {
+        if (row === "gate-first") {
+          expect(order).toContain("gate-close-done");
+          expect(closed.settled).toBe(false);
+          expect(exits).toEqual([]);
+          rejectServer(Error("PRIVATE_LATE_CANARY"));
+          await microtasks();
+        }
       }
-      if (row.startsWith("expiry")) {
-        const deadline = committed ? 45000 : 1000;
-        await vi.advanceTimersByTimeAsync(deadline - 1);
-        expect(closed.settled).toBe(false);
-        expect(exits).toEqual([]);
-        expect(order).toContain("sink-close");
-        await vi.advanceTimersByTimeAsync(1);
-        await microtasks();
-        expect(closed.settled).toBe(true);
-        rejectServer(Error("PRIVATE_AFTER_EXPIRY_CANARY"));
-        await microtasks();
-      } else if (row === "eof") {
-        await vi.advanceTimersByTimeAsync(1000);
-        expect(closed.settled).toBe(false);
-        expect(exits).toEqual([]);
-        await vi.advanceTimersByTimeAsync(1999);
-        expect(closed.settled).toBe(false);
-        await vi.advanceTimersByTimeAsync(1);
-        await microtasks();
-        expect(
-          order.filter((text) =>
-            ["mutator-success", "outcome", "sink-close"].includes(text),
-          ),
-        ).toEqual(["mutator-success", "outcome", "sink-close"]);
-        expect(file.records).toHaveLength(2);
+      async function verifyExpiry() {
+        if (row.startsWith("expiry")) {
+          const deadline = committed ? 45000 : 1000;
+          await vi.advanceTimersByTimeAsync(deadline - 1);
+          expect(closed.settled).toBe(false);
+          expect(exits).toEqual([]);
+          if (!row.includes("without-onclose"))
+            expect(order).toContain("sink-close");
+          await vi.advanceTimersByTimeAsync(1);
+          await microtasks();
+          expect(closed.settled).toBe(true);
+          if (row.includes("without-onclose"))
+            expect(order).toContain("sink-close");
+          rejectServer(Error("PRIVATE_AFTER_EXPIRY_CANARY"));
+          await microtasks();
+        }
       }
+      async function verifyEofDrain() {
+        if (row === "eof") {
+          await vi.advanceTimersByTimeAsync(1000);
+          expect(closed.settled).toBe(false);
+          expect(exits).toEqual([]);
+          await vi.advanceTimersByTimeAsync(1999);
+          expect(closed.settled).toBe(false);
+          await vi.advanceTimersByTimeAsync(1);
+          await microtasks();
+          expect(
+            order.filter((text) =>
+              ["mutator-success", "outcome", "sink-close"].includes(text),
+            ),
+          ).toEqual(["mutator-success", "outcome", "sink-close"]);
+          expect(file.records).toHaveLength(2);
+        }
+      }
+      await verifyGateFirst();
+      await verifyExpiry();
+      await verifyEofDrain();
       expect(closed).toEqual({ settled: true, value: undefined });
       expect(ready).toEqual({ settled: true, value: undefined });
       await expect(started.close()).resolves.toBeUndefined();
