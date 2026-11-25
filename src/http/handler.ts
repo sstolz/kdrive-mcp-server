@@ -29,6 +29,7 @@ import {
   readBounded,
 } from "./checks.js";
 import { createPeerResolver } from "./peer.js";
+import { registerDisconnect } from "./disconnect.js";
 import { HttpStartupError } from "./errors.js";
 import {
   IDENTITY_LIMIT,
@@ -47,6 +48,8 @@ import {
 } from "./limits.js";
 import { errorResponse, fromProxy } from "./responses.js";
 import { GONE, SessionRegistry, closeBoth, type Session } from "./sessions.js";
+
+export { disconnectSignalOf } from "./disconnect.js";
 import type {
   HttpEvent,
   HttpHandler,
@@ -131,12 +134,17 @@ function pathOf(target: string): string {
   return at < 0 ? target : target.slice(0, at);
 }
 
-/** BR-166: the request the SDK sees carries no credential header. */
-function sdkRequest(request: Request): Request {
+/**
+ * BR-166 v2: the request the SDK sees carries no credential header and no
+ * `signal` option; the disconnect signal is registered for it in the map.
+ */
+function sdkRequest(request: Request, disconnect?: AbortSignal): Request {
   const headers = new Headers(request.headers);
   headers.delete("authorization");
   headers.delete("cookie");
-  return new Request(request.url, { method: request.method, headers });
+  const sdk = new Request(request.url, { method: request.method, headers });
+  if (disconnect) registerDisconnect(sdk, disconnect);
+  return sdk;
 }
 
 function requestedProtocol(parsed: unknown): string {
@@ -398,9 +406,10 @@ export function createHttpHandler(options: HttpHandlerOptions): HttpHandler {
     request: Request,
     identity: string,
     parsed: unknown,
+    disconnect: AbortSignal | undefined,
   ): Promise<Response> {
     const id = request.headers.get("mcp-session-id");
-    if (id === null) return await create(request, identity, parsed);
+    if (id === null) return await create(request, identity, parsed, disconnect);
     const session = SESSION_ID.test(id)
       ? registry.find(id, identity)
       : undefined;
@@ -408,13 +417,17 @@ export function createHttpHandler(options: HttpHandlerOptions): HttpHandler {
     session.lastUsed = now();
     return await settle(
       session,
-      session.transport.handleRequest(sdkRequest(request), {
+      session.transport.handleRequest(sdkRequest(request, disconnect), {
         parsedBody: parsed,
       }),
     );
   }
 
-  async function remove(request: Request, identity: string): Promise<Response> {
+  async function remove(
+    request: Request,
+    identity: string,
+    disconnect: AbortSignal | undefined,
+  ): Promise<Response> {
     const id = request.headers.get("mcp-session-id");
     if (id === null) return refuse("mcp", 400, "invalid_request");
     const session = SESSION_ID.test(id)
@@ -422,16 +435,22 @@ export function createHttpHandler(options: HttpHandlerOptions): HttpHandler {
       : undefined;
     if (!session) return refuse("mcp", 404, "session_not_found");
     session.lastUsed = now();
-    const response = await session.transport.handleRequest(sdkRequest(request));
+    // BR-164 v2: a DELETE in flight settles 503 when its session closes first.
+    const response = await settle(
+      session,
+      session.transport.handleRequest(sdkRequest(request, disconnect)),
+    );
     if (response.ok) await registry.close(session, "deleted");
     return response;
   }
 
   /** BR-163: a new session from an `initialize` request. */
+  // eslint-disable-next-line sonarjs/cognitive-complexity -- the creation steps share one state; BR-164 v2 adds the failure close
   async function create(
     request: Request,
     identity: string,
     parsed: unknown,
+    disconnect: AbortSignal | undefined,
   ): Promise<Response> {
     if (!isInitializeRequest(parsed))
       return refuse("mcp", 400, "invalid_request");
@@ -450,6 +469,13 @@ export function createHttpHandler(options: HttpHandlerOptions): HttpHandler {
     };
     let server: McpServer | undefined;
     let transport: WebStandardStreamableHTTPServerTransport | undefined;
+    let session: Session | undefined;
+    /** BR-164 v2: closes a registered session whose initialize failed. */
+    const failed = async (): Promise<Response | undefined> => {
+      if (!session || session.closed) return undefined;
+      await registry.close(session, "initialize_failed");
+      return refuse("mcp", 500, "server_error");
+    };
     try {
       server = createNavigationServer(configuration, dependencies, undefined, {
         gate: options.gate,
@@ -469,20 +495,19 @@ export function createHttpHandler(options: HttpHandlerOptions): HttpHandler {
         }
         const time = now();
         try {
-          registry.register(
-            {
-              id,
-              identity,
-              server: created,
-              transport: current(),
-              createdAt: time,
-              lastUsed: time,
-              closed: false,
-              gone,
-              settle: settleGone,
-            },
-            requestedProtocol(parsed),
-          );
+          const entry: Session = {
+            id,
+            identity,
+            server: created,
+            transport: current(),
+            createdAt: time,
+            lastUsed: time,
+            closed: false,
+            gone,
+            settle: settleGone,
+          };
+          registry.register(entry, requestedProtocol(parsed));
+          session = entry;
           state.registered = true;
         } catch {
           state.failure = "error";
@@ -500,14 +525,28 @@ export function createHttpHandler(options: HttpHandlerOptions): HttpHandler {
         onsessioninitialized: register,
       });
       await server.connect(transport);
-      const call = transport.handleRequest(sdkRequest(request), {
+      const call = transport.handleRequest(sdkRequest(request, disconnect), {
         parsedBody: parsed,
       });
       call.catch(() => undefined);
-      const response = await Promise.race([call, gone]);
+      let response: Response | typeof GONE;
+      try {
+        response = await Promise.race([call, gone]);
+      } catch (error) {
+        const answer = await failed();
+        if (answer) return answer;
+        throw error;
+      }
       if (response === GONE)
         return refuse("mcp", 503, "temporarily_unavailable");
-      if (state.registered) return response;
+      if (state.registered) {
+        if (response.status >= 200 && response.status <= 299) return response;
+        // BR-164 v2: the SDK's own non-2xx answer is discarded.
+        const answer = await failed();
+        if (!answer) return response;
+        await response.body?.cancel().catch(() => undefined);
+        return answer;
+      }
       await closeBoth(server, transport);
       if (state.failure === "error") return refuse("mcp", 500, "server_error");
       if (state.failure === "closing")
@@ -523,7 +562,11 @@ export function createHttpHandler(options: HttpHandlerOptions): HttpHandler {
   }
 
   /** BR-161, BR-163, BR-164: identity window, body and session steps of the MCP endpoint. */
-  async function mcp(request: Request, target: string): Promise<Response> {
+  async function mcp(
+    request: Request,
+    target: string,
+    disconnect: AbortSignal | undefined,
+  ): Promise<Response> {
     const identity = await authenticate(request, target);
     if (typeof identity !== "string") return identity;
     const wait = identityWindow.take(identity, now());
@@ -539,8 +582,8 @@ export function createHttpHandler(options: HttpHandlerOptions): HttpHandler {
     }
     await registry.sweep(now());
     return request.method === "DELETE"
-      ? await remove(request, identity)
-      : await bound(request, identity, parsed);
+      ? await remove(request, identity, disconnect)
+      : await bound(request, identity, parsed, disconnect);
   }
 
   async function oauth(
@@ -649,7 +692,8 @@ export function createHttpHandler(options: HttpHandlerOptions): HttpHandler {
   async function dispatch(
     request: Request,
     target: string,
-    remoteAddress?: string,
+    remoteAddress: string | undefined,
+    disconnect: AbortSignal | undefined,
   ): Promise<Response> {
     const path = pathOf(target);
     const route = path.startsWith("/") ? routes.get(path) : undefined;
@@ -676,7 +720,7 @@ export function createHttpHandler(options: HttpHandlerOptions): HttpHandler {
     if (originRefused(request, name))
       return refuse(name, 403, "invalid_origin");
     if (name === "health") return health(host);
-    if (name === "mcp") return await mcp(request, target);
+    if (name === "mcp") return await mcp(request, target, disconnect);
     if (!proxy) throw new Error("proxy");
     if (name === "prm")
       return new Response(
@@ -692,9 +736,9 @@ export function createHttpHandler(options: HttpHandlerOptions): HttpHandler {
   }
 
   const handler: HttpHandler = {
-    async handle(request, target, remoteAddress) {
+    async handle(request, target, remoteAddress, disconnect) {
       try {
-        return await dispatch(request, target, remoteAddress);
+        return await dispatch(request, target, remoteAddress, disconnect);
       } catch {
         return refuse(routeOf(target), 500, "server_error");
       }

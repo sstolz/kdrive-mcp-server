@@ -452,6 +452,12 @@ clients in `auto` negotiation fall back to `initialize` after a 400 on their
 - Bodies: 262,144 bytes on the MCP endpoint, 32,768 bytes on registration,
   consent and token; headers 16,384 bytes; request target 8,192 bytes;
   `headersTimeout` 10 s, `requestTimeout` 30 s, at most 256 connections.
+- At most 100 header lines per request (F-053, pending acceptance): more get
+  431 `invalid_request` with `Connection: close` before any other check.
+- A client disconnect (F-053, pending acceptance) cancels that request's
+  queued tool call, resource read or write that has not started; it returns
+  `ACCESS_DENIED` with no kDrive request and no audit record. A call that has
+  started runs to completion, a write included, and its result is discarded.
 - OAuth admission (F-035, accepted on main `703bece`) uses the windows below. Each
   opens at its first counted request. Invalid admitted requests count too;
   refusals count in neither window. A 429 includes `Retry-After` rounded up

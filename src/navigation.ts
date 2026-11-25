@@ -30,6 +30,7 @@ import { acquireExtraction, ExtractionBusy } from "./extraction-admission.js";
 import type { ReadArguments } from "./extraction-values.js";
 import type { AuditIdentity } from "./audit/sink.js";
 import { PACKAGE_VERSION } from "./version.js";
+import { disconnectSignalOf } from "./http/disconnect.js";
 import type { GateResult, MutationGate } from "./mutation-gate.js";
 import {
   isMutationTool,
@@ -325,6 +326,8 @@ type QueueCode = "SERVER_BUSY" | "ACCESS_DENIED";
 interface Waiter {
   readonly joined: number;
   readonly signal: AbortSignal | undefined;
+  /** F-053 BR-445: the HTTP disconnect signal, listened to only while waiting. */
+  readonly disconnect: AbortSignal | undefined;
   /** Takes the slot: creates the invocation and sets `current`. */
   readonly start: () => void;
   readonly settle: (code: QueueCode | undefined) => void;
@@ -379,7 +382,8 @@ export function createNavigationController(
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- the loop condition checked the length
       const waiter = waiting.shift()!;
       waiter.leave();
-      if (closed || waiter.signal?.aborted) waiter.settle("ACCESS_DENIED");
+      if (closed || waiter.signal?.aborted || waiter.disconnect?.aborted)
+        waiter.settle("ACCESS_DENIED");
       else if (performance.now() - waiter.joined >= MAX_WAIT_MS)
         waiter.settle("SERVER_BUSY");
       else {
@@ -388,10 +392,15 @@ export function createNavigationController(
       }
     }
   }
-  /** BR-380–BR-386: run `start` now, or wait in the bounded queue for the slot. */
+  /**
+   * BR-380–BR-386: run `start` now, or wait in the bounded queue for the slot.
+   * F-053 BR-445: a disconnect while waiting leaves with ACCESS_DENIED; its
+   * listener is removed in the step that takes the slot.
+   */
   function admit(
     signal: AbortSignal | undefined,
     start: () => void,
+    disconnect?: AbortSignal,
   ): Promise<QueueCode | undefined> {
     if (!current && !waiting.length) {
       start();
@@ -415,14 +424,17 @@ export function createNavigationController(
       const waiter: Waiter = {
         joined: performance.now(),
         signal,
+        disconnect,
         start,
         settle: resolve,
         leave() {
           clearTimeout(timer);
           signal?.removeEventListener("abort", onAbort);
+          disconnect?.removeEventListener("abort", onAbort);
         },
       };
       signal?.addEventListener("abort", onAbort, { once: true });
+      disconnect?.addEventListener("abort", onAbort, { once: true });
       waiting.push(waiter);
     });
   }
@@ -782,8 +794,10 @@ export function createNavigationController(
     work: () => Promise<T>,
     paged: boolean,
     signal?: AbortSignal,
+    disconnect?: AbortSignal,
   ): Promise<{ ok: true; value: T } | { ok: false; code: string }> {
-    if (closed || signal?.aborted) return { ok: false, code: "ACCESS_DENIED" };
+    if (closed || signal?.aborted || disconnect?.aborted)
+      return { ok: false, code: "ACCESS_DENIED" };
     let inv!: Invocation, timer!: ReturnType<typeof setTimeout>;
     const cancel = () => {
       inv.code ??=
@@ -807,7 +821,7 @@ export function createNavigationController(
         inv.controller.abort();
       }, 10000);
     };
-    const refused = await admit(signal, start);
+    const refused = await admit(signal, start, disconnect);
     if (refused) return { ok: false, code: refused };
     let success = false;
     try {
@@ -849,8 +863,9 @@ export function createNavigationController(
     identity: unknown,
     signal?: AbortSignal,
     payload?: unknown,
+    disconnect?: AbortSignal,
   ): Promise<MutateResult> {
-    if (!gate || closed || signal?.aborted)
+    if (!gate || closed || signal?.aborted || disconnect?.aborted)
       return { ok: false, code: "ACCESS_DENIED" };
     let inv!: Invocation, timer!: ReturnType<typeof setTimeout>;
     const cancel = () => {
@@ -877,7 +892,7 @@ export function createNavigationController(
         inv.controller.abort();
       }, 10000);
     };
-    const refused = await admit(signal, start);
+    const refused = await admit(signal, start, disconnect);
     if (refused) return { ok: false, code: refused };
     try {
       const result = await gate.run({
@@ -932,6 +947,7 @@ export function createNavigationController(
     raw: unknown,
     identity: unknown,
     signal?: AbortSignal,
+    disconnect?: AbortSignal,
   ): Promise<CallToolResult> {
     if (!isMutationTool(name) || config.mode === "read")
       return navigationError("ACCESS_DENIED");
@@ -950,6 +966,7 @@ export function createNavigationController(
       identity,
       signal,
       payload,
+      disconnect,
     );
     if (!result.ok) return navigationError(result.code);
     return {
@@ -977,6 +994,7 @@ export function createNavigationController(
       name: string,
       raw: unknown,
       signal?: AbortSignal,
+      disconnect?: AbortSignal,
     ): Promise<CallToolResult> {
       if (!Object.hasOwn(schemas, name))
         return navigationError("ACCESS_DENIED");
@@ -989,6 +1007,7 @@ export function createNavigationController(
           tool === "kdrive_download" ||
           tool === "kdrive_read",
         signal,
+        disconnect,
       );
       return result.ok
         ? // eslint-disable-next-line sonarjs/no-nested-conditional -- F-011: pre-existing nested conditional kept unchanged; refactor tracked in #79
@@ -997,7 +1016,11 @@ export function createNavigationController(
           : { content: [{ type: "text", text: JSON.stringify(result.value) }] }
         : navigationError(result.code);
     },
-    async readResource(uri: string, signal?: AbortSignal) {
+    async readResource(
+      uri: string,
+      signal?: AbortSignal,
+      disconnect?: AbortSignal,
+    ) {
       let target;
       try {
         target = resourceTarget(uri);
@@ -1008,6 +1031,7 @@ export function createNavigationController(
         () => content.read(target, 0, undefined, undefined, uri),
         true,
         signal,
+        disconnect,
       );
       if (!result.ok) throw new ProtocolError(-32000, result.code);
       return result.value as {
@@ -1048,7 +1072,12 @@ export function createNavigationServer(
         annotations,
       },
       (args: unknown, ctx: ServerContext) =>
-        controller.invoke(name, args, ctx.mcpReq.signal),
+        controller.invoke(
+          name,
+          args,
+          ctx.mcpReq.signal,
+          disconnectSignalOf(ctx.http?.req),
+        ),
     );
   }
   // BR-060 v6: the six mutation tools exist in `write` and `share` modes only.
@@ -1067,6 +1096,7 @@ export function createNavigationServer(
             args,
             options.identity,
             ctx.mcpReq.signal,
+            disconnectSignalOf(ctx.http?.req),
           ),
       );
   server.registerResource(
@@ -1077,7 +1107,11 @@ export function createNavigationServer(
       mimeType: "application/octet-stream",
     },
     (uri, _variables, ctx) =>
-      controller.readResource(uri.toString(), ctx.mcpReq.signal),
+      controller.readResource(
+        uri.toString(),
+        ctx.mcpReq.signal,
+        disconnectSignalOf(ctx.http?.req),
+      ),
   );
   // Validate original URI bytes before the SDK's URL canonicalization/template dispatch.
   server.server.setRequestHandler(
@@ -1092,7 +1126,11 @@ export function createNavigationServer(
     (params, ctx) => {
       if (Object.keys(params).some((key) => key !== "uri" && key !== "_meta"))
         throw new ProtocolError(-32000, "UNSUPPORTED_REPRESENTATION");
-      return controller.readResource(params.uri, ctx.mcpReq.signal);
+      return controller.readResource(
+        params.uri,
+        ctx.mcpReq.signal,
+        disconnectSignalOf(ctx.http?.req),
+      );
     },
   );
   server.server.onclose = () => {

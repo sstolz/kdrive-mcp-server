@@ -37,6 +37,18 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
 
 ### Fixed
 
+- #73 / F-053 v1 (pending acceptance): over HTTP, a session whose `initialize`
+  fails after registration is closed (`initialize_failed`) and answered 500
+  instead of holding a session slot for 30 minutes; a DELETE in flight settles
+  503 when its session closes for another reason; ended identity and
+  `/healthz` rate windows are pruned; an accept-time listener error such as
+  `EMFILE` no longer ends the process and is logged once per minute as
+  `listener_error`; a request with more than 100 header lines gets 431.
+  A client disconnect now cancels its queued calls, writes included, that
+  have not started (`ACCESS_DENIED`, no kDrive request, no audit record);
+  this reverses the F-026 D-8 accepted residual risk for queued calls. A
+  started call still runs to completion.
+
 - #72 / F-052 v1 (accepted 2026-11-25 on main `019f0f5`; [#72 acceptance](https://github.com/sstolz/kdrive-mcp-server/issues/72#issuecomment-7147678234)): token admission refuses conflicting
   discovery endpoints before prompting or printing an authorization URL;
   irrelevant issuer uncertainty no longer blocks proxy selection. Hidden
