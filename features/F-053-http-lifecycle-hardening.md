@@ -456,11 +456,12 @@ names cite their BR versions.
   entries of at most 16,384 bytes in total) reach the adapter, whose check
   reads only `rawHeaders.length` (constant cost) before any other work. That
   is more pairs than the current default cap of 2,000, but the parser work
-  and memory stay bounded by the same 16,384 bytes per request. Trailers stay outside BR-446: with no count limit they
-  are bounded only by `maxHeaderSize` (measured: 16,300 trailers accepted,
-  17,000 refused by Node), exist only on requests whose body is read, and
-  keep Node's existing parse-error path on overflow. The check runs in the adapter before `handle()`, because the Fetch
-  `Headers` object merges repeated names. Owner choice (2026-11-25) between
+  and memory stay proportional to the 16,384-byte limit per request.
+  Trailers stay outside BR-446: with no count limit they are bounded only by
+  `maxHeaderSize` (measured: 16,300 trailers accepted, 17,000 refused by
+  Node), exist only on requests whose body is read, and keep Node's existing
+  parse-error path on overflow. The check runs in the adapter before
+  `handle()`, because the Fetch `Headers` object merges repeated names. Owner choice (2026-11-25) between
   the two options of v2. Rejected: `maxHeadersCount` 100, leaving Node's
   refusal (silent, unlogged, a body shape unlike every other refusal);
   `maxHeadersCount` 101 (v1, which rested on the truncation premise and
@@ -537,3 +538,4 @@ names cite their BR versions.
 - v2 (2026-11-25, implementation phase) — the v1 D-5 premise (Node truncates beyond `maxHeadersCount`) was measured false on Node v26.13.0; BR-169 v4 now sets `maxHeadersCount` 0 and BR-446 alone applies the 100-line bound (owner choice); v1 is kept in `features/history/F-053-v1.md`.
 - 73-spec-v2-review-1-opus #1 (major) — retained — the bound is about 16,300 pairs (Node counts name and value bytes), measured and cited in Context item 6, BR-169 v4 and D-5.
 - 73-spec-v2-review-1-opus #2 (minor) — retained — D-5 states that trailers stay outside BR-446, bounded by `maxHeaderSize`, with Node's parse-error path on overflow.
+- 73-spec-v2-review-2-opus #1, #2 (minor) — retained — "proportional to the 16,384-byte limit"; lines re-wrapped.
