@@ -9,7 +9,8 @@ import type { MutationGate } from "../mutation-gate.js";
 import type { ClientMetadataFetchOptions } from "../auth/proxy/client-metadata-fetch.js";
 
 /** BR-167: the events this feature adds to the proxy's own. */
-export type HttpEvent = "request_refused" | "session_opened" | "session_closed";
+export type HttpEvent =
+  "request_refused" | "session_opened" | "session_closed" | "listener_error";
 
 export interface HttpLogger {
   event(
@@ -40,10 +41,15 @@ export interface HttpHandlerOptions {
 }
 
 export interface HttpHandler {
+  /**
+   * BR-166 v2: `disconnect` is the adapter's disconnect signal, passed
+   * explicitly; the request itself carries no signal.
+   */
   handle(
     request: Request,
     target: string,
     remoteAddress?: string,
+    disconnect?: AbortSignal,
   ): Promise<Response>;
   /** BR-167: the route name a request target matches, `unknown` otherwise. */
   routeOf(target: string): RouteName;

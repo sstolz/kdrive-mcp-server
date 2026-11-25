@@ -7,7 +7,8 @@ import type { AddressInfo } from "node:net";
 import { serve, type InFlight } from "./adapter.js";
 import { HttpStartupError } from "./errors.js";
 import { createHttpHandler } from "./handler.js";
-import type { HttpHandlerOptions } from "./types.js";
+import { MAX_HEADERS_COUNT } from "./limits.js";
+import type { HttpHandlerOptions, HttpLogger } from "./types.js";
 
 export type ListenPort = (
   server: Server,
@@ -23,6 +24,56 @@ export interface HttpServer {
 export interface StartedHttpServer {
   readonly address: AddressInfo;
   close(): Promise<void>;
+}
+
+/** F-053 AC-14 test evidence: the in-flight set of each created server. */
+const inFlightSets = new WeakMap<Server, ReadonlySet<InFlight>>();
+
+/** F-053 AC-14 test evidence only: the number of requests still in flight. */
+export function inFlightSize(server: Server): number {
+  return inFlightSets.get(server)?.size ?? 0;
+}
+
+/** BR-444: at most one `listener_error` per this many milliseconds. */
+const LISTENER_ERROR_INTERVAL_MS = 60_000;
+const ERROR_CODE = /^E[A-Z0-9]{1,31}$/u;
+
+/**
+ * BR-444: the post-bind `error` listener. It never closes, rejects or ends
+ * anything; it emits a bounded, payload-free `listener_error` at most once
+ * per minute of the handler clock and counts the others.
+ */
+function listenerErrorHandler(
+  clock: () => Date,
+  logger: HttpLogger | undefined,
+): (error: unknown) => void {
+  let last: number | undefined;
+  let suppressed = 0;
+  return (error: unknown) => {
+    const at = clock().getTime();
+    if (last !== undefined) {
+      const elapsed = at - last;
+      if (elapsed >= 0 && elapsed < LISTENER_ERROR_INTERVAL_MS) {
+        suppressed++;
+        return;
+      }
+    }
+    const code: unknown =
+      typeof error === "object" && error !== null
+        ? Reflect.get(error, "code")
+        : undefined;
+    const fields = {
+      code: typeof code === "string" && ERROR_CODE.test(code) ? code : "other",
+      suppressed,
+    };
+    last = at;
+    suppressed = 0;
+    try {
+      logger?.event("listener_error", fields);
+    } catch {
+      // A logger failure changes nothing else (BR-444).
+    }
+  };
 }
 
 /** BR-169: the bound on waiting for a settled response to be written. */
@@ -64,6 +115,9 @@ export function createHttpServer(options: HttpHandlerOptions): HttpServer {
     },
   );
   server.maxConnections = 256;
+  // BR-169 v4: up to 2,000 lines reach BR-446; Node refuses more with 431.
+  server.maxHeadersCount = MAX_HEADERS_COUNT;
+  inFlightSets.set(server, inflight);
   let closing: Promise<void> | undefined;
   return {
     server,
@@ -119,9 +173,19 @@ export async function startHttpServer(
     await created.close();
     throw new HttpStartupError("LISTEN_FAILED");
   }
-  if (insecure && address.address !== "127.0.0.1") {
+  // BR-444: once bound, one `error` listener stays until close() resolves.
+  const onError = listenerErrorHandler(
+    handlerOptions.clock,
+    handlerOptions.logger,
+  );
+  created.server.on("error", onError);
+  const close = async () => {
     await created.close();
+    created.server.off("error", onError);
+  };
+  if (insecure && address.address !== "127.0.0.1") {
+    await close();
     throw new HttpStartupError("INSECURE_BIND_REFUSED");
   }
-  return { address, close: () => created.close() };
+  return { address, close };
 }

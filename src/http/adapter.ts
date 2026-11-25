@@ -1,4 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
+import type { Socket } from "node:net";
+import { MAX_HEADER_LINES } from "./limits.js";
 import { errorResponse } from "./responses.js";
 import type { HttpHandler, HttpLogger } from "./types.js";
 
@@ -77,22 +79,56 @@ export function toRequest(req: IncomingMessage): Request {
 }
 
 /** True once the connection can no longer carry a response. */
-function gone(res: ServerResponse): boolean {
-  return res.destroyed || res.writableEnded;
+function gone(res: ServerResponse, abandoned?: AbortSignal): boolean {
+  return res.destroyed || res.writableEnded || abandoned?.aborted === true;
+}
+
+/** BR-166 v2: one shared `close` listener per socket and its unsettled requests. */
+const socketWatches = new WeakMap<
+  Socket,
+  { readonly requests: Set<() => void>; readonly listener: () => void }
+>();
+
+/**
+ * BR-166 v2: calls `onClose` when the socket closes; the returned function
+ * stops watching, removing the shared listener once no request is left.
+ */
+function watchSocket(socket: Socket, onClose: () => void): () => void {
+  let watch = socketWatches.get(socket);
+  if (!watch) {
+    const requests = new Set<() => void>();
+    const listener = () => {
+      for (const request of [...requests]) request();
+    };
+    watch = { requests, listener };
+    socketWatches.set(socket, watch);
+    socket.on("close", listener);
+  }
+  const current = watch;
+  current.requests.add(onClose);
+  return () => {
+    current.requests.delete(onClose);
+    if (current.requests.size === 0) {
+      socket.off("close", current.listener);
+      socketWatches.delete(socket);
+    }
+  };
 }
 
 /**
  * BR-170: writes a response unchanged, closing the connection after an unread
  * body. It never waits on a connection that is already gone (BR-169): an
- * aborted request settles at once instead of staying in flight.
+ * aborted request settles at once instead of staying in flight. An aborted
+ * `abandoned` signal (BR-166 v2 disconnect) also ends the wait.
  */
 export async function writeResponse(
   req: IncomingMessage,
   res: ServerResponse,
   response: Response,
   onBodyFailure?: () => void,
+  abandoned?: AbortSignal,
 ): Promise<void> {
-  if (gone(res)) {
+  if (gone(res, abandoned)) {
     await response.body?.cancel().catch(() => undefined);
     return;
   }
@@ -102,10 +138,16 @@ export async function writeResponse(
   } catch {
     // The head is not written yet: answer 500 instead of destroying the socket.
     onBodyFailure?.();
-    await writeResponse(req, res, errorResponse(500, "server_error"));
+    await writeResponse(
+      req,
+      res,
+      errorResponse(500, "server_error"),
+      undefined,
+      abandoned,
+    );
     return;
   }
-  if (gone(res)) return;
+  if (gone(res, abandoned)) return;
   const pairs: string[] = [];
   for (const [name, value] of response.headers) pairs.push(name, value);
   if (!response.headers.has("content-length"))
@@ -114,15 +156,24 @@ export async function writeResponse(
     pairs.push("connection", "close");
   res.writeHead(response.status, pairs);
   await new Promise<void>((resolve) => {
-    res.once("close", resolve);
-    res.end(body, () => {
+    const done = () => {
+      res.off("close", done);
+      abandoned?.removeEventListener("abort", done);
       resolve();
-    });
-    if (res.destroyed) resolve();
+    };
+    res.once("close", done);
+    abandoned?.addEventListener("abort", done, { once: true });
+    res.end(body, done);
+    if (res.destroyed || abandoned?.aborted) done();
   });
 }
 
-/** BR-170: answers one request; any exception becomes the 500 of the router. */
+/**
+ * BR-170: answers one request; any exception becomes the 500 of the router.
+ * BR-446: more than 100 header lines are refused 431 before `handle()`.
+ * BR-166 v2: the request's disconnect signal aborts when the response or the
+ * socket closes before the response was completely written.
+ */
 export async function serve(
   handler: HttpHandler,
   logger: HttpLogger | undefined,
@@ -131,33 +182,58 @@ export async function serve(
   flight: InFlight,
 ): Promise<void> {
   const target = req.url ?? "";
-  const refused = () => {
+  const refused = (status = 500, error = "server_error") => {
     try {
       logger?.event("request_refused", {
         route: handler.routeOf(target),
-        status: 500,
-        error: "server_error",
+        status,
+        error,
       });
     } catch {
       // A logger failure never changes a response.
     }
   };
-  let response: Response;
+  const disconnect = new AbortController();
+  // Ends the response-write wait once the response or the socket closed; kept
+  // apart from `disconnect`, which only the queue listens to (BR-445).
+  const closed = new AbortController();
+  const onClose = () => {
+    if (!res.writableFinished) disconnect.abort();
+    closed.abort();
+  };
+  res.on("close", onClose);
+  const socket = req.socket as Socket | null;
+  const unwatch =
+    typeof socket?.on === "function" ? watchSocket(socket, onClose) : undefined;
+  if (socket?.destroyed) onClose();
   try {
-    response = await handler.handle(
-      toRequest(req),
-      target,
-      req.socket.remoteAddress,
-    );
-  } catch {
-    refused();
-    response = errorResponse(500, "server_error");
-  }
-  flight.settled = true;
-  try {
-    await writeResponse(req, res, response, refused);
-  } catch {
-    // The response had started or the connection failed: end the connection.
-    res.destroy();
+    let response: Response;
+    if (req.rawHeaders.length / 2 > MAX_HEADER_LINES) {
+      refused(431, "invalid_request");
+      response = errorResponse(431, "invalid_request", {
+        connection: "close",
+      });
+    } else
+      try {
+        response = await handler.handle(
+          toRequest(req),
+          target,
+          req.socket.remoteAddress,
+          disconnect.signal,
+        );
+      } catch {
+        refused();
+        response = errorResponse(500, "server_error");
+      }
+    flight.settled = true;
+    try {
+      await writeResponse(req, res, response, refused, closed.signal);
+    } catch {
+      // The response had started or the connection failed: end the connection.
+      res.destroy();
+    }
+  } finally {
+    res.off("close", onClose);
+    unwatch?.();
   }
 }

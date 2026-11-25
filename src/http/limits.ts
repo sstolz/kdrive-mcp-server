@@ -5,6 +5,13 @@ export const OAUTH_BODY_LIMIT = 32_768;
 export const MAX_TOKEN_BYTES = 4096;
 /** BR-169: the longest request target. */
 export const MAX_TARGET_BYTES = 8192;
+/** BR-446: the most header lines a request may carry. */
+export const MAX_HEADER_LINES = 100;
+/**
+ * BR-169 v4: requests of 101 to 2,000 header lines reach the BR-446 check;
+ * Node refuses more with its own empty-body 431.
+ */
+export const MAX_HEADERS_COUNT = 2000;
 /** BR-161 and BR-162 windows. */
 export const IDENTITY_LIMIT = 120;
 export const IDENTITY_WINDOW_MS = 60_000;
@@ -53,6 +60,9 @@ export class WindowLimiter {
     let window = this.windows.get(key);
     if (window && now >= window.start + this.windowMs) window = undefined;
     if (!window) {
+      // BR-443: opening a window first removes every ended window.
+      for (const [other, entry] of this.windows)
+        if (now >= entry.start + this.windowMs) this.windows.delete(other);
       this.windows.set(key, { start: now, count: 1 });
       return undefined;
     }
@@ -60,6 +70,11 @@ export class WindowLimiter {
       return Math.ceil((window.start + this.windowMs - now) / 1000);
     window.count++;
     return undefined;
+  }
+
+  /** BR-443: aggregate test evidence only; never exposes a key. */
+  get size(): number {
+    return this.windows.size;
   }
 }
 

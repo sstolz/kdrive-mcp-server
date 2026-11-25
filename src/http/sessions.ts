@@ -11,7 +11,12 @@ import {
 import type { HttpEvent } from "./types.js";
 
 export type CloseReason =
-  "deleted" | "idle" | "lifetime" | "evicted" | "shutdown";
+  | "deleted"
+  | "idle"
+  | "lifetime"
+  | "evicted"
+  | "shutdown"
+  | "initialize_failed";
 
 /** Settles a request whose session closed while it was in flight (BR-164). */
 export const GONE: unique symbol = Symbol("session-gone");

@@ -1,5 +1,20 @@
 # Capability map
 
+## Provisional — HTTP lifecycle hardening
+
+[F-053 v2](features/F-053-http-lifecycle-hardening.md) (#73),
+[BR-164 v2](business-rules/BR-164.md), [BR-166 v2](business-rules/BR-166.md),
+[BR-167 v4](business-rules/BR-167.md), [BR-169 v4](business-rules/BR-169.md)
+and [BR-443 v1](business-rules/BR-443.md), [BR-444 v1](business-rules/BR-444.md),
+[BR-445 v1](business-rules/BR-445.md), [BR-446 v1](business-rules/BR-446.md)
+are pending acceptance: a registered session whose `initialize` fails is
+closed and answered 500; a held DELETE settles 503 when its session closes for
+another reason; ended identity and `/healthz` windows are pruned; accept-time
+listener errors keep the server serving with one payload-free event per
+minute; an HTTP disconnect cancels a queued call that has not started, never
+a started one; and more than 100 header lines get 431. Local, CI and
+actual-main acceptance remain unverified.
+
 ## Accepted — OAuth qualification and proxy hardening
 
 [F-052 v1](features/F-052-oauth-qualification-proxy-hardening.md) (#72),
@@ -543,6 +558,9 @@ with justifications; marking them in the Sonar UI is owner-side and not
 confirmed in the record.
 
 ## Accepted — authenticated Streamable HTTP (proxy mode)
+
+BR-164 v2, BR-166 v2, BR-167 v4 and BR-169 v4 extend this accepted scope
+under F-053; these versions are pending acceptance (#73).
 
 Accepted on actual main 00e6fe340a505ce57967b486a0bda6f7c2f4d2d9, 2026-11-04
 (`make check` rc=0, 94 files / 2031 tests; PR #53 CI green; owner-run AC-21 with
