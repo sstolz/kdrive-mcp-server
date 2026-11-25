@@ -14,9 +14,8 @@ export class FlushPort extends EventEmitter {
     this.writes.push(text);
     if (callback) {
       this.callbacks.push(callback);
+      this.onWrite?.(callback);
     }
-    // A Writable still performs writes when its caller omits the callback.
-    this.onWrite?.(callback ?? (() => {}));
     return false;
   }
 }

@@ -86,6 +86,7 @@ export function startStdioNavigation(
   let closeDiagnostic = false;
   let closing: Promise<void> | undefined;
   let cleanupPromise: Promise<void> | undefined;
+  let transportClosing = false;
   function report(message: string) {
     try {
       diagnostic(message);
@@ -120,7 +121,10 @@ export function startStdioNavigation(
     options.output ?? processStdout().stream,
     {
       diagnostic: report,
-      onClosing: beginClose,
+      onClosing: () => {
+        transportClosing = true;
+        beginClose();
+      },
       onFailure: failure,
       onCloseFailure: closeFailure,
     },
@@ -149,7 +153,16 @@ export function startStdioNavigation(
       // Cleanup normally starts from transport onclose. A pending transport close
       // must still allow an admitted run to commit before the gate closes.
       const observed = Promise.resolve()
-        .then(() => server.close())
+        .then(() => {
+          try {
+            return server.close();
+          } finally {
+            // A server close that never reaches its transport must not consume
+            // the whole drain budget before gate/sink cleanup can even start.
+            // An already closing transport retains its own onclose ordering.
+            if (!transportClosing) void cleanup();
+          }
+        })
         .catch(() => {
           closeFailure();
         });

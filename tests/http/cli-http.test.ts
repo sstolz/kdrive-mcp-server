@@ -358,7 +358,9 @@ it("TestBR447_TestBR448_AC06_HTTP_closed_stderr_SIGTERM_exit0", async () => {
     signals = new EventEmitter();
   const ports = processPorts(out, err);
   let epipes = 0;
-  err.onWrite = () => {
+  const write = err.write.bind(err);
+  const stderrWrite = vi.spyOn(err, "write").mockImplementation((...args) => {
+    const result = write(...args);
     queueMicrotask(() => {
       err.emit(
         "error",
@@ -366,7 +368,8 @@ it("TestBR447_TestBR448_AC06_HTTP_closed_stderr_SIGTERM_exit0", async () => {
       );
       epipes++;
     });
-  };
+    return result;
+  });
   out.onWrite = (callback) => {
     callback();
   };
@@ -426,6 +429,7 @@ it("TestBR447_TestBR448_AC06_HTTP_closed_stderr_SIGTERM_exit0", async () => {
     expect(signals.listenerCount("SIGTERM")).toBe(0);
   } finally {
     for (const mock of mocks.toReversed()) mock.mockRestore();
+    stderrWrite.mockRestore();
     ports.restore();
     vi.useRealTimers();
   }
