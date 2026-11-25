@@ -90,8 +90,8 @@ BR-447–BR-448 v1 are new allocations. Recheck IDs on main before freeze and PR
   holds even when transport `onclose` starts gate cleanup first. No new
   allowance extends the existing 1,000 ms no-committed-run or 45,000 ms gate
   bound. Verified by: AC-04.
-- **BR-254 v3 (close diagnostic)** — Each failed HTTP signal shutdown or stdio
-  shutdown (including server-close expiry) offers exactly
+- **BR-254 v3 (close diagnostic)** — Each HTTP signal shutdown or stdio
+  shutdown whose server/transport close rejects or reaches the deadline offers exactly
   one `PROCESS_CLOSE_FAILED\n` diagnostic without any rejection payload.
   Verified by: AC-03, AC-04.
 - **BR-262 v2** — The gate error parsed-object validator requires
@@ -207,7 +207,8 @@ files and then Docker/Make `make check` during implementation, not authoring.
   before the existing 1,000 ms deadline, closure stays pending until that
   deadline, then dedicated exit is requested with 1 or owned closure settles
   with setter 1, offering exactly `PROCESS_CLOSE_FAILED\n`. A committed-run
-  row uses the existing 45,000 ms gate deadline without a fresh allowance;
+  row uses the existing 45,000 ms gate deadline, counted from the gate close
+  call, without a fresh allowance;
   gate/sink drain completes before exit 1 at that deadline. Consume a server
   rejection arriving after expiry without another diagnostic/status request.
   Also exercise each `src/stdio-transport.ts` EOF, failure and SDK-close
@@ -217,8 +218,9 @@ files and then Docker/Make `make check` during implementation, not authoring.
   The EOF row uses the F-016 AC-21 committed mutator settling successfully
   at 3,000 virtual ms: reject `sdk.close()` during gate drain, verify no exit
   at 1,000 or 2,999 ms, then outcome append → sink close → exit 1 (or owned
-  setter 1 and `closed`) at 3,000 ms. Each failed shutdown offers the fixed
-  close-failure diagnostic once, even when the transport already reported
+  setter 1 and `closed`) at 3,000 ms. Each shutdown whose server/transport close
+  rejects or reaches the deadline offers the fixed close-failure diagnostic
+  once, even when the transport already reported
   its separate fixed failure diagnostic.
   Verified by: `TestBR254_v3_AC04_stdio_signal_close_rejection_is_contained`
   in `tests/mutation-composition.test.ts`.
@@ -323,7 +325,9 @@ files and then Docker/Make `make check` during implementation, not authoring.
   timeout or transport failure path as the source of exit 1. Add a healthy
   slow-client row with the same pending write and transport-close barriers:
   the parent resumes its reader instead of destroying it, receives all
-  262144 frame bytes, and the write callback reports no error. No stdout
+  262144 frame bytes, and the write callback reports no error. The parent
+  releases the mutator only after it has received all 262144 bytes and the
+  child's IPC milestone "write callback, no error". No stdout
   failure latches; after mutator release, outcome append and sink close
   precede actual exit 0, without uncaught error or unhandled rejection.
   The 262144-byte frame includes the JSON-RPC envelope and newline: use a
@@ -363,7 +367,8 @@ files and then Docker/Make `make check` during implementation, not authoring.
    when synchronous transport `onclose` starts gate cleanup first: gate close
    keeps its existing bound, and server close races the same existing absolute
    shutdown deadline (1,000 ms without a committed run, otherwise the existing
-   45,000 ms gate bound). Do not start another allowance for server close.
+   45,000 ms gate bound counted from the gate close call; the choice is made
+   when cleanup evaluates `hasCommitted`). Do not start another allowance for server close.
    Server-close expiry counts as close failure with status 1 and the fixed
    diagnostic, while gate/sink drain still completes before exit/owned `closed`.
    Keep a rejection handler attached to server close after expiry. Dedicated
@@ -580,3 +585,15 @@ Spec review round 2 (`139-spec-review-2-opus`) produced these decisions:
   failing loudly if the setup does not produce backpressure.
 
 No freeze or acceptance is claimed in this section.
+
+### 139-spec-review-4-opus (diff-only confirmation, approve)
+
+- **Minor 1 — retained.** AC-10's healthy row releases the mutator only after
+  the parent has received all 262144 bytes and the child's "write callback, no
+  error" milestone.
+- **Minor 2 — retained.** The close diagnostic applies to each shutdown whose
+  server/transport close rejects or reaches the deadline, not to a transport
+  failure whose `sdk.close()` resolves.
+- **Minor 3 — retained.** The committed-run bound is the existing 45,000 ms
+  counted from the gate close call, chosen when cleanup evaluates
+  `hasCommitted`.
