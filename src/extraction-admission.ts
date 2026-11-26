@@ -1,3 +1,4 @@
+import { processStderr } from "./process-streams.js";
 import type { AuditIdentity } from "./audit/sink.js";
 
 export const MAX_ACTIVE_EXTRACTIONS = 2;
@@ -27,7 +28,7 @@ const active = new Map<string, { detached: boolean }>();
 const waiting: Waiter[] = [];
 const diagnostic = (line: string) => {
   try {
-    process.stderr.write(line, () => {});
+    processStderr().stream.write(line, () => {});
   } catch {
     // Best effort, with no callback/drain wait or retry, even after session close.
   }

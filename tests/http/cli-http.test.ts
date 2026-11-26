@@ -193,3 +193,244 @@ describe("BR-210 HTTP composition", () => {
     expect(run.exits).toEqual([0]);
   });
 });
+
+// F-054 BR-210 v2 / BR-254 v3: main owns the real signal registration and shutdown result.
+it.each(
+  ["SIGINT", "SIGTERM"].flatMap((signal) =>
+    ["success", "transport", "gate", "diagnostic-throws"].map((row) => ({
+      signal,
+      row,
+    })),
+  ),
+)(
+  "TestBR210_v2_AC03_signal_close_failure_is_fixed_exit1 [$signal $row]",
+  async ({ signal, row }) => {
+    const { main } = await import("../../src/main.js");
+    const config = await import("../../src/config.js");
+    const adapters = await import("../../src/kdrive/index.js");
+    const audit = await import("../../src/audit/sink.js");
+    const gates = await import("../../src/mutation-gate.js");
+    const http = await import("../../src/http/index.js");
+    const { navigationFixture } = await import("../helpers/navigation.js");
+    const { deferred } = await import("../helpers/f040-admission.js");
+    const { microtasks } = await import("../helpers/f039-composition.js");
+    const { EventEmitter } = await import("node:events");
+    const f = await navigationFixture({
+      KDRIVE_MCP_TRANSPORT: "http",
+      KDRIVE_MCP_INSECURE_NO_AUTH: "1",
+    });
+    const signals = new EventEmitter(),
+      order: string[] = [],
+      errors: string[] = [],
+      stdout: string[] = [],
+      exits: number[] = [];
+    const pending = deferred<undefined>(),
+      gatePending = deferred<undefined>();
+    const realAdapter = adapters.createKdriveAdapter;
+    const realGate = gates.createMutationGate;
+    const mocks = [
+      vi.spyOn(config, "preflightConfiguration").mockResolvedValue(f.config),
+      vi
+        .spyOn(adapters, "createKdriveAdapter")
+        .mockImplementation((options) => {
+          const adapter = realAdapter(options);
+          return {
+            ...adapter,
+            dependencies: { ...adapter.dependencies, ...f.dependencies },
+          };
+        }),
+      vi.spyOn(audit, "openAuditSink").mockResolvedValue(
+        audit.createStderrSink({
+          write: (_text, callback) => {
+            callback();
+            return true;
+          },
+        }),
+      ),
+      vi.spyOn(gates, "createMutationGate").mockImplementation((options) => {
+        const gate = realGate(options);
+        const target = gate;
+        // The real gate is frozen: proxy an empty delegate so `close` can be replaced.
+        return new Proxy(Object.create(target) as typeof target, {
+          get(_delegate, key) {
+            if (key === "close") {
+              return async () => {
+                order.push("gate");
+                await gatePending.promise;
+                await target.close();
+                if (row === "gate") throw Error("PRIVATE_GATE_CANARY");
+              };
+            }
+            return Reflect.get(target, key, target) as unknown;
+          },
+        });
+      }),
+      vi.spyOn(http, "startHttpServer").mockResolvedValue({
+        address: { address: "127.0.0.1", family: "IPv4", port: 3000 },
+        close: async () => {
+          order.push("transport");
+          await pending.promise;
+          if (row === "transport" || row === "diagnostic-throws")
+            throw Error("PRIVATE_TRANSPORT_CANARY");
+        },
+      }),
+    ];
+    const unhandled: unknown[] = [],
+      onUnhandled = (error: unknown) => {
+        unhandled.push(error);
+      };
+    process.on("unhandledRejection", onUnhandled);
+    try {
+      await main({
+        argv: ["--http", "--insecure-no-auth"],
+        env: { KDRIVE_ID: "7", KDRIVE_TOKEN: "SYNTHETIC" },
+        lookup: () => Promise.resolve([]),
+        connect: () => {
+          throw Error("Unexpected network");
+        },
+        now: () => 0,
+        signals: {
+          on: (name, fn) => signals.on(name, fn),
+          off: (name, fn) => signals.off(name, fn),
+        },
+        stdout: {
+          write: (text) => {
+            stdout.push(text);
+          },
+        },
+        stderr: {
+          write: (text) => {
+            errors.push(text);
+            if (row === "diagnostic-throws")
+              throw Error("PRIVATE_DIAGNOSTIC_CANARY");
+            return true;
+          },
+        },
+        exit: (code) => {
+          exits.push(code);
+        },
+      });
+      signals.emit(signal);
+      signals.emit(signal);
+      await microtasks();
+      expect(order).toEqual(["transport"]);
+      expect(exits).toEqual([]);
+      pending.resolve(undefined);
+      await microtasks();
+      expect(order).toEqual(["transport", "gate"]);
+      expect(exits).toEqual([]);
+      gatePending.resolve(undefined);
+      await microtasks();
+      expect(exits).toEqual([row === "success" ? 0 : 1]);
+      expect(errors).toEqual(
+        row === "success" ? [] : ["PROCESS_CLOSE_FAILED\n"],
+      );
+      expect(stdout).toEqual([]);
+      expect(
+        signals.listenerCount("SIGINT") + signals.listenerCount("SIGTERM"),
+      ).toBe(0);
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off("unhandledRejection", onUnhandled);
+      for (const mock of mocks.toReversed()) mock.mockRestore();
+    }
+  },
+);
+
+// BR-447 v1 / BR-448 v1: production dependencies install owners before HTTP main entry.
+it("TestBR447_TestBR448_AC06_HTTP_closed_stderr_SIGTERM_exit0", async () => {
+  vi.useFakeTimers();
+  const { main } = await import("../../src/main.js");
+  const config = await import("../../src/config.js");
+  const adapters = await import("../../src/kdrive/index.js");
+  const audit = await import("../../src/audit/sink.js");
+  const http = await import("../../src/http/index.js");
+  const { navigationFixture } = await import("../helpers/navigation.js");
+  const { FlushPort, processPorts, microtasks } =
+    await import("../helpers/f039-composition.js");
+  const { EventEmitter } = await import("node:events");
+  const f = await navigationFixture({
+    KDRIVE_MCP_TRANSPORT: "http",
+    KDRIVE_MCP_INSECURE_NO_AUTH: "1",
+  });
+  const out = new FlushPort(),
+    err = new FlushPort(),
+    signals = new EventEmitter();
+  const ports = processPorts(out, err);
+  let epipes = 0;
+  const write = err.write.bind(err);
+  const stderrWrite = vi.spyOn(err, "write").mockImplementation((...args) => {
+    const result = write(...args);
+    queueMicrotask(() => {
+      err.emit(
+        "error",
+        Object.assign(Error("PRIVATE_HTTP_PIPE_CANARY"), { code: "EPIPE" }),
+      );
+      epipes++;
+    });
+    return result;
+  });
+  out.onWrite = (callback) => {
+    callback();
+  };
+  const originalAdapter = adapters.createKdriveAdapter;
+  const mocks = [
+    vi.spyOn(config, "preflightConfiguration").mockResolvedValue(f.config),
+    vi.spyOn(adapters, "createKdriveAdapter").mockImplementation((options) => {
+      const adapter = originalAdapter(options);
+      return {
+        ...adapter,
+        dependencies: { ...adapter.dependencies, ...f.dependencies },
+      };
+    }),
+    vi.spyOn(audit, "openAuditSink").mockResolvedValue(
+      audit.createStderrSink({
+        write: (_text, callback) => {
+          callback();
+          return true;
+        },
+      }),
+    ),
+    vi.spyOn(http, "startHttpServer").mockImplementation((options) => {
+      expect(err.listenerCount("error")).toBe(1);
+      expect(out.listenerCount("error")).toBe(1);
+      options.logger?.event("listener_error", {});
+      return Promise.resolve({
+        address: { address: "127.0.0.1", family: "IPv4", port: 3000 },
+        close: () => Promise.resolve(),
+      });
+    }),
+  ];
+  try {
+    expect(err.listenerCount("error")).toBe(1);
+    ports.dependencies.stderr.write("SYNTHETIC_DIAGNOSTIC\n");
+    await main({
+      ...ports.dependencies,
+      argv: ["--http", "--insecure-no-auth"],
+      env: { KDRIVE_ID: "7", KDRIVE_TOKEN: "SYNTHETIC" },
+      signals: {
+        on: (name, fn) => signals.on(name, fn),
+        off: (name, fn) => signals.off(name, fn),
+      },
+    });
+    await microtasks();
+    expect(epipes).toBe(2);
+    expect(err.writes).toEqual([
+      "SYNTHETIC_DIAGNOSTIC\n",
+      '{"event":"listener_error"}\n',
+    ]);
+    signals.emit("SIGTERM");
+    await microtasks();
+    await vi.advanceTimersByTimeAsync(250);
+    expect(ports.exits.map((exit) => exit.code)).toEqual([0]);
+    expect(err.writes.join("")).not.toContain("PRIVATE_");
+    expect(out.writes).toEqual([""]);
+    expect(err.listenerCount("error")).toBe(1);
+    expect(signals.listenerCount("SIGTERM")).toBe(0);
+  } finally {
+    for (const mock of mocks.toReversed()) mock.mockRestore();
+    stderrWrite.mockRestore();
+    ports.restore();
+    vi.useRealTimers();
+  }
+});

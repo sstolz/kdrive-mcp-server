@@ -3,7 +3,8 @@ import { JSONRPCMessageSchema } from "@modelcontextprotocol/core";
 import { StdioServerTransport } from "@modelcontextprotocol/server/stdio";
 import type { JSONRPCMessage, Transport } from "@modelcontextprotocol/server";
 import { contentMessages } from "./content.js";
-import { isGateErrorText } from "./mutation-tools.js";
+import { parsedGateErrorText } from "./mutation-tools.js";
+import { protocolWriteFailed } from "./process-streams.js";
 
 const byteLimit = 1048576;
 type OutboundMessage =
@@ -52,29 +53,37 @@ function sanitized(message: OutboundMessage): OutboundMessage {
     };
   }
   if ("result" in message && message.result.isError === true) {
-    const content = message.result.content;
-    const first: unknown = Array.isArray(content) ? content[0] : undefined;
-    const text =
-      typeof first === "object" &&
-      first !== null &&
-      "text" in first &&
-      typeof first.text === "string" &&
-      // F-017 BR-262: a mutation gate result carries no name or path.
-      (allowedToolErrors.has(first.text) || isGateErrorText(first.text))
-        ? first.text
-        : "INVALID_ARGUMENTS";
     return {
       jsonrpc: "2.0",
       id: message.id,
-      result: { isError: true, content: [{ type: "text", text }] },
+      result: {
+        isError: true,
+        content: [
+          { type: "text", text: sanitizedToolError(message.result.content) },
+        ],
+      },
     };
   }
   return message;
+}
+function sanitizedToolError(content: unknown): string {
+  const first: unknown = Array.isArray(content) ? content[0] : undefined;
+  if (
+    typeof first !== "object" ||
+    first === null ||
+    !("text" in first) ||
+    typeof first.text !== "string"
+  )
+    return "INVALID_ARGUMENTS";
+  if (allowedToolErrors.has(first.text)) return first.text;
+  const validated = parsedGateErrorText(first.text);
+  return validated ? JSON.stringify(validated) : "INVALID_ARGUMENTS";
 }
 interface OwnerOptions {
   diagnostic(message: string): void;
   onFailure(): void;
   onClosing?(): void;
+  onCloseFailure?(): void;
 }
 /** BR-069/070: SDK parsing/dispatch, with only narrow bounded input/output ownership. */
 export function createOwnedStdioTransport(
@@ -116,8 +125,9 @@ export function createOwnedStdioTransport(
       owner.onclose?.();
     }
   }
+  let closing: Promise<void> | undefined;
   function close(): Promise<void> {
-    if (closed) return Promise.resolve();
+    if (closed) return closing ?? Promise.resolve();
     closed = true;
     options.onClosing?.();
     input.off("data", data);
@@ -136,9 +146,22 @@ export function createOwnedStdioTransport(
     output.destroy();
     normalized.destroy();
     sdkOutput.destroy();
-    const done = sdk.close();
+    // Observe SDK failure even on EOF/failure/SDK-initiated fire-and-forget paths.
+    closing = Promise.resolve()
+      .then(() => sdk.close())
+      .catch(() => {
+        if (options.onCloseFailure) options.onCloseFailure();
+        else {
+          try {
+            options.diagnostic("PROCESS_CLOSE_FAILED\n");
+          } catch {
+            // Best effort; the standalone transport still selects failure.
+          }
+          options.onFailure();
+        }
+      });
     notifyClose();
-    return done;
+    return closing;
   }
   function outputError() {
     fail("STDIO_OUTPUT_FAILED\n");
@@ -232,6 +255,7 @@ export function createOwnedStdioTransport(
       output.once("drain", drain);
       try {
         const writable = output.write(frame, (error?: Error | null) => {
+          if (error) protocolWriteFailed(output);
           if (settled || closed) return;
           if (error) {
             fail("STDIO_OUTPUT_FAILED\n");

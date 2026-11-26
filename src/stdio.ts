@@ -7,6 +7,11 @@ import {
 } from "./navigation.js";
 import { createOwnedStdioTransport } from "./stdio-transport.js";
 import { productionExit } from "./production.js";
+import {
+  processStderr,
+  processStdout,
+  processStreamsFailed,
+} from "./process-streams.js";
 import type { MutationGate } from "./mutation-gate.js";
 
 export interface StdioNavigationOptions {
@@ -18,6 +23,29 @@ export interface StdioNavigationOptions {
   readonly exit?: (code: number, shutdownDeadline?: number) => void;
   /** F-016: the mutation gate; the runner closes it after the transport (BR-254). */
   readonly gate?: MutationGate;
+}
+/** Observe server close without extending the gate's current absolute bound. */
+async function observeClose(
+  closing: Promise<void>,
+  deadline: () => number,
+  expired: () => void,
+) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const expiry = new Promise<void>((resolve) => {
+    function checkDeadline() {
+      const remaining = deadline() - performance.now();
+      if (remaining <= 0) {
+        expired();
+        resolve();
+      } else timer = setTimeout(checkDeadline, remaining);
+    }
+    checkDeadline();
+  });
+  try {
+    await Promise.race([closing, expiry]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
 }
 /** BR-059 v2/069/070: explicit start owns streams/signals; importing never starts a session. */
 export function startStdioNavigation(
@@ -34,7 +62,7 @@ export function startStdioNavigation(
   const diagnostic =
     options.diagnostic ??
     ((message: string) => {
-      process.stderr.write(message);
+      processStderr().stream.write(message);
     });
   const exit = options.exit ?? productionExit();
   const setExitCode =
@@ -51,15 +79,38 @@ export function startStdioNavigation(
       identity: { kind: "stdio" },
     },
   );
-  let done = false;
-  let shutdownStarted = false;
+  const dedicated = options.input === undefined && options.output === undefined;
   let shutdownDeadline: number | undefined;
-  let exitCode: number | undefined;
+  let shutdownStarted = false;
+  let failed = false;
+  let closeDiagnostic = false;
+  let closing: Promise<void> | undefined;
+  let cleanupPromise: Promise<void> | undefined;
+  let transportClosing = false;
+  function report(message: string) {
+    try {
+      diagnostic(message);
+    } catch {
+      // Best effort: diagnostic delivery cannot replace the shutdown status.
+    }
+  }
+  function failure() {
+    if (failed) return;
+    failed = true;
+    if (!dedicated) setExitCode(1);
+  }
+  function closeFailure() {
+    failure();
+    if (closeDiagnostic) return;
+    closeDiagnostic = true;
+    report("PROCESS_CLOSE_FAILED\n");
+  }
   function beginClose() {
     if (shutdownStarted) return;
     shutdownStarted = true;
     if (!options.gate?.hasCommitted)
       shutdownDeadline = performance.now() + 1000;
+    gateDeadline = shutdownDeadline ?? performance.now() + 45000;
   }
   let finish!: () => void;
   const closed = new Promise<void>((resolve) => {
@@ -67,50 +118,85 @@ export function startStdioNavigation(
   });
   const transport = createOwnedStdioTransport(
     options.input ?? process.stdin,
-    options.output ?? process.stdout,
+    options.output ?? processStdout().stream,
     {
-      diagnostic,
-      onClosing: beginClose,
-      onFailure: () => {
-        exitCode = 1;
-        setExitCode(1);
+      diagnostic: report,
+      onClosing: () => {
+        transportClosing = true;
+        beginClose();
       },
+      onFailure: failure,
+      onCloseFailure: closeFailure,
     },
   );
-  const cleanup = () => {
-    if (done) return;
-    done = true;
+  function cleanup() {
+    if (cleanupPromise) return cleanupPromise;
     beginClose();
-    // A run may commit while the transport is closing. Match the gate budget.
-    if (options.gate?.hasCommitted) shutdownDeadline = undefined;
-    // BR-254: the transport is closed; the gate drains, then the process exits.
-    // The signal handlers stay installed during the drain so that a signal
-    // cannot kill the process before in-flight outcomes are recorded.
-    void (options.gate?.close(shutdownDeadline) ?? Promise.resolve()).then(
-      () => {
+    // A run may commit while the transport closes. Choose the bound at gate close.
+    const committed = options.gate?.hasCommitted === true;
+    if (committed) shutdownDeadline = undefined;
+    gateDeadline = shutdownDeadline ?? performance.now() + 45000;
+    cleanupPromise = (async () => {
+      try {
+        await options.gate?.close(shutdownDeadline);
+      } catch {
+        closeFailure();
+      }
+    })();
+    return cleanupPromise;
+  }
+  // One server-close observation shares the gate's absolute shutdown deadline.
+  function close(): Promise<void> {
+    if (closing) return closing;
+    beginClose();
+    closing = Promise.resolve().then(async () => {
+      // Cleanup normally starts from transport onclose. A pending transport close
+      // must still allow an admitted run to commit before the gate closes.
+      const observed = Promise.resolve()
+        .then(() => {
+          try {
+            return server.close();
+          } finally {
+            // A server close that never reaches its transport must not consume
+            // the whole drain budget before gate/sink cleanup can even start.
+            // An already closing transport retains its own onclose ordering.
+            if (!transportClosing) void cleanup();
+          }
+        })
+        .catch(() => {
+          closeFailure();
+        });
+      try {
+        await observeClose(observed, () => gateDeadline, closeFailure);
+        // Rejection/expiry without onclose must also start cleanup, using the
+        // committed state at this point rather than the state at signal time.
+        await cleanup();
+      } finally {
         process.off("SIGINT", signal);
         process.off("SIGTERM", signal);
+        if (dedicated) {
+          exit(
+            failed || processStreamsFailed()
+              ? 1
+              : Number(process.exitCode ?? 0),
+            shutdownDeadline,
+          );
+        }
         finish();
-        // Node's process.stdout can retain an unfinished OS pipe write after destroy().
-        // Only the default dedicated-process composition owns process termination.
-        if (options.input === undefined && options.output === undefined)
-          exit(exitCode ?? Number(process.exitCode ?? 0), shutdownDeadline);
-      },
-    );
-  };
+      }
+    });
+    return closing;
+  }
+  let gateDeadline = Infinity;
   const originalClose = server.server.onclose;
   server.server.onclose = () => {
-    originalClose?.();
-    cleanup();
-  };
-  async function close() {
-    if (!done) {
-      beginClose();
-      await server.close();
-      cleanup();
+    try {
+      originalClose?.();
+    } finally {
+      void cleanup();
+      void close();
     }
-    await closed;
-  }
+  };
   function signal() {
     void close();
   }
@@ -119,12 +205,9 @@ export function startStdioNavigation(
     process.on("SIGTERM", signal);
   }
   const ready = server.connect(transport).catch(async () => {
-    if (!done) {
-      diagnostic("STDIO_START_FAILED\n");
-      exitCode = 1;
-      setExitCode(1);
-      await close();
-    }
+    report("STDIO_START_FAILED\n");
+    failure();
+    await close();
   });
   return Object.freeze({ server, ready, closed, close });
 }

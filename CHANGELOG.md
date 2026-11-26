@@ -19,6 +19,9 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
 
 ### Changed
 
+- #139 / F-054 v1 (pending acceptance): stdio gate-error text is re-serialized
+  from its validated object; attempts and optional status must be finite.
+
 - #72 / F-052 v1 (accepted 2026-11-25 on main `019f0f5`; [#72 acceptance](https://github.com/sstolz/kdrive-mcp-server/issues/72#issuecomment-7147678234)): hidden qualification input refuses
   residual control characters, treats Ctrl-D as EOF and retains DEL editing;
   registration defaults apply only to absent members, with explicit nulls
@@ -36,6 +39,12 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
   retain the same key and kid.
 
 ### Fixed
+
+- #139 / F-054 v1 (pending acceptance): close failures select status 1 after
+  committed mutation drain; stdio server close shares the existing shutdown
+  bound. Permanent process stream owners contain late pipe errors, preserve
+  protocol-write and unexpected stderr failure status through exit flushing,
+  and keep stderr EPIPE diagnostic delivery best effort.
 
 - #73 / F-053 v2 (accepted 2026-11-25 on main `4492616`; [#73 acceptance](https://github.com/sstolz/kdrive-mcp-server/issues/73#issuecomment-7155904032)): over HTTP, a session whose `initialize`
   fails after registration is closed (`initialize_failed`) and answered 500

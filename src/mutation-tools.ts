@@ -246,17 +246,17 @@ const RESULT_KEYS = new Set([
  * BR-262 through the stdio sanitizer: an error result whose text is a gate
  * result without `value` (failed, uncertain or denied) carries no name or path.
  */
-export function isGateErrorText(text: string): boolean {
+export function parsedGateErrorText(text: string) {
   let value: unknown;
   try {
     value = JSON.parse(text);
   } catch {
-    return false;
+    return undefined;
   }
   if (typeof value !== "object" || value === null || Array.isArray(value))
-    return false;
+    return undefined;
   const record = value as Record<string, unknown>;
-  return (
+  const valid =
     ["failed", "uncertain", "denied"].includes(record.result as string) &&
     Object.keys(record).every((key) => RESULT_KEYS.has(key)) &&
     (record.op === undefined ||
@@ -265,8 +265,13 @@ export function isGateErrorText(text: string): boolean {
       (typeof record.code === "string" &&
         /^[A-Z_]{1,32}$/u.test(record.code))) &&
     typeof record.attempts === "number" &&
-    (record.status === undefined || typeof record.status === "number") &&
+    Number.isFinite(record.attempts) &&
+    (record.status === undefined ||
+      (typeof record.status === "number" && Number.isFinite(record.status))) &&
     (record.audit === undefined || record.audit === "outcome_unrecorded") &&
-    (record.message === undefined || record.message === UNCERTAIN_MESSAGE)
-  );
+    (record.message === undefined || record.message === UNCERTAIN_MESSAGE);
+  return valid ? record : undefined;
+}
+export function isGateErrorText(text: string): boolean {
+  return parsedGateErrorText(text) !== undefined;
 }
