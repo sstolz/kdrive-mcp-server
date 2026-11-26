@@ -19,7 +19,7 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
 
 ### Changed
 
-- #139 / F-054 v1 (pending acceptance): stdio gate-error text is re-serialized
+- #139 / F-054 v2 (accepted 2026-11-26 on main `23174da`; [#139 acceptance](https://github.com/sstolz/kdrive-mcp-server/issues/139#issuecomment-7185165708)): stdio gate-error text is re-serialized
   from its validated object; attempts and optional status must be finite.
 
 - #72 / F-052 v1 (accepted 2026-11-25 on main `019f0f5`; [#72 acceptance](https://github.com/sstolz/kdrive-mcp-server/issues/72#issuecomment-7147678234)): hidden qualification input refuses
@@ -40,7 +40,7 @@ User-facing changes follow Keep a Changelog and Semantic Versioning.
 
 ### Fixed
 
-- #139 / F-054 v1 (pending acceptance): close failures select status 1 after
+- #139 / F-054 v2 (accepted 2026-11-26 on main `23174da`; [#139 acceptance](https://github.com/sstolz/kdrive-mcp-server/issues/139#issuecomment-7185165708)): close failures select status 1 after
   committed mutation drain; stdio server close shares the existing shutdown
   bound. Permanent process stream owners contain late pipe errors, preserve
   protocol-write and unexpected stderr failure status through exit flushing,

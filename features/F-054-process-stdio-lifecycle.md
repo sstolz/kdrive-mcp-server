@@ -2,11 +2,14 @@
 id: F-054
 title: Close process and stdio lifecycle gaps
 ticket: "#139"
-status: frozen
-version: 1
+status: done
+version: 2
 ---
 
 ## Context
+
+This version was accepted on main `23174da` on 2026-11-26
+([#139 acceptance](https://github.com/sstolz/kdrive-mcp-server/issues/139#issuecomment-7185165708)).
 
 This ticket is **security-sensitive**: shutdown must drain dispatched mutations,
 process exit must report close failures, and the stdio sanitizer must not echo
@@ -96,8 +99,10 @@ BR-447–BR-448 v1 are new allocations. Recheck IDs on main before freeze and PR
   allowance extends the existing 1,000 ms no-committed-run or 45,000 ms gate
   bound. Session `close()` and `ready` never reject after a consumed close
   failure; status 1 is selected through the same shutdown result owner.
-  Server-close rejection or expiry starts cleanup if it has not started,
-  re-evaluating `hasCommitted` before exit. Verified by: AC-04.
+  When the transport has not started closing, gate/sink cleanup starts as soon
+  as `server.close()` is called; on server-close rejection or expiry it starts
+  then if it has not started. Cleanup evaluates `hasCommitted` to choose the
+  existing bound before exit. Verified by: AC-04.
 - **BR-254 v3 (close diagnostic)** — Each HTTP signal shutdown or stdio
   shutdown whose server/transport or gate close rejects or reaches the deadline offers exactly
   one `PROCESS_CLOSE_FAILED\n` diagnostic without any rejection payload.
@@ -396,8 +401,10 @@ files and then Docker/Make `make check` during implementation, not authoring.
    when cleanup evaluates `hasCommitted`). Do not start another allowance for server close.
    Server-close expiry counts as close failure with status 1 and the fixed
    diagnostic, while gate/sink drain still completes before exit/owned `closed`.
-   Server-close rejection or expiry starts cleanup if it has not started,
-   re-evaluating `hasCommitted` to choose the existing bound before exit.
+   When the transport has not started closing, gate/sink cleanup starts as soon
+   as `server.close()` is called; on server-close rejection or expiry it starts
+   then if it has not started. Cleanup evaluates `hasCommitted` to choose the
+   existing bound before exit.
    Keep a rejection handler attached to server close after expiry. Dedicated
    modes use `deps.exit(1)` (stdio's injected exit port); owned modes use their
    setter only with 1, never with 0, selecting 1 once per session regardless of
@@ -652,3 +659,17 @@ No freeze or acceptance is claimed in this section.
   expiry to start cleanup if it has not started, re-evaluating `hasCommitted`
   before exit. AC-04 adds variants without transport `onclose`, with gate/sink
   drain completed before exit or owned `closed`.
+
+### Version 2 — accepted cleanup timing (2026-11-26)
+
+D-2 and BR-254 v3 now state the earlier, stricter cleanup timing implemented
+in `src/stdio.ts` on main `23174da`: when the transport has not started
+closing, gate/sink cleanup starts as soon as `server.close()` is called;
+rejection or expiry starts cleanup then if it has not started. The gate
+refuses commits after close, and the bound is still chosen when cleanup
+evaluates whether a commit happened (`hasCommitted`). This is the deviation
+declared in PR #143 (`139-code-review-1-opus`, finding 2); all other contract
+clauses remain unchanged. AC-01–AC-10 passed on actual main
+`23174dae40a8f64d54f73c8c78198bef39897faa`; `make check` exited 0
+(7032 passed, 9 skipped), and CI run 45771570006 succeeded
+([#139 acceptance](https://github.com/sstolz/kdrive-mcp-server/issues/139#issuecomment-7185165708)). Deferred minor findings are tracked in #144.
