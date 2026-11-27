@@ -92,6 +92,7 @@ override the current Docker-only development contract.
 | F-051 | #77       | `features/F-051-transport-edge-cases.md`                | Done v1, accepted on main b249860 (2026-11-24); BR-438/439 v1 and BR-216/268 v3 active; separate read-deadline decision remains open on #77                                                                                                                                                                                                              |
 | F-052 | #72       | `features/F-052-oauth-qualification-proxy-hardening.md` | Done v1, accepted on main 019f0f5 (2026-11-25); BR-440–BR-442 v1, BR-096/103/127 v2, BR-143 v5 and BR-306/394 v3 active                                                                                                                                                                                                                                  |
 | F-053 | #73       | `features/F-053-http-lifecycle-hardening.md`            | Done v2 (v1 in history), accepted on main 4492616 (2026-11-25); BR-443–BR-446 v1, BR-164/166 v2 and BR-167/169 v4 active                                                                                                                                                                                                                                 |
+| F-054 | #139      | `features/F-054-process-stdio-lifecycle.md`             | Done v2 (v1 in history), accepted on main 23174da (2026-11-26); BR-447/448 v1, BR-069/254 v3 and BR-210/262 v2 active                                                                                                                                                                                                                                    |
 
 Version history: [v1 immutable snapshot](../features/history/F-001-v1.md),
 [v2 immutable snapshot](../features/history/F-001-v2.md),
@@ -325,4 +326,14 @@ to v4. F-053 v2 is done (v1 in `features/history/F-053-v1.md`), accepted on main
 ([#73 acceptance](https://github.com/sstolz/kdrive-mcp-server/issues/73#issuecomment-7155904032)); all eight rule versions are active; previous accepted versions are preserved as superseded history.
 Its D-4 reverses F-026 D-8 for queued calls that have not started; F-026
 (closed) is not edited. No ADR is allocated.
-Next free IDs: **F-054, BR-447, ADR-013**.
+Next free IDs after F-053 were **F-054, BR-447, ADR-013**.
+
+#139 allocates F-054 / [BR-447](../business-rules/BR-447.md) and
+[BR-448](../business-rules/BR-448.md) v1 and versions BR-069/254 to v3 and
+BR-210/262 to v2 in its [process and stdio lifecycle contract](../features/F-054-process-stdio-lifecycle.md).
+F-054 v2 is done (v1 in `features/history/F-054-v1.md`), accepted on main `23174da` on 2026-11-26
+([#139 acceptance](https://github.com/sstolz/kdrive-mcp-server/issues/139#issuecomment-7185165708)); all six rule versions are active.
+V2 records the earlier, stricter cleanup timing implemented on accepted main;
+previous accepted rule versions remain superseded history. No ADR is allocated.
+Deferred minor findings are tracked in #144.
+Next free IDs: **F-055, BR-449, ADR-013**.

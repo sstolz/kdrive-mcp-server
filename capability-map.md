@@ -1,15 +1,16 @@
 # Capability map
 
-## Provisional — Process and stdio lifecycle
+## Accepted — Process and stdio lifecycle
 
-[F-054 v1](features/F-054-process-stdio-lifecycle.md) (#139),
+[F-054 v2](features/F-054-process-stdio-lifecycle.md) (#139),
 [BR-069 v3](business-rules/BR-069.md), [BR-210 v2](business-rules/BR-210.md),
 [BR-254 v3](business-rules/BR-254.md), [BR-262 v2](business-rules/BR-262.md),
 [BR-447 v1](business-rules/BR-447.md) and [BR-448 v1](business-rules/BR-448.md)
-are pending acceptance: close failures settle with failure status after bounded
+are active: close failures settle with failure status after bounded
 shutdown and committed mutation drain; permanent process stream ownership
 contains late errors and preserves failure precedence; stdio emits only
 re-serialized validated gate errors with finite numeric fields.
+Accepted on actual main `23174da` on 2026-11-26 ([#139 acceptance](https://github.com/sstolz/kdrive-mcp-server/issues/139#issuecomment-7185165708)). F-054 v2 is done.
 
 ## Accepted — HTTP lifecycle hardening
 
